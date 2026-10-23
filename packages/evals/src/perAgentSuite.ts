@@ -80,8 +80,20 @@ const NO_REFERENCE_JUDGE =
 /** Longest reference answer quoted in a judge statement, in characters. */
 const MAX_REFERENCE_CHARS = 280;
 
+/** What went wrong generating a suite (task 7.6a follow-up: a typed reason, not a message-text
+ * match, so a caller can tell the cases apart without depending on this error's wording). */
+export type PerAgentSuiteErrorReason = 'no-packages' | 'id-collision' | 'invalid-case';
+
 export class PerAgentSuiteError extends Error {
-  override name = 'PerAgentSuiteError';
+  override readonly name = 'PerAgentSuiteError';
+
+  constructor(
+    readonly reason: PerAgentSuiteErrorReason,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+  }
 }
 
 /** Lowercase, then every character outside `[a-z0-9-]` becomes `-` (the case id rule). */
@@ -114,6 +126,7 @@ export function generatePerAgentSuite(input: PerAgentSuiteInput): EvalCase[] {
   const first = input.packages[0];
   if (first === undefined) {
     throw new PerAgentSuiteError(
+      'no-packages',
       `agent ${input.agentId} has no packages to evaluate against, so no suite can be generated`,
     );
   }
@@ -124,13 +137,16 @@ export function generatePerAgentSuite(input: PerAgentSuiteInput): EvalCase[] {
     const previous = sourceOf.get(draft.id);
     if (previous !== undefined) {
       throw new PerAgentSuiteError(
+        'id-collision',
         `generated case id ${draft.id} collides: ${previous} and ${draft.source} sanitise to the same id`,
       );
     }
     const parsed = EvalCaseSchema.safeParse(draft);
     if (!parsed.success) {
       throw new PerAgentSuiteError(
+        'invalid-case',
         `generated case ${draft.id} (from ${draft.source}) is invalid: ${parsed.error.message}`,
+        { cause: parsed.error },
       );
     }
     sourceOf.set(draft.id, draft.source);
@@ -166,25 +182,28 @@ export function generatePerAgentSuite(input: PerAgentSuiteInput): EvalCase[] {
     };
     for (const moduleId of modules) {
       if (covered.has(moduleId)) continue;
-      for (const item of input.answerable) {
-        if (item.moduleId !== moduleId) continue;
-        add({
-          id: `gen-lock-${pkgId}-direct-${sanitiseId(item.id)}`,
-          suite: 'locked',
-          package: pkg.id,
-          reviewed_by: 'generated:locked-template',
-          source: item.sourceLabel,
-          turns: oneTurn(item.question, lockedExpect),
-        });
-      }
-      for (const [template, message] of Object.entries(MODULE_MESSAGES)) {
+      for (const template of LOCKED_TEMPLATES) {
+        if (template === 'direct') {
+          for (const item of input.answerable) {
+            if (item.moduleId !== moduleId) continue;
+            add({
+              id: `gen-lock-${pkgId}-direct-${sanitiseId(item.id)}`,
+              suite: 'locked',
+              package: pkg.id,
+              reviewed_by: 'generated:locked-template',
+              source: item.sourceLabel,
+              turns: oneTurn(item.question, lockedExpect),
+            });
+          }
+          continue;
+        }
         add({
           id: `gen-lock-${pkgId}-${template}-${sanitiseId(moduleId)}`,
           suite: 'locked',
           package: pkg.id,
           reviewed_by: 'generated:locked-template',
           source: `${pkg.sourceLabel}#locked:${moduleId}`,
-          turns: oneTurn(message(moduleId), lockedExpect),
+          turns: oneTurn(MODULE_MESSAGES[template](moduleId), lockedExpect),
         });
       }
     }
