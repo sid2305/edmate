@@ -44,7 +44,17 @@
 - Why: Auth.js owns token consumption and sessions (1.4 Q2). The only lever Edmate has is where the mailed link points and what runs before Auth.js's route. Binding the cookie to the address closes the auto-forward login-CSRF the review found. 1.4's accepted residual risk stays: a victim who is talked into clicking "Sign in" on someone else's link still signs in as that person. Merely opening a link, or the callback URL itself, never does.
 - risk: high. This touches `apps/web/src/auth/**` and `apps/web/app/api/auth/**`. Reversible: revert `rebuildLink`'s target, the `index.ts` exports, the two new routes (`signin/email`, `callback/email`), and the page, action and form files. No migration, env var, contract or ADR.
 
-Tool calls used: 50
+### 23 Oct 2026 · 1.4b: no Referrer-Policy no-referrer on apps/web/app/sign-in/confirm/page.tsx · decided by lead · risk: low
+- Decided: Keep `metadata.referrer = 'same-origin'` on `apps/web/app/sign-in/confirm/page.tsx`; the review LOW asking for `no-referrer` is wontfix.
+- Why: Under `no-referrer` the browser sends `Origin: null` on the Server Action POST and Next 16 aborts the action, so manual sign-in would break. `same-origin` keeps the token-bearing URL out of every cross-origin Referer; the token is single-use and spent by then.
+- risk: low. Only a same-origin Referer can carry a spent token.
+
+### 23 Oct 2026 · 1.4b: live-stack run of apps/web/scripts/sandbox-magic-link.mjs deferred to 1.4d · decided by lead · risk: low
+- Decided: The security re-verify's LOW (the sandbox script and the e2e magic-link flows were not run against a live stack by the fixers) is deferred to 1.4d; CI's e2e job runs the e2e magic-link flows on this PR.
+- Why: Builders do not run docker compose; CI's e2e stack covers route precedence and the Origin check for the e2e flows, and the sandbox script is a manual try-it tool.
+- risk: low. If the sandbox script breaks, a human trying the product sees it at once; nothing reaches students.
+
+Tool calls used: 146 (harness count: builder 68, fix round 47, fix round 2 31; the agents reported 50, 30 and 22)
 
 ## Fix round (security and TypeScript review)
 
