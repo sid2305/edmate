@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { systemClock, systemIds } from '../src/turn/deps';
 import { webFallbackReplies } from '../src/turn/fallbackReplies';
 import type { TurnBackend } from '../src/turn/routes';
+import type { SessionRateLimiter } from '../src/turn/sessionRateLimit';
 
 /**
  * Wraps a real clock so a step or classifier *deadline* (task 0.21) never races real wall-clock
@@ -161,6 +162,8 @@ export interface MemoryBackendOptions {
    * every stream, classifier and judge call, through the real `defaultSteps`.
    */
   gateway?: ModelGateway;
+  /** The session-start limit (9.4a); default: allow every start. */
+  sessionRateLimit?: SessionRateLimiter;
 }
 
 export function memoryBackend(opts: MemoryBackendOptions = {}) {
@@ -239,6 +242,7 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
         ) ?? null,
     },
     entitlements,
+    sessionRateLimit: opts.sessionRateLimit ?? { take: async () => true },
     depsFor,
     steps: defaultSteps,
     now: () => new Date(),

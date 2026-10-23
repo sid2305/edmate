@@ -23,8 +23,16 @@ import {
 import { devFactories, devModelEnabled } from './devModel';
 import { processPorts, systemClock, systemIds, turnDepsFor } from './deps';
 import { errorName, TurnUnavailableError, type ServerLog, type TurnBackend } from './routes';
+import { redisSessionRateLimiter, type SessionRateLimiter } from './sessionRateLimit';
 
 export type Env = Readonly<Record<string, string | undefined>>;
+
+/** What the turn runtime's Redis hook opens: the producer queues and both limiters. */
+export interface RuntimeRedis {
+  queues: TurnQueues;
+  limits: TurnLimits;
+  sessionRateLimit: SessionRateLimiter;
+}
 
 /** The outside world the runtime opens; injected so tests open nothing real. */
 export interface RuntimeHooks {
@@ -33,6 +41,14 @@ export interface RuntimeHooks {
   /** Queues and the Redis-backed turn limits on `redisUrl`. */
   redis(redisUrl: string): { queues: TurnQueues; limits: TurnLimits };
   log: ServerLog;
+}
+
+/**
+ * The student turn runtime's hooks (9.4a): its Redis hook also opens the per-student
+ * session-start limit. The studio test chat keeps the narrower `RuntimeHooks`.
+ */
+export interface TurnRuntimeHooks extends RuntimeHooks {
+  redis(redisUrl: string): RuntimeRedis;
 }
 
 /** Anthropic for every tier; the key is read from the environment and kept in a `Secret`. */
@@ -60,7 +76,7 @@ function configuredMarket(env: Env, packs: ReadonlyMap<string, unknown>): string
   return market || 'global';
 }
 
-async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
+async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
   const redisUrl = env.REDIS_URL?.trim();
   if (!redisUrl) throw new TurnUnavailableError('REDIS_URL');
   // The dev model (9.0, D2) is honoured only with a local http AUTH_URL; any other setting of
@@ -80,7 +96,7 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
   const market = configuredMarket(env, packs);
   if (dev) hooks.log.error('turn.dev_model_on', {});
   const { repos, identity } = hooks.database();
-  const { queues, limits } = hooks.redis(redisUrl);
+  const { queues, limits, sessionRateLimit } = hooks.redis(redisUrl);
   const ports = processPorts(repos, {
     market,
     packMarket: (m) => (packs.has(m) ? m : 'global'),
@@ -104,6 +120,7 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
     agents: repos.agents,
     sessions: repos.sessions,
     entitlements: ports.entitlements,
+    sessionRateLimit,
     depsFor: (scope) => turnDepsFor(turnProcess, scope),
     steps: defaultSteps,
     now: () => new Date(),
@@ -115,7 +132,7 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
  * A memoised backend factory. The first call builds; a failure is logged once (its reason code or
  * error name, never a key) and every later call gets the same rejection until the process restarts.
  */
-export function createTurnRuntime(env: () => Env, hooks: RuntimeHooks): () => Promise<TurnBackend> {
+export function createTurnRuntime(env: () => Env, hooks: TurnRuntimeHooks): () => Promise<TurnBackend> {
   let backend: Promise<TurnBackend> | undefined;
   return () => {
     backend ??= build(env(), hooks).catch((error: unknown) => {
@@ -140,14 +157,19 @@ export function consoleLog(prefix: string): ServerLog {
 }
 
 /**
- * The producer queues and the turn limits on two Redis clients: BullMQ wants no per-request retry
- * cap; the limits fail fast (one retry). Errors are logged by name only (they can quote the host).
+ * The producer queues and the limits on two Redis clients: BullMQ wants no per-request retry cap;
+ * the turn limits and the session-start limit share the fail-fast client (one retry; no third
+ * connection). Errors are logged by name only (they can quote the host).
  */
-export function openRedis(url: string, log: ServerLog): { queues: TurnQueues; limits: TurnLimits } {
+export function openRedis(url: string, log: ServerLog): RuntimeRedis {
   const forQueues = new Redis(url, { maxRetriesPerRequest: null });
   const forLimits = new Redis(url, { maxRetriesPerRequest: 1 });
   for (const client of [forQueues, forLimits]) {
     client.on('error', (error: unknown) => log.error('turn.redis_error', { error: errorName(error) }));
   }
-  return { queues: createTurnQueues(forQueues), limits: redisTurnLimits(forLimits) };
+  return {
+    queues: createTurnQueues(forQueues),
+    limits: redisTurnLimits(forLimits),
+    sessionRateLimit: redisSessionRateLimiter(forLimits),
+  };
 }

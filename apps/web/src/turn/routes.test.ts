@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 import { memoryBackend, says, type MemoryBackendOptions } from '../../test/turn-backend';
 import { devModelAdapter } from './devModel';
+import { failingSessionRateLimiter, fakeSessionRateLimiter } from './sessionRateLimit';
 import { createGuard, type GuardDeps, type Principal } from '../auth/guard';
 import {
   createSessionHandlers,
@@ -206,6 +207,79 @@ describe('POST /api/sessions', () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: { code: 'provider_error', retryable: true } });
   });
+});
+
+describe('POST /api/sessions per-student rate limit (9.4a)', () => {
+  function limited(limit: number) {
+    let t = 0;
+    const r = routes({ sessionRateLimit: fakeSessionRateLimiter({ limit, windowMs: 1000, now: () => t }) });
+    return { r, advance: (ms: number) => void (t += ms) };
+  }
+  const start = (r: ReturnType<typeof routes>, who: string, agentId = 'agt_a') =>
+    r.start(post('/api/sessions', who, { agentId }));
+
+  it('the start past the limit is 429 rate_limited (retryable) and writes no session row', async () => {
+    const { r } = limited(2);
+    expect((await start(r, 'clear')).status).toBe(201);
+    expect((await start(r, 'clear')).status).toBe(201);
+    const before = r.world.sessions.length;
+    const entitlementCalls = r.entitlements.calls.length;
+    const res = await start(r, 'clear');
+    expect(res.status).toBe(429);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.json()).toMatchObject({ error: { code: 'rate_limited', retryable: true } });
+    expect(r.world.sessions.length).toBe(before);
+    // Refused before any entitlement or DB work.
+    expect(r.entitlements.calls.length).toBe(entitlementCalls);
+  });
+
+  it('the same student succeeds again once the window has passed', async () => {
+    const { r, advance } = limited(1);
+    expect((await start(r, 'clear')).status).toBe(201);
+    expect((await start(r, 'clear')).status).toBe(429);
+    advance(1000);
+    expect((await start(r, 'clear')).status).toBe(201);
+  });
+
+  it('counts per student: stu_1 capped does not cap stu_2', async () => {
+    const { r } = limited(1);
+    expect((await start(r, 'clear')).status).toBe(201);
+    expect((await start(r, 'clear')).status).toBe(429);
+    // stu_2's subscription with A is paused, so a start is 403 -- reached past the limiter.
+    expect((await start(r, 'two')).status).toBe(403);
+  });
+
+  it('keys the limit by the principal id, never anything in the body', async () => {
+    const seen: string[] = [];
+    const r = routes({ sessionRateLimit: { take: async (id) => (seen.push(id), true) } });
+    await start(r, 'clear');
+    await start(r, 'two');
+    expect(seen).toEqual(['stu_1', 'stu_2']);
+  });
+
+  it('a body that fails validation is not counted', async () => {
+    const seen: string[] = [];
+    const r = routes({ sessionRateLimit: { take: async (id) => (seen.push(id), true) } });
+    expect((await r.start(post('/api/sessions', 'clear', '{nope'))).status).toBe(400);
+    expect(seen).toEqual([]);
+  });
+
+  it('an unreachable limiter fails closed: 503 provider_error, logged by name, no session', async () => {
+    const r = routes({ sessionRateLimit: failingSessionRateLimiter(new TypeError('ECONNREFUSED 10.0.0.1')) });
+    const res = await start(r, 'clear');
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: { code: 'provider_error', retryable: true } });
+    expect(r.world.sessions.filter((s) => s.id.startsWith('ses_new_'))).toEqual([]);
+    expect(r.logs).toEqual([{ event: 'sessions.rate_limit_failed', fields: { error: 'TypeError' } }]);
+  });
+
+  it('turns are not limited by the session-start limiter', async () => {
+    const r = routes({ sessionRateLimit: { take: async () => false } });
+    expect((await start(r, 'clear')).status).toBe(429);
+    const res = await r.turn(post('/api/sessions/ses_1a/turns', 'clear', turnBody()), ctx('ses_1a'));
+    expect(res.status).toBe(200);
+    expect((await events(res)).at(-1)?.type).toBe('done');
+  }, 20_000);
 });
 
 describe('POST /api/sessions/:id/turns', () => {

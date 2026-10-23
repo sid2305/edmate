@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { consoleLog, contentDir, createTurnRuntime, openRedis, type RuntimeHooks } from './runtime';
+import { consoleLog, contentDir, createTurnRuntime, openRedis, type TurnRuntimeHooks } from './runtime';
 import { TurnUnavailableError } from './routes';
 
 const opened = vi.hoisted(() => ({ clients: [] as { url: string; options: Record<string, unknown> }[] }));
@@ -15,9 +15,13 @@ const opened = vi.hoisted(() => ({ clients: [] as { url: string; options: Record
 vi.mock('ioredis', async () => {
   const { EventEmitter } = await import('node:events');
   class Redis extends EventEmitter {
+    readonly defined: string[] = [];
     constructor(url: string, options: Record<string, unknown>) {
       super();
       opened.clients.push({ url, options });
+    }
+    defineCommand(name: string): void {
+      this.defined.push(name);
     }
   }
   return { Redis, default: Redis };
@@ -47,14 +51,15 @@ const CONTENT = fileURLToPath(new URL('../../../../content/', import.meta.url));
 const ENV = { REDIS_URL: 'redis://127.0.0.1:6399', EDMATE_ANTHROPIC_API_KEY: 'test-only-placeholder', EDMATE_CONTENT_DIR: CONTENT };
 
 function hooks() {
+  const sessionRateLimit = { take: async () => true };
   const repos = { agents: { tag: 'agents' }, sessions: { tag: 'sessions' } } as unknown as Repositories;
   const log = vi.fn();
   const h = {
     database: vi.fn(() => ({ repos, identity: { learnerStatus: async () => 'clear' as const } })),
-    redis: vi.fn(() => ({ queues: {} as never, limits: {} as never })),
+    redis: vi.fn(() => ({ queues: {} as never, limits: {} as never, sessionRateLimit })),
     log: { error: log },
-  } satisfies RuntimeHooks;
-  return { h, log, repos };
+  } satisfies TurnRuntimeHooks;
+  return { h, log, repos, sessionRateLimit };
 }
 
 afterEach(() => {
@@ -65,7 +70,7 @@ afterEach(() => {
 
 describe('createTurnRuntime', () => {
   it('builds once, lazily, from the auth database and the Redis URL', async () => {
-    const { h, repos } = hooks();
+    const { h, repos, sessionRateLimit } = hooks();
     const runtime = createTurnRuntime(() => ENV, h);
     expect(h.database).not.toHaveBeenCalled();
     const backend = await runtime();
@@ -74,6 +79,8 @@ describe('createTurnRuntime', () => {
     expect(h.redis).toHaveBeenCalledWith('redis://127.0.0.1:6399');
     expect(backend.agents).toBe(repos.agents);
     expect(backend.sessions).toBe(repos.sessions);
+    // 9.4a: the session-start limit comes from the Redis hook, not built inside build().
+    expect(backend.sessionRateLimit).toBe(sessionRateLimit);
     expect(backend.now()).toBeInstanceOf(Date);
     expect(typeof backend.depsFor).toBe('function');
     expect(backend.log).toBe(h.log);
@@ -242,5 +249,15 @@ describe('openRedis', () => {
     out.limits.redis.emit('error', 'not an error');
     expect(log.mock.calls[0]).toEqual(['turn.redis_error', { error: 'TypeError' }]);
     expect(log.mock.calls).toHaveLength(2);
+  });
+
+  it('builds the session-start limit on the fail-fast limits client (no third connection)', () => {
+    const out = openRedis('redis://127.0.0.1:6399', { error: vi.fn() }) as unknown as {
+      limits: { redis: { defined: string[] } };
+      sessionRateLimit: { take(id: string): Promise<boolean> };
+    };
+    expect(opened.clients).toHaveLength(2);
+    expect(out.limits.redis.defined).toEqual(['edmateSessionStartTake']);
+    expect(typeof out.sessionRateLimit.take).toBe('function');
   });
 });
