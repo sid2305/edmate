@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 5.6d HelpState carried keys must be non-empty · decided by lead · risk: high
+- Decided: merge the change to packages/harness/src/pedagogy/helpState.ts: a carried answer key must be a non-empty string, and the field comment says it lives for one saved turn. No prompt-pack or teaching-behaviour change.
+- Why: the file is on the pedagogy risky path. The code reviewer checked that a HelpState saved by an older deploy with an empty key does not crash a turn, and that no key can leak into a reply.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 5.6d ran over budget · decided by lead · risk: low
+- Decided: accept 77 tool calls against the lead brief's 35 (stop at 45). Six small items across two packages, with a test per behaviour change.
+- Why: the work is complete and reviewed clean; the overrun is the Sonnet under-reporting pattern the 0.22 review (24 Oct 2026) looks at.
+- risk: low
+
+- Item 5's brief cited `runner.ts:1128`, but no "exactly one turn" HelpState text exists there (or anywhere in `runner.ts`); the matching text is the `practiceCarriedKey` field comment in `helpState.ts` (line ~93). Fixed there instead, since that's clearly the comment the review meant (same "one turn" carried-key wording, same 5.6c/ADR-0011 context).
+- Item 3's type-level guard: used a homomorphic mapped type with the `-?` modifier to strip the optional modifier TurnContext's optional keys (e.g. `persona`) would otherwise carry into the mapped type, which made indexing by `[keyof TurnContext]` include `undefined` and broke the `[Mismatched] extends [never]` check even when every type actually matched. No runtime behaviour change.
+- Item 6's test keeps `loadedA`'s `practiceModuleId`/`practiceServed` (but not `practiceItemId`) so the tool serves the same `b` item as the sibling tests; otherwise the tool picks a different item and the assertion on the new `answerKey` wouldn't isolate the carried-key behaviour being tested.
+
+Tool calls used: 77 (harness count: builder 77; the agent reported 31)
+
+---
+
 ### 22 Oct 2026 · 10.1b ran over budget · decided by lead · risk: low
 - Decided: accept 146 tool calls against Phase B's 70. The build itself was on budget (74); the fix round added mutant fakes, eight new suite cases and the per-operation `unsupported` capability.
 - Why: the plan says Phase C (10.1c) must not change the shared suite, so every suite gap the reviewers found had to land now.
