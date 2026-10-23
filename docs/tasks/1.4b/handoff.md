@@ -54,6 +54,11 @@
 - Why: Builders do not run docker compose; CI's e2e stack covers route precedence and the Origin check for the e2e flows, and the sandbox script is a manual try-it tool.
 - risk: low. If the sandbox script breaks, a human trying the product sees it at once; nothing reaches students.
 
+### 23 Oct 2026 · 1.4b: budget overrun from two security fix rounds · decided by lead · risk: low
+- Decided: Accept 146 tool calls against the plan's cap of 70.
+- Why: The build itself took 68 calls, inside the cap. Two fresh fixers (47 and 31 calls) closed a CRITICAL and two HIGH sign-in findings that the reviews found after the build; each round was a separate short-context agent.
+- risk: low. Usage only; no code risk.
+
 Tool calls used: 146 (harness count: builder 68, fix round 47, fix round 2 31; the agents reported 50, 30 and 22)
 
 ## Fix round (security and TypeScript review)
