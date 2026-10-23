@@ -161,10 +161,24 @@ to 100% statements/functions/lines, 98.32% branches (threshold 90%).
 
 Status: DONE
 
-Tool calls used: ~55 (this continuation) + prior session (see earlier handoff notes); counted from
-this agent's own log, approximate given the conversation was resumed from a summary.
+Tool calls used: 289 (harness count: builder 160 + fixer 129; the agents reported about 55 for the last stretch only)
 
 ## Decisions
+
+### 22 Oct 2026 · 5.10b ran over budget · decided by lead · risk: low
+- Decided: accept 289 tool calls (builder 160, fixer 129) against budgets of 65 and 45.
+- Why: the builder ran long over the deadlock analysis and coverage, and the fixer stalled after its last commit (the lead ran its gate and pushed). Both HIGH findings are fixed and re-verified; a third round would cost more than it saves. Raised for the 0.22 review.
+- risk: low
+
+### 22 Oct 2026 · 5.10b teacher-questions lock order approved · decided by lead · risk: high
+- Decided: merge the packages/db/src/repositories/teacher-questions.ts change: open() and answer() now lock teacher-question rows in ascending id order, answer() takes the agent lock first like open(), and both stores keep the trimmed answer; migration 0025 adds an index only.
+- Why: database-reviewer, security-reviewer, code-reviewer and typescript-reviewer reviewed it, and code-reviewer and typescript-reviewer re-verified the two HIGH fixes. The lead re-ran the db gate on the fixer's final commit (1445 tests pass, integration tests included).
+- risk: high
+
+### 22 Oct 2026 · 5.10b unique session index deferred to 5.10d · decided by lead · risk: low
+- Decided: the unique partial index on open sessions per (teacher, student, agent) moves to task 5.10d, which first makes startSession in apps/web/src/turn/routes.ts reuse the open session.
+- Why: startSession calls sessions.create on every request, so the index would turn today's successful calls into constraint errors.
+- risk: low
 
 ### 22 Oct 2026 · 5.10b teacherQuestions.answer lock order and trimmed answer · decided by builder · risk: high
 - Decided: `answer()` takes the agent lock (`for('no key update')`, same order as `open`) before
