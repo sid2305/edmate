@@ -121,9 +121,17 @@ logs the error name only, as before. The method takes a bare student id (no pack
 
 ### Gate
 `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/db`:
-`@edmate/web` Test Files 143 passed | 5 skipped (148); `@edmate/db` Test Files 1 failed | 73
-passed (74), 0 skipped (Postgres on 127.0.0.1:55432, so the integration tests ran);
-`Tasks: 12 successful, 13 total`. The one failing file is
+After merging origin/main (it brought `packages/db` changes), each package's gate on its own is
+green: `corepack pnpm turbo run test --filter=@edmate/db` → `Test Files 74 passed (74)`, 0
+skipped (Postgres on 127.0.0.1:55432, so the integration tests ran), `Tasks: 6 successful, 6
+total`; `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → `Test Files 144
+passed | 4 skipped (148)`, `Tasks: 10 successful, 10 total`. The combined two-package run is
+not green on this loaded machine, and the failures are timing only: in the post-merge run,
+`src/auth/route-coverage.test.ts` `/api/sessions/x/reports` hit vitest's 5 s timeout
+(`Test Files 1 failed | 142 passed | 5 skipped (148)`), and the file passes alone along with
+`src/chat` and `app/home` (`Tests 310 passed (310)`). Before the merge, the combined runs showed
+`@edmate/web` 143 passed | 5 skipped (148) and `@edmate/db` `Test Files 1 failed | 73 passed (74)`,
+`Tasks: 12 successful, 13 total`. The failing db file was
 `packages/db/test/retrieval-leak.int.test.ts`, a wall-clock timing case (the cold-build timeout or
 the p95 SLO case, a different one on different runs) under machine load (load average about 20,
 other builders running). It is the known flake already on the board (the PR #98 SLO flake and
