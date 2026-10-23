@@ -89,4 +89,9 @@ None for this task. (The board already has the other 9.4a LOW follow-ups.)
 - Why: a black-holed Redis would otherwise hang every session start. The route deadline also covers any future limiter implementation.
 - risk: low
 
+### 23 Oct 2026 · 9.4d: no extra catch on the raced take() in apps/web/src/turn/routes.ts · decided by lead · risk: low
+- Decided: the security reviewer's LOW (a late rejection of `take()` after the deadline wins) is wontfix.
+- Why: `Promise.race` attaches handlers to both promises, so a late rejection is already handled; the code reviewer checked this, and the tests show no leaked timers.
+- risk: low
+
 Tool calls used: 48 (harness count: builder 48; the agent reported 32)
