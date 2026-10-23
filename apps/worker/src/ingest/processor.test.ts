@@ -105,15 +105,21 @@ function memoryRepos(initial: DocumentRow) {
   };
 }
 
-function fakeStorage(objects: Record<string, Uint8Array> = {}): StorageClient {
+function fakeStorage(
+  objects: Record<string, Uint8Array> = {},
+  calls: string[] = [],
+): StorageClient {
   return {
     getObjectBytes: (key) => {
+      calls.push('getObjectBytes');
       const bytes = objects[key];
       if (bytes === undefined) throw new Error(`no object at ${key}`);
       return Promise.resolve(bytes);
     },
-    getSignedDownloadUrl: (key, ttl) =>
-      Promise.resolve(`https://signed.example/${key}?ttl=${String(ttl)}`),
+    getSignedDownloadUrl: (key, ttl) => {
+      calls.push('getSignedDownloadUrl');
+      return Promise.resolve(`https://signed.example/${key}?ttl=${String(ttl)}`);
+    },
     deleteObject: () => Promise.resolve(),
   };
 }
@@ -152,9 +158,10 @@ describe('ingestProcessor', () => {
       storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }),
       gateway: gateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }));
     expect(outcome).toBe('ready');
     expect(mem.getRow()?.status).toBe('ready');
     expect(mem.calls).toContain('insertMany');
@@ -167,13 +174,59 @@ describe('ingestProcessor', () => {
       storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }),
       gateway: offGateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }));
     expect(outcome).toBe('ready');
     expect(mem.getRow()?.status).toBe('ready');
     expect(mem.calls).toContain('insertMany');
     expect(mem.calls).not.toContain('setEmbeddings');
+  });
+
+  it('every document fileKind reads object bytes, never a signed URL (8.2k MEDIUM: an exhaustive map replaces the untyped Set)', async () => {
+    for (const fileKind of ['pdf', 'docx', 'pptx', 'markdown', 'vtt', 'srt'] as const) {
+      const storageCalls: string[] = [];
+      const mem = memoryRepos(row());
+      const deps: IngestProcessorDeps = {
+        repos: mem.repos,
+        storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }, storageCalls),
+        gateway: gateway(),
+      };
+      // Bytes are markdown, not the real format: non-markdown kinds fail to parse, but the
+      // storage call made before that failure still proves which branch buildSource took.
+      await ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind })).catch(() => undefined);
+      expect(storageCalls).toContain('getObjectBytes');
+      expect(storageCalls).not.toContain('getSignedDownloadUrl');
+    }
+  });
+
+  it('every recording fileKind reads a signed URL, never object bytes', async () => {
+    for (const fileKind of ['video', 'audio'] as const) {
+      const storageCalls: string[] = [];
+      const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.media' }));
+      const deps: IngestProcessorDeps = {
+        repos: mem.repos,
+        storage: fakeStorage({}, storageCalls),
+        gateway: gateway(),
+      };
+      await ingestProcessor(
+        deps,
+        log,
+      )(
+        job({
+          teacherId: 'tch_1',
+          documentId: 'doc_1',
+          fileKind,
+          mimeType: fileKind === 'video' ? 'video/mp4' : 'audio/mpeg',
+        }),
+      ).catch(() => undefined);
+      expect(storageCalls).toContain('getSignedDownloadUrl');
+      expect(storageCalls).not.toContain('getObjectBytes');
+    }
   });
 
   it('EDMATE_INGEST_EMBEDDINGS=off: a video job fails as unsupported with nothing written', async () => {
@@ -184,9 +237,10 @@ describe('ingestProcessor', () => {
       gateway: offGateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(
-        job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video', mimeType: 'video/mp4' }),
-      ),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video', mimeType: 'video/mp4' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
     expect(mem.getRow()?.status).toBe('failed');
     expect(mem.getRow()?.failureReason).toBe('unsupported');
@@ -202,7 +256,10 @@ describe('ingestProcessor', () => {
       gateway: offGateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(
+      ingestProcessor(
+        deps,
+        log,
+      )(
         job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'audio', mimeType: 'audio/mpeg' }),
       ),
     ).rejects.toBeInstanceOf(PermanentJobError);
@@ -225,7 +282,10 @@ describe('ingestProcessor', () => {
       storage: fakeStorage(),
       gateway: gateway({ transcribe }),
     };
-    const outcome = await ingestProcessor(deps, log)(
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(
       job({
         teacherId: 'tch_1',
         documentId: 'doc_1',
@@ -262,7 +322,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
   });
 
@@ -274,7 +337,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
   });
 
@@ -287,7 +353,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
     expect(mem.getRow()?.status).toBe('failed');
     expect(mem.getRow()?.failureReason).toBe('validation');
@@ -308,7 +377,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
     expect(seen).toEqual([MAX_DOCUMENT_BYTES]);
     expect(mem.getRow()?.status).toBe('failed');
@@ -325,9 +397,10 @@ describe('ingestProcessor', () => {
       gateway: gateway({ transcribe }),
     };
     await expect(
-      ingestProcessor(deps, log)(
-        job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video', mimeType: 'video/mp4' }),
-      ),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video', mimeType: 'video/mp4' })),
     ).rejects.toThrow('transcribed');
     expect(mem.getRow()?.status).toBe('processing');
   });
@@ -347,9 +420,10 @@ describe('ingestProcessor', () => {
       },
       gateway: gateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }));
     expect(outcome).toBe('stale_skipped');
     expect(mem.calls).toContain('insertManyIfStorageKey');
     expect(mem.calls).not.toContain('insertMany');
@@ -364,9 +438,10 @@ describe('ingestProcessor', () => {
       storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }),
       gateway: gateway(),
     };
-    await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-    );
+    await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }));
     expect(mem.calls.filter((c) => c === 'get')).toHaveLength(1);
     expect(mem.calls).toContain('insertMany');
   });
@@ -384,9 +459,10 @@ describe('ingestProcessor', () => {
       },
       gateway: gateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }));
     expect(outcome).toBe('stale_skipped');
     expect(mem.calls).not.toContain('insertMany');
     expect(mem.calls.some((c) => c.startsWith('updateStatus'))).toBe(false);
@@ -402,9 +478,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(
-        job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-      ),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toThrow();
     expect(mem.getRow()?.status).not.toBe('ready');
   });
@@ -426,9 +503,10 @@ describe('ingestProcessor', () => {
       if (status === 'ready') mem.setRow(row({ storageKey: 'docs/doc_1/v2', status: 'uploading' }));
       return realUpdateStatus(scope, id, status, failureReason);
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }));
     expect(outcome).toBe('stale_skipped');
   });
 
@@ -440,7 +518,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toThrow('no object at');
   });
 
@@ -458,7 +539,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(RepositoryError);
   });
 
@@ -476,7 +560,10 @@ describe('ingestProcessor', () => {
       gateway: gateway(),
     };
     await expect(
-      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+      ingestProcessor(
+        deps,
+        log,
+      )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
   });
 });
@@ -513,9 +600,10 @@ describe('ingestProcessor: caption files (task 8.2c Phase B)', () => {
       },
       gateway: gateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' }));
     expect(outcome).toBe('ready');
     expect(mem.getRow()?.status).toBe('ready');
     expect(seen).toEqual([MAX_DOCUMENT_BYTES]);
@@ -529,9 +617,10 @@ describe('ingestProcessor: caption files (task 8.2c Phase B)', () => {
       storage: fakeStorage({ 'docs/doc_1/v1.srt': srtBytes() }),
       gateway: gateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'srt' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'srt' }));
     expect(outcome).toBe('ready');
     expect(mem.getRow()?.status).toBe('ready');
     expect(mem.calls).toContain('insertMany');
@@ -591,9 +680,10 @@ describe('ingestProcessor: caption files (task 8.2c Phase B)', () => {
       storage: fakeStorage({ 'docs/doc_1/v1.vtt': vttBytes() }),
       gateway: offGateway(),
     };
-    const outcome = await ingestProcessor(deps, log)(
-      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' }),
-    );
+    const outcome = await ingestProcessor(
+      deps,
+      log,
+    )(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' }));
     expect(outcome).toBe('ready');
     expect(mem.getRow()?.status).toBe('ready');
     expect(mem.calls).not.toContain('setEmbeddings');

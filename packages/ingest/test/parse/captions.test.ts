@@ -3,7 +3,11 @@
 // caption file from a real video.
 import { describe, expect, it } from 'vitest';
 import { parseSrt, parseVtt } from '../../src/parse/captions.js';
-import { formatTimestamp, parseVideoTranscript, VIDEO_UNIT_WINDOW_MS } from '../../src/parse/video.js';
+import {
+  formatTimestamp,
+  parseVideoTranscript,
+  VIDEO_UNIT_WINDOW_MS,
+} from '../../src/parse/video.js';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -68,9 +72,7 @@ describe('parseVtt', () => {
       ),
       'Tags',
     );
-    expect(doc.units[0]?.text).toBe(
-      'Rock & roll chemistry <fun> today!!!xy "quoted" \'it\'s\' end',
-    );
+    expect(doc.units[0]?.text).toBe("Rock & roll chemistry <fun> today!!!xy \"quoted\" 'it's' end");
   });
 
   it('a cue identifier line is optional', () => {
@@ -82,7 +84,10 @@ describe('parseVtt', () => {
   });
 
   it('parses CRLF and CR line endings', () => {
-    const crlf = parseVtt(enc('WEBVTT\r\n\r\n00:00:00.000 --> 00:00:01.000\r\nCRLF cue.\r\n'), 'CRLF');
+    const crlf = parseVtt(
+      enc('WEBVTT\r\n\r\n00:00:00.000 --> 00:00:01.000\r\nCRLF cue.\r\n'),
+      'CRLF',
+    );
     expect(crlf.units).toEqual([{ text: 'CRLF cue.', locator: '0:00' }]);
     const cr = parseVtt(enc('WEBVTT\r\r00:00:00.000 --> 00:00:01.000\rCR cue.\r'), 'CR');
     expect(cr.units).toEqual([{ text: 'CR cue.', locator: '0:00' }]);
@@ -137,9 +142,7 @@ describe('parseVtt', () => {
       ),
       'Order',
     );
-    expect(doc.units).toEqual([
-      { text: 'First. Second said first in the file.', locator: '0:00' },
-    ]);
+    expect(doc.units).toEqual([{ text: 'First. Second said first in the file.', locator: '0:00' }]);
   });
 
   it('a missing WEBVTT header is unsupported, no text from the file', () => {
@@ -148,6 +151,17 @@ describe('parseVtt', () => {
       throw new Error('expected parseVtt to throw');
     } catch (e) {
       expect((e as { code?: string }).code).toBe('unsupported');
+      expect((e as Error).message).not.toContain('not a caption file');
+    }
+  });
+
+  it('a bad header and a bad title together report the header error first', () => {
+    try {
+      parseVtt(enc('not a caption file\n\nsome text\n'), '  ');
+      throw new Error('expected parseVtt to throw');
+    } catch (e) {
+      expect((e as { code?: string }).code).toBe('unsupported');
+      expect((e as Error).message).toContain('not a WebVTT caption file');
       expect((e as Error).message).not.toContain('not a caption file');
     }
   });
@@ -180,10 +194,7 @@ describe('parseVtt', () => {
   });
 
   it('matches parseVideoTranscript units for the same segments', () => {
-    const doc = parseVtt(
-      enc('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello class.\n'),
-      'Compare',
-    );
+    const doc = parseVtt(enc('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello class.\n'), 'Compare');
     const transcript = {
       text: 'Hello class.',
       language: 'en',
@@ -198,7 +209,9 @@ describe('parseVtt', () => {
 describe('parseSrt', () => {
   it('parses a happy path with index lines and a comma separator', () => {
     const doc = parseSrt(
-      enc('1\n00:00:00,000 --> 00:00:02,000\nHello class.\n\n2\n00:00:05,000 --> 00:00:07,000\nWe begin today.\n'),
+      enc(
+        '1\n00:00:00,000 --> 00:00:02,000\nHello class.\n\n2\n00:00:05,000 --> 00:00:07,000\nWe begin today.\n',
+      ),
       'Srt lesson',
     );
     expect(doc).toEqual({
@@ -208,10 +221,7 @@ describe('parseSrt', () => {
   });
 
   it('parses without index lines, and with a dot separator', () => {
-    const doc = parseSrt(
-      enc('00:00:00.000 --> 00:00:01.000\nNo index line.\n'),
-      'No index',
-    );
+    const doc = parseSrt(enc('00:00:00.000 --> 00:00:01.000\nNo index line.\n'), 'No index');
     expect(doc.units).toEqual([{ text: 'No index line.', locator: '0:00' }]);
   });
 
@@ -225,6 +235,12 @@ describe('parseSrt', () => {
 
   it('a missing header is fine (SRT has none); only bad timing fails', () => {
     expect(() => parseSrt(enc('not timed at all\nsome text\n'), 'Bad')).toThrow(
+      'no captions to learn from',
+    );
+  });
+
+  it('bad timing and a bad title together report the timing error first', () => {
+    expect(() => parseSrt(enc('not timed at all\nsome text\n'), '  ')).toThrow(
       'no captions to learn from',
     );
   });
