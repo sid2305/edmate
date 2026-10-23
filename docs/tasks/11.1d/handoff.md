@@ -1,4 +1,4 @@
-**Status:** DONE (Phase A only)
+**Status:** DONE (Phases A, B and C)
 
 ## Phase A
 
@@ -69,10 +69,137 @@ Result: clean, no findings.
   check before/after), and `listUpcomingForStudent` dedup + cancelled-but-visible cases.
 - `packages/db/test/repositories.int.test.ts` — minimal addition (see Decisions below).
 
+## Phase B
+
+Teacher studio edit/cancel UI over Phase A's `update`/`cancel` repository methods:
+
+- `apps/web/app/api/studio/live-classes/[id]/route.ts` (new) — `PUT` → `liveClassesHandlers.update`,
+  `DELETE` → `liveClassesHandlers.cancel`, `withRole(['teacher'], …)`, same shape as the sibling
+  `documents/[id]/route.ts`. No edit to `apps/web/src/auth/**` was needed: the `/api/studio/**`
+  `ROUTE_POLICY` row already allows `PUT`/`DELETE` for teachers.
+- `apps/web/src/studio/liveClasses/routes.ts` — `LiveClassesBackend.liveClasses` widened to also
+  pick `update`/`cancel`; `Work` widened to receive `ctx: RoleContext`; a shared `classId(ctx)`
+  helper (mirrors `docId(ctx)` in `../routes.ts`) reads the `:id` path param through the same
+  `Id` regex used for package ids. `TitleSchema`/`LinkSchema`/`StartsAtSchema` factored out of
+  `CreateSchema` and reused by a new `UpdateSchema` (no `packageIds`). New `update`/`cancel`
+  `Work`s; the https-only check (`validation('The join link must start with https://.')`) is
+  shared via one `HTTPS_MESSAGE` constant, applied to both `create` and `update`. The repository's
+  `not_found`/`invalid` map through the existing generic `run()` wrapper — no new branch needed.
+- `apps/web/src/studio/liveClasses/index.ts` — unchanged in substance; `liveClassesHandlers` now
+  carries `update`/`cancel` automatically because it is just `createLiveClassesHandlers(...)`'s
+  return value.
+- `apps/web/src/studio/liveClasses/runtime.ts` — no edit needed: `LiveClassesHooks.repos()`
+  already returns the whole `liveClasses` repository object (not narrowed), so `update`/`cancel`
+  flow through to `LiveClassesBackend` without a change.
+- `apps/web/src/studio/liveClasses/updateLiveClassAction.ts` (new), `cancelLiveClassAction.ts`
+  (new) — client calls (`PUT`/`DELETE`), same settle-never-reject shape as
+  `scheduleLiveClassAction.ts` (try/catch around the fetch and the body read, a zod `safeParse` on
+  the reply).
+- `apps/web/app/teacher/live-classes/LiveClassesView.tsx` — for a `status: 'scheduled'` class that
+  hasn't started: an **Edit** button opens an inline form (title/link/`datetime-local` start,
+  pre-filled via a new `toLocalInputValue` helper — the reverse of the existing
+  `toIsoWithOffset`), with **Save**/**Cancel**; a **Cancel class** button calls
+  `window.confirm(t('cancelConfirm'))` first (mirrors `ResetMemoryButton.tsx`), then
+  `cancelLiveClassAction`. A `status: 'cancelled'` class shows a "Cancelled" label instead of the
+  join link and instead of either control (checked before the started/not-started branch, so a
+  cancelled class never shows Edit/Cancel even if, by the time the page is viewed, its own
+  `startsAt` has since passed too). Per-row state (`editingId`, `editDraft`, `rowBusy`,
+  `rowError` — all keyed or scoped by class id, not the page-wide `busy`) means editing or
+  cancelling one class never disables another row's own controls (lessons: "a studio page that
+  trusts a 200 response gets stuck"); every fetch is try/catch/finally. **11.1b review LOW fix:**
+  the existing join `<a>` gets `aria-label={t('joinLinkLabel', { title: c.title })}`, visible text
+  unchanged.
+- `apps/web/messages/en.json` — 13 new keys inside `liveClassesStudio` only (`joinLinkLabel`,
+  `editButton`, `editTitleLabel`, `editLinkLabel`, `editStartsAtLabel`, `saveButton`, `saving`,
+  `cancelEditButton`, `cancelButton`, `cancelling`, `cancelConfirm`, `cancelledLabel`).
+- Tests: `routes.test.ts` gains 16 new cases (PUT/DELETE success; a non-https or over-length link
+  on PUT is 400, nothing written; a link at exactly `LIVE_CLASS_LINK_MAX_LENGTH` succeeds on both
+  POST and PUT — the 11.1b review LOW fix; another teacher's id is 404 on both; a repository
+  `invalid` is 400 on both; a double-cancel no-op is 200 with `{cancelled: false}`; a malformed
+  `:id` is 400 before the backend is called). `LiveClassesView.test.tsx` gains a new "edit and
+  cancel (task 11.1d)" describe block (8 cases: edit updates the row in place; the inline form's
+  own Cancel discards the draft; a failed PUT shows an error and re-enables that row only; a
+  confirmed Cancel shows "Cancelled" with no Edit/Cancel/join-link; a declined `window.confirm`
+  does nothing; a failed DELETE shows an error and re-enables the row; an already-cancelled class
+  and an already-started class both show no Edit/Cancel) plus an update to the existing join-link
+  test for its new `aria-label`.
+
+### Gate
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force
+```
+Result: 10/10 tasks successful. Test Files: 145 passed, 4 skipped (149). Tests: 2222 passed, 25
+skipped (2247), before the `main` merge below; after merging `main` and re-running: 10/10 tasks,
+145 passed/4 skipped test files (149), 2234 passed/26 skipped tests (2260).
+
+```
+python3 .githooks/secret-scan.py --all
+```
+Result: clean, no findings (ran directly from this worktree; no refusal this time).
+
+### Files
+
+- `apps/web/app/api/studio/live-classes/[id]/route.ts` (new)
+- `apps/web/src/studio/liveClasses/routes.ts`, `routes.test.ts`
+- `apps/web/src/studio/liveClasses/index.ts`
+- `apps/web/src/studio/liveClasses/updateLiveClassAction.ts` (new),
+  `cancelLiveClassAction.ts` (new)
+- `apps/web/app/teacher/live-classes/LiveClassesView.tsx`, `LiveClassesView.test.tsx`
+- `apps/web/messages/en.json` (`liveClassesStudio` namespace)
+
+## Phase C
+
+Student `/home` surfaces a cancelled class:
+
+- `apps/web/app/home/view.tsx` — inside the live-classes list: when `liveClass.status ===
+  'cancelled'`, render `{t('liveClasses.cancelled')}` in place of the window label, and render
+  neither the join `<a>` nor `<AskQuestionForm>` for that class; a `'scheduled'` class is
+  unchanged.
+- `apps/web/app/home/page.tsx` — **no change.** `homeLiveClasses` already passes `UpcomingLiveClass`
+  rows (with `status`, since Phase A merged) straight through; the types flowed cleanly with no
+  edit.
+- `apps/web/messages/en.json` — one new key, `home.liveClasses.cancelled`, inside the existing
+  `home` namespace.
+- `apps/web/app/home/view.test.tsx` — 3 new cases (a cancelled class shows the label with no join
+  link and no ask form; a scheduled class alongside a cancelled one keeps its own join link and
+  ask form; no axe violations with a cancelled class shown). `page.test.tsx` untouched (no `page.tsx`
+  edit was needed).
+
+### Gate
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force
+```
+Result (before the `main` merge): 10/10 tasks successful; Test Files 145 passed/4 skipped (149);
+Tests 2222 passed/25 skipped (2247).
+
+```
+python3 .githooks/secret-scan.py --all
+```
+Result: clean.
+
+### Files
+
+- `apps/web/app/home/view.tsx`, `view.test.tsx`
+- `apps/web/messages/en.json` (`home.liveClasses` namespace)
+
+### After merging `main`
+
+`git merge origin/main` picked up an unrelated `en.json` addition (merged cleanly, no conflict)
+plus other teams' work (`apps/staff/**`, `packages/db/src/repositories/takedowns.ts`,
+`teacher-profiles.ts`, board/decision-log updates) — none of it touches a file this task owns.
+Re-ran the full gate after the merge: 10/10 tasks successful; Test Files 145 passed/4 skipped
+(149); Tests 2234 passed/26 skipped (2260). Secret scan: clean.
+
 ## Left to do
 
-- Phase B: apps/web teacher studio (edit/cancel UI for live classes).
-- Phase C: apps/web student home (surface cancelled/updated class status).
+- None for this task. The 11.1e follow-up LOWs (Phase A review) are a different builder's work,
+  not this task's.
+- Follow-up noted in the plan, not fixed here: `classQuestions.submit` (11.2a) does not check a
+  class's `status`, so a student could still submit a pre-class question to a class that was
+  since cancelled through the API directly (Phase C only stops *rendering* the ask-a-question form
+  for a cancelled class on `/home`). Logged as a gap, not a blocker, per the plan.
 
 ## Decisions
 
@@ -126,7 +253,33 @@ Result: clean, no findings.
   resolution either way).
 - risk: low
 
+### 23 Oct 2026 · Double-cancel is a no-op (200, not an error) in the PUT/DELETE routes too · decided by builder · risk: low
+- Decided: Phase B's `DELETE` route returns the repository's `{cancelled: false}` as a plain 200,
+  the same as a first cancel's `{cancelled: true}`, rather than treating "already cancelled" as an
+  error status. The route layer makes no decision of its own here; it only carries Phase A's own
+  judgment call (noted in the plan's "Open questions for the lead") through to the HTTP response.
+- Why: a double-click Cancel, or a client retry after a dropped reply, must not show the teacher
+  an error toast for something that already succeeded; `LiveClassesView`'s own Cancel flow relies
+  on this (the button's busy state always clears, whether the server did the write or found it
+  already done).
+- risk: low
+
+### 23 Oct 2026 · The join link's new aria-label changes its accessible name; the existing test was updated, not the markup · decided by builder · risk: low
+- Decided: adding `aria-label={t('joinLinkLabel', { title: c.title })}` to the join `<a>`
+  (11.1b review LOW fix) makes that aria-label the link's accessible name, overriding its visible
+  text ("Join link") for `getByRole('link', { name: … })` queries. Kept the visible text as the
+  plan asked and updated `LiveClassesView.test.tsx`'s one existing assertion
+  (`getByRole('link', { name: 'Join link' })` → `{ name: 'Join link for Ratios review' }`, with a
+  separate `toHaveTextContent('Join link')` check added) rather than finding another way to keep
+  the old query passing.
+- Why: this is standard ARIA behaviour (an explicit `aria-label` always wins over text content for
+  the accessible name), not a bug; the plan's own acceptance line for this fix ("a per-class
+  aria-label on the studio join links") only makes sense if the label actually changes the name a
+  screen reader announces per row, which is the whole point of the fix.
+- risk: low
+
 Tool calls used: 149 (harness count: builder 116 + fixer 33; the agents reported 92 + 26)
+Phase B+C tool calls: 95
 
 ## Fix round 1
 
