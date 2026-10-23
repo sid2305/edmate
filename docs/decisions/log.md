@@ -10,6 +10,15 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2m ran over budget · decided by lead · risk: low
+- Decided: accept 74 tool calls against a 40-call budget; both reviews approve with no findings.
+- Why: the builder counted 32; the harness counted 74 (install, three package gates, and new processor tests). The work is done and clean, so another round would only cost more.
+- risk: low
+
+Tool calls used: 74 (harness count: builder 74; the agent reported 32)
+
+---
+
 ### 22 Oct 2026 · 3.11h: linear-time test rewritten in packages/harness/src/pedagogy · decided by builder · risk: high
 - Decided: widen `expectLinear`'s input-size step from 4x to 16x and raise
   the ratio bound from 10 to 64, instead of switching to counted work units,

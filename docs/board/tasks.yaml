@@ -6184,9 +6184,28 @@ tasks:
   accept: both changes with a test each; ingest typecheck, lint and test green
   deps:
   - 8.2j
-  status: running
+  status: done
   branch: m13/8.2m-ingest-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 29
+    tokens_in: 96
+    tokens_out: 1120
+    cache_read_tokens: 1219022
+    wall_time_seconds: 90
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7d
   milestone: M13
   title: '9.7b follow-ups: full-flow.spec.ts:224 toHaveCount(0) takes the STEP_TIMEOUT like the other assertions (typescript-reviewer LOW); give chat.spec.ts a postOnce-style send with a hydration retry
