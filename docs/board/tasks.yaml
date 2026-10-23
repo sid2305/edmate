@@ -3894,9 +3894,9 @@ tasks:
   deps:
   - '9.2'
   risk: medium
-  status: planning
-  branch: null
-  model: plan:fable
+  status: running
+  branch: m13/9.2d-display-name
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 8.6c
   milestone: M8
   title: '8.6 Phase C: apps/web studio packages API with cost estimates (plan docs/tasks/8.6/plan.md)'
