@@ -1,7 +1,7 @@
 # Task 8.9d handoff: studio questions follow-ups (8.9b/8.9c review deferrals)
 
 **Status:** DONE
-Tool calls used: 46
+Tool calls used: 75 (harness count: builder 75; the agent reported 46)
 
 - Branch: `m13/8.9d-questions-followups` (built on local branch `work-89d`)
 - Worktree: `.claude/worktrees/agent-a244f0c129546a6b1`
@@ -89,4 +89,9 @@ it time out under load with no code change nearby.
   there was no existing call site to infer a mapping from; the brief asked to match how other
   studio routes map these kinds, and `profile.ts` is the sibling with the most complete mapping
   (all five kinds, one switch, no default fallthrough).
+- risk: low
+
+### 23 Oct 2026 · 8.9d: fromError exhaustiveness in apps/web/src/studio/questions/routes.ts deferred to 8.9e · decided by lead · risk: low
+- Decided: the TypeScript-review MEDIUM at apps/web/src/studio/questions/routes.ts:126 (the switch is not compiler-enforced exhaustive although its comment says so) moves to 8.9e, together with the same check in studio/profile.ts.
+- Why: every current kind is mapped and tested, and an unknown kind still fails closed with a logged 500; MEDIUM findings go to board tasks.
 - risk: low
