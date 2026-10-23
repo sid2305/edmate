@@ -36,14 +36,18 @@ let raw: pg.Client;
 
 const A = { teacherId: teacherId('A') };
 const B = { teacherId: teacherId('B') };
-/** The week under test: [2026-10-12 00:00 UTC, 2026-10-19 00:00 UTC). */
-const WEEK = '2026-10-12';
-const NEXT_WEEK = '2026-10-19';
-const IN = '2026-10-14T10:00:00.000Z';
-const OLD = '2026-10-01T10:00:00.000Z';
+/**
+ * The week under test: [2026-10-05 00:00 UTC, 2026-10-12 00:00 UTC). Both weeks are closed: since
+ * 11.3c the repository refuses a week that has not ended (its end is after now), so fixtures stay
+ * in the past instead of pinning a clock.
+ */
+const WEEK = '2026-10-05';
+const NEXT_WEEK = '2026-10-12';
+const IN = '2026-10-07T10:00:00.000Z';
+const OLD = '2026-09-24T10:00:00.000Z';
 /** The last instant before the window, and the window's (excluded) end. */
-const JUST_BEFORE = '2026-10-11T23:59:59.999Z';
-const AT_END = '2026-10-19T00:00:00.000Z';
+const JUST_BEFORE = '2026-10-04T23:59:59.999Z';
+const AT_END = '2026-10-12T00:00:00.000Z';
 /** The teacher's own 8.5 test chat runs with student id = teacher id. */
 const PREVIEW = teacherId('A');
 
@@ -216,7 +220,7 @@ describe.skipIf(!up)(
         await question('A', X[5]!, 'g_win', { at: JUST_BEFORE });
         await question('A', X[6]!, 'g_win', { at: AT_END });
         expect(await repos.insights.weeklyTopQuestions(A, WEEK)).toEqual([]);
-        await question('A', X[7]!, 'g_win', { status: 'dismissed', at: '2026-10-12T00:00:00Z' });
+        await question('A', X[7]!, 'g_win', { status: 'dismissed', at: '2026-10-05T00:00:00Z' });
         const [g] = await repos.insights.weeklyTopQuestions(A, WEEK);
         expect(g).toEqual({ groupId: 'g_win', students: 5, questions: 5 });
         // The next week sees only the row at its own start.
@@ -385,7 +389,7 @@ describe.skipIf(!up)(
           await miss('A', st, topicOf('A', 3));
           await trace('A', st, { move: 'ask_teacher' });
           // Next week's rows stay out of this week's payload.
-          await question('A', st, 'g_later', { at: '2026-10-20T10:00:00Z', status: 'answered' });
+          await question('A', st, 'g_later', { at: '2026-10-13T10:00:00Z', status: 'answered' });
         }
         const saved = await repos.insights.computeAndSaveWeek(A, WEEK);
         const expected: WeeklyInsightsPayload = {
@@ -417,7 +421,7 @@ describe.skipIf(!up)(
           [teacherId('A')],
         );
         expect(rows.rows[0].n).toBe(2);
-        expect(await repos.insights.getWeek(A, '2026-10-05')).toBeNull();
+        expect(await repos.insights.getWeek(A, '2026-09-28')).toBeNull();
       });
 
       it('has no public write that takes a payload', () => {
@@ -456,7 +460,7 @@ describe.skipIf(!up)(
       });
 
       it('refuses a week that is not a Monday date', async () => {
-        for (const w of ['2026-10-13', '2026-10-12T00:00:00Z', 'monday', '']) {
+        for (const w of ['2026-10-06', '2026-10-05T00:00:00Z', 'monday', '']) {
           await expectKind(() => repos.insights.computeAndSaveWeek(A, w), 'invalid');
           await expectKind(() => repos.insights.getWeek(A, w), 'invalid');
           await expectKind(() => repos.insights.weeklyTopQuestions(A, w), 'invalid');
@@ -465,6 +469,47 @@ describe.skipIf(!up)(
         }
         const n = await raw.query('select count(*)::int as n from insights');
         expect(n.rows[0].n).toBe(0);
+      });
+
+      // Task 11.3c (11.3a security review, deferred MEDIUM): a week that has not ended is
+      // refused, so nobody can read "this week" before and after one student's activity and
+      // difference that student out of the floor.
+      describe('refuses a week that has not ended', () => {
+        /** The Monday (YYYY-MM-DD) of the ISO week containing `d`, in UTC. */
+        const mondayOf = (d: Date): string => {
+          const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+          const monday = new Date(day - ((d.getUTCDay() + 6) % 7) * 24 * 60 * 60 * 1000);
+          return monday.toISOString().slice(0, 10);
+        };
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        const thisWeek = mondayOf(new Date());
+        const futureWeek = mondayOf(new Date(Date.now() + 7 * DAY_MS));
+        const farFuture = mondayOf(new Date(Date.now() + 365 * DAY_MS));
+        const lastWeek = mondayOf(new Date(Date.now() - 7 * DAY_MS));
+
+        it('is invalid for the current week and any future week, on every read and the write', async () => {
+          for (const st of first(5)) await trace('A', st, { move: 'ask_teacher', at: new Date().toISOString() });
+          for (const w of [thisWeek, futureWeek, farFuture]) {
+            await expectKind(() => repos.insights.weeklyTopQuestions(A, w), 'invalid');
+            await expectKind(() => repos.insights.stickingTopics(A, w), 'invalid');
+            await expectKind(() => repos.insights.unhelpfulAnswerCount(A, w), 'invalid');
+            await expectKind(() => repos.insights.getWeek(A, w), 'invalid');
+            await expectKind(() => repos.insights.computeAndSaveWeek(A, w), 'invalid');
+          }
+          const n = await raw.query('select count(*)::int as n from insights');
+          expect(n.rows[0].n).toBe(0);
+        });
+
+        it('still serves a closed week (last week and the fixture weeks)', async () => {
+          for (const w of new Set([lastWeek, WEEK, NEXT_WEEK])) {
+            expect(await repos.insights.weeklyTopQuestions(A, w)).toEqual([]);
+            expect(await repos.insights.stickingTopics(A, w)).toEqual([]);
+            expect(await repos.insights.unhelpfulAnswerCount(A, w)).toBeNull();
+            expect(await repos.insights.getWeek(A, w)).toBeNull();
+            expect(await repos.insights.computeAndSaveWeek(A, w)).toMatchObject({ week: w });
+            expect((await repos.insights.getWeek(A, w))?.payload).toEqual(emptyPayload());
+          }
+        });
       });
 
       it('throws integrity for a stored payload that no longer parses', async () => {
