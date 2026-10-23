@@ -45,15 +45,13 @@ describe('LiveClassesView', () => {
       />,
     );
     expect(screen.getByText('Ratios review')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Join link' })).toHaveAttribute(
-      'href',
-      'https://meet.example.com/abc',
-    );
-    expect(screen.getByRole('link', { name: 'Join link' })).toHaveAttribute('target', '_blank');
-    expect(screen.getByRole('link', { name: 'Join link' })).toHaveAttribute(
-      'rel',
-      'noopener noreferrer',
-    );
+    // 11.1b review LOW fix: the join link's aria-label includes the class title so a
+    // screen-reader user can tell rows apart; the visible text stays "Join link".
+    const link = screen.getByRole('link', { name: 'Join link for Ratios review' });
+    expect(link).toHaveTextContent('Join link');
+    expect(link).toHaveAttribute('href', 'https://meet.example.com/abc');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
   it('schedules a class and adds it to the list, clearing the form', async () => {
@@ -115,6 +113,154 @@ describe('LiveClassesView', () => {
     fireEvent.click(button);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Try again.'));
     expect(button).not.toBeDisabled();
+  });
+
+  // Task 11.1d Phase B: edit and cancel a scheduled class, before it starts.
+  describe('edit and cancel (task 11.1d)', () => {
+    const CLASS: TeacherLiveClassRow = {
+      id: 'lc_1',
+      title: 'Ratios review',
+      link: 'https://meet.example.com/abc',
+      startsAt: '2026-11-01T10:00:00.000Z',
+      packageIds: ['pkg_1'],
+      status: 'scheduled',
+    };
+
+    it('an Edit flow updates the row in place', async () => {
+      const updateLiveClass = vi.fn(async () => ({ ok: true as const }));
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
+      );
+      const row = within(screen.getByRole('list', { name: 'Live classes' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Ratios review 2' } });
+      fireEvent.change(row.getByLabelText('Join link (https://…)'), {
+        target: { value: 'https://meet.example.com/xyz' },
+      });
+      fireEvent.click(row.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(updateLiveClass).toHaveBeenCalled());
+      expect(updateLiveClass).toHaveBeenCalledWith(
+        'lc_1',
+        expect.objectContaining({ title: 'Ratios review 2', link: 'https://meet.example.com/xyz' }),
+      );
+      await waitFor(() => expect(screen.getByText('Ratios review 2')).toBeInTheDocument());
+      expect(row.queryByLabelText('Title')).toBeNull();
+    });
+
+    it('"Cancel" on the inline edit form discards the draft without saving', () => {
+      const updateLiveClass = vi.fn();
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
+      );
+      const row = within(screen.getByRole('list', { name: 'Live classes' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Changed' } });
+      fireEvent.click(row.getByRole('button', { name: 'Cancel' }));
+      expect(screen.getByText('Ratios review')).toBeInTheDocument();
+      expect(updateLiveClass).not.toHaveBeenCalled();
+    });
+
+    it('Save then discard while the PUT is in flight disables discard and ignores a stale resolve (code review HIGH)', async () => {
+      let resolveUpdate: (value: { ok: true }) => void = () => {};
+      const updateLiveClass = vi.fn(
+        () => new Promise<{ ok: true }>((resolve) => (resolveUpdate = resolve)),
+      );
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
+      );
+      const row = within(screen.getByRole('list', { name: 'Live classes' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Changed' } });
+      fireEvent.click(row.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(updateLiveClass).toHaveBeenCalled());
+      // The discard "Cancel" button must be disabled while the save is still in flight, so a
+      // teacher cannot start a discard that the pending PUT would later silently undo.
+      expect(row.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      await act(async () => {
+        resolveUpdate({ ok: true });
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(screen.getByText('Changed')).toBeInTheDocument());
+    });
+
+    it('a failed PUT shows an error and re-enables the row (not stuck disabled)', async () => {
+      const updateLiveClass = vi.fn(async () => ({
+        ok: false as const,
+        code: 'validation' as const,
+        retryable: false,
+      }));
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
+      );
+      const row = within(screen.getByRole('list', { name: 'Live classes' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      const save = row.getByRole('button', { name: 'Save' });
+      fireEvent.click(save);
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+      expect(save).not.toBeDisabled();
+      expect(row.getByLabelText('Title')).toBeInTheDocument();
+    });
+
+    it("a Cancel click confirmed shows 'Cancelled', with no Edit/Cancel controls", async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const cancelLiveClass = vi.fn(async () => ({ ok: true as const, cancelled: true }));
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} cancelLiveClass={cancelLiveClass} />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+      await waitFor(() => expect(cancelLiveClass).toHaveBeenCalledWith('lc_1'));
+      await waitFor(() => expect(screen.getByText('Cancelled')).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
+      expect(screen.queryByRole('link', { name: /Join link/ })).toBeNull();
+      vi.restoreAllMocks();
+    });
+
+    it('a Cancel click declined does nothing', () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const cancelLiveClass = vi.fn();
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} cancelLiveClass={cancelLiveClass} />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+      expect(cancelLiveClass).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Cancel class' })).toBeInTheDocument();
+      vi.restoreAllMocks();
+    });
+
+    it('a failed DELETE shows an error and re-enables the row (not stuck disabled)', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const cancelLiveClass = vi.fn(async () => ({
+        ok: false as const,
+        code: 'provider_error' as const,
+        retryable: true,
+      }));
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} cancelLiveClass={cancelLiveClass} />,
+      );
+      const button = screen.getByRole('button', { name: 'Cancel class' });
+      fireEvent.click(button);
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+      expect(button).not.toBeDisabled();
+      vi.restoreAllMocks();
+    });
+
+    it('a cancelled class shows no Edit/Cancel even before it starts', () => {
+      renderIntl(
+        <LiveClassesView classes={[{ ...CLASS, status: 'cancelled' }]} packages={PACKAGES} />,
+      );
+      expect(screen.getByText('Cancelled')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
+    });
+
+    it('an already-started class (now >= startsAt) shows no Edit/Cancel', () => {
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} now="2026-11-02T00:00:00.000Z" />,
+      );
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
+    });
   });
 
   // Task 11.2b: the pre-class question queue, grouped by topic, fed by students and by

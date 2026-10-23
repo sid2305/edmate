@@ -17,6 +17,8 @@ import type {
 import { listDocuments as defaultListDocuments } from '../../../src/studio/uploadClient';
 import { RecordingUpload, type RecordingUploadProps } from './RecordingUpload';
 import { scheduleLiveClass, type ScheduleLiveClassResult } from '../../../src/studio/liveClasses/scheduleLiveClassAction';
+import { updateLiveClass as defaultUpdateLiveClass } from '../../../src/studio/liveClasses/updateLiveClassAction';
+import { cancelLiveClass as defaultCancelLiveClass } from '../../../src/studio/liveClasses/cancelLiveClassAction';
 import type { LiveClassesPackage } from '../../../src/studio/liveClasses/loadLiveClasses';
 
 export interface LiveClassesViewProps {
@@ -28,6 +30,10 @@ export interface LiveClassesViewProps {
   askQueue?: TeacherQuestionGroup[];
   /** Tests inject a fake; defaults to Phase B's route. */
   scheduleLiveClass?: typeof scheduleLiveClass;
+  /** 11.1d Phase B: edits a scheduled class before it starts. Tests inject a fake. */
+  updateLiveClass?: typeof defaultUpdateLiveClass;
+  /** 11.1d Phase B: cancels (soft) a scheduled class. Tests inject a fake. */
+  cancelLiveClass?: typeof defaultCancelLiveClass;
   /** 11.4c: the teacher's class recordings, shown under their own class. */
   recordings?: LiveClassRecording[];
   /** 11.4c: server time (ISO). A class with `startsAt <= now` can take a recording; none without it. */
@@ -97,12 +103,22 @@ function toIsoWithOffset(localValue: string): string | null {
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
+/** The reverse of `toIsoWithOffset`: an ISO timestamp as a local `datetime-local` value, for
+ * pre-filling the edit form (11.1d Phase B). */
+function toLocalInputValue(isoValue: string): string {
+  const d = new Date(isoValue);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function LiveClassesView({
   classes: initialClasses,
   packages,
   studentQueue = [],
   askQueue = [],
   scheduleLiveClass: doSchedule = scheduleLiveClass,
+  updateLiveClass: doUpdate = defaultUpdateLiveClass,
+  cancelLiveClass: doCancel = defaultCancelLiveClass,
   recordings: initialRecordings = [],
   now,
   listDocuments = defaultListDocuments,
@@ -211,6 +227,92 @@ export function LiveClassesView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorKey | null>(null);
   const [notice, setNotice] = useState(false);
+
+  // 11.1d Phase B: edit/cancel state, per row (not the whole-page `busy`), so editing one class
+  // never disables Save or Cancel on another (lessons: "a studio page that trusts a 200 response
+  // gets stuck").
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ title: '', link: '', startsAt: '' });
+  const [rowBusy, setRowBusy] = useState<Record<string, boolean>>({});
+  const [rowError, setRowError] = useState<Record<string, ErrorKey | null>>({});
+  // Tracks the live `editingId` for in-flight saveEdit calls: a discard clears `editingId`
+  // immediately, but the async saveEdit closure only sees the value at call time, so without
+  // this ref a stale PUT resolving after discard would still overwrite the row (code review
+  // HIGH, 11.1d Phase B/C).
+  const editingIdRef = useRef(editingId);
+  useEffect(() => {
+    editingIdRef.current = editingId;
+  }, [editingId]);
+
+  const startEdit = (c: TeacherLiveClassRow) => {
+    setEditingId(c.id);
+    setEditDraft({
+      title: c.title,
+      link: c.link ?? '',
+      startsAt: toLocalInputValue(c.startsAt),
+    });
+    setRowError((errs) => ({ ...errs, [c.id]: null }));
+  };
+
+  const cancelEditDraft = () => setEditingId(null);
+
+  const saveEdit = async (c: TeacherLiveClassRow) => {
+    const iso = toIsoWithOffset(editDraft.startsAt);
+    if (!editDraft.title.trim() || !editDraft.link.trim() || !iso) {
+      setRowError((errs) => ({ ...errs, [c.id]: 'validation' }));
+      return;
+    }
+    setRowError((errs) => ({ ...errs, [c.id]: null }));
+    setRowBusy((b) => ({ ...b, [c.id]: true }));
+    try {
+      const result = await doUpdate(c.id, {
+        title: editDraft.title.trim(),
+        link: editDraft.link.trim(),
+        startsAt: iso,
+      });
+      if (!result.ok) {
+        setRowError((errs) => ({ ...errs, [c.id]: errorKey(result.code) }));
+        return;
+      }
+      if (editingIdRef.current !== c.id) {
+        // The edit was discarded (or another row's edit started) while the PUT was in flight;
+        // applying this now-stale draft would silently undo the discard.
+        return;
+      }
+      setClasses((cs) =>
+        cs.map((row) =>
+          row.id === c.id
+            ? { ...row, title: editDraft.title.trim(), link: editDraft.link.trim(), startsAt: iso }
+            : row,
+        ),
+      );
+      setEditingId(null);
+    } catch {
+      setRowError((errs) => ({ ...errs, [c.id]: 'generic' }));
+    } finally {
+      setRowBusy((b) => ({ ...b, [c.id]: false }));
+    }
+  };
+
+  const onCancelClass = async (c: TeacherLiveClassRow) => {
+    if (!window.confirm(t('cancelConfirm'))) return;
+    setRowError((errs) => ({ ...errs, [c.id]: null }));
+    setRowBusy((b) => ({ ...b, [c.id]: true }));
+    try {
+      const result = await doCancel(c.id);
+      if (!result.ok) {
+        setRowError((errs) => ({ ...errs, [c.id]: errorKey(result.code) }));
+        return;
+      }
+      setClasses((cs) =>
+        cs.map((row) => (row.id === c.id ? { ...row, status: 'cancelled' as const } : row)),
+      );
+    } catch {
+      setRowError((errs) => ({ ...errs, [c.id]: 'generic' }));
+    } finally {
+      setRowBusy((b) => ({ ...b, [c.id]: false }));
+    }
+  };
 
   const togglePackage = (packageId: string) =>
     setPackageIds((ids) =>
@@ -327,32 +429,101 @@ export function LiveClassesView({
         <ul aria-label={t('title')}>
           {classes.map((c) => (
             <li key={c.id}>
-              <span>{c.title}</span> <span>{c.startsAt}</span>{' '}
-              <a href={c.link ?? undefined} target="_blank" rel="noopener noreferrer">
-                {t('joinLink')}
-              </a>
-              {renderRecordings(c)}
-              {hasStarted(c) ? (
+              {rowError[c.id] ? (
+                <p role="alert" className="live-classes-row-error">
+                  {t(`errors.${rowError[c.id]}`)}
+                </p>
+              ) : null}
+              {editingId === c.id ? (
                 <>
-                  {' '}
-                  <button
-                    type="button"
-                    aria-expanded={openClassId === c.id}
-                    aria-label={t('recording.addLabel', { title: c.title })}
-                    onClick={() => setOpenClassId((id) => (id === c.id ? null : c.id))}
-                  >
-                    {openClassId === c.id ? t('recording.close') : t('recording.add')}
-                  </button>
-                  {openClassId === c.id ? (
-                    <RecordingUpload
-                      liveClass={c}
-                      moduleIds={modulesFor(c)}
-                      onRecording={(row) => setRecordings((rows) => upsert(rows, row))}
-                      {...recordingClient}
+                  <p>
+                    <label htmlFor={`live-class-edit-title-${c.id}`}>{t('editTitleLabel')}</label>
+                    <input
+                      id={`live-class-edit-title-${c.id}`}
+                      value={editDraft.title}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, title: e.target.value }))}
                     />
+                  </p>
+                  <p>
+                    <label htmlFor={`live-class-edit-link-${c.id}`}>{t('editLinkLabel')}</label>
+                    <input
+                      id={`live-class-edit-link-${c.id}`}
+                      value={editDraft.link}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, link: e.target.value }))}
+                    />
+                  </p>
+                  <p>
+                    <label htmlFor={`live-class-edit-starts-at-${c.id}`}>
+                      {t('editStartsAtLabel')}
+                    </label>
+                    <input
+                      id={`live-class-edit-starts-at-${c.id}`}
+                      type="datetime-local"
+                      value={editDraft.startsAt}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, startsAt: e.target.value }))}
+                    />
+                  </p>
+                  <button type="button" disabled={!!rowBusy[c.id]} onClick={() => void saveEdit(c)}>
+                    {rowBusy[c.id] ? t('saving') : t('saveButton')}
+                  </button>{' '}
+                  <button type="button" disabled={!!rowBusy[c.id]} onClick={cancelEditDraft}>
+                    {t('cancelEditButton')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span>{c.title}</span> <span>{c.startsAt}</span>{' '}
+                  {c.status === 'cancelled' ? (
+                    <span>{t('cancelledLabel')}</span>
+                  ) : (
+                    <a
+                      href={c.link ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={t('joinLinkLabel', { title: c.title })}
+                    >
+                      {t('joinLink')}
+                    </a>
+                  )}
+                  {renderRecordings(c)}
+                  {c.status === 'scheduled' && !hasStarted(c) ? (
+                    <>
+                      {' '}
+                      <button type="button" disabled={!!rowBusy[c.id]} onClick={() => startEdit(c)}>
+                        {t('editButton')}
+                      </button>{' '}
+                      <button
+                        type="button"
+                        disabled={!!rowBusy[c.id]}
+                        onClick={() => void onCancelClass(c)}
+                      >
+                        {rowBusy[c.id] ? t('cancelling') : t('cancelButton')}
+                      </button>
+                    </>
+                  ) : null}
+                  {hasStarted(c) ? (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        aria-expanded={openClassId === c.id}
+                        aria-label={t('recording.addLabel', { title: c.title })}
+                        onClick={() => setOpenClassId((id) => (id === c.id ? null : c.id))}
+                      >
+                        {openClassId === c.id ? t('recording.close') : t('recording.add')}
+                      </button>
+                      {openClassId === c.id ? (
+                        <RecordingUpload
+                          liveClass={c}
+                          moduleIds={modulesFor(c)}
+                          onRecording={(row) => setRecordings((rows) => upsert(rows, row))}
+                          {...recordingClient}
+                        />
+                      ) : null}
+                    </>
                   ) : null}
                 </>
-              ) : null}
+              )}
             </li>
           ))}
         </ul>
