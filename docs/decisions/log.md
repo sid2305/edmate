@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.4d: missing studentMarket fails loudly in packages/db/src/repositories/ports.ts · decided by builder · risk: high
+- Decided: a `subscription` resolve for a learner who passes `learnerClear` but has no `studentMarket` option throws `RepositoryError('integrity')` instead of returning `null`. The option stays optional (preview/eval roots), and a root whose `learnerClear` is always false (studio preview) still gets `null`.
+- Why: a silent `null` turned a wiring mistake into "You need a live package" for every student, with no log line. Throwing is still fail-closed (no entitlement), but it is loud. Checking after `learnerClear` keeps the studio preview store, which is out of bounds here, unchanged.
+- risk: high (the entitlement store, a risky path; behaviour changes only for a misconfigured root).
+
+---
+
+### 22 Oct 2026 · 9.4d: live-class questions resolve teachers from the student's own live subscriptions · decided by builder · risk: low
+- Decided: the ask route uses `subscriptions.listLiveForStudent(principal.userId)` (not-ended rows, paused included) for its candidate teachers and no longer reads `EDMATE_CHAT_AGENTS` or `agents.owner`.
+- Why: the route then matches the source /home lists live classes from, so every class /home shows can be asked. The student id comes only from the session.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4d: session-start limiter bounded twice (client commandTimeout 2 s, route deadline 3 s) · decided by builder · risk: low
+- Decided: the limits Redis client gets `commandTimeout: 2000` and `connectTimeout: 5000`, and `POST /api/sessions` races `take()` against a 3 s deadline, failing closed with 503.
+- Why: a black-holed Redis would otherwise hang every session start. The route deadline also covers any future limiter implementation.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 9.4d: no extra catch on the raced take() in apps/web/src/turn/routes.ts · decided by lead · risk: low
+- Decided: the security reviewer's LOW (a late rejection of `take()` after the deadline wins) is wontfix.
+- Why: `Promise.race` attaches handlers to both promises, so a late rejection is already handled; the code reviewer checked this, and the tests show no leaked timers.
+- risk: low
+
+Tool calls used: 48 (harness count: builder 48; the agent reported 32)
+
+---
+
 ### 22 Oct 2026 · 11.3c: insights refuse a week that has not ended in packages/db/src/repositories/insights.ts · decided by builder · risk: high
 - Decided: `weekWindow` (shared by every insights read and by `computeAndSaveWeek`) throws
   `RepositoryError('invalid', method)` when the window's end (`weekStart` + 7 days) is after
