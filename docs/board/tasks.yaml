@@ -7330,3 +7330,19 @@ tasks:
   needs_decision: null
   branch: null
   model: null
+- id: 9.3f
+  milestone: M13
+  title: '9.3e follow-ups (security-review MEDIUM and builder left-to-do): staff can safety-reject a verified teacher from the console (today the safety checkbox only reaches pending teachers in the verification queue); the B-49 student line, home card and pause/cancel for a subscription whose agent is suspended; the staff queue row shows a teacher''s active takedowns and last decision; subject-edit history for staff'
+  accept: a verified teacher with live subscribers can be safety-rejected from the staff console and their students lose access; web and db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 9.3e
+  risk: high
+  status: todo
+- id: 9.3g
+  milestone: M13
+  title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift with no teacher profile (draft); a two-connection forced-order test for setVerification(safety) against goLive and create; lift returns the agent status so the staff reports page can say a content-takedown lift left the agent in draft (and the README notes it); the rejectedSafety notice says an agent was taken off only when one was'
+  accept: db and web typecheck, lint and test green with the new tests.
+  deps:
+  - 9.3e
+  risk: high
+  status: todo
