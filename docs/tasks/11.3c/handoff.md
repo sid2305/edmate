@@ -75,4 +75,4 @@ handoff.
 
 None. The gate is green and the fix matches the brief in full.
 
-Tool calls used: 13 (first builder) + 9 (this session) = 22.
+Tool calls used: 13 (first builder) + 22 (this session) = 35.
