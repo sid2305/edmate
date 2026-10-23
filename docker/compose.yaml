@@ -110,7 +110,9 @@ services:
       # otherwise refuses. A real deployment sets an https S3_ENDPOINT and neither of these.
       S3_PUBLIC_ENDPOINT: http://localhost:${EDMATE_S3_PORT:-9000}
       S3_ALLOW_HTTP: 'true'
-      # Chat (task 9.0). The market picks the locale pack; production fails closed without one.
+      # The teacher's studio test chat only (9.4a): there is no student there, so its preview
+      # turns run in this market; production fails closed without a locale pack for it. A
+      # student's chat never reads it: each student's turns run in their own market (users.market).
       EDMATE_MARKET: ${EDMATE_MARKET:-US}
       # Agents students can chat with; in production an unset value means none. The seeded demo agent.
       EDMATE_CHAT_AGENTS: ${EDMATE_CHAT_AGENTS:-demo-agent}

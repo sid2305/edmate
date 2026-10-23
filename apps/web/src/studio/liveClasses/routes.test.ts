@@ -17,6 +17,7 @@ const CLASS: TeacherLiveClassRow = {
   link: 'https://meet.example.com/abc',
   startsAt: '2026-11-01T10:00:00.000Z',
   packageIds: ['pkg_1'],
+  status: 'scheduled',
 };
 
 function memoryBackend() {

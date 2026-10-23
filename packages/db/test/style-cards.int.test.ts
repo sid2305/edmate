@@ -14,7 +14,7 @@ import {
   RepositoryError,
   turnConfigStoreFor,
 } from '../src/index.js';
-import { learnerClear, locales, packMarket, seedAccess } from './access-seed.js';
+import { learnerClear, locales, packMarket, seedAccess, studentMarket } from './access-seed.js';
 import { agentConfig, ids, studentId, teacherId } from './isolation-seed.js';
 import {
   createDatabase,
@@ -149,7 +149,7 @@ describe.skipIf(!up)(`styleCards on Postgres${up ? '' : ` (${SKIP_REASON})`}`, (
   });
 
   it('acceptance: the turn after a save loads the new card version', async () => {
-    const e = await entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear }).resolve(
+    const e = await entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear, studentMarket }).resolve(
       { studentId: 'stu_1', agentId: ids.agent('A'), source: 'subscription' },
       AT,
     );

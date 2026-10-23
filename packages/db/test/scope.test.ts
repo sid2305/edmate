@@ -146,6 +146,10 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // malformed one is `invalid` before any SQL (regulated-subjects.test.ts); a non-staff one is
     // `scope` (regulated-subjects.int.test.ts, the isolation grid).
     if (name.startsWith('regulatedSubjects.')) continue;
+    // subscriptions.listLiveForStudent (9.4a Phase C) takes the signed-in student's own bare id,
+    // not a scope object, so the plain string 'tch_a' above is a well-formed id for it. Its own
+    // malformed-id cases are the test right after this loop.
+    if (name === 'subscriptions.listLiveForStudent') continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(
@@ -158,6 +162,28 @@ describe('every repository method rejects a bad scope before any SQL', () => {
       }
     });
   }
+
+  it('subscriptions.listLiveForStudent rejects a malformed student id before any SQL', async () => {
+    const bad: unknown[] = [
+      undefined,
+      null,
+      '',
+      "x' or 1=1",
+      'a'.repeat(129),
+      { studentId: 'stu_1' },
+      ['stu_1'],
+      42,
+    ];
+    for (const id of bad) {
+      const err = await repos.subscriptions.listLiveForStudent(id as never).then(
+        () => new Error('resolved'),
+        (e: unknown) => e,
+      );
+      expect(err, String(id)).toBeInstanceOf(RepositoryError);
+      expect((err as RepositoryError).kind).toBe('scope');
+      expect((err as RepositoryError).method).toBe('subscriptions.listLiveForStudent');
+    }
+  });
 
   it('transcriptStoreFor rejects a bad scope at construction', () => {
     for (const [, bad] of BAD_SCOPES) {

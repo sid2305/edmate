@@ -24,6 +24,9 @@ export const packMarket = (m: string): string => (locales(m) === null ? 'global'
 /** Every learner is past the age gate (1.7): the entitlement store's `learnerClear`. */
 export const learnerClear = async (): Promise<boolean> => true;
 
+/** Every learner's own market (9.4a): the entitlement store's `studentMarket`. */
+export const studentMarket = async (): Promise<string> => 'IN';
+
 export async function seedAccess(db: Db): Promise<void> {
   await seed(db);
   const A = teacherId('A');

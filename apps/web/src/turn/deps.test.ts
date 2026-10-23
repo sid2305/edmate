@@ -17,7 +17,7 @@ function fakeQueue() {
 function turnProcess(log = vi.fn()): TurnProcess {
   const clock = systemClock();
   const ports = processPorts(repos, {
-    market: 'global',
+    studentMarket: async () => 'global',
     packMarket: () => 'global',
     locales: () => null,
     learnerClear: async () => true,
