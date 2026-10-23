@@ -79,4 +79,4 @@ needed so `replace` can pass `type.chunkKind` to the repository without a cast.
   matches reality (no upload is a note) and lets the route pass the kind to the repository safely.
 - risk: low
 
-Tool calls used: 19
+Tool calls used: 26 (harness count: builder 26; the agent reported 19)
