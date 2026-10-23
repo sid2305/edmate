@@ -4,8 +4,10 @@
 // has the live class's id from the URL -- no repository method maps a `liveClassId` to its
 // teacher, and `packages/db` is untouched this phase (plan "Files out of bounds"). This route
 // resolves it the same way `/home` already does for its own live-classes list
-// (`homeLiveClasses`, 11.1c): the student's own configured candidate agents' distinct teachers,
-// tried in turn, keeping the first one `submit` accepts. A mismatched teacher, an unentitled
+// (`homeLiveClasses`, 11.1c; task 9.4d): the distinct teachers of the signed-in student's own
+// live subscriptions (`subscriptions.listLiveForStudent(principal.userId)`, never a client id),
+// tried in turn, keeping the first one `submit` accepts. `EDMATE_CHAT_AGENTS` plays no part, so
+// every class /home lists can be asked. A mismatched teacher, an unentitled
 // student and a class that has already started all read alike (`not_found`): nothing is written
 // for any of them, and the route never reveals which reason applied.
 import { LIMITS } from '@edmate/contracts';
@@ -14,13 +16,11 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { apiError } from '../../../../../src/auth/errors';
 import type { RoleContext } from '../../../../../src/auth/guard';
-import type { AgentOwners } from '../../../../../src/turn/scope';
 
 export interface AskQuestionBackend {
-  agents: AgentOwners;
   classQuestions: Pick<Repositories['classQuestions'], 'submit'>;
-  /** The student's own configured candidate agents (same list `/home` uses); empty = none. */
-  candidateAgentIds(): readonly string[];
+  /** The student's own not-ended subscriptions (the same query `/home` uses). */
+  subscriptions: Pick<Repositories['subscriptions'], 'listLiveForStudent'>;
 }
 
 const BodySchema = z.strictObject({
@@ -87,21 +87,15 @@ const failed = () => apiError('provider_error', MSG.failed, 500);
 const ok = (body: unknown) =>
   Response.json(body, { status: 200, headers: { 'cache-control': 'no-store' } });
 
-/** The distinct teachers behind the student's configured candidate agents, in order, deduped. */
-async function candidateTeacherIds(
-  agents: AgentOwners,
-  candidates: readonly string[],
+/** The distinct teachers of the student's own live subscriptions, in order, deduped. */
+async function liveTeacherIds(
+  subscriptions: AskQuestionBackend['subscriptions'],
+  studentId: string,
 ): Promise<string[]> {
+  const live = await subscriptions.listLiveForStudent(studentId);
   const seen = new Set<string>();
-  const out: string[] = [];
-  for (const agentId of candidates) {
-    const owner = await agents.owner({ agentId });
-    if (owner !== null && !seen.has(owner.teacherId)) {
-      seen.add(owner.teacherId);
-      out.push(owner.teacherId);
-    }
-  }
-  return out;
+  for (const row of live) if (row.status !== 'ended') seen.add(row.teacherId);
+  return [...seen];
 }
 
 type Handler = (req: NextRequest, ctx: RoleContext) => Promise<Response>;
@@ -120,11 +114,8 @@ export function createAskQuestionHandlers(backend: AskQuestionBackend): { post: 
     if (!body.success) return validation();
     const text = body.data.text.trim();
 
-    const candidates = backend.candidateAgentIds();
-    if (candidates.length === 0) return notFound();
-
     try {
-      const teacherIds = await candidateTeacherIds(backend.agents, candidates);
+      const teacherIds = await liveTeacherIds(backend.subscriptions, ctx.principal.userId);
       for (const teacherId of teacherIds) {
         const scope: StudentScope = studentScope(
           { studentId: ctx.principal.userId, teacherId },
