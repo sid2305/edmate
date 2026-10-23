@@ -43,6 +43,11 @@ All files  100% stmts / 94.92% branch / 100% funcs / 100% lines (unchanged overa
 
 ## Decisions
 
+### 22 Oct 2026 · 7.3b ran over budget · decided by lead · risk: low
+- Decided: accept 59 tool calls against a 40-call budget; both reviews approve with no findings.
+- Why: the builder counted 26; the harness counted 59 (install, the evals gate with its dependencies, a merge of main and a re-run). The work is done and clean, so a second round would only cost more.
+- risk: low
+
 ### 22 Oct 2026 · PerAgentSuiteError structured field is `reason`, not an id · decided by builder · risk: low
 - Decided: added a `readonly reason: 'no-packages' | 'id-collision' | 'invalid-case'` field
   rather than an offending-id field.
@@ -51,4 +56,4 @@ All files  100% stmts / 94.92% branch / 100% funcs / 100% lines (unchanged overa
   uniformly, as the brief allowed ("pick one that fits the existing throw sites").
 - risk: low
 
-Tool calls used: 26
+Tool calls used: 59 (harness count: builder 59; the agent reported 26)
