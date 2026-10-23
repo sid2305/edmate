@@ -55,7 +55,7 @@ $ python3 .githooks/secret-scan.py --all
 - Why: it only normalises repo_root before deriving the transcript slug; no shell-outs, no new file reads, and the tests use a temp home, never the real ~/.claude.
 - risk: high
 
-### 22 Oct 2026 · task_id path join in .claude/skills/team-lead/metrics.py left as is · decided by lead · risk: low
+### 22 Oct 2026 · 0.16b: task_id path join in .claude/skills/team-lead/metrics.py left as is · decided by lead · risk: low
 - Decided: wontfix the security LOW on .claude/skills/team-lead/metrics.py collect(): it joins docs/tasks/<task_id> without checking task_id.
 - Why: the code is older than this task, and task_id comes only from the lead's board and CLI, never from outside input; a read stays inside the repo and only feeds counts.
 - risk: low
