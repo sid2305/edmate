@@ -335,25 +335,30 @@ describe('forged teacher-note marker (3.11d)', () => {
 
   /**
    * A ratio check that catches quadratic/exponential blow-up on hostile
-   * input without pinning a tight wall-clock bound: linear work gives a
-   * 4n/n ratio of about 4; quadratic gives about 16. We allow up to 10 so a
-   * slow or loaded CI runner doesn't fail on noise alone, while a true
-   * quadratic (or worse) regression still trips it. The loose 10 s bound on
-   * the 4n run catches a slow but finite blow-up. It can't stop a true
-   * infinite loop: a synchronous call never yields, so neither this bound nor
-   * the test timeout fires, and only the CI job timeout ends the run.
+   * input without pinning a tight wall-clock bound: with a 16x input-size
+   * step, linear work gives a 16n/n ratio of about 16; quadratic gives about
+   * 256. We allow up to 64 (4x the linear ratio) so a slow or loaded CI
+   * runner doesn't fail on noise alone, while a true quadratic (or worse)
+   * regression still trips it comfortably below 256. Widening the step from
+   * 4x to 16x (3.11h) widens the gap between the linear and quadratic
+   * expectations, so a single noisy run is far less likely to cross the
+   * bound than the old 4x/10 check (which flaked once on CI at 11.01). The
+   * loose 10 s bound on the 16n run catches a slow but finite blow-up. It
+   * can't stop a true infinite loop: a synchronous call never yields, so
+   * neither this bound nor the test timeout fires, and only the CI job
+   * timeout ends the run.
    */
   function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
-    const n = 5_000;
+    const n = 2_000;
     const smallInput = buildInput(n);
-    const largeInput = buildInput(4 * n);
+    const largeInput = buildInput(16 * n);
     const small = bestOf3(() => run(smallInput));
     const large = bestOf3(() => run(largeInput));
     expect(large).toBeLessThan(10_000);
     // Guard against a near-zero small run making the ratio meaningless
     // (e.g. on a very fast machine); floor it at 0.5ms.
     const ratio = large / Math.max(small, 0.5);
-    expect(ratio).toBeLessThan(10);
+    expect(ratio).toBeLessThan(64);
   }
 
   it('runs in linear time on long hostile input', () => {

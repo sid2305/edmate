@@ -10,6 +10,64 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2m ran over budget · decided by lead · risk: low
+- Decided: accept 74 tool calls against a 40-call budget; both reviews approve with no findings.
+- Why: the builder counted 32; the harness counted 74 (install, three package gates, and new processor tests). The work is done and clean, so another round would only cost more.
+- risk: low
+
+Tool calls used: 74 (harness count: builder 74; the agent reported 32)
+
+---
+
+### 22 Oct 2026 · 3.11h: linear-time test rewritten in packages/harness/src/pedagogy · decided by builder · risk: high
+- Decided: widen `expectLinear`'s input-size step from 4x to 16x and raise
+  the ratio bound from 10 to 64, instead of switching to counted work units,
+  keeping the wall-clock approach but widening the margin between the
+  linear and quadratic expectations so a single noisy CI run is far less
+  likely to cross the bound.
+- Why: the brief's preferred fix (count work, not time) needs the code
+  under test to expose its internal work units, which would be a
+  production-code change; the brief explicitly scopes this task to the test
+  file only. The fallback the brief names — compare 16n against n with a
+  bound near 64 — is a pure test change, keeps the quadratic signal (256 vs
+  16 is a much wider gap than 16 vs 4), and was verified to still catch a
+  quadratic regression (ratio 248.87 against the 64 bound) and to pass 20/20
+  under CPU load.
+- risk: high (flagged only because `packages/harness` is a risk path by
+  location; this is a test-only change, no production code, no contracts,
+  no prompt-pack behaviour change).
+
+Tool calls used: 23 (harness count: builder 23; the agent reported 15)
+
+---
+
+### 22 Oct 2026 · 1.7g ran over budget · decided by lead · risk: low
+- Decided: accept 33 tool calls against a 15-call budget for a comment-only change.
+- Why: the builder counted 21; the harness counted 33, several of them retries after transient tool denials and three gate runs while it checked a harness timeout. The change is done and the review is clean.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 1.7g: US.yaml header reworded for the signed pack · decided by lead · risk: high
+- Decided: merge the comment-only change to content/locales/US.yaml (a locales risk path): the header now says the pack was signed on 21 Oct 2026, so the no-consent waiver applies, the three `pending` values still wait for a person, and the age rule fails closed again if `reviewedBy` is cleared.
+- Why: the code reviewer checked every claim against packages/content/src/agePolicy.ts; no value or key changed, no helpline, contact, law, reviewer or date was added, and the "agents must never fill in" warning is kept.
+- risk: high
+
+---
+
+### 22 Oct 2026 · Pre-existing flaky harness test is out of scope · decided by builder · risk: low
+- Decided: treated the `@edmate/harness#test` timeout on `runner.test.ts` (unrelated 4.3
+  distress-check test) as a pre-existing flaky failure, not a regression from this change, and did
+  not attempt to fix it.
+- Why: this task only edits YAML comments in `content/locales/US.yaml`; the failing test exercises
+  the pipeline runner's distress/escalation logic, has no import path through the file this task
+  touches, and failed with the same timeout across repeated runs regardless of this change.
+- risk: low
+
+Tool calls used: 33 (harness count: builder 33; the agent reported 21)
+
+---
+
 ### 22 Oct 2026 · 5.10b ran over budget · decided by lead · risk: low
 - Decided: accept 289 tool calls (builder 160, fixer 129) against budgets of 65 and 45.
 - Why: the builder ran long over the deadlock analysis and coverage, and the fixer stalled after its last commit (the lead ran its gate and pushed). Both HIGH findings are fixed and re-verified; a third round would cost more than it saves. Raised for the 0.22 review.

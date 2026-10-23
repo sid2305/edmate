@@ -83,9 +83,7 @@ describe('IngestJobSchema', () => {
   });
 
   it('refuses an unknown field (strict)', () => {
-    expect(
-      IngestJobSchema.safeParse({ ...base, fileKind: 'pdf', extra: 'x' }).success,
-    ).toBe(false);
+    expect(IngestJobSchema.safeParse({ ...base, fileKind: 'pdf', extra: 'x' }).success).toBe(false);
   });
 
   it('refuses an unknown fileKind', () => {
@@ -96,15 +94,21 @@ describe('IngestJobSchema', () => {
 describe('IngestJobSchema: caption files (task 8.2c, B-47)', () => {
   const base = { teacherId: 'tch_1', documentId: 'doc_1' };
 
-  it.each(['vtt', 'srt'] as const)('accepts a %s caption job with no mimeType and no url', (fileKind) => {
-    expect(IngestJobSchema.safeParse({ ...base, fileKind }).success).toBe(true);
-  });
+  it.each(['vtt', 'srt'] as const)(
+    'accepts a %s caption job with no mimeType and no url',
+    (fileKind) => {
+      expect(IngestJobSchema.safeParse({ ...base, fileKind }).success).toBe(true);
+    },
+  );
 
-  it.each(['vtt', 'srt'] as const)('refuses a %s caption job that carries a mimeType', (fileKind) => {
-    expect(
-      IngestJobSchema.safeParse({ ...base, fileKind, mimeType: 'text/vtt' }).success,
-    ).toBe(false);
-  });
+  it.each(['vtt', 'srt'] as const)(
+    'refuses a %s caption job that carries a mimeType',
+    (fileKind) => {
+      expect(IngestJobSchema.safeParse({ ...base, fileKind, mimeType: 'text/vtt' }).success).toBe(
+        false,
+      );
+    },
+  );
 
   it.each(['vtt', 'srt'] as const)('refuses a %s caption job that carries a url', (fileKind) => {
     expect(
@@ -207,7 +211,9 @@ describe('createIngestQueue / enqueueIngest', () => {
   });
 
   it('gives a replace (a new storage key) a different job id than the original', async () => {
-    const add = vi.fn(async (_name: string, _data: unknown, _opts: { jobId?: string }) => undefined);
+    const add = vi.fn(
+      async (_name: string, _data: unknown, _opts: { jobId?: string }) => undefined,
+    );
     await enqueueIngest(
       { add },
       { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' },

@@ -621,9 +621,28 @@ tasks:
   deps:
   - 1.7f
   risky: true
-  status: running
+  status: done
   branch: m13/1.7g-us-header
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 8
+    tokens_in: 28
+    tokens_out: 207
+    cache_read_tokens: 238698
+    wall_time_seconds: 44
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -2403,7 +2422,9 @@ tasks:
   accept: removing .orderBy(teacherQuestions.id) from open()'s lock read fails a test; the db tests pass
   deps:
   - 5.10b
-  status: todo
+  status: running
+  branch: m13/5.10c-open-race-test
+  model: plan:lead build:sonnet
 - id: 5.10d
   milestone: M13
   title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions
@@ -4862,7 +4883,9 @@ tasks:
   deps:
   - 11.1b
   risk: low
-  status: planning
+  status: running
+  branch: m13/11.1d-live-class-edit
+  model: plan:sonnet build:sonnet
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -5917,9 +5940,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:fable
 - id: 8.2i
   milestone: M13
   title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h
@@ -5970,9 +5993,9 @@ tasks:
   deps:
   - 12.5b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.5e-alert-store-log
+  model: plan:lead build:fable
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
@@ -6131,9 +6154,28 @@ tasks:
   accept: the test still fails on a quadratic implementation (shown once in the handoff) and passes 20 local runs under CPU load; harness tests pass
   deps:
   - 3.11g
-  status: running
+  status: done
   branch: m13/3.11h-linear-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 8
+    tokens_in: 28
+    tokens_out: 722
+    cache_read_tokens: 253616
+    wall_time_seconds: 91
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
@@ -6142,9 +6184,28 @@ tasks:
   accept: both changes with a test each; ingest typecheck, lint and test green
   deps:
   - 8.2j
-  status: running
+  status: done
   branch: m13/8.2m-ingest-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 29
+    tokens_in: 96
+    tokens_out: 1120
+    cache_read_tokens: 1219022
+    wall_time_seconds: 90
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7d
   milestone: M13
   title: '9.7b follow-ups: full-flow.spec.ts:224 toHaveCount(0) takes the STEP_TIMEOUT like the other assertions (typescript-reviewer LOW); give chat.spec.ts a postOnce-style send with a hydration retry
