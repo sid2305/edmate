@@ -6541,7 +6541,9 @@ tasks:
   deps:
   - 12.4f
   risk: low
-  status: todo
+  status: running
+  branch: m13/12.4g-agents-reload
+  model: plan:lead build:opus
 - id: 11.4e
   milestone: M13
   title: '11.4a review LOWs (packages/db tests): a listRecordingsForTeacher test that fails if the .limit() cap at live-classes.ts:216 is removed, and a test for the same-teacher join check at live-classes.ts:212'
