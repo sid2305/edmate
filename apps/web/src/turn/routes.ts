@@ -130,7 +130,8 @@ async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 /** The largest request body either route reads (bytes). A turn's text limit is far below it. */
 export const MAX_BODY_BYTES = 64 * 1024;
 
-const TOO_LARGE = Symbol('too large');
+/** Exported (8.5d) so a sibling route (the studio test chat) reads a body the same way. */
+export const TOO_LARGE = Symbol('too large');
 
 /** The body's bytes, or TOO_LARGE as soon as more than the cap has been read. */
 async function readCapped(body: ReadableStream<Uint8Array>): Promise<Uint8Array | typeof TOO_LARGE> {
@@ -161,7 +162,7 @@ async function readCapped(body: ReadableStream<Uint8Array>): Promise<Uint8Array 
  * content-length over the cap is refused before reading; the bytes actually read are capped too,
  * so a missing or false content-length can't get past it.
  */
-async function readJson(req: Request): Promise<unknown> {
+export async function readJson(req: Request): Promise<unknown> {
   if (Number(req.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) return TOO_LARGE;
   if (req.body === null) return undefined;
   try {
