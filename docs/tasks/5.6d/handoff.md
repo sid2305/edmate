@@ -42,6 +42,11 @@ $ python3 .githooks/secret-scan.py --all
 
 ## Decisions
 
+### 22 Oct 2026 · 5.6d HelpState carried keys must be non-empty · decided by lead · risk: high
+- Decided: merge the change to packages/harness/src/pedagogy/helpState.ts: a carried answer key must be a non-empty string, and the field comment says it lives for one saved turn. No prompt-pack or teaching-behaviour change.
+- Why: the file is on the pedagogy risky path. The code reviewer checked that a HelpState saved by an older deploy with an empty key does not crash a turn, and that no key can leak into a reply.
+- risk: high
+
 ### 22 Oct 2026 · 5.6d ran over budget · decided by lead · risk: low
 - Decided: accept 77 tool calls against the lead brief's 35 (stop at 45). Six small items across two packages, with a test per behaviour change.
 - Why: the work is complete and reviewed clean; the overrun is the Sonnet under-reporting pattern the 0.22 review (24 Oct 2026) looks at.
