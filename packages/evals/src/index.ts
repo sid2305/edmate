@@ -67,6 +67,7 @@ export {
   type ItemProvenance,
   type LockedTemplate,
   type OutOfCourseItem,
+  type PerAgentSuiteErrorReason,
   type PerAgentSuiteInput,
 } from './perAgentSuite.js';
 export {
