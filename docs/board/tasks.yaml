@@ -4928,8 +4928,8 @@ tasks:
   - 11.1b
   risk: low
   status: running
-  branch: m13/11.1d-live-class-edit
-  model: 'plan:sonnet build:sonnet+fable review:fable (Phase A merged #239; B/C next)'
+  branch: m13/11.1d-live-class-ui
+  model: 'plan:sonnet build:sonnet+fable review:fable (A #239); B+C build:sonnet'
   metrics:
     tool_calls: 136
     tokens_in: 4484
