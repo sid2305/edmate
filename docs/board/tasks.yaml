@@ -6416,9 +6416,29 @@ tasks:
   deps:
   - 10.1a
   risk: risky
-  status: running
+  status: done
   branch: m10/10.1b-payments-package
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 18
+      by_severity:
+        MEDIUM: 6
+        LOW: 12
+      by_status:
+        fixed: 13
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 10.1c
   milestone: M10
   title: 'The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53); 10.1b review LOWs (suite hardening only, no caller change):
