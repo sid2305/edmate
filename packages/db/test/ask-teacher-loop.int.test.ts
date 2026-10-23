@@ -50,7 +50,7 @@ import {
   questionSimilarity,
 } from '../src/repositories/question-similarity.js';
 import { ids, seed, teacherId } from './isolation-seed.js';
-import { learnerClear, locales, packMarket } from './access-seed.js';
+import { learnerClear, locales, packMarket, studentMarket } from './access-seed.js';
 import {
   createDatabase,
   dropDatabase,
@@ -150,6 +150,7 @@ async function runFor(
     market: 'IN',
     packMarket,
     learnerClear,
+    studentMarket,
   });
   const profiles: ProfileStore = {
     get: (sid, tid) => profileStoreFor(repos, { studentId: sid, teacherId: tid }).get(sid, tid),

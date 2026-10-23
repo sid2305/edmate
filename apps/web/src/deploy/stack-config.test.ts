@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const DOCKERFILE = readFileSync(join(ROOT, 'apps/web/Dockerfile'), 'utf8');
 const COMPOSE = readFileSync(join(ROOT, 'docker/compose.yaml'), 'utf8');
+const TURN_RUNTIME = readFileSync(join(ROOT, 'apps/web/src/turn/runtime.ts'), 'utf8');
 
 /** Every content dir the web reads at run time (age gate, legal, turn runtime). */
 const RUNTIME_CONTENT = ['locales', 'legal', 'prompt-packs', 'skills'] as const;
@@ -46,13 +47,20 @@ describe('apps/web/Dockerfile', () => {
 describe('docker/compose.yaml web', () => {
   const web = service(COMPOSE, 'web');
 
-  it('passes EDMATE_MARKET with a default that has a locale pack', () => {
+  // 9.4a: the studio test chat's preview market only (no student there); see the next test.
+  it('passes EDMATE_MARKET (studio preview) with a default that has a locale pack', () => {
     const market = passed(web, 'EDMATE_MARKET');
     expect(market).toBeTruthy();
     expect(existsSync(join(ROOT, 'content/locales', `${market ?? ''}.yaml`))).toBe(true);
     expect(passed(web.replace(/EDMATE_MARKET/g, 'EDMATE_OTHER'), 'EDMATE_MARKET')).toBeUndefined();
     const bad = web.replace(/\$\{EDMATE_MARKET:-[^}]*\}/, '${EDMATE_MARKET:-ZZ}');
     expect(existsSync(join(ROOT, 'content/locales', `${passed(bad, 'EDMATE_MARKET') ?? ''}.yaml`))).toBe(false);
+  });
+
+  it("no env var picks a student's market: the student turn runtime never reads EDMATE_MARKET (9.4a)", () => {
+    const readsMarket = (src: string) => /\bEDMATE_MARKET\b/.test(src);
+    expect(readsMarket(TURN_RUNTIME)).toBe(false);
+    expect(readsMarket(`${TURN_RUNTIME}\nconst m = env.EDMATE_MARKET;`)).toBe(true);
   });
 
   it('passes EDMATE_CHAT_AGENTS defaulting to demo-agent', () => {

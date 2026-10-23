@@ -60,8 +60,11 @@ export function systemIds(): IdSource {
 }
 
 export interface ProcessPortOptions {
-  /** The market turns run in (see runtime.ts: `EDMATE_MARKET`, default `global`). */
-  market: string;
+  /**
+   * The signed-in student's own market (9.4a: `users.market`), asked fresh at every subscription
+   * resolve. It is the only market a student turn runs in; no deploy setting picks it.
+   */
+  studentMarket(studentId: string): Promise<string>;
   packMarket(market: string): string;
   locales(market: string): LocalePack | null;
   /** The age gate's standing, asked fresh at every resolve (second line behind the route guard). */
@@ -75,7 +78,9 @@ export function processPorts(
 ): { entitlements: EntitlementStore; turnConfig: TurnConfigStore; retrieval: RetrievalIndex } {
   return {
     entitlements: entitlementStoreFor(repos, {
-      market: opts.market,
+      // Read only by a `teacher_preview` resolve, which a student turn never makes (9.4a).
+      market: 'global',
+      studentMarket: opts.studentMarket,
       packMarket: opts.packMarket,
       learnerClear: opts.learnerClear,
     }),

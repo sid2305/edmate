@@ -110,6 +110,11 @@ export function memoryIdentity(
       const u = users.get(id);
       return u ? { ...u } : null;
     },
+    // 9.4a: `global` from signup, the age-gate answer's market after; null for an unknown id.
+    async getMarket(id) {
+      if (!users.has(id)) return null;
+      return ages.get(id)?.market ?? 'global';
+    },
     async getUserByEmail(email) {
       const u = byEmail(email);
       return u ? { ...u } : null;

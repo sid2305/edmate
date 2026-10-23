@@ -31,24 +31,31 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // No `--webpack` here (unlike `next build`, next.config.ts): `@edmate/gateway`'s
-    // `loadBundledPrices` reads its bundled `prices.yaml` with
-    // `readFileSync(new URL('./prices.yaml', import.meta.url), 'utf8')`, and webpack's dev
-    // bundling of that server route rewrites `import.meta.url` into something `readFileSync`
-    // rejects (`TypeError: ... Received an instance of URL`), 503-ing `POST /api/sessions` on the
-    // very first call. Turbopack (the default `next dev`) does not hit this. Fixing the gateway
-    // module itself is out of this task's file scope (`packages/gateway`); flagged as a decision
-    // and a blocker, not fixed here. Decision, handoff `## Decisions`.
+    // Still no `--webpack` here (unlike `next build --webpack`, package.json / next.config.ts).
+    // 9.4's original blocker (`@edmate/gateway`'s `loadBundledPrices` reading `prices.yaml` via
+    // `import.meta.url`) is gone since fix round 9.4e embeds the prices statically, but 9.4a
+    // Phase D's trial of `next dev --webpack -p <port>` (Next 16.4, webpack dev) still 500s
+    // `/api/health`: webpack's dev compile of `instrumentation.ts` and the health route pulls
+    // `@edmate/queue` -> bullmq in through `src/auth/rate-limit.ts` and fails with
+    // `Module not found: Can't resolve 'crypto'` (bullmq's `bun-redis-client.js`) plus pg-native /
+    // valkey-glide optional-dependency resolutions -- a `next.config.ts` (`serverExternalPackages`)
+    // or `@edmate/queue` matter, out of 9.4a's scope. Turbopack (the default `next dev`) serves
+    // the same routes fine. Tracked in 9.4a's handoff "Left to do"; restore `--webpack` once the
+    // dev compile of those server modules is fixed.
     command: 'node_modules/.bin/next dev -p ' + String(PORT),
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
     env: {
       DATABASE_URL: TEST_DATABASE_URL,
-      // Syntactically valid but unreachable on purpose: starting a session never touches the
-      // queues or the turn limits (only running a real turn does, and the turn route is always
-      // intercepted in this suite -- see fixtures.ts). Decision, handoff `## Decisions`.
+      // Syntactically valid but unreachable on purpose: the queues and the turn limits are only
+      // touched by a real turn, and the turn route is always intercepted in this suite (see
+      // fixtures.ts). The per-student session-start limit (9.4a) would touch it, so the dev
+      // model below swaps it for the in-memory limiter. Decision, handoff `## Decisions`.
       REDIS_URL: 'redis://127.0.0.1:1',
+      // The dev model (9.0, D2): honoured only with a local http AUTH_URL, which BASE_URL is. It
+      // keeps the session-start limit in memory (see above); no turn runs against it here.
+      EDMATE_DEV_MODEL: 'scripted',
       // Never a real key; a turn is never actually run against a provider in this suite.
       EDMATE_ANTHROPIC_API_KEY: 'e2e-not-a-real-key',
       AUTH_SECRET: 'e2e-test-secret-'.padEnd(40, 'x'),

@@ -163,7 +163,9 @@ corepack pnpm --filter @edmate/web e2e:stack
 - **The chat says "Something went wrong"**: run `docker compose -f docker/compose.yaml logs web`
   and look for `turn.runtime_unavailable reason=...`.
   - `provider_key`: the key is missing or too short. Check `docker/.env`, then restart `web`.
-  - `EDMATE_MARKET`: the market is unset. Leave it at its default, `US`.
+  - A student's chat runs in that student's own market (from the age question), so no setting
+    picks it. `EDMATE_MARKET` is only for the teacher's studio test chat
+    (`testChat.runtime_unavailable reason=EDMATE_MARKET`). Leave it at its default, `US`.
   - `EDMATE_DEV_MODEL`: the dev model is on, but `AUTH_URL` isn't localhost.
 - **Use `localhost`, not `127.0.0.1`**, for the app. Sign-in and every form check that the page
   came from `http://localhost:8080`. Mailpit is fine on either.

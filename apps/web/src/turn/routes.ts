@@ -21,6 +21,7 @@ import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { ClientTurnSchema, StartSessionSchema, toTurnInput } from './clientInput';
 import { studentTurnScope, type AgentOwners } from './scope';
+import type { SessionRateLimiter } from './sessionRateLimit';
 
 /** A session as the turn route needs it. */
 export interface TurnSessionRow {
@@ -50,6 +51,11 @@ export interface TurnBackend {
   };
   /** Resolves the student's subscription (and asks the age gate again, as a second line). */
   entitlements: EntitlementStore;
+  /**
+   * The per-student session-start limit (9.4a): fixed window, rejects when its store is down so
+   * the start fails closed. Turns are not counted here.
+   */
+  sessionRateLimit: SessionRateLimiter;
   /** One turn's pipeline dependencies for this student x teacher. */
   depsFor(scope: StudentScope): PipelineDeps;
   steps: Steps;
@@ -86,6 +92,7 @@ const MSG = {
   noAccess: 'You need a live package with this teacher first.',
   unavailable: 'The tutor is not available right now. Try again soon.',
   failed: 'Something went wrong. Try again.',
+  tooManySessions: 'You have started a lot of chats just now. Wait a few minutes and try again.',
 } as const;
 
 const notFound = (message: string) => apiError('not_found', message, 404);
@@ -214,6 +221,16 @@ export function createSessionHandlers(backend: () => Promise<TurnBackend>) {
     const { agentId } = body.data;
     const b = await load();
     if (b instanceof Response) return b;
+    // The per-student start limit runs before any DB or entitlement work, keyed by the principal
+    // (never the body). A limiter that can't answer refuses the start (fail closed, 503).
+    let allowed: boolean;
+    try {
+      allowed = await b.sessionRateLimit.take(principal.userId);
+    } catch (error) {
+      b.log.error('sessions.rate_limit_failed', { error: errorName(error) });
+      return apiError('provider_error', MSG.unavailable, 503);
+    }
+    if (!allowed) return apiError('rate_limited', MSG.tooManySessions, 429);
     try {
       const scope = await studentTurnScope(b.agents, principal, agentId);
       if (scope === null) return notFound(MSG.agent);
