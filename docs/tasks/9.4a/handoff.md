@@ -352,7 +352,7 @@ webpack's dev compile of `@edmate/queue`/bullmq is fixed in `next.config.ts` or 
 package; export the harness's grounding/advice/route/summary schemas so `devModel.test.ts` can
 drop its copies; the three 0 % `.tsx` files named under Phase D item 1.)
 
-Tool calls used: 281 (harness count: Phase A 55 + Phase B 64 + B finisher 26 + Phase C 75 + Phase D 61; the agents reported fewer, e.g. A 36, C 51, D 46)
+Tool calls used: 308 (harness count: Phase A 55 + Phase B 64 + B finisher 26 + Phase C 75 + Phase D 61 + e2e fix round 27; the agents reported fewer, e.g. A 36, C 51, D 46)
 
 ## Fix round (e2e)
 CI run 39895140480's e2e job: every chat/skills spec failed because `POST /api/sessions` answered
@@ -373,4 +373,4 @@ Evidence:
   successful, 10 total`; `Test Files 145 passed | 4 skipped`
 - `python3 .githooks/secret-scan.py --all` -> clean
 
-Fix round tool calls: 15
+Fix round tool calls: 27 (harness count; the agent reported 15)
