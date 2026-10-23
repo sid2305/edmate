@@ -239,7 +239,7 @@ describe('src/auth wiring', () => {
       expect(fakes.transports[0]?.sent).toHaveLength(1);
       expect(fakes.transports[0]?.sent[0]).toMatchObject({ to: 'cold@example.test' });
       expect(String(fakes.transports[0]?.sent[0]?.text)).toContain(
-        `${ORIGIN}/api/auth/callback/email?`,
+        `${ORIGIN}/sign-in/confirm?`,
       );
     },
     AUTH_IMPORT_TIMEOUT_MS,
@@ -407,6 +407,110 @@ describe('src/auth wiring', () => {
       get: (_name: string) => undefined,
       set: vi.fn(),
     }));
+  });
+
+  describe('the magic-link confirm page (task 1.4b)', () => {
+    const TOKEN = 'cd'.repeat(32);
+    const EMAIL = 'confirm@example.test';
+    const PARAMS = { token: TOKEN, email: EMAIL, callbackUrl: `${ORIGIN}/` };
+    const CALLBACK = `${ORIGIN}/api/auth/callback/email?token=${TOKEN}&email=confirm%40example.test&callbackUrl=http%3A%2F%2Flocalhost%3A8080%2F`;
+
+    function withCookie(name: string, value: string) {
+      pageCookies.mockImplementation(async () => ({
+        get: (n: string) => (n === name ? { value } : undefined),
+        set: vi.fn(),
+      }));
+    }
+    function noCookies() {
+      pageCookies.mockImplementation(async () => ({ get: (_n: string) => undefined, set: vi.fn() }));
+    }
+
+    it('linkBindingCookie: an HMAC of the address under AUTH_SECRET, not secure on http', async () => {
+      setAuthEnv();
+      const auth = await load();
+      const cookie = auth.linkBindingCookie('Confirm@Example.TEST');
+      expect(cookie).toMatchObject({
+        name: 'edmate.link-bound',
+        value: expect.stringMatching(/^\d+\.[0-9a-f]{64}$/),
+        options: { httpOnly: true, sameSite: 'lax', secure: false, path: '/', maxAge: 900 },
+      });
+      expect(auth.linkBindingCookie(EMAIL)?.value.split('.')[1]).toBe(cookie?.value.split('.')[1]);
+      expect(auth.linkBindingCookie('not-an-address')).toBeNull();
+    });
+
+    it('confirmSignInView: invalid params → invalid', async () => {
+      setAuthEnv();
+      const auth = await load();
+      expect(await auth.confirmSignInView({ email: EMAIL })).toEqual({ kind: 'invalid' });
+    });
+
+    it('confirmSignInView: this browser\'s cookie for this address → auto, to the real callback', async () => {
+      setAuthEnv();
+      const auth = await load();
+      withCookie('edmate.link-bound', auth.linkBindingCookie(EMAIL)!.value);
+      try {
+        expect(await auth.confirmSignInView(PARAMS)).toEqual({ kind: 'auto', url: CALLBACK });
+      } finally {
+        noCookies();
+      }
+    });
+
+    it.each([
+      ['no cookie', null],
+      ['a forged cookie', `${Math.floor(Date.now() / 1000)}.${'f'.repeat(64)}`],
+      ['a cookie for another address', 'other@example.test'],
+    ])('confirmSignInView: %s → manual', async (_label, cookie) => {
+      setAuthEnv();
+      const auth = await load();
+      if (cookie === 'other@example.test') withCookie('edmate.link-bound', auth.linkBindingCookie(cookie)!.value);
+      else if (cookie) withCookie('edmate.link-bound', cookie);
+      try {
+        expect(await auth.confirmSignInView(PARAMS)).toEqual({ kind: 'manual', ...PARAMS });
+      } finally {
+        noCookies();
+      }
+    });
+
+    it('confirmEmailSignIn: valid fields → the confirmed cookie and the real callback URL; invalid → null, no cookie', async () => {
+      setAuthEnv();
+      const auth = await load();
+      const set = vi.fn();
+      pageCookies.mockImplementation(async () => ({ get: (_n: string) => undefined, set }));
+      try {
+        expect(await auth.confirmEmailSignIn(PARAMS)).toBe(CALLBACK);
+        expect(set).toHaveBeenCalledExactlyOnceWith(
+          'edmate.link-confirmed',
+          expect.stringMatching(/^\d+\.[0-9a-f]{64}$/),
+          { httpOnly: true, sameSite: 'lax', secure: false, path: '/', maxAge: 120 },
+        );
+        const confirmed = set.mock.calls[0]![1] as string;
+        // That cookie lets this token's callback through; nothing else does.
+        const callback = (cookie?: string) =>
+          new NextRequest(CALLBACK, cookie ? { headers: { cookie } } : {});
+        expect(auth.emailCallbackRedirect(callback(`edmate.link-confirmed=${confirmed}`))).toBeNull();
+        expect(auth.emailCallbackRedirect(callback())).toBe(CALLBACK.replace('/api/auth/callback/email', '/sign-in/confirm'));
+        const bound = auth.linkBindingCookie(EMAIL)!.value;
+        expect(auth.emailCallbackRedirect(callback(`edmate.link-bound=${bound}`))).toBeNull();
+        set.mockClear();
+        expect(await auth.confirmEmailSignIn({ ...PARAMS, token: 'nope' })).toBeNull();
+        expect(await auth.confirmEmailSignIn(null)).toBeNull();
+        expect(set).not.toHaveBeenCalled();
+      } finally {
+        noCookies();
+      }
+    });
+
+    it('signInBindsLink: only a same-origin POST answered with verify-request', async () => {
+      setAuthEnv();
+      const auth = await load();
+      const post = (origin: string) =>
+        new Request(`${ORIGIN}/api/auth/signin/email`, { method: 'POST', headers: { origin } });
+      const verify = new Response(null, { status: 302, headers: { location: `${ORIGIN}/api/auth/verify-request` } });
+      expect(auth.signInBindsLink(post(ORIGIN), verify)).toBe(true);
+      expect(auth.signInBindsLink(post('https://evil.test'), verify)).toBe(false);
+      const csrf = new Response(null, { status: 302, headers: { location: `${ORIGIN}/api/auth/signin?error=MissingCSRF` } });
+      expect(auth.signInBindsLink(post(ORIGIN), csrf)).toBe(false);
+    });
   });
 
   it('signIn and signOut delegate to Auth.js', async () => {

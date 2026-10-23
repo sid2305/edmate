@@ -1,7 +1,7 @@
 // Task 8.5 Phase B: the teacher's test-chat routes end to end over memory ports, the real
 // `defaultSteps` and the scripted gateway (rule 4: no real model call). The guard is the real
 // `createGuard` with fake dependencies, and ROUTE_POLICY's `/api/studio/**` row decides access.
-import { TurnEventSchema, type TurnEvent } from '@edmate/contracts';
+import { LIMITS, TurnEventSchema, type TurnEvent } from '@edmate/contracts';
 import {
   RepositoryError,
   type CorrectionRecordInput,
@@ -471,6 +471,17 @@ describe('POST /api/studio/corrections', () => {
     const big = await r.correct(post(CORRECTIONS_PATH, 'a', correction({ correctedAnswer: 'x'.repeat(70_000) })));
     expect(big.status).toBe(413);
     expect(r.calls.corrections).toHaveLength(0);
+  });
+
+  it('a text field at LIMITS.turnTextMaxLength is accepted; one character over is a 400, before any write', async () => {
+    const r = routes();
+    const atBound = 'x'.repeat(LIMITS.turnTextMaxLength);
+    const ok = await r.correct(post(CORRECTIONS_PATH, 'a', correction({ question: atBound })));
+    expect(ok.status).toBe(201);
+    const over = await r.correct(post(CORRECTIONS_PATH, 'a', correction({ question: `${atBound}x` })));
+    expect(over.status).toBe(400);
+    expect(await errorOf(over)).toBe('validation');
+    expect(r.calls.corrections).toEqual([{ scope: { teacherId: 'tch_a' }, input: correction({ question: atBound }) }]);
   });
 
   it("the repository's not_found (another teacher's or a missing module) is 404; invalid is 400", async () => {

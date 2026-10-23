@@ -522,22 +522,48 @@ tasks:
   accept: a link opened in a different browser or by a prefetching scanner does not sign in; the confirm page posts with CSRF; auth tests pass
   deps:
   - '1.4'
-  status: running
+  status: done
   risk: risky
-  model: plan:sonnet build:opus review:sonnet
+  model: plan:sonnet build:opus fix:opus+opus review:opus+sonnet
   branch: m13/1.4b-magic-link-binding
+  metrics:
+    tool_calls: 150
+    tokens_in: 1472
+    tokens_out: 84423
+    cache_read_tokens: 9487913
+    wall_time_seconds: 17867
+    models:
+    - <synthetic>
+    - claude-fable-5-1
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 6
+      by_severity:
+        CRITICAL: 1
+        HIGH: 2
+        LOW: 3
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 1.4d
   milestone: M13
   title: 'Sign-in follow-ups from the 1.4 review: ioredis dev singleton and shutdown; split the Edge-safe guard exports from the Node-only auth runtime (server-only); one shared Redis ready promise; log
     the Auth.js error type, not minified class names; bump nodemailer once next-auth allows; per-IP ''unknown'' bucket; production email through Resend (human answer B-25, switchable by config); deploy
-    drops the Mailpit default and sets Caddy trusted_proxies'
+    drops the Mailpit default and sets Caddy trusted_proxies; run apps/web/scripts/sandbox-magic-link.mjs against a live dev stack after 1.4b (1.4b review LOW)'
   accept: dev hot reload reuses one Redis client; guard helpers import without ioredis or nodemailer; no MaxListeners warning in a Redis outage; deploy docs cover Mailpit and trusted_proxies; auth tests
     pass
   deps:
   - '1.4'
-  status: planning
+  status: running
   risk: risky
-  model: plan:sonnet
+  model: plan:sonnet build:sonnet
+  branch: m13/1.4d-signin-followups
 - id: 1.4c
   milestone: M13
   title: 'Google sign-in after a link sign-up (1.4 plan Q4): link the accounts when both sides have a verified email instead of OAuthAccountNotLinked (changes a 1.3 risk-high decision)'
@@ -2480,7 +2506,8 @@ tasks:
   deps:
   - 5.10b
   - 9.4a
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
@@ -3853,9 +3880,28 @@ tasks:
   deps:
   - 8.5b
   risk: medium
-  status: running
+  status: done
   branch: m13/8.5d-preview-ports
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 51
+    tokens_in: 168
+    tokens_out: 996
+    cache_read_tokens: 2516031
+    wall_time_seconds: 144
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.3c
   milestone: M9
   title: '9.2 plan Q5: the package page and subscriptions.start refuse a package whose teacher is not verified (a teacher rejected after publishing can''t be started by typing the URL)'
