@@ -44,4 +44,4 @@ None. Only the two named source files and this handoff changed.
   only.
 - risk: high (apps/worker/src/alerts is a risky path; behaviour change is log ordering only).
 
-Tool calls used: 19
+Tool calls used: 24 (harness count: builder 24; the agent reported 19)
