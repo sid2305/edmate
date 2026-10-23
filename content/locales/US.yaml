@@ -1,9 +1,11 @@
-# The United States locale pack (task 1.7 Phase B): a DRAFT. Every "pending" value below waits for
-# a person to check it. Board decision `min-age` (18 Oct 2026): learners are 13+, and US learners
-# need no parental consent. That waiver (parentalConsentRequired: false) does NOT apply until a
-# named person signs this pack's compliance block (reviewedBy): until then US learners aged 13 to
-# 17 need parental consent too, like every other market (the age rule fails closed).
-# `edmate content validate content/locales` fails on purpose until a person signs off.
+# The United States locale pack (task 1.7 Phase B): signed on 21 Oct 2026 (reviewedBy below).
+# Board decision `min-age` (18 Oct 2026): learners are 13+, and US learners need no parental
+# consent; because this pack's compliance block is now signed, that waiver
+# (parentalConsentRequired: false) applies. The `privacyLaw`, `dataRegion` and `grievance` values
+# below are still `pending`: they wait for a person to check them. If `reviewedBy` is ever cleared
+# or set back to `pending`, the age rule (packages/content/src/agePolicy.ts) fails closed again and
+# US learners aged 13 to 17 need parental consent too, like every other market, with no other
+# change needed to this pack.
 # Agents must never fill in a helpline number, contact, law or reviewer here: only a person may.
 market: US
 languages: [en] # the pilot teaches and replies in English only (18 Oct 2026)
@@ -16,7 +18,7 @@ compliance:
   minAge: 13
   dataRegion: pending
   grievance: pending
-  parentalConsentRequired: false # applies only once reviewedBy is signed (see the header)
+  parentalConsentRequired: false # applies: reviewedBy below is signed (see the header)
 reviewedBy: sid2305
 reviewedOn: "2026-10-21"
 regulatedDisclaimers:

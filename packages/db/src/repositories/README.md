@@ -293,17 +293,44 @@ then oldest, at most `GROUPS_MAX_LIMIT` groups of at most `GROUP_QUESTIONS_MAX` 
 selects `student_id`.
 
 **`teacherQuestions.answer(scope, { questionId, moduleId, answer, noteQuestion? })`** answers the
-scope's own open question and every open question sharing its group, in one transaction: locks the
-target `FOR UPDATE`, then every open member of its group `FOR UPDATE` (another teacher's, a missing,
-an already-answered or a dismissed question is `not_found`); calls `insertTeacherNote` once, so the
-note, the members' status and the student delivery commit together; sets every member
-`status 'answered'` with `answer` and `answered_at`; then, for each **distinct student** among the
-members (the earliest, then lowest-id member stands for them), writes one `teacher` message into
-that student's open session with this teacher and agent (`insertSelect`, `order by created_at desc,
-id desc limit 1` in case more than one is somehow open at once — the statement would otherwise try
-to insert one row's id twice and fail its primary key) and one `notifications` row
-(`onConflictDoNothing`, so a retry is harmless). Returns counts only (`answered`, `students`,
-`threadMessages`, `noteChunkId`, `evalCaseId`) — no student id ever leaves.
+scope's own open question and every open question sharing its group, in one transaction, in this
+lock order (task 5.10b, review follow-up): an unlocked peek at the target row for its `agentId`
+and `groupId` (both immutable once `open` writes them, so reading them before any lock is safe);
+the agent row `FOR NO KEY UPDATE` (the same lock, same mode, `open` takes — a question opened for
+this agent mid-answer can't land after the group below is read); then every currently-open member
+of the group, locked in **one statement, ascending by id** (`WHERE id = ANY(ids) ORDER BY id FOR
+UPDATE`) — two concurrent answers into the same group always acquire that same row set low-to-high,
+so one holds the whole set while the other blocks on the lowest id, instead of each holding one row
+the other wants (the prior per-row lock order could 40P01-deadlock). Another teacher's, a missing,
+an already-answered or a dismissed question is `not_found`, checked against this fresh read, not
+the first peek. Calls `insertTeacherNote` once, so the note, the members' status and the student
+delivery commit together; the thread message and `teacher_questions.answer` both store the same
+`answer.trim()` (whatever `insertTeacherNote` accepted, since it validates through the same
+`teacherNoteParts` helper); sets every member `status 'answered'` with `answer` and `answered_at`;
+then, for each **distinct student** among the members (the earliest, then lowest-id member stands
+for them), writes one `teacher` message into that student's open session with this teacher and
+agent (`insertSelect`, `order by created_at desc, id desc limit 1` in case more than one is somehow
+open at once — the statement would otherwise try to insert one row's id twice and fail its primary
+key) and one `notifications` row (`onConflictDoNothing`, so a retry is harmless). Returns counts
+only (`answered`, `students`, `threadMessages`, `noteChunkId`, `evalCaseId`) — no student id ever
+leaves.
+
+**Index (task 5.10b).** `teacher_questions_teacher_id_agent_id_status_created_at_idx` (migration
+0025, additive) covers `open`'s grouping read, which filters on exactly
+`(teacher_id, agent_id, status = 'open')` and orders by `created_at` (fix round:
+`listGroupsForTeacher`'s scan filters only `(teacher_id, status)`, with no `agent_id` predicate, so
+it can't use this index's `agent_id`/`created_at` prefix and ties with or loses to the existing
+`teacher_questions_teacher_id_status_idx` instead — this index only serves `open`). The 5.10 review
+also asked for a unique partial index on open sessions per `(teacher, student, agent)`; that was
+**not**
+added — `sessions.create` (`sessions.ts`) opens a new session on every call with no check for an
+existing open one for the same triple, and `apps/web/src/turn/routes.ts`'s `startSession` calls it
+unconditionally, so two open sessions for one triple already happen today (this is exactly why
+`teacherQuestions.answer`'s message insert already picks `order by … limit 1` instead of assuming
+one row). Adding the unique index first needs that caller to check for an existing open session
+(or `sessions.create` itself to do an insert-or-return-existing, as `teacherQuestions.open` does),
+which is outside `packages/db`'s and this task's bounds (`apps/web` is out of bounds for this
+builder). Left for a follow-up task.
 
 **`teacherQuestions.dismiss(scope, questionId)`** (task 8.9) closes the scope's own open question
 alone: a single scoped UPDATE (`status 'open' -> 'dismissed'`, `answer`/`answered_at` left null),
