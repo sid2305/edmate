@@ -2379,6 +2379,14 @@ tasks:
   deps:
   - 5.10b
   status: todo
+- id: 5.10d
+  milestone: M13
+  title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions for one triple can exist; make startSession reuse (or end) the open session first, then add the unique partial index on open sessions per (teacher_id, student_id, agent_id) in an additive migration (database-reviewer confirms no existing duplicates block it)'
+  accept: two startSession calls for one triple leave one open session; the unique partial index exists; web and db tests pass
+  deps:
+  - 5.10b
+  - 9.4a
+  status: todo
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
