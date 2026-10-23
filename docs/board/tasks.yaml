@@ -6468,9 +6468,30 @@ tasks:
   deps:
   - 8.2l
   risk: low
-  status: running
+  status: done
   branch: m13/8.2n-studio-followups
-  model: plan:lead build:fable
+  model: plan:lead build:fable review:fable
+  metrics:
+    tool_calls: 47
+    tokens_in: 2678
+    tokens_out: 7192
+    cache_read_tokens: 2860342
+    wall_time_seconds: 570
+    models:
+    - claude-fable-5-1
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 1
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 8.2o
   milestone: M13
   title: '8.2n review follow-ups: replace refuses (or clears live_class_id consistently) when a live-class-linked transcript row would become material, like create; replace refuses a teacher_note row; an
