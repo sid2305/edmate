@@ -7463,3 +7463,11 @@ tasks:
   - 9.3e
   risk: medium
   status: todo
+- id: 5.6f
+  milestone: M13
+  title: '5.6b plan Q5 follow-up (pilot-blocking): release the practice key on a turn that is graded correct, so a confirmation that restates the key ("Yes, B is right!") is not replaced by the safe hint; drop the key from HelpState once the attempt is correct'
+  accept: harness typecheck, lint and test green; a runner test shows a correct MCQ answer gets a confirmation that names the key, and a wrong answer still cannot get the key
+  deps:
+  - 5.6b
+  risk: high
+  status: todo
