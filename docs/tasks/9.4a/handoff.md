@@ -80,52 +80,80 @@ with no locale pack still runs as `global` (`packMarket`, unchanged).
   the studio test chat's market only (see Decisions).
 
 ### Gate
-GATE_LINES
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/db`:
+`@edmate/web` Test Files 143 passed | 5 skipped (148), Tests 2182 passed | 29 skipped (2211);
+`@edmate/db` Test Files 27 passed | 47 skipped (74), Tests 680 passed | 771 skipped (1451) (no
+Postgres at `TEST_DATABASE_URL`, so the db integration tests were skipped, not run). Tasks: 13
+successful, 13 total. `python3 .githooks/secret-scan.py --all` → exit 0, no findings.
 
 ## Decisions
-- **`TurnRuntimeHooks` instead of widening `RuntimeHooks`.** The plan said `RuntimeHooks.redis`'s
-  return type grows one field. But `apps/web/src/studio/testChat/runtime.test.ts` (out of bounds)
-  satisfies `RuntimeHooks` with a two-field redis, so widening it would break typecheck there.
-  I added `TurnRuntimeHooks extends RuntimeHooks` (its `redis` returns `RuntimeRedis`), used only
-  by `createTurnRuntime`. `openRedis` returns the wider `RuntimeRedis`, which still fits both.
+
+### 22 Oct 2026 · TurnRuntimeHooks instead of widening RuntimeHooks · decided by builder · risk: low
+- Decided: Add `TurnRuntimeHooks extends RuntimeHooks` (its `redis` returns `RuntimeRedis`), used
+  only by `createTurnRuntime`. `openRedis` returns the wider `RuntimeRedis`, which still fits both.
   The studio is untouched.
-- **A limiter failure is 503 `provider_error`**, the same as an unbuildable backend, logged as
-  `sessions.rate_limit_failed`. The plan said fail closed but didn't name the code.
-- **The limiter runs after the backend loads**, since the backend owns it. It still runs before
-  the agent lookup, entitlement and DB writes. A request with an invalid body is not counted. A
-  start for an unknown or unentitled agent is counted, because it's an abuse guard.
-- **Message text:** "You have started a lot of chats just now. Wait a few minutes and try again."
-- **Redis key prefix:** `edmate:turn:sessionstart:<studentId>`.
+- Why: The plan said `RuntimeHooks.redis`'s return type grows one field. But
+  `apps/web/src/studio/testChat/runtime.test.ts` (out of bounds) satisfies `RuntimeHooks` with a
+  two-field redis, so widening it would break typecheck there.
+- risk: low
 
-### 9.4a Phase B: a student's market comes from identity, per turn; the EDMATE_MARKET boot check goes (risk: high)
-Touches `packages/db/src/identity/**` and `packages/db/src/repositories/**`. New identity read
-`getMarket` (market column only, no `IdentityUser` change) and a new
-`EntitlementStoreOptions.studentMarket`, the only market source of a `subscription` resolve.
-The turn runtime's production fail-closed `EDMATE_MARKET` boot check is removed: the market is
-now per-row data (`users.market` is NOT NULL), and an unknown market still maps to `global`.
-Callers pass the signed-in principal's id only. Reviewer: security-reviewer.
+### 22 Oct 2026 · a limiter failure is 503 provider_error · decided by builder · risk: low
+- Decided: A limiter failure is 503 `provider_error`, the same as an unbuildable backend, logged
+  as `sessions.rate_limit_failed`.
+- Why: The plan said fail closed but didn't name the code.
+- risk: low
 
-### 9.4a Phase B: studentMarket is optional and fails closed when absent
-The plan said required, but the studio test chat (`apps/web/src/studio/testChat/deps.ts`) and the
-worker gate (`apps/worker/src/gate/agent.ts`) build the store too and are out of bounds. Optional
-keeps them untouched; a `subscription` resolve with no `studentMarket` returns `null`
-(`no_access`), never the fixed `market`.
+### 22 Oct 2026 · the limiter runs after the backend loads · decided by builder · risk: low
+- Decided: The limiter runs after the backend loads, since the backend owns it. It still runs
+  before the agent lookup, entitlement and DB writes. A request with an invalid body is not
+  counted. A start for an unknown or unentitled agent is counted, because it's an abuse guard.
+- Why: The backend owns the limiter and must be loaded first; counting unknown/unentitled starts
+  keeps the guard effective against abuse even when the agent lookup later fails.
+- risk: low
 
-### 9.4a Phase B: EDMATE_MARKET stays in compose, as the studio test chat's market only
-The plan said to drop it from the deploy surface, but the studio test chat (out of bounds) still
-fails closed in production without it, so removing it would break the teacher preview on the local
-stack. Compose, env.example and try-it now describe it as the preview market only. The student
-runtime never reads it, and a new stack-config test pins that. Drop it when the studio preview gets
-its own market source.
+### 22 Oct 2026 · rate-limit message text and Redis key prefix · decided by builder · risk: low
+- Decided: Message text: "You have started a lot of chats just now. Wait a few minutes and try
+  again." Redis key prefix: `edmate:turn:sessionstart:<studentId>`.
+- Why: The plan left the exact wording and key naming to the builder.
+- risk: low
 
-### 9.4a Phase B: when the market is read
-`studentMarket` is asked only after a subscription and its package are found, so a refused resolve
-costs no identity read. An unknown id (no row) falls back to `global`, as planned; an identity
-error fails the resolve.
+### 22 Oct 2026 · 9.4a Phase B: student market read from identity · decided by builder · risk: high
+- Decided: `packages/db/src/identity/store.ts` gains `getMarket(id)`, a new identity read of the
+  `market` column only (`null` for an unknown id, no `IdentityUser` change).
+  `packages/db/src/repositories/ports.ts` gains `EntitlementStoreOptions.studentMarket`, the only
+  market source of the `subscription` resolve branch; it is optional, and a `subscription`
+  resolve with no `studentMarket` fails closed (`null`, so `no_access`), never the fixed `market`.
+  The turn runtime's production fail-closed `EDMATE_MARKET` boot check is removed: the market is
+  now per-row data (`users.market` is NOT NULL), and an unknown market still maps to `global`.
+  Callers pass the signed-in principal's id only.
+- Why: A student's turns must run in that student's own market, read fresh on every resolve, not
+  from a single env var shared by every student. Making `studentMarket` optional (the plan said
+  required) keeps the studio test chat (`apps/web/src/studio/testChat/deps.ts`) and the worker
+  gate (`apps/worker/src/gate/agent.ts`) untouched, since both build the store too and are out of
+  bounds for this task; failing closed when it is absent, rather than falling back to the fixed
+  `market`, keeps a misconfigured caller from granting access it should not.
+- risk: high
 
-### 9.4a Phase B: the identity Pick widens on TurnRuntimeHooks, not RuntimeHooks
-Same reason as Phase A: the studio test chat's test satisfies `RuntimeHooks` with `learnerStatus`
-only.
+### 22 Oct 2026 · EDMATE_MARKET stays in compose, as the studio test chat's market only · decided by builder · risk: low
+- Decided: Compose, env.example and try-it now describe `EDMATE_MARKET` as the studio preview
+  market only. The student runtime never reads it, and a new stack-config test pins that.
+- Why: The plan said to drop it from the deploy surface, but the studio test chat (out of bounds)
+  still fails closed in production without it, so removing it would break the teacher preview on
+  the local stack. Drop it when the studio preview gets its own market source.
+- risk: low
+
+### 22 Oct 2026 · when the market is read · decided by builder · risk: low
+- Decided: `studentMarket` is asked only after a subscription and its package are found.
+- Why: A refused resolve then costs no identity read. An unknown id (no row) falls back to
+  `global`, as planned; an identity error fails the resolve.
+- risk: low
+
+### 22 Oct 2026 · the identity Pick widens on TurnRuntimeHooks, not RuntimeHooks · decided by builder · risk: low
+- Decided: `TurnRuntimeHooks.database()`'s identity type is narrowed via the same
+  `TurnRuntimeHooks extends RuntimeHooks` pattern as Phase A, not a change to `RuntimeHooks`.
+- Why: Same reason as Phase A: the studio test chat's test satisfies `RuntimeHooks` with
+  `learnerStatus` only.
+- risk: low
 
 ## Left to do
 - Phase C: `/home` chat links from `subscriptions.listLiveForStudent`; `EDMATE_CHAT_AGENTS` kept
