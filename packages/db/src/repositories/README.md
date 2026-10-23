@@ -316,9 +316,13 @@ only (`answered`, `students`, `threadMessages`, `noteChunkId`, `evalCaseId`) —
 leaves.
 
 **Index (task 5.10b).** `teacher_questions_teacher_id_agent_id_status_created_at_idx` (migration
-0025, additive) covers `open`'s grouping read and `listGroupsForTeacher`'s scan, both filtered on
-exactly `(teacher_id, agent_id, status = 'open')` and ordered by `created_at`. The 5.10 review also
-asked for a unique partial index on open sessions per `(teacher, student, agent)`; that was **not**
+0025, additive) covers `open`'s grouping read, which filters on exactly
+`(teacher_id, agent_id, status = 'open')` and orders by `created_at` (fix round:
+`listGroupsForTeacher`'s scan filters only `(teacher_id, status)`, with no `agent_id` predicate, so
+it can't use this index's `agent_id`/`created_at` prefix and ties with or loses to the existing
+`teacher_questions_teacher_id_status_idx` instead — this index only serves `open`). The 5.10 review
+also asked for a unique partial index on open sessions per `(teacher, student, agent)`; that was
+**not**
 added — `sessions.create` (`sessions.ts`) opens a new session on every call with no check for an
 existing open one for the same triple, and `apps/web/src/turn/routes.ts`'s `startSession` calls it
 unconditionally, so two open sessions for one triple already happen today (this is exactly why

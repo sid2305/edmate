@@ -155,6 +155,10 @@ export function teacherQuestionsRepo(db: Db) {
           if (!owner) throw new RepositoryError('not_found', method);
 
           if (callerSimilarIds.length > 0) {
+            // Task 5.10b (fix round): locked ascending by id, the same order `answer`'s group
+            // lock below uses — two multi-row locks on this table in different orders is exactly
+            // the AB-BA deadlock class `docs/lessons.md`'s "Two writers that lock the same rows in
+            // different orders deadlock" entry names for this file.
             const owned = await tx
               .select({ id: teacherQuestions.id })
               .from(teacherQuestions)
@@ -164,8 +168,10 @@ export function teacherQuestionsRepo(db: Db) {
                   inArray(teacherQuestions.id, callerSimilarIds),
                 ),
               )
+              .orderBy(teacherQuestions.id)
               .for('key share');
-            if (owned.length !== callerSimilarIds.length) throw new RepositoryError('scope', method);
+            if (owned.length !== callerSimilarIds.length)
+              throw new RepositoryError('scope', method);
           }
 
           const candidates: GroupCandidate[] = await tx
@@ -315,7 +321,9 @@ export function teacherQuestionsRepo(db: Db) {
      * Answers the scope's own open question and every open question sharing its group, in one
      * transaction (task 5.10 § Ask the teacher 4). Already-answered, dismissed, another teacher's
      * or a missing question is `not_found` and nothing is written. Writes, in order:
-     *   1. locks the target `FOR UPDATE`, then every open member of its group `FOR UPDATE`;
+     *   1. an unlocked peek at the target row for its `agentId`/`groupId`, then the agent row
+     *      `FOR NO KEY UPDATE` (the same lock `open` takes), then every currently-open member of
+     *      its group, locked in one statement ascending by id (task 5.10b);
      *   2. one teacher note (`insertTeacherNote`, shared with `CorrectionStore`), so the note, the
      *      members' status and the student delivery commit together (plan decision 2);
      *   3. every member to `status 'answered'` with `answer` and `answered_at`;
@@ -387,6 +395,14 @@ export function teacherQuestionsRepo(db: Db) {
               ),
             );
           const memberIds = groupRows.map((r) => r.id);
+          /* v8 ignore next -- peek's own `WHERE status = 'open'` just matched this row, so this
+           * only fires if another transaction on this same agent closed peek's whole group in the
+           * gap between that read and this one (it waited behind the agent lock above, then found
+           * the group it's racing against already answered) — a real race, but one that needs a
+           * second transaction paused at that exact point to force, which the previous
+           * non-deterministic test (removed below) happened to hit by luck of scheduling rather
+           * than by design; the item 2 rewrite forces the lock-order race deterministically
+           * instead, which no longer happens to land here. */
           if (!memberIds.includes(peek.id)) throw new RepositoryError('not_found', method);
 
           const members = await tx
@@ -397,14 +413,19 @@ export function teacherQuestionsRepo(db: Db) {
               createdAt: teacherQuestions.createdAt,
             })
             .from(teacherQuestions)
-            .where(and(inArray(teacherQuestions.id, memberIds), eq(teacherQuestions.status, 'open')))
+            .where(
+              and(inArray(teacherQuestions.id, memberIds), eq(teacherQuestions.status, 'open')),
+            )
             .orderBy(teacherQuestions.id)
             .for('update');
-          /* v8 ignore next -- the unlocked `memberIds` read just above already excludes peek.id
-           * unless it is open, so this only fires if another transaction closes that exact row in
-           * the gap between that read and this lock; a real but sub-millisecond race that no test
-           * can force deterministically without manual two-connection lock-stepping. */
-          if (!members.some((m) => m.id === peek.id)) throw new RepositoryError('not_found', method);
+          /* v8 ignore next 2 -- the unlocked `memberIds` read just above already excludes
+           * peek.id unless it is open, so this only fires if another transaction closes that
+           * exact row in the gap between that read and this lock; a real but sub-millisecond
+           * race that no test can force deterministically without manual two-connection
+           * lock-stepping. (Fix round: prettier wraps this `if` onto two lines, so the ignore
+           * directive now needs to name both.) */
+          if (!members.some((m) => m.id === peek.id))
+            throw new RepositoryError('not_found', method);
 
           // Task 5.10b (review follow-up, LOW): the stored answer is the same trimmed text in
           // both the thread message and `teacher_questions.answer` — `insertTeacherNote` already

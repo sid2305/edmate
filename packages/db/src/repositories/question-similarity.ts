@@ -59,7 +59,10 @@ export function bestGroup(text: string, candidates: GroupCandidate[]): string | 
     let shared = 0;
     for (const t of ta) if (tb.has(t)) shared += 1;
     if (shared < MIN_SHARED_TERMS) continue;
-    const score = ta.size === 0 || tb.size === 0 ? 0 : shared / (ta.size + tb.size - shared);
+    // `shared >= MIN_SHARED_TERMS` (2) already means both `ta` and `tb` are non-empty (`shared`
+    // can't exceed either set's size), so there is no reachable zero-set case to branch on here
+    // (fix round, task 5.10b review follow-up).
+    const score = shared / (ta.size + tb.size - shared);
     if (score < QUESTION_GROUP_MIN) continue;
     const createdAt = new Date(c.createdAt).getTime();
     const groupId = c.groupId ?? c.id;
