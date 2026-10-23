@@ -18,6 +18,9 @@ export const MAX_EMAIL_LENGTH = 320;
 /** The only path a mailed link may have. */
 export const CALLBACK_PATH = `/api/auth/callback/${EMAIL_PROVIDER_ID}`;
 
+/** The page a mailed link opens (task 1.4b): it confirms before Auth.js spends the token. */
+export const CONFIRM_PATH = '/sign-in/confirm';
+
 const EmailSchema = z.email();
 
 /** Whitespace, a comma, a double quote or a control character: never in an address we accept. */
@@ -52,14 +55,14 @@ export function normalizeEmail(raw: unknown): string {
 }
 
 /**
- * The link to mail: Auth.js's path and query on AUTH_URL's origin. With `trustHost`, Auth.js's own
- * URL follows `X-Forwarded-Host`, so a forged host must never reach the mail. A path other than
- * the email callback throws.
+ * The link to mail: Auth.js's query on the confirm page (task 1.4b), on AUTH_URL's origin. With
+ * `trustHost`, Auth.js's own URL follows `X-Forwarded-Host`, so a forged host must never reach the
+ * mail. Auth.js's URL must be the email callback; any other path throws.
  */
 export function rebuildLink(authJsUrl: string, origin: URL): string {
   const parsed = new URL(authJsUrl);
   if (parsed.pathname !== CALLBACK_PATH) throw new Error('unexpected sign-in link path');
-  return new URL(`${parsed.pathname}${parsed.search}`, origin.origin).toString();
+  return new URL(`${CONFIRM_PATH}${parsed.search}`, origin.origin).toString();
 }
 
 const HTML_ESCAPES: Record<string, string> = {
