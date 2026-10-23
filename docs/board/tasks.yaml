@@ -2372,6 +2372,13 @@ tasks:
   status: running
   branch: m13/5.10b-teacher-questions-locking
   model: plan:lead build:sonnet
+- id: 5.10c
+  milestone: M13
+  title: '5.10b review follow-up (code-reviewer re-verify LOW): the open()-vs-answer() deadlock test in packages/db/test/teacher-question-answer.int.test.ts replays open()''s FOR KEY SHARE statement on a raw connection instead of calling teacherQuestions.open(), so removing the orderBy from open() would not fail it; find a way to drive the real open() into the interleaving (e.g. a test hook or a raw lock held on the agent row) or add a query-shape test that pins open()''s lock read to ORDER BY id'
+  accept: removing .orderBy(teacherQuestions.id) from open()'s lock read fails a test; the db tests pass
+  deps:
+  - 5.10b
+  status: todo
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
