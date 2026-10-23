@@ -220,10 +220,16 @@ describe.skipIf(!up)(`entitlementStoreFor on Postgres${up ? '' : ` (${SKIP_REASO
       expect(calls).toEqual([]);
     });
 
-    it('left out, a subscription fails closed (null), never the fixed market', async () => {
+    it('left out, a subscription resolve fails loudly (integrity), never null or the fixed market (9.4d)', async () => {
       const without: EntitlementStoreOptions = { ...OPTS };
       delete without.studentMarket;
-      expect(await sub('stu_1', 'agt_a', without)).toBeNull();
+      const err = await sub('stu_1', 'agt_a', without).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(RepositoryError);
+      expect((err as RepositoryError).kind).toBe('integrity');
+      // A wiring mistake, so it is loud for every student, even one with no subscription.
+      await expect(sub('stu_1', 'agt_nowhere', without)).rejects.toBeInstanceOf(RepositoryError);
+      // Preview and eval roots never need it.
+      expect((await preview('tch_a', 'agt_a', { ...without, preview: { packageId: 'pkg_a' } }))?.market).toBe('IN');
     });
 
     it('an error from it fails the resolve', async () => {

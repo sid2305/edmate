@@ -5,7 +5,7 @@ import type { AgeStatus } from '@edmate/db';
 import { TurnEventSchema, type TurnEvent } from '@edmate/contracts';
 import { scriptedStreamProviderError } from '@edmate/harness/testing';
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { memoryBackend, says, type MemoryBackendOptions } from '../../test/turn-backend';
 import { devModelAdapter } from './devModel';
 import { failingSessionRateLimiter, fakeSessionRateLimiter } from './sessionRateLimit';
@@ -13,6 +13,7 @@ import { createGuard, type GuardDeps, type Principal } from '../auth/guard';
 import {
   createSessionHandlers,
   MAX_BODY_BYTES,
+  SESSION_LIMIT_DEADLINE_MS,
   sseBody,
   TurnUnavailableError,
   type TurnBackend,
@@ -271,6 +272,38 @@ describe('POST /api/sessions per-student rate limit (9.4a)', () => {
     expect(await res.json()).toMatchObject({ error: { code: 'provider_error', retryable: true } });
     expect(r.world.sessions.filter((s) => s.id.startsWith('ses_new_'))).toEqual([]);
     expect(r.logs).toEqual([{ event: 'sessions.rate_limit_failed', fields: { error: 'TypeError' } }]);
+  });
+
+  it('a hung limiter (black-holed Redis) is 503 within the deadline, not a hang (9.4d)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const r = routes({ sessionRateLimit: { take: () => new Promise<boolean>(() => undefined) } });
+      let settled: Response | undefined;
+      const pending = start(r, 'clear').then((res) => (settled = res));
+      await vi.advanceTimersByTimeAsync(SESSION_LIMIT_DEADLINE_MS - 1);
+      expect(settled).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      const res = await pending;
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: { code: 'provider_error', retryable: true } });
+      expect(r.world.sessions.filter((s) => s.id.startsWith('ses_new_'))).toEqual([]);
+      expect(r.logs).toEqual([
+        { event: 'sessions.rate_limit_failed', fields: { error: 'SessionLimitTimeoutError' } },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a limiter that answers in time clears its deadline timer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const r = routes({ sessionRateLimit: { take: async () => false } });
+      expect((await start(r, 'clear')).status).toBe(429);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('turns are not limited by the session-start limiter', async () => {
