@@ -3,7 +3,7 @@
 // storage key is always built here, on the server; its extension names the upload type, so the
 // complete route learns the type from the key it stored, never from the client.
 import { randomUUID } from 'node:crypto';
-import type { ChunkKind } from '@edmate/contracts';
+import type { FileChunkKind } from '@edmate/db';
 import { WHISPER_MAX_UPLOAD_BYTES } from '@edmate/gateway';
 import type { IngestFileKind } from '@edmate/queue';
 
@@ -24,8 +24,11 @@ export const MAX_MEDIA_UPLOAD_BYTES = 500 * 1024 * 1024;
  */
 export const MAX_UNSPLIT_MEDIA_BYTES = WHISPER_MAX_UPLOAD_BYTES;
 
-/** The retrieval kind an uploaded file can have: never `teacher_note` (those rows have no file). */
-export type FileChunkKind = Exclude<ChunkKind, 'teacher_note'>;
+/**
+ * The retrieval kind an uploaded file can have: never `teacher_note` (those rows have no file).
+ * Task 8.2o: the db package names it once (`documents.startReplace` takes the same type).
+ */
+export type { FileChunkKind };
 
 export interface UploadType {
   contentType: string;

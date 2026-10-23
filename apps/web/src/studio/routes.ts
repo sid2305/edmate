@@ -150,8 +150,18 @@ const MSG = {
   linkRateLimited: 'Too many links added. Wait a while, then try again.',
 } as const;
 
+/**
+ * Task 8.2o: the fixed 409 messages when `replace` refuses the existing row itself. A note has no
+ * file; a class recording stays a recording (another caption, audio or video file is fine).
+ */
+export const REPLACE_REFUSAL_MESSAGE = {
+  note: "A note has no file to replace. Edit the note's text instead.",
+  recording:
+    'A class recording can only be replaced by another recording: a caption file (.vtt or .srt), audio or video.',
+} as const;
+
 /** The fixed 400 message for each way `checkWebLinkUrl` refuses a link (task 8.2f). */
-const LINK_REFUSAL_MESSAGE: Record<WebLinkRefusal, string> = {
+export const LINK_REFUSAL_MESSAGE: Record<WebLinkRefusal, string> = {
   invalid_url: 'Enter a valid web address.',
   not_https: 'Links must start with https://.',
   has_credentials: "A link can't include a user name or password.",
@@ -384,6 +394,10 @@ const replace: Work = async (b, scope, req, ctx) => {
   if (existing.storageKey !== undefined && isLinkKey(existing.storageKey)) {
     return validation(MSG.linkReplace);
   }
+  // Task 8.2o: a note has no file to replace. Refused before anything is signed.
+  if (existing.kind === 'teacher_note') {
+    return apiError('validation', REPLACE_REFUSAL_MESSAGE.note, 409);
+  }
   const key = newStorageKey(scope.teacherId, id, type);
   const uploadUrl = await b.storage.createUploadUrl({
     key,
@@ -391,12 +405,23 @@ const replace: Work = async (b, scope, req, ctx) => {
     contentLength: body.byteSize,
   });
   // Task 8.2n: the new file's retrieval kind replaces the old one (a PDF swapped for a caption
-  // file becomes `transcript`, and the reverse), so citations read the right way.
-  const { previousStorageKey } = await b.documents.startReplace(scope, id, {
-    storageKey: key,
-    rightsDeclared: body.rightsDeclared,
-    kind: type.chunkKind,
-  });
+  // file becomes `transcript`, and the reverse), so citations read the right way. Task 8.2o: the
+  // repository refuses (`invalid`, nothing written) a class-linked recording turning `material`,
+  // the same rule as create's task-11.4 guard; `DocumentRow` carries no `liveClassId`, so the
+  // route learns it here. The signed URL is never returned, so nothing is uploaded under `key`.
+  let previousStorageKey: string | null;
+  try {
+    ({ previousStorageKey } = await b.documents.startReplace(scope, id, {
+      storageKey: key,
+      rightsDeclared: body.rightsDeclared,
+      kind: type.chunkKind,
+    }));
+  } catch (error) {
+    if (error instanceof RepositoryError && error.kind === 'invalid') {
+      return apiError('validation', REPLACE_REFUSAL_MESSAGE.recording, 409);
+    }
+    throw error;
+  }
   await dropObject(b, previousStorageKey);
   return ok({ documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } });
 };
