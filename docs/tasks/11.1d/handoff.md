@@ -76,6 +76,11 @@ Result: clean, no findings.
 
 ## Decisions
 
+### 22 Oct 2026 · 11.1d Phase A ran over budget · decided by lead · risk: low
+- Decided: accept Phase A at 149 harness-counted calls against a budget of 85 (builder 116, fix round 33).
+- Why: the builder ran the db integration gate several times on a heavily loaded machine, and the fix round had to touch four apps/web fixtures the plan had not listed; the work itself is in scope.
+- risk: low
+
 ### 22 Oct 2026 · 11.1d Phase A: live class status, update and cancel in packages/db/src/repositories · decided by builder · risk: high
 - Decided: added a `status` column + check constraint to `live_classes`, and `update`/`cancel`
   repository methods with row-level locking, `not_found`-before-other-checks ordering, and an
@@ -121,7 +126,7 @@ Result: clean, no findings.
   resolution either way).
 - risk: low
 
-Tool calls used: 92
+Tool calls used: 149 (harness count: builder 116 + fixer 33; the agents reported 92 + 26)
 
 ## Fix round 1
 
