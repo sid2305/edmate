@@ -6427,8 +6427,9 @@ tasks:
   deps:
   - 8.2l
   risk: low
-  status: todo
-  branch: null
+  status: running
+  branch: m13/8.2n-studio-followups
+  model: plan:lead build:fable
 - id: 12.3f
   milestone: M12
   title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
