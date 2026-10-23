@@ -86,6 +86,53 @@ with no locale pack still runs as `global` (`packMarket`, unchanged).
 Postgres at `TEST_DATABASE_URL`, so the db integration tests were skipped, not run). Tasks: 13
 successful, 13 total. `python3 .githooks/secret-scan.py --all` → exit 0, no findings.
 
+## Phase C (/home chat links from the student's own subscriptions)
+
+**Status:** DONE. Local branch `work-94a-C`, worktree `.claude/worktrees/agent-aab66ffd3ef0a3475`.
+
+### Summary
+`/home`'s chat and paused links (and the teacher ids its live-classes block uses) now come from
+one query over the signed-in student's own subscriptions across every teacher:
+`subscriptionsRepo.listLiveForStudent(studentId)` joins `subscriptions -> package_versions ->
+packages -> agents`, keeps live agents only, leaves out `ended`, orders by agent id. No env var
+picks a student's chat links any more. **`EDMATE_CHAT_AGENTS` stays for the startable bucket
+only** (lead answer 2): the configured candidates (or `demo-agent` outside production) give the
+"start a package" links, minus any agent already in the student's live list, and minus a
+draft/suspended/unknown agent (`agents.owner`, as before). A failure anywhere shows no links and
+logs the error name only, as before. The method takes a bare student id (no packages/db type for
+"the signed-in user's own id across teachers" exists), parsed like a scope id, so a malformed or
+`undefined` id is `scope` before any SQL. The `/api/live-classes/[id]/questions` route still uses
+`chatAgentCandidates` for its own candidate list; it is outside Phase C and unchanged.
+
+### Files
+- `packages/db/src/repositories/subscriptions.ts`: `listLiveForStudent`, with the scope-exception
+  comment.
+- `packages/db/test/repositories.int.test.ts`: an isolation-grid case (each seeded student sees
+  exactly its own two pairs; 20 random ids see nothing; malformed ids fail closed) and a fixture
+  test (live agent active/paused/past_due kept; suspended, draft and ended left out; another
+  student's subscription never listed). Written first, red (3 failed), then green.
+- `packages/db/test/scope.test.ts`: the bad-scope grid skips this method (a plain id string is a
+  valid id for it, like the staff-id methods); its own malformed-id test replaces that.
+- `apps/web/src/chat/liveChats.ts`, `liveChats.test.ts`: `homeCandidateScan` removed;
+  `LiveChatDeps.subscriptions.listLiveForStudent`; `classifyHomeLinks(live)` returns
+  chats/paused; `homeLinks` builds startable from the candidates. Tests written first (red).
+- `apps/web/app/home/page.tsx`, `page.test.tsx`: comments and one test name (wiring unchanged:
+  `serverDatabase().repos` already has the new method).
+
+### Gate
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/db`:
+`@edmate/web` Test Files 143 passed | 5 skipped (148); `@edmate/db` Test Files 1 failed | 73
+passed (74), 0 skipped (Postgres on 127.0.0.1:55432, so the integration tests ran);
+`Tasks: 12 successful, 13 total`. The one failing file is
+`packages/db/test/retrieval-leak.int.test.ts`, a wall-clock timing case (the cold-build timeout or
+the p95 SLO case, a different one on different runs) under machine load (load average about 20,
+other builders running). It is the known flake already on the board (the PR #98 SLO flake and
+the 22 Oct timing-flake task); this phase does not touch retrieval, and the file alone passes:
+`corepack pnpm vitest run test/retrieval-leak.int.test.ts` → `Tests 25 passed (25)`. Every other
+db file, including `repositories.int.test.ts` (`subscriptions.listLiveForStudent public read
+cases=27 leaks=0`) and `scope.test.ts`, passed. Typecheck and lint green for both packages.
+`python3 .githooks/secret-scan.py --all` → exit 0, no findings.
+
 ## Decisions
 
 ### 22 Oct 2026 · TurnRuntimeHooks instead of widening RuntimeHooks · decided by builder · risk: low
@@ -155,9 +202,36 @@ successful, 13 total. `python3 .githooks/secret-scan.py --all` → exit 0, no fi
   `learnerStatus` only.
 - risk: low
 
+### 22 Oct 2026 · 9.4a Phase C: listLiveForStudent takes the signed-in student's own id · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/subscriptions.ts` gains `listLiveForStudent(studentId)`,
+  which takes a bare student id, not a `StudentScope`: the one deliberate exception to "student
+  data is always per student x teacher", because it lists the student's own subscriptions across
+  every teacher. packages/db has no branded "own id" or self-scope type, so per lead answer 3 it
+  is a bare id with a comment saying it may only be called with the signed-in principal's own id.
+  The id is parsed with the scope id schema (`scope` error on anything malformed or `undefined`,
+  before any SQL). The only caller is `/home` (`homeLinks`), which passes `principal.userId`.
+- Why: /home must list the student's own chats from their subscriptions, not an env var, in one
+  query instead of a per-candidate loop; a student x teacher scope cannot express "all my
+  teachers". The security reviewer checks the call sites at review.
+- risk: high
+
+### 22 Oct 2026 · startable candidates are still checked for a live agent · decided by builder · risk: low
+- Decided: A configured candidate is startable only if `agents.owner` finds it live (as before)
+  and it is not already in the student's live list. Only candidates not already live are looked
+  up. The teacher ids for live classes come from the live list only.
+- Why: The plan said to filter out agents already live; keeping the live-agent check keeps a
+  draft or suspended configured agent from showing a dead "start" link, which was today's
+  behaviour.
+- risk: low
+
+### 22 Oct 2026 · the bad-scope unit grid skips listLiveForStudent · decided by builder · risk: low
+- Decided: `packages/db/test/scope.test.ts`'s every-method bad-scope grid skips this method (as it
+  does the staff-id methods) and a dedicated test checks its malformed ids fail `scope` before SQL.
+- Why: The grid's plain string `'tch_a'` is a well-formed id for a bare-id method, so it would
+  reach the database instead of failing as a scope.
+- risk: low
+
 ## Left to do
-- Phase C: `/home` chat links from `subscriptions.listLiveForStudent`; `EDMATE_CHAT_AGENTS` kept
-  for startable only.
 - Phase D: test hygiene (coverage include for `.tsx`, playwright `--webpack`, gate test,
   devModel schemas, `deadlineSafeClock.sleep`, abort test clock, instrumentation).
 
