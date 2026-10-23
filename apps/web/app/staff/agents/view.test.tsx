@@ -138,6 +138,49 @@ describe('StaffAgentsView', () => {
     await waitFor(() => expect(screen.getByText('2026-10-22T11:00:00.000Z')).toBeInTheDocument());
   });
 
+  it('approve: the whole row takes the reloaded record (status, teacher slug), not just approval fields', async () => {
+    const setApproval = vi.fn(async () => ({ ok: true as const, changed: true }));
+    const FRESH = agent({
+      agentId: 'agt_flagged',
+      teacherSlug: 'asha-math-v2',
+      status: 'live',
+      liveVersion: 3,
+      regulatedSubject: 'health',
+      approvedAt: '2026-10-22T11:00:00.000Z',
+      approvedBy: 'stf_9',
+    });
+    const loadAgents = vi.fn(async () => ({ ok: true as const, agents: [FRESH] }));
+    renderIntl(<StaffAgentsView initial={[FLAGGED]} setApproval={setApproval} loadAgents={loadAgents} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(screen.getByText('asha-math-v2')).toBeInTheDocument());
+    const row = within(screen.getByRole('list')).getByRole('listitem');
+    expect(within(row).getByText('Live')).toBeInTheDocument();
+    expect(within(row).queryByText('Draft')).toBeNull();
+    expect(within(row).getByText('2026-10-22T11:00:00.000Z')).toBeInTheDocument();
+  });
+
+  it('revoke: the whole row takes the reloaded record (status, teacher slug), not just approval fields', async () => {
+    const setApproval = vi.fn(async () => ({ ok: true as const, changed: true }));
+    const FRESH = agent({
+      agentId: 'agt_approved',
+      teacherSlug: 'ravi-law',
+      status: 'suspended',
+      liveVersion: 2,
+      regulatedSubject: 'law',
+    });
+    const loadAgents = vi.fn(async () => ({ ok: true as const, agents: [FRESH] }));
+    renderIntl(<StaffAgentsView initial={[APPROVED]} setApproval={setApproval} loadAgents={loadAgents} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(screen.getByText('ravi-law')).toBeInTheDocument());
+    const row = within(screen.getByRole('list')).getByRole('listitem');
+    expect(within(row).getByText('Suspended')).toBeInTheDocument();
+    expect(within(row).queryByText('asha-math')).toBeNull();
+    expect(within(row).queryByText('2026-10-20T10:00:00.000Z')).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+  });
+
   it('a dirty, unsaved edit on one row survives a reload that only changes another row', async () => {
     const OTHER_BEFORE = agent({ agentId: 'agt_other', regulatedSubject: 'investing' });
     const OTHER_AFTER = agent({

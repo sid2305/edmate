@@ -10,6 +10,76 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.4d: missing studentMarket fails loudly in packages/db/src/repositories/ports.ts · decided by builder · risk: high
+- Decided: a `subscription` resolve for a learner who passes `learnerClear` but has no `studentMarket` option throws `RepositoryError('integrity')` instead of returning `null`. The option stays optional (preview/eval roots), and a root whose `learnerClear` is always false (studio preview) still gets `null`.
+- Why: a silent `null` turned a wiring mistake into "You need a live package" for every student, with no log line. Throwing is still fail-closed (no entitlement), but it is loud. Checking after `learnerClear` keeps the studio preview store, which is out of bounds here, unchanged.
+- risk: high (the entitlement store, a risky path; behaviour changes only for a misconfigured root).
+
+---
+
+### 22 Oct 2026 · 9.4d: live-class questions resolve teachers from the student's own live subscriptions · decided by builder · risk: low
+- Decided: the ask route uses `subscriptions.listLiveForStudent(principal.userId)` (not-ended rows, paused included) for its candidate teachers and no longer reads `EDMATE_CHAT_AGENTS` or `agents.owner`.
+- Why: the route then matches the source /home lists live classes from, so every class /home shows can be asked. The student id comes only from the session.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4d: session-start limiter bounded twice (client commandTimeout 2 s, route deadline 3 s) · decided by builder · risk: low
+- Decided: the limits Redis client gets `commandTimeout: 2000` and `connectTimeout: 5000`, and `POST /api/sessions` races `take()` against a 3 s deadline, failing closed with 503.
+- Why: a black-holed Redis would otherwise hang every session start. The route deadline also covers any future limiter implementation.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 9.4d: no extra catch on the raced take() in apps/web/src/turn/routes.ts · decided by lead · risk: low
+- Decided: the security reviewer's LOW (a late rejection of `take()` after the deadline wins) is wontfix.
+- Why: `Promise.race` attaches handlers to both promises, so a late rejection is already handled; the code reviewer checked this, and the tests show no leaked timers.
+- risk: low
+
+Tool calls used: 48 (harness count: builder 48; the agent reported 32)
+
+---
+
+### 22 Oct 2026 · 11.3c: insights refuse a week that has not ended in packages/db/src/repositories/insights.ts · decided by builder · risk: high
+- Decided: `weekWindow` (shared by every insights read and by `computeAndSaveWeek`) throws
+  `RepositoryError('invalid', method)` when the window's end (`weekStart` + 7 days) is after
+  `Date.now()`. No injected clock exists on this repository, so this follows the module's
+  existing way of getting "now" rather than adding one. Fixtures that previously used the
+  then-current week were moved into the past instead of pinning a test clock.
+- Why: 11.3a's security review found that a teacher could call a read for the current week
+  twice, once before and once after a single student's activity, and difference the two results
+  to identify that student even though the small-group floor (`INSIGHTS_MIN_STUDENTS`) is meant
+  to prevent singling anyone out. Refusing any week that has not fully closed removes the
+  attack: every payload the repository ever returns is for a week whose contents cannot change
+  again.
+- risk: high (`packages/db/src/repositories/**` is a risk path). Required reviewers:
+  database-reviewer, security-reviewer.
+
+---
+
+### 22 Oct 2026 · 9.3e Phase A: safety rejection takes down live agents in packages/db/src/repositories · decided by builder · risk: high
+- Decided: `setVerification` takes a `safety: true` flag (rejections only; refine makes it `invalid` on approval) and, in its transaction, takes down every live agent of the teacher via the new module-internal `takeDownAgentInTx` (category `harmful`, note = reason, agent `suspended`, audited; lock order role → profile → agents asc id → takedown rows). The `teacher.verify` audit row names the takedown ids. A re-verification lifts nothing. `takedowns.lift` returns an agent to `live` only when its teacher's profile is `verified`; with no profile, `pending`, `rejected` or any other state it returns it to `draft` (profile read FOR SHARE before the agent lock). Phase A first built "not `rejected`"; the lead kept verified-only and Phase A2 built it, so a safety-rejected teacher who edits their subject (back to `pending`) can't be reopened by a routine lift. A plain rejection is unchanged. The student sees the existing takedown texts; no new error code.
+- Why: B-46 (c): a safety rejection must cut existing subscribers off at once; every student path already refuses a non-live agent, so reusing 12.2b's takedown write needs no migration, contract or harness change and gives staff an audit trail and lift path. The lift rule closes the security review's MEDIUM (a routine lift reopening a rejected teacher).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.3e Phase A: takedowns.create checks a linked report before inserting the takedown row · decided by builder · risk: low
+- Decided: to share the agent write with setVerification, `create` now locks and checks the linked report before inserting the takedown row (it used to insert first). Same rows and audit rows are written; a bad report still writes nothing (the transaction rolls back either way).
+- Why: the helper writes the takedown row and its audit row together; the new row is invisible to other transactions, so the contended lock order (role → target → report) is unchanged.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.3e Phase B: staff safety flag in apps/web/app/api/staff/verifications · decided by builder · risk: high
+- Decided: the staff verification API accepts an optional `safety` boolean on a decision; `safety: true` is valid only with `status: 'rejected'` (else 400 `validation`) and is passed to `setVerification` only when `true`, so `false` and an absent key are the same plain rejection. The staff console adds a "safety concern" checkbox per row (with a hint saying existing subscribers lose access at once); Reject sends it, Approve always sends `false`, the client only puts `safety: true` in the body on a rejection, and a safety rejection shows its own notice. The body stays strict and `by` is still the session's principal.
+- Why: B-46 (c) needs staff to mark a rejection as safety-related; the refine mirrors the repository's own so a bad combination never reaches SQL, and dropping `false` keeps a plain rejection's call and audit row exactly as before.
+- risk: high
+
+Tool calls used: 114 (harness count: Phase A 51 + Phase A2+B 63; the agents reported 33 + 52)
+
+---
+
 ### 22 Oct 2026 · 9.4a: unentitled session starts count toward the limit in apps/web/src/turn/routes.ts · decided by lead · risk: low
 
 - Decided: keep counting session starts for an unknown or unentitled agent against the student's own 10-minute window (security-reviewer LOW, wontfix).

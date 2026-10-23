@@ -17,6 +17,11 @@
 // inbox). The payload holds ids, counts and topic titles only: no question text, no timestamp.
 // The only write is `computeAndSaveWeek`, which builds the payload from these reads; `saveWeek`
 // is internal, so no caller can store a forged payload.
+//
+// Closed weeks only (task 11.3c, 11.3a security review): every read and `computeAndSaveWeek`
+// refuse (`invalid`) a week whose end (Monday + 7 days) is after the server clock. Otherwise a
+// caller could read the current week before and after one student's activity and difference
+// that student out of the floor. The worker only ever asks for the last finished week.
 import { and, asc, desc, eq, gte, lt, ne, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -28,7 +33,7 @@ import {
   topics,
   turnTraces,
 } from '../schema/index.js';
-import { translateWrite } from './errors.js';
+import { RepositoryError, translateWrite } from './errors.js';
 import { checked, iso } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
@@ -85,11 +90,17 @@ export interface InsightsWeek {
 
 const atLeastFloor = (distinct: SQL) => sql`${distinct} >= ${INSIGHTS_MIN_STUDENTS}`;
 
-/** A validated Monday and its fixed window [00:00 UTC, +7 days). */
+/**
+ * A validated Monday and its fixed window [00:00 UTC, +7 days). The week must have ended: a
+ * window whose end is after now (the server clock, `Date.now()`) is `invalid`, so no read or
+ * write ever sees a week that can still change.
+ */
 function weekWindow(weekStart: string, method: string): { week: string; start: Date; end: Date } {
   const week = parseArg(WeekStart, weekStart, method);
   const start = new Date(`${week}T00:00:00.000Z`);
-  return { week, start, end: new Date(start.getTime() + WEEK_MS) };
+  const end = new Date(start.getTime() + WEEK_MS);
+  if (end.getTime() > Date.now()) throw new RepositoryError('invalid', method);
+  return { week, start, end };
 }
 
 export function insightsRepo(db: Db) {

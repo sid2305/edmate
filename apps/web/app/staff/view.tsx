@@ -27,7 +27,7 @@ export interface StaffQueueViewProps {
 
 type Busy = { kind: 'decide'; teacherId: string; status: Decision } | { kind: 'reload' } | null;
 type ErrorKey = 'forbidden' | 'not_found' | 'validation' | 'generic' | 'loadFailed';
-type Notice = { status: Decision; slug: string } | null;
+type Notice = { status: Decision; slug: string; safety: boolean } | null;
 
 function errorKey(code: ErrorCode): ErrorKey {
   return code === 'forbidden' || code === 'not_found' || code === 'validation' ? code : 'generic';
@@ -51,18 +51,22 @@ export function StaffQueueView({
   );
   const [notice, setNotice] = useState<Notice>(null);
 
-  const onDecide = async (item: QueueItem, status: Decision, reason: string) => {
+  const onDecide = async (item: QueueItem, status: Decision, reason: string, safety: boolean) => {
     setError(null);
     setNotice(null);
     setBusy({ kind: 'decide', teacherId: item.teacherId, status });
     try {
-      const result = await decide({ teacherId: item.teacherId, status, reason });
+      const result = await decide({ teacherId: item.teacherId, status, reason, safety });
       if (!result.ok) {
         setError(errorKey(result.code));
         return;
       }
       setTeachers((list) => (list ?? []).filter((x) => x.teacherId !== item.teacherId));
-      setNotice({ status: result.verificationStatus, slug: item.slug });
+      setNotice({
+        status: result.verificationStatus,
+        slug: item.slug,
+        safety: safety && result.verificationStatus === 'rejected',
+      });
     } catch {
       setError('generic');
     } finally {
@@ -98,7 +102,10 @@ export function StaffQueueView({
       ) : null}
       {notice ? (
         <p role="status" className="staff-notice">
-          {t(notice.status === 'verified' ? 'approved' : 'rejected', { slug: notice.slug })}
+          {t(
+            notice.status === 'verified' ? 'approved' : notice.safety ? 'rejectedSafety' : 'rejected',
+            { slug: notice.slug },
+          )}
         </p>
       ) : null}
       <p>
@@ -116,7 +123,7 @@ export function StaffQueueView({
               item={item}
               pending={busy?.kind === 'decide' && busy.teacherId === item.teacherId ? busy.status : null}
               disabled={busy !== null}
-              onDecide={(status, reason) => void onDecide(item, status, reason)}
+              onDecide={(status, reason, safety) => void onDecide(item, status, reason, safety)}
             />
           ))}
         </ul>

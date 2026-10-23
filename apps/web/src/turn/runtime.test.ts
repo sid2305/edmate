@@ -294,7 +294,7 @@ describe('openRedis', () => {
     };
     expect(opened.clients.map((c) => c.options)).toEqual([
       { maxRetriesPerRequest: null },
-      { maxRetriesPerRequest: 1 },
+      { maxRetriesPerRequest: 1, commandTimeout: 2_000, connectTimeout: 5_000 },
     ]);
     out.queues.connection.emit('error', new TypeError('connect ECONNREFUSED 127.0.0.1:6399'));
     out.limits.redis.emit('error', 'not an error');

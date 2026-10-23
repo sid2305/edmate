@@ -103,11 +103,9 @@ export function StaffAgentsView({
       const fresh = await loadAgents();
       const freshAgent = fresh.ok ? fresh.agents.find((a) => a.agentId === agent.agentId) : undefined;
       if (freshAgent) {
-        replace(agent.agentId, {
-          approvedAt: freshAgent.approvedAt,
-          approvedBy: freshAgent.approvedBy,
-          regulatedSubject: freshAgent.regulatedSubject,
-        });
+        // Take the whole reloaded record (task 12.4g): status, liveVersion and teacherSlug can
+        // change too, and merging only the approval fields left them stale.
+        replace(agent.agentId, freshAgent);
       } else {
         replace(agent.agentId, {
           approvedAt: approved ? new Date().toISOString() : null,

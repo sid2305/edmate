@@ -5,13 +5,14 @@
 //
 // `photo` has no input yet (the column stays null until a storage port exists, 8.2 or later) and
 // `payoutAccountRef` belongs to payments (M10); neither is read or written here.
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { lockRole } from '../role-lock.js';
-import { teacherProfiles, users } from '../schema/index.js';
+import { agents, takedowns, teacherProfiles, users } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
+import { takeDownAgentInTx } from './takedowns.js';
 import {
   toTeacherProfile,
   toTeacherVerificationQueueRow,
@@ -63,12 +64,19 @@ const UpdateInput = z
   })
   .refine((p) => Object.keys(p).length > 0);
 
-/** Staff decide `verified` or `rejected`; `pending` is only the starting state. */
-const VerificationInput = z.strictObject({
-  status: z.enum(['verified', 'rejected']),
-  by: IdSchema,
-  reason: z.string().min(1).max(500).optional(),
-});
+/**
+ * Staff decide `verified` or `rejected`; `pending` is only the starting state. Task 9.3e:
+ * `safety: true` marks a rejection made for a safety reason (it also takes the teacher's live
+ * agents down); it only goes with `rejected`, so `safety: true` on an approval is `invalid`.
+ */
+const VerificationInput = z
+  .strictObject({
+    status: z.enum(['verified', 'rejected']),
+    by: IdSchema,
+    reason: z.string().min(1).max(500).optional(),
+    safety: z.boolean().optional(),
+  })
+  .refine((v) => v.safety !== true || v.status === 'rejected');
 
 export type TeacherProfileCreate = z.infer<typeof CreateInput>;
 export type TeacherProfileUpdate = z.infer<typeof UpdateInput>;
@@ -165,6 +173,21 @@ export function teacherProfilesRepo(db: Db) {
      * now (share-locked, like identity.grantRole) and not the teacher themself, else `scope`; the
      * profile is locked and updated; a `teacher.verify` audit row records before and after. No
      * profile is `not_found`.
+     *
+     * Task 9.3e (B-46 (c)): a rejection with `safety: true` also takes down every one of the
+     * teacher's `live` agents in the same transaction (`takeDownAgentInTx`: a `harmful` takedown
+     * row per agent whose note is the reason, agent `suspended`, a `takedown.create` audit row),
+     * so `agents.owner` is null and every student turn is refused at once. The audit row's
+     * `after` then carries `safety: true` and the takedown ids. A live agent that somehow already
+     * has an active takedown is only set `suspended` (one active takedown per target). A plain
+     * rejection never touches agents: existing subscribers keep access until their plan ends.
+     * A later `verified` lifts nothing; staff lift each takedown explicitly.
+     *
+     * Lock order: the staff user's role row (FOR SHARE) -> the profile (FOR UPDATE) -> the
+     * teacher's live agents in ascending id (FOR UPDATE) -> new takedown rows. publish takes
+     * advisory -> profile -> agent -> run, and takedowns.create/lift take role -> (profile) ->
+     * agent -> takedown -> report: everyone takes the profile before an agent and an agent before
+     * a takedown, and nobody holds an agent while waiting on a role or profile row, so no cycle.
      */
     async setVerification(
       scope: TeacherScope,
@@ -174,30 +197,71 @@ export function teacherProfilesRepo(db: Db) {
       const { teacherId } = teacherScope(scope, method);
       const v = parseArg(VerificationInput, input, method);
       if (v.by === teacherId) throw new RepositoryError('scope', method);
-      return db.transaction(async (tx) => {
-        if ((await lockRole(tx, v.by)) !== 'staff') throw new RepositoryError('scope', method);
-        const [current] = await tx
-          .select({ status: teacherProfiles.verificationStatus })
-          .from(teacherProfiles)
-          .where(eq(teacherProfiles.userId, teacherId))
-          .for('update');
-        if (!current) throw new RepositoryError('not_found', method);
-        const [row] = await tx
-          .update(teacherProfiles)
-          .set({ verificationStatus: v.status })
-          .where(eq(teacherProfiles.userId, teacherId))
-          .returning(columns);
-        await insertAuditEntry(tx, method, teacherId, null, {
-          actor: v.by,
-          actorRole: 'staff',
-          action: 'teacher.verify',
-          target: `teacher:${teacherId}`,
-          ...(v.reason === undefined ? {} : { reason: v.reason }),
-          before: { verificationStatus: current.status },
-          after: { verificationStatus: v.status },
-        });
-        return toTeacherProfile(row!, method);
-      });
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          if ((await lockRole(tx, v.by)) !== 'staff') throw new RepositoryError('scope', method);
+          const [current] = await tx
+            .select({ status: teacherProfiles.verificationStatus })
+            .from(teacherProfiles)
+            .where(eq(teacherProfiles.userId, teacherId))
+            .for('update');
+          if (!current) throw new RepositoryError('not_found', method);
+          const [row] = await tx
+            .update(teacherProfiles)
+            .set({ verificationStatus: v.status })
+            .where(eq(teacherProfiles.userId, teacherId))
+            .returning(columns);
+
+          const takenDown: string[] = [];
+          if (v.safety === true) {
+            const live = await tx
+              .select({ id: agents.id, teacherId: agents.teacherId, status: agents.status })
+              .from(agents)
+              .where(and(eq(agents.teacherId, teacherId), eq(agents.status, 'live')))
+              .orderBy(asc(agents.id))
+              .for('update');
+            for (const agent of live) {
+              const [active] = await tx
+                .select({ id: takedowns.id })
+                .from(takedowns)
+                .where(
+                  and(eq(takedowns.target, `agent:${agent.id}`), eq(takedowns.status, 'active')),
+                );
+              if (active) {
+                await tx.update(agents).set({ status: 'suspended' }).where(eq(agents.id, agent.id));
+                takenDown.push(active.id);
+                continue;
+              }
+              const { id } = await takeDownAgentInTx(
+                tx,
+                {
+                  staff: v.by,
+                  agent,
+                  category: 'harmful',
+                  note: v.reason ?? null,
+                  source: 'teacher.verify',
+                },
+                method,
+              );
+              takenDown.push(id);
+            }
+          }
+
+          await insertAuditEntry(tx, method, teacherId, null, {
+            actor: v.by,
+            actorRole: 'staff',
+            action: 'teacher.verify',
+            target: `teacher:${teacherId}`,
+            ...(v.reason === undefined ? {} : { reason: v.reason }),
+            before: { verificationStatus: current.status },
+            after:
+              v.safety === true
+                ? { verificationStatus: v.status, safety: true, takedowns: takenDown }
+                : { verificationStatus: v.status },
+          });
+          return toTeacherProfile(row!, method);
+        }),
+      );
     },
 
     /**

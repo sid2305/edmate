@@ -1,7 +1,7 @@
 // Task 11.2b: POST /api/live-classes/[id]/questions over a memory backend (no database; rule 4).
 // The route only knows the live class's id and the session's own student; `teacherId` is resolved
-// by trying the student's configured candidate agents' distinct teachers in turn (see
-// handlers.ts). A mismatched teacher, an unentitled student and a class that has already started
+// by trying the distinct teachers of the student's own live subscriptions in turn (task 9.4d; see
+// handlers.ts) -- `EDMATE_CHAT_AGENTS` plays no part. A mismatched teacher, an unentitled student and a class that has already started
 // all read alike: `not_found`, nothing written.
 import { RepositoryError } from '@edmate/db';
 import { NextRequest } from 'next/server';
@@ -30,9 +30,11 @@ async function codeOf(res: Response): Promise<string> {
   return ((await res.json()) as { error: { code: string } }).error.code;
 }
 
-/** A memory backend: one agent (`agt_a`) owned by `tch_a`; `submit` accepts only `lc_1`, for a
- * student with `studentId === 'stu_1'` and `teacherId === 'tch_a'`, matching 11.2a's own shape. */
-function memory(candidates: readonly string[] = ['agt_a']) {
+type Live = { agentId: string; teacherId: string; status: 'trial' | 'active' | 'past_due' | 'paused' | 'ended' };
+
+/** A memory backend: `stu_1` has a live subscription to `tch_a` (agent `agt_a`); `submit` accepts
+ * only `lc_1`, for `studentId === 'stu_1'` and `teacherId === 'tch_a'`, matching 11.2a's shape. */
+function memory(live: readonly Live[] = [{ agentId: 'agt_a', teacherId: 'tch_a', status: 'active' }]) {
   const submit = vi.fn(
     async (scope: { studentId: string; teacherId: string }, input: { liveClassId: string; text: string }) => {
       if (scope.teacherId !== 'tch_a' || scope.studentId !== 'stu_1' || input.liveClassId !== 'lc_1') {
@@ -41,15 +43,12 @@ function memory(candidates: readonly string[] = ['agt_a']) {
       return { id: 'cq_1' };
     },
   );
-  const owner = vi.fn(async ({ agentId }: { agentId: string }) =>
-    agentId === 'agt_a' ? { teacherId: 'tch_a' } : null,
-  );
+  const listLiveForStudent = vi.fn(async (studentId: string) => (studentId === 'stu_1' ? [...live] : []));
   const h = createAskQuestionHandlers({
-    agents: { owner },
     classQuestions: { submit },
-    candidateAgentIds: () => candidates,
+    subscriptions: { listLiveForStudent },
   });
-  return { h, submit, owner };
+  return { h, submit, listLiveForStudent };
 }
 
 describe('POST /api/live-classes/[id]/questions', () => {
@@ -81,21 +80,68 @@ describe('POST /api/live-classes/[id]/questions', () => {
     expect(await codeOf(res)).toBe('not_found');
   });
 
-  it('an entitled student with no configured candidate agents is 404', async () => {
+  it('a live subscription to a teacher not in EDMATE_CHAT_AGENTS can ask (9.4d)', async () => {
+    const prev = process.env.EDMATE_CHAT_AGENTS;
+    process.env.EDMATE_CHAT_AGENTS = 'agt_other';
+    try {
+      const m = memory([{ agentId: 'agt_not_configured', teacherId: 'tch_a', status: 'past_due' }]);
+      const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }));
+      expect(res.status).toBe(200);
+      expect(m.listLiveForStudent).toHaveBeenCalledWith('stu_1');
+      expect(m.submit).toHaveBeenCalledWith({ studentId: 'stu_1', teacherId: 'tch_a' }, expect.anything());
+    } finally {
+      if (prev === undefined) delete process.env.EDMATE_CHAT_AGENTS;
+      else process.env.EDMATE_CHAT_AGENTS = prev;
+    }
+  });
+
+  it('a paused subscription still resolves its teacher (paused classes show on /home)', async () => {
+    const m = memory([{ agentId: 'agt_a', teacherId: 'tch_a', status: 'paused' }]);
+    const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }));
+    expect(res.status).toBe(200);
+  });
+
+  it('a student with no live subscription is 404, nothing written', async () => {
     const m = memory([]);
+    const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }));
+    expect(res.status).toBe(404);
+    expect(await codeOf(res)).toBe('not_found');
+    expect(m.submit).not.toHaveBeenCalled();
+  });
+
+  it('only the signed-in student\'s own subscriptions are read (another student is 404)', async () => {
+    const m = memory();
+    const other: Principal = { userId: 'stu_2', role: 'student' };
+    const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }, other));
+    expect(res.status).toBe(404);
+    expect(m.listLiveForStudent).toHaveBeenCalledWith('stu_2');
+    expect(m.submit).not.toHaveBeenCalled();
+  });
+
+  it('an ended row is skipped', async () => {
+    const m = memory([{ agentId: 'agt_a', teacherId: 'tch_a', status: 'ended' }]);
     const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }));
     expect(res.status).toBe(404);
     expect(m.submit).not.toHaveBeenCalled();
   });
 
-  it('a student not entitled through any candidate teacher is 404 (tries every one)', async () => {
-    const m = memory(['agt_a', 'agt_b']);
-    m.owner.mockImplementation(async ({ agentId }: { agentId: string }) =>
-      agentId === 'agt_a' ? { teacherId: 'tch_a' } : agentId === 'agt_b' ? { teacherId: 'tch_b' } : null,
-    );
-    const res = await m.h.post(post('lc_mismatch', { text: 'hi' }), ctx({ id: 'lc_mismatch' }));
+  it('a subscription only to a different class\'s teacher is 404; each teacher tried once', async () => {
+    const m = memory([
+      { agentId: 'agt_b', teacherId: 'tch_b', status: 'active' },
+      { agentId: 'agt_b2', teacherId: 'tch_b', status: 'trial' },
+      { agentId: 'agt_c', teacherId: 'tch_c', status: 'active' },
+    ]);
+    const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }));
     expect(res.status).toBe(404);
     expect(m.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('a subscription lookup failure is 500, no raw error text', async () => {
+    const m = memory();
+    m.listLiveForStudent.mockRejectedValueOnce(new Error('pg says secret@example.test'));
+    const res = await m.h.post(post('lc_1', { text: 'hi' }), ctx({ id: 'lc_1' }));
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toContain('secret@example.test');
   });
 
   it.each([

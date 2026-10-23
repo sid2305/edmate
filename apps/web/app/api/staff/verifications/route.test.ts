@@ -29,6 +29,7 @@ interface Audit {
   actor: string;
   action: string;
   reason?: string;
+  safety?: true;
   before: string;
   after: string;
 }
@@ -84,7 +85,7 @@ function memory() {
     setVerification: vi.fn(
       async (
         scope: { teacherId: string },
-        input: { status: 'verified' | 'rejected'; by: string; reason?: string },
+        input: { status: 'verified' | 'rejected'; by: string; reason?: string; safety?: boolean },
       ): Promise<TeacherProfileRow> => {
         const m = 'teacherProfiles.setVerification';
         if (input.reason !== undefined && (input.reason.length < 1 || input.reason.length > 500)) {
@@ -101,6 +102,7 @@ function memory() {
           actor: input.by,
           action: 'teacher.verify',
           ...(input.reason === undefined ? {} : { reason: input.reason }),
+          ...(input.safety === true ? { safety: true as const } : {}),
           before: current.verificationStatus,
           after: input.status,
         });
@@ -235,6 +237,45 @@ describe('POST: approve or reject', () => {
     ]);
   });
 
+  it('a safety rejection passes `safety: true` through; the audit row records it (9.3e)', async () => {
+    const m = memory();
+    const res = await m.h.decide(
+      post({ teacherId: 'tch_b', status: 'rejected', reason: 'unsafe advice', safety: true }),
+      ctx(),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ teacherId: 'tch_b', verificationStatus: 'rejected' });
+    expect(m.teacherProfiles.setVerification).toHaveBeenCalledWith(
+      { teacherId: 'tch_b' },
+      { status: 'rejected', by: 'stf_1', reason: 'unsafe advice', safety: true },
+    );
+    expect(m.audits).toEqual([
+      {
+        teacherId: 'tch_b',
+        actor: 'stf_1',
+        action: 'teacher.verify',
+        reason: 'unsafe advice',
+        safety: true,
+        before: 'pending',
+        after: 'rejected',
+      },
+    ]);
+  });
+
+  it('`safety: false` is a plain rejection: the flag never reaches the repo (9.3e)', async () => {
+    const m = memory();
+    const res = await m.h.decide(
+      post({ teacherId: 'tch_b', status: 'rejected', safety: false }),
+      ctx(),
+    );
+    expect(res.status).toBe(200);
+    expect(m.teacherProfiles.setVerification).toHaveBeenCalledWith(
+      { teacherId: 'tch_b' },
+      { status: 'rejected', by: 'stf_1' },
+    );
+    expect(m.audits[0]).not.toHaveProperty('safety');
+  });
+
   it('after an approval the teacher leaves the queue', async () => {
     const m = memory();
     await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx());
@@ -275,6 +316,10 @@ describe('POST: approve or reject', () => {
     ['numeric teacherId', { teacherId: 7, status: 'verified' }],
     ['blank reason', { teacherId: 'tch_a', status: 'rejected', reason: '   ' }],
     ['reason too long', { teacherId: 'tch_a', status: 'rejected', reason: 'x'.repeat(MAX_REASON_CHARS + 1) }],
+    ['safety on an approval', { teacherId: 'tch_a', status: 'verified', safety: true }],
+    ['numeric safety', { teacherId: 'tch_a', status: 'rejected', safety: 1 }],
+    ['string safety', { teacherId: 'tch_a', status: 'rejected', safety: 'yes' }],
+    ['null safety', { teacherId: 'tch_a', status: 'rejected', safety: null }],
     ['not an object', ['tch_a', 'verified']],
     ['null', null],
   ])('%s is 400 validation', async (_label, body) => {
