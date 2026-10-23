@@ -522,9 +522,10 @@ tasks:
   accept: a link opened in a different browser or by a prefetching scanner does not sign in; the confirm page posts with CSRF; auth tests pass
   deps:
   - '1.4'
-  status: planning
+  status: running
   risk: risky
-  model: plan:fable
+  model: plan:sonnet build:opus review:sonnet
+  branch: m13/1.4b-magic-link-binding
 - id: 1.4d
   milestone: M13
   title: 'Sign-in follow-ups from the 1.4 review: ioredis dev singleton and shutdown; split the Edge-safe guard exports from the Node-only auth runtime (server-only); one shared Redis ready promise; log
@@ -6019,9 +6020,30 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: running
+  status: done
   branch: m13/9.3e-safety-rejection
-  model: plan:fable build:opus
+  model: plan:fable build:opus review:opus+fable
+  metrics:
+    tool_calls: 137
+    tokens_in: 5630
+    tokens_out: 55077
+    cache_read_tokens: 10277762
+    wall_time_seconds: 3343
+    models:
+    - claude-fable-5-1
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        MEDIUM: 1
+        LOW: 5
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 6
+        wontfix: 0
+    human_questions: 0
 - id: 8.2i
   milestone: M13
   title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h
@@ -6608,9 +6630,28 @@ tasks:
   deps:
   - 12.4f
   risk: low
-  status: running
+  status: done
   branch: m13/12.4g-agents-reload
-  model: plan:lead build:opus
+  model: plan:lead build:opus review:sonnet
+  metrics:
+    tool_calls: 6
+    tokens_in: 24
+    tokens_out: 89
+    cache_read_tokens: 204478
+    wall_time_seconds: 37
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 11.4e
   milestone: M13
   title: '11.4a review LOWs (packages/db tests): a listRecordingsForTeacher test that fails if the .limit() cap at live-classes.ts:216 is removed, and a test for the same-teacher join check at live-classes.ts:212'
@@ -7351,4 +7392,14 @@ tasks:
   deps:
   - 9.3e
   risk: high
+  status: todo
+- id: 9.2g
+  milestone: M13
+  title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students
+    will see'
+  accept: db and web typecheck, lint and test green; a test shows the display name in the staff verification row.
+  deps:
+  - 9.2d
+  - 9.3e
+  risk: medium
   status: todo
