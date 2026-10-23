@@ -6097,6 +6097,13 @@ tasks:
         deferred: 0
         wontfix: 1
     human_questions: 0
+- id: 3.11h
+  milestone: M13
+  title: 'CI flake: packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (3.11g) failed on PR #230 with a 4n/n time ratio of 11.01 against the bound of 10 (passed on re-run); make it robust without losing the quadratic signal, e.g. compare 16n against n (linear about 16, quadratic about 256) with a bound near 64, or count work as docs/lessons.md prefers'
+  accept: the test still fails on a quadratic implementation (shown once in the handoff) and passes 20 local runs under CPU load; harness tests pass
+  deps:
+  - 3.11g
+  status: todo
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
