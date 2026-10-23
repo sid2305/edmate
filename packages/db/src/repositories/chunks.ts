@@ -161,6 +161,14 @@ const StatusUpdateSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.enum(['processing', 'ready']), failureReason: z.undefined() }),
 ]);
 
+/**
+ * Task 8.2o: the retrieval kind an uploaded file can have -- the two `ChunkKind`s minus
+ * `teacher_note` (a note row has no file). Named once here; `startReplace` and apps/web's upload
+ * table both use it, so the set can't drift between the schema and its callers.
+ */
+const FileChunkKindSchema = z.enum(['material', 'transcript']);
+export type FileChunkKind = z.infer<typeof FileChunkKindSchema>;
+
 const ReplaceInputSchema = z.strictObject({
   storageKey: z.string().min(1).max(1024),
   /** Task 12.3b/12.3f: as on create, required; the new file gets a fresh declaration. */
@@ -169,7 +177,7 @@ const ReplaceInputSchema = z.strictObject({
    * Task 8.2n: the new file's retrieval kind, when it differs from (or restates) the old one.
    * Only the two kinds an uploaded file can be; `teacher_note` rows have no file to replace.
    */
-  kind: z.enum(['material', 'transcript']).optional(),
+  kind: FileChunkKindSchema.optional(),
 });
 
 const documentColumns = {
@@ -419,7 +427,7 @@ export function documentsRepo(db: Db) {
       const docId = parseArg(IdSchema, id, method);
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
-          const storageKey = await lockDocument(tx, teacherId, docId, method);
+          const { storageKey } = await lockDocument(tx, teacherId, docId, method);
           await removeChunks(tx, teacherId, docId);
           await tx
             .delete(documents)
@@ -437,12 +445,15 @@ export function documentsRepo(db: Db) {
      * new file (tasks 12.3b, 12.3f; without it, `invalid` and nothing is written). Returns the
      * previous storage key for the caller to delete. Another teacher's or a missing one is
      * `not_found` and nothing is written. With `kind` (task 8.2n), the document's retrieval kind
-     * is set to the new file's; without it the kind is left as it was.
+     * is set to the new file's; without it the kind is left as it was. Task 8.2o: a `teacher_note`
+     * row (no file to replace) and a class-linked row (`live_class_id` set; it is the class's
+     * recording) given `kind: 'material'` are `invalid`, and nothing is written; a linked row
+     * replaced by another transcript-kind file keeps its link.
      */
     async startReplace(
       scope: TeacherScope,
       id: string,
-      input: { storageKey: string; rightsDeclared: true; kind?: 'material' | 'transcript' },
+      input: { storageKey: string; rightsDeclared: true; kind?: FileChunkKind },
     ): Promise<{ previousStorageKey: string | null }> {
       const method = 'documents.startReplace';
       const { teacherId } = teacherScope(scope, method);
@@ -450,7 +461,11 @@ export function documentsRepo(db: Db) {
       const r = parseArg(ReplaceInputSchema, input, method);
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
-          const previousStorageKey = await lockDocument(tx, teacherId, docId, method);
+          const locked = await lockDocument(tx, teacherId, docId, method);
+          if (locked.kind === 'teacher_note' || (locked.liveClassId !== null && r.kind === 'material')) {
+            throw new RepositoryError('invalid', method);
+          }
+          const previousStorageKey = locked.storageKey;
           await removeChunks(tx, teacherId, docId);
           await tx
             .update(documents)
@@ -472,23 +487,24 @@ export function documentsRepo(db: Db) {
 }
 
 /**
- * Locks the scope's document `FOR UPDATE` and returns its storage key, or throws `not_found`.
- * The lock makes a concurrent `chunks.insertMany` (whose foreign key needs a share lock on this
- * row) wait for the caller's transaction.
+ * Locks the scope's document `FOR UPDATE` and returns its storage key, kind and live-class link
+ * (task 8.2o: what `startReplace`'s guards need), or throws `not_found`. The lock makes a
+ * concurrent `chunks.insertMany` (whose foreign key needs a share lock on this row) wait for the
+ * caller's transaction.
  */
 async function lockDocument(
   tx: Tx,
   teacherId: string,
   docId: string,
   method: string,
-): Promise<string | null> {
+): Promise<{ storageKey: string | null; kind: string; liveClassId: string | null }> {
   const [row] = await tx
-    .select({ storageKey: documents.storageKey })
+    .select({ storageKey: documents.storageKey, kind: documents.kind, liveClassId: documents.liveClassId })
     .from(documents)
     .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)))
     .for('update');
   if (!row) throw new RepositoryError('not_found', method);
-  return row.storageKey;
+  return row;
 }
 
 /** Deletes every chunk of the scope's document `docId` (task 8.2, the only chunk delete). */

@@ -3,6 +3,7 @@
 // PUT runs over a fake XMLHttpRequest. Written red before uploadClient.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAX_UNSPLIT_MEDIA_BYTES, UPLOAD_TYPES, isRecordingType, uploadTypeFor } from './files';
+import { LINK_REFUSAL_MESSAGE } from './routes';
 import {
   ACCEPT,
   CLIENT_UPLOAD_TYPES,
@@ -240,7 +241,7 @@ describe('the JSON calls', () => {
 
   it('a refused link carries the server\'s fixed message through', async () => {
     stubFetch(
-      reply(400, { error: { code: 'validation', message: "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.", retryable: false } }),
+      reply(400, { error: { code: 'validation', message: LINK_REFUSAL_MESSAGE.youtube_unsupported, retryable: false } }),
     );
     await expect(
       addLink({ moduleId: 'm1', url: 'https://youtu.be/x', rightsDeclared: true }),
@@ -248,7 +249,7 @@ describe('the JSON calls', () => {
       ok: false,
       status: 400,
       code: 'validation',
-      message: "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.",
+      message: LINK_REFUSAL_MESSAGE.youtube_unsupported,
     });
   });
 

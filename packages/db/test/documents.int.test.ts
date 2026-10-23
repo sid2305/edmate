@@ -381,6 +381,29 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       expect((await repos.documents.get(A, id))?.storageKey).toBe('uploads/kind.pdf');
     });
 
+    it('refuses replacing a teacher_note row (it has no file), nothing written (task 8.2o)', async () => {
+      await repos.documents.create(A, {
+        id: 'doc_note_rep',
+        moduleId: MOD.allowed,
+        kind: 'teacher_note',
+        sourceTitle: 'note',
+        rightsDeclared: true,
+      });
+      const before = await repos.retrieval.revision(A);
+      const err = await rejection(
+        repos.documents.startReplace(A, 'doc_note_rep', {
+          storageKey: 'uploads/note.pdf',
+          rightsDeclared: true,
+          kind: 'material',
+        }),
+      );
+      expect(err.kind).toBe('invalid');
+      const row = await repos.documents.get(A, 'doc_note_rep');
+      expect(row?.kind).toBe('teacher_note');
+      expect(row && Object.keys(row)).not.toContain('storageKey');
+      expect(await repos.retrieval.revision(A)).toBe(before);
+    });
+
     it("another teacher's or a missing document is not_found, nothing written", async () => {
       const id = await doc(['wombat marker'], 'uploads/w.pdf');
       for (const [scope, target] of [
@@ -639,6 +662,34 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       await repos.documents.create(A, recording('doc_rec_replace', LC_PAST));
       await repos.documents.startReplace(A, 'doc_rec_replace', { storageKey: 'uploads/v2.vtt', rightsDeclared: true });
       expect(await linkOf('doc_rec_replace')).toBe(LC_PAST);
+    });
+
+    it('startReplace refuses a plain-document kind for a class-linked row, nothing written (task 8.2o)', async () => {
+      await repos.documents.create(A, recording('doc_rec_nomat', LC_PAST));
+      const before = await repos.retrieval.revision(A);
+      const err = await rejection(
+        repos.documents.startReplace(A, 'doc_rec_nomat', {
+          storageKey: 'uploads/v2.pdf',
+          rightsDeclared: true,
+          kind: 'material',
+        }),
+      );
+      expect(err.kind).toBe('invalid');
+      expect(await repos.documents.get(A, 'doc_rec_nomat')).toMatchObject({
+        kind: 'transcript',
+        storageKey: 'uploads/doc_rec_nomat.vtt',
+        status: 'uploading',
+      });
+      expect(await linkOf('doc_rec_nomat')).toBe(LC_PAST);
+      expect(await repos.retrieval.revision(A)).toBe(before);
+      // Another recording type (audio for a caption file) is still allowed and keeps the link.
+      await repos.documents.startReplace(A, 'doc_rec_nomat', {
+        storageKey: 'uploads/v2.mp3',
+        rightsDeclared: true,
+        kind: 'transcript',
+      });
+      expect((await repos.documents.get(A, 'doc_rec_nomat'))?.storageKey).toBe('uploads/v2.mp3');
+      expect(await linkOf('doc_rec_nomat')).toBe(LC_PAST);
     });
 
     it("a linked transcript's chunks are found by its module's search, with a timestamp locator", async () => {

@@ -10,6 +10,8 @@ import {
 import { createRepositories, type Repositories } from './repositories/index.js';
 
 export * from './repositories/index.js';
+// Task 8.2o: the one name for the kinds an uploaded file can have (apps/web's upload table reuses it).
+export type { FileChunkKind } from './repositories/chunks.js';
 export * from './identity/index.js';
 export { migrateDatabase, MIGRATIONS_DIR } from './migrate.js';
 export type { DbEnv } from './client.js';
