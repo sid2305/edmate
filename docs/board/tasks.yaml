@@ -4471,7 +4471,9 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.9d-questions-followups
+  model: plan:lead-brief build:sonnet
 - id: 9.2e
   milestone: M13
   title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table
