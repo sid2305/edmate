@@ -621,9 +621,28 @@ tasks:
   deps:
   - 1.7f
   risky: true
-  status: running
+  status: done
   branch: m13/1.7g-us-header
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 8
+    tokens_in: 28
+    tokens_out: 207
+    cache_read_tokens: 238698
+    wall_time_seconds: 44
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -2369,19 +2388,48 @@ tasks:
     newline; the migration is additive; the db tests pass
   deps:
   - '5.10'
-  status: running
+  status: done
   branch: m13/5.10b-teacher-questions-locking
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 321
+    tokens_in: 1018
+    tokens_out: 90217
+    cache_read_tokens: 35742992
+    wall_time_seconds: 1552
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 9
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 8
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 5.10c
   milestone: M13
-  title: '5.10b review follow-up (code-reviewer re-verify LOW): the open()-vs-answer() deadlock test in packages/db/test/teacher-question-answer.int.test.ts replays open()''s FOR KEY SHARE statement on a raw connection instead of calling teacherQuestions.open(), so removing the orderBy from open() would not fail it; find a way to drive the real open() into the interleaving (e.g. a test hook or a raw lock held on the agent row) or add a query-shape test that pins open()''s lock read to ORDER BY id'
+  title: '5.10b review follow-up (code-reviewer re-verify LOW): the open()-vs-answer() deadlock test in packages/db/test/teacher-question-answer.int.test.ts replays open()''s FOR KEY SHARE statement on
+    a raw connection instead of calling teacherQuestions.open(), so removing the orderBy from open() would not fail it; find a way to drive the real open() into the interleaving (e.g. a test hook or a raw
+    lock held on the agent row) or add a query-shape test that pins open()''s lock read to ORDER BY id'
   accept: removing .orderBy(teacherQuestions.id) from open()'s lock read fails a test; the db tests pass
   deps:
   - 5.10b
-  status: todo
+  status: running
+  branch: m13/5.10c-open-race-test
+  model: plan:lead build:sonnet
 - id: 5.10d
   milestone: M13
-  title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions for one triple can exist; make startSession reuse (or end) the open session first, then add the unique partial index on open sessions per (teacher_id, student_id, agent_id) in an additive migration (database-reviewer confirms no existing duplicates block it)'
+  title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions
+    for one triple can exist; make startSession reuse (or end) the open session first, then add the unique partial index on open sessions per (teacher_id, student_id, agent_id) in an additive migration
+    (database-reviewer confirms no existing duplicates block it)'
   accept: two startSession calls for one triple leave one open session; the unique partial index exists; web and db tests pass
   deps:
   - 5.10b
@@ -4835,7 +4883,9 @@ tasks:
   deps:
   - 11.1b
   risk: low
-  status: planning
+  status: running
+  branch: m13/11.1d-live-class-edit
+  model: plan:sonnet build:sonnet
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -6097,6 +6147,35 @@ tasks:
         deferred: 0
         wontfix: 1
     human_questions: 0
+- id: 3.11h
+  milestone: M13
+  title: 'CI flake: packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (3.11g) failed on PR #230 with a 4n/n time ratio of 11.01 against the bound of 10 (passed
+    on re-run); make it robust without losing the quadratic signal, e.g. compare 16n against n (linear about 16, quadratic about 256) with a bound near 64, or count work as docs/lessons.md prefers'
+  accept: the test still fails on a quadratic implementation (shown once in the handoff) and passes 20 local runs under CPU load; harness tests pass
+  deps:
+  - 3.11g
+  status: done
+  branch: m13/3.11h-linear-flake
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 8
+    tokens_in: 28
+    tokens_out: 722
+    cache_read_tokens: 253616
+    wall_time_seconds: 91
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
@@ -6105,9 +6184,28 @@ tasks:
   accept: both changes with a test each; ingest typecheck, lint and test green
   deps:
   - 8.2j
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/8.2m-ingest-followups
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 29
+    tokens_in: 96
+    tokens_out: 1120
+    cache_read_tokens: 1219022
+    wall_time_seconds: 90
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7d
   milestone: M13
   title: '9.7b follow-ups: full-flow.spec.ts:224 toHaveCount(0) takes the STEP_TIMEOUT like the other assertions (typescript-reviewer LOW); give chat.spec.ts a postOnce-style send with a hydration retry

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { IngestError, MAX_DOCUMENT_BYTES, parseDocument, parseWebLink } from '../../src/index.js';
+import { MAX_DOCUMENT_BYTES, parseDocument, parseWebLink } from '../../src/index.js';
 import { stubWebFetcher } from '../../src/testing/index.js';
 
 const bytesOf = (rel: string): Uint8Array =>
@@ -98,14 +98,17 @@ describe('parseDocument', () => {
     ).rejects.toMatchObject({ code: 'input_too_large' });
   });
 
-  it('refuses an unknown kind', async () => {
+  it('refuses an unknown kind, naming it in the error', async () => {
     await expect(
       parseDocument({
         kind: 'exe' as unknown as 'pdf',
         bytes: new Uint8Array([1]),
         sourceTitle: 'x',
       }),
-    ).rejects.toBeInstanceOf(IngestError);
+    ).rejects.toMatchObject({
+      code: 'unsupported',
+      message: expect.stringContaining('exe'),
+    });
   });
 });
 

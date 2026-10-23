@@ -10,6 +10,138 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2m ran over budget · decided by lead · risk: low
+- Decided: accept 74 tool calls against a 40-call budget; both reviews approve with no findings.
+- Why: the builder counted 32; the harness counted 74 (install, three package gates, and new processor tests). The work is done and clean, so another round would only cost more.
+- risk: low
+
+Tool calls used: 74 (harness count: builder 74; the agent reported 32)
+
+---
+
+### 22 Oct 2026 · 3.11h: linear-time test rewritten in packages/harness/src/pedagogy · decided by builder · risk: high
+- Decided: widen `expectLinear`'s input-size step from 4x to 16x and raise
+  the ratio bound from 10 to 64, instead of switching to counted work units,
+  keeping the wall-clock approach but widening the margin between the
+  linear and quadratic expectations so a single noisy CI run is far less
+  likely to cross the bound.
+- Why: the brief's preferred fix (count work, not time) needs the code
+  under test to expose its internal work units, which would be a
+  production-code change; the brief explicitly scopes this task to the test
+  file only. The fallback the brief names — compare 16n against n with a
+  bound near 64 — is a pure test change, keeps the quadratic signal (256 vs
+  16 is a much wider gap than 16 vs 4), and was verified to still catch a
+  quadratic regression (ratio 248.87 against the 64 bound) and to pass 20/20
+  under CPU load.
+- risk: high (flagged only because `packages/harness` is a risk path by
+  location; this is a test-only change, no production code, no contracts,
+  no prompt-pack behaviour change).
+
+Tool calls used: 23 (harness count: builder 23; the agent reported 15)
+
+---
+
+### 22 Oct 2026 · 1.7g ran over budget · decided by lead · risk: low
+- Decided: accept 33 tool calls against a 15-call budget for a comment-only change.
+- Why: the builder counted 21; the harness counted 33, several of them retries after transient tool denials and three gate runs while it checked a harness timeout. The change is done and the review is clean.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 1.7g: US.yaml header reworded for the signed pack · decided by lead · risk: high
+- Decided: merge the comment-only change to content/locales/US.yaml (a locales risk path): the header now says the pack was signed on 21 Oct 2026, so the no-consent waiver applies, the three `pending` values still wait for a person, and the age rule fails closed again if `reviewedBy` is cleared.
+- Why: the code reviewer checked every claim against packages/content/src/agePolicy.ts; no value or key changed, no helpline, contact, law, reviewer or date was added, and the "agents must never fill in" warning is kept.
+- risk: high
+
+---
+
+### 22 Oct 2026 · Pre-existing flaky harness test is out of scope · decided by builder · risk: low
+- Decided: treated the `@edmate/harness#test` timeout on `runner.test.ts` (unrelated 4.3
+  distress-check test) as a pre-existing flaky failure, not a regression from this change, and did
+  not attempt to fix it.
+- Why: this task only edits YAML comments in `content/locales/US.yaml`; the failing test exercises
+  the pipeline runner's distress/escalation logic, has no import path through the file this task
+  touches, and failed with the same timeout across repeated runs regardless of this change.
+- risk: low
+
+Tool calls used: 33 (harness count: builder 33; the agent reported 21)
+
+---
+
+### 22 Oct 2026 · 5.10b ran over budget · decided by lead · risk: low
+- Decided: accept 289 tool calls (builder 160, fixer 129) against budgets of 65 and 45.
+- Why: the builder ran long over the deadlock analysis and coverage, and the fixer stalled after its last commit (the lead ran its gate and pushed). Both HIGH findings are fixed and re-verified; a third round would cost more than it saves. Raised for the 0.22 review.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 5.10b teacher-questions lock order approved · decided by lead · risk: high
+- Decided: merge the packages/db/src/repositories/teacher-questions.ts change: open() and answer() now lock teacher-question rows in ascending id order, answer() takes the agent lock first like open(), and both stores keep the trimmed answer; migration 0025 adds an index only.
+- Why: database-reviewer, security-reviewer, code-reviewer and typescript-reviewer reviewed it, and code-reviewer and typescript-reviewer re-verified the two HIGH fixes. The lead re-ran the db gate on the fixer's final commit (1445 tests pass, integration tests included).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 5.10b unique session index deferred to 5.10d · decided by lead · risk: low
+- Decided: the unique partial index on open sessions per (teacher, student, agent) moves to task 5.10d, which first makes startSession in apps/web/src/turn/routes.ts reuse the open session.
+- Why: startSession calls sessions.create on every request, so the index would turn today's successful calls into constraint errors.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 5.10b teacherQuestions.answer lock order and trimmed answer · decided by builder · risk: high
+- Decided: `answer()` takes the agent lock (`for('no key update')`, same order as `open`) before
+  locking the group's open members in one statement ordered ascending by id
+  (`WHERE id = ANY(memberIds) ORDER BY id FOR UPDATE`); both the thread message and
+  `teacher_questions.answer` store the same trimmed text.
+- Why: two concurrent `answer()` calls on different members of one group could deadlock (40P01)
+  under the old single-row-then-unordered-group lock; a consistent lock order removes the AB-BA
+  cycle, and the agent lock closes the narrower "opened mid-answer" race the 5.10 review flagged.
+  Storing the trimmed text in both places keeps the thread message and the answer record
+  byte-identical.
+- risk: high (touches `packages/db/src/repositories/**`). Needs `database-reviewer` and
+  `security-reviewer`.
+
+---
+
+### 22 Oct 2026 · 5.10b additive migration for teacher-questions grouping index · decided by builder · risk: low
+- Decided: migration `0025_teacher_questions_grouping_index.sql` adds
+  `teacher_questions_teacher_id_agent_id_status_created_at_idx` on
+  `(teacher_id, agent_id, status, created_at)`, additive only (`CREATE INDEX`).
+- Why: `open`'s grouping read filters on exactly this `(teacher, agent, open)` triple and sorts by
+  recency; this index covers that read instead of falling back to the existing
+  `(teacher_id, status)` index plus a filter on `agent_id`. (Fix round: corrected — this index does
+  not serve `listGroupsForTeacher`, which has no `agent_id` predicate and so can't use this index's
+  prefix.)
+- risk: low (additive index, no behaviour change). Needs `database-reviewer`.
+
+---
+
+### 22 Oct 2026 · 5.10b unique partial session index not added · decided by builder · risk: medium
+- Decided: did not add the unique partial index on open sessions per `(teacher, student, agent)`
+  that the plan's item 3 asked for.
+- Why: `sessions.create` (`packages/db/src/repositories/sessions.ts`) has no check for an existing
+  open session before inserting, and its only caller, `apps/web/src/turn/routes.ts`'s
+  `startSession` handler, calls it unconditionally on every request with no prior lookup. Two open
+  sessions for one `(teacher, student, agent)` triple can exist today, so a unique index on that
+  triple would make some existing, currently-successful `startSession` calls fail with a
+  constraint violation. The lead's own instruction for this item was to stop and say exactly where
+  rather than add the index; fixing `apps/web`'s session-opening logic first is out of this task's
+  bounds (no `apps/*` edits).
+- risk: medium (a deferred safety net, not a behaviour change — but it means two open sessions for
+  one triple remain possible until a follow-up task closes `startSession`'s gap). Needs
+  `database-reviewer` to confirm before any follow-up task adds the index.
+
+---
+
+### 22 Oct 2026 · Backup model provider: the same team on Claude models in Microsoft Foundry when the subscription window is exhausted · decided by you · risk: high
+Decided: Sessions start through `scripts/claude-backup.sh`. It probes the subscription with one Haiku call; on a usage-limit error it starts Claude Code against Claude deployments (Opus-, Sonnet- and Haiku-class) in the human's Microsoft Foundry resource, paid per token from the human's Azure credit; on any other error it stops rather than switching to paid usage. Config and key live outside the repo (`~/.config/edmate/foundry.env`, chmod 600, or the Mac Keychain). On the backup, builders run on Sonnet only, no third slot, and closeouts record `provider: foundry`. The backup never serves students. Setup guide: `docs/backup-provider.md`.
+Why: The subscription pool is shared by the lead and every agent and was exhausted on 20 Oct 2026; a Foundry endpoint keeps the same agents, skills, hooks and merge gate running, where a second agent runtime would mean rebuilding all of them. The credit is capped by the Azure spending limit and covers about one backup day a month.
+Alternatives: real Microsoft Foundry Agent Service agents (rejected: a second orchestrator and tool layer to keep in sync); paid extra usage on the subscription (rejected by the human's standing rule).
+Review: security-reviewer (sonnet) on the launcher, template, guide, skill paragraph and scanner; its HIGH (the secret scan missed an unquoted `KEY=value` line, so a key typed into the tracked template would pass) is fixed by a new "Unquoted secret assignment" pattern in `.githooks/secret-scan.py`; its MEDIUMs (arguments logged verbatim; a bare 429 treated as a usage limit) are fixed too.
+Reversible: Yes. Start sessions with `claude` instead of the launcher.
+
+
 ### 22 Oct 2026 · 7.3b ran over budget · decided by lead · risk: low
 - Decided: accept 59 tool calls against a 40-call budget; both reviews approve with no findings.
 - Why: the builder counted 26; the harness counted 59 (install, the evals gate with its dependencies, a merge of main and a re-run). The work is done and clean, so a second round would only cost more.

@@ -47,7 +47,12 @@ function decodeEntities(line: string): string {
  * `close` at all is detected once and the remainder kept literally. Either way the whole line is
  * visited once: true O(n).
  */
-function removeSpans(line: string, isOpen: (i: number) => boolean, openLen: number, close: string): string {
+function removeSpans(
+  line: string,
+  isOpen: (i: number) => boolean,
+  openLen: number,
+  close: string,
+): string {
   let out = '';
   let i = 0;
   let nextClose = -2; // -2: unknown, needs a search; -1: no `close` exists from here on (permanent)
@@ -152,27 +157,40 @@ function parseCueBlocks(lines: readonly string[]): { startMs: number; text: stri
   return cues;
 }
 
-function finish(title: string, cues: readonly { startMs: number; text: string }[]): ParsedDocument {
+/** Throws when no cue carries any text, so a bad-timing file reports that before its title. */
+function requireCues(cues: readonly { startMs: number; text: string }[]): void {
   if (!cues.some((c) => c.text !== '')) {
     throw new IngestError('validation', false, 'the caption file has no captions to learn from');
   }
+}
+
+function toDocument(
+  title: string,
+  cues: readonly { startMs: number; text: string }[],
+): ParsedDocument {
   const sorted = [...cues].sort((a, b) => a.startMs - b.startMs);
   return { sourceTitle: title, units: unitsFromTimedText(sorted) };
 }
 
-/** Parses a WebVTT caption file (`.vtt`) into timestamped units. */
+/** Parses a WebVTT caption file (`.vtt`) into timestamped units. The header, then the timing, are
+ * checked before the title, so a file with several problems reports its earliest one first. */
 export function parseVtt(bytes: Uint8Array, sourceTitle: string): ParsedDocument {
-  const title = requireTitle(sourceTitle);
   const lines = toLines(bytes);
   if (!VTT_HEADER.test(lines[0] ?? '')) {
     throw new IngestError('unsupported', false, 'the file is not a WebVTT caption file');
   }
-  return finish(title, parseCueBlocks(lines.slice(1)));
+  const cues = parseCueBlocks(lines.slice(1));
+  requireCues(cues);
+  const title = requireTitle(sourceTitle);
+  return toDocument(title, cues);
 }
 
-/** Parses an SRT caption file (`.srt`) into timestamped units. */
+/** Parses an SRT caption file (`.srt`) into timestamped units. The timing is checked before the
+ * title, so a file with several problems reports its earliest one first. */
 export function parseSrt(bytes: Uint8Array, sourceTitle: string): ParsedDocument {
-  const title = requireTitle(sourceTitle);
   const lines = toLines(bytes);
-  return finish(title, parseCueBlocks(lines));
+  const cues = parseCueBlocks(lines);
+  requireCues(cues);
+  const title = requireTitle(sourceTitle);
+  return toDocument(title, cues);
 }

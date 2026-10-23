@@ -49,6 +49,8 @@ Each agent's known limitations, typical misses, average cost per run and last-re
 
 The human picks your own model (the main session); opus is recommended for the lead.
 
+**Backup provider** (human decision, 22 Oct 2026; `docs/backup-provider.md`). Sessions start through `scripts/claude-backup.sh`, which falls back to Claude models in the human's Microsoft Foundry resource when the subscription window is exhausted. If `EDMATE_PROVIDER` is `foundry` (or `/status` shows Microsoft Foundry), every token is paid from the human's Azure credit: finish running work first, start builders on **sonnet only**, no third slot, skip optional reviewers, and record `provider: foundry` in the board's `model` field at closeout so 0.22-style reviews can see the spend. Never use the backup for anything that serves students.
+
 ## 3. Run one task
 Safety-path tasks (guardrails, safety/locked evals, prompt packs, access) get a plan review before the
 branch is created, not only after the build: until the pilot gate (13.3) the lead reads `plan.md` with a

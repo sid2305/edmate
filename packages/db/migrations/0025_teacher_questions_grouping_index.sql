@@ -1,0 +1,1 @@
+CREATE INDEX "teacher_questions_teacher_id_agent_id_status_created_at_idx" ON "teacher_questions" USING btree ("teacher_id","agent_id","status","created_at");
