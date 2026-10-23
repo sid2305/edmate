@@ -449,21 +449,41 @@ every run is selected by id AND `teacher_id`.
 - `publicScorecard({ agentId })` is public: it returns null unless the agent is live and its
   teacher verified, and carries each category forward from the newest passed run that measured it.
 
-## Live classes (task 11.1a)
+## Live classes (task 11.1a, edit/cancel 11.1d)
 
 In-app, pull-based only (decision B-45, 22 Oct 2026): no email/SMS, no background job
 (`packages/queue/**` and `apps/worker/**` are untouched). `liveClasses.create(scope, { title,
 link, startsAt, packageIds })` schedules one of the scope's teacher's classes, attached to 1..20 of
-that teacher's own packages: `link` must be an http(s) URL and `startsAt` a future timestamp
-(`invalid`); any package id that is not the scope's own is `not_found`, key-share locked in the
-same transaction as the insert (same shape as `packages.ts`'s `checkModules`). Writes one
-`live_class.schedule` audit row (`after`: title, startsAt, packageIds). `listForTeacher(scope)`
-returns the scope's own classes, soonest first. `listUpcomingForStudent(scope, { now? })` returns
-the scope's own teacher's classes that have not started, attached to the base package of the
-scope's own live (`trial` / `active`) subscription only (`paused` / `past_due` / `ended` see
-nothing), each with a window label (`reminder_24h` / `reminder_1h` / `starting_soon` / `later`)
-computed here, from `startsAt` vs `now`, inside `live-classes.ts` (the one place this label is
-computed; `options.now` only overrides the clock for deterministic tests).
+that teacher's own packages: `link` must be an **https** URL (no plain `http`), at most
+`LIVE_CLASS_LINK_MAX_LENGTH` (2048) characters, and `startsAt` a future timestamp (`invalid`); any
+package id that is not the scope's own is `not_found`, key-share locked in the same transaction as
+the insert (same shape as `packages.ts`'s `checkModules`). Writes one `live_class.schedule` audit
+row (`after`: title, startsAt, packageIds). `title`/`link`/`startsAt` share one set of field
+schemas with `update` so the https-and-length check lives in one place.
+
+`listForTeacher(scope)` returns the scope's own classes, soonest first, at most
+`LIVE_CLASS_LIST_MAX` (500), each with `status` (`'scheduled'` | `'cancelled'`).
+`listUpcomingForStudent(scope, { now? })` returns the scope's own teacher's classes that have not
+started, attached to the base package of the scope's own live (`trial` / `active`) subscription
+only (`paused` / `past_due` / `ended` see nothing), each with a window label (`reminder_24h` /
+`reminder_1h` / `starting_soon` / `later`) computed here, from `startsAt` vs `now`, inside
+`live-classes.ts` (the one place this label is computed; `options.now` only overrides the clock for
+deterministic tests), at most `LIVE_CLASS_LIST_MAX`, `.selectDistinct`-ed so a student with two
+live subscriptions whose packages both overlap one class sees it once, not once per matching
+subscription. A cancelled class with a future `startsAt` still appears here (status shown, not
+filtered out — see the task's own "cancelled class is marked, not dropped" decision); it drops off
+on its own, like any class, once `startsAt` passes.
+
+`update(scope, id, { title, link, startsAt })` and `cancel(scope, id)` (task 11.1d) both lock the
+row `FOR UPDATE` by id **and** teacherId first: another teacher's id or a missing one is
+`not_found`, before any other check. `update` on an already-cancelled class, or one whose own
+(current, not the caller's) `startsAt` has passed, is `invalid`; otherwise it writes the new
+title/link/startsAt and one `live_class.update` audit row (`link` left out of the payload, matching
+`create`). `cancel` on an already-cancelled class is an idempotent no-op — `{ cancelled: false }`,
+nothing written, no audit row, so a double-click or a retried request never errors; on a
+`'scheduled'` class whose `startsAt` has already passed it is `invalid` (the class already
+happened, this is not the no-op case); otherwise it sets `status = 'cancelled'` and writes one
+`live_class.cancel` audit row.
 
 ## Live-class recordings (task 11.4)
 

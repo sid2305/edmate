@@ -93,9 +93,14 @@ export const liveClasses = pgTable(
     title: text('title').notNull(),
     startsAt: tstz('starts_at').notNull(),
     link: text('link'),
+    // Task 11.1d: scheduled | cancelled. Additive; existing rows get 'scheduled' from the default.
+    status: text('status').notNull().default('scheduled'),
     ...timestamps(),
   },
-  (t) => [index('live_classes_teacher_id_starts_at_idx').on(t.teacherId, t.startsAt)],
+  (t) => [
+    index('live_classes_teacher_id_starts_at_idx').on(t.teacherId, t.startsAt),
+    check('live_classes_status_check', sql`${t.status} in ('scheduled', 'cancelled')`),
+  ],
 );
 
 /** Questions collected for a live class (for example, grouped from teacher_questions). */

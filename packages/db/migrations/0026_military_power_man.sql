@@ -1,0 +1,2 @@
+ALTER TABLE "live_classes" ADD COLUMN "status" text DEFAULT 'scheduled' NOT NULL;--> statement-breakpoint
+ALTER TABLE "live_classes" ADD CONSTRAINT "live_classes_status_check" CHECK ("live_classes"."status" in ('scheduled', 'cancelled'));
