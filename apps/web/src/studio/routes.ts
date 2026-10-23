@@ -308,14 +308,14 @@ const complete: Work = async (b, scope, _req, ctx) => {
   }
   // `processing` first: the worker's own `ready` write is refused from `uploading`.
   await b.documents.updateStatus(scope, id, 'processing');
-  const media = type.fileKind === 'video' || type.fileKind === 'audio';
+  // Task 8.2n: the needs-transcription rule lives on the upload type, not here.
   try {
     await b.enqueue(
       {
         teacherId: scope.teacherId,
         documentId: id,
         fileKind: type.fileKind,
-        ...(media ? { mimeType: type.contentType } : {}),
+        ...(type.transcribe ? { mimeType: type.contentType } : {}),
       },
       key,
     );
@@ -390,9 +390,12 @@ const replace: Work = async (b, scope, req, ctx) => {
     contentType: type.contentType,
     contentLength: body.byteSize,
   });
+  // Task 8.2n: the new file's retrieval kind replaces the old one (a PDF swapped for a caption
+  // file becomes `transcript`, and the reverse), so citations read the right way.
   const { previousStorageKey } = await b.documents.startReplace(scope, id, {
     storageKey: key,
     rightsDeclared: body.rightsDeclared,
+    kind: type.chunkKind,
   });
   await dropObject(b, previousStorageKey);
   return ok({ documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } });

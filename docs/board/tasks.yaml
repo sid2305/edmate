@@ -3870,9 +3870,9 @@ tasks:
   deps:
   - '9.2'
   risk: medium
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:fable
 - id: 8.6c
   milestone: M8
   title: '8.6 Phase C: apps/web studio packages API with cost estimates (plan docs/tasks/8.6/plan.md)'
@@ -4909,7 +4909,9 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 11.1e
   milestone: M13
-  title: '11.1d review LOWs (packages/db live-classes.ts): the live_class.update audit records the link before/after and normalises after.startsAt with iso(); listUpcomingForStudent returns no link on a cancelled row; listForTeacher keeps the newest classes past the 500 cap (order or window); status reads through a checked parse, not `as LiveClassStatus`; fix the "max before regex" comment (zod v4 checks do not abort); tests: update moves startsAt and writes exactly one audit row, over-length link on update, repositories.int.test.ts verify reads back for liveClasses.update/cancel'
+  title: '11.1d review LOWs (packages/db live-classes.ts): the live_class.update audit records the link before/after and normalises after.startsAt with iso(); listUpcomingForStudent returns no link on a
+    cancelled row; listForTeacher keeps the newest classes past the 500 cap (order or window); status reads through a checked parse, not `as LiveClassStatus`; fix the "max before regex" comment (zod v4
+    checks do not abort); tests: update moves startsAt and writes exactly one audit row, over-length link on update, repositories.int.test.ts verify reads back for liveClasses.update/cancel'
   accept: db typecheck, lint and test green with the new tests.
   deps:
   - 11.1d
@@ -6056,6 +6058,15 @@ tasks:
   status: running
   branch: m13/12.5f-alert-sentinel
   model: plan:lead build:fable
+- id: 12.5g
+  milestone: M13
+  title: 'Alert worker (12.5f silent-failure LOWs): a permanent store error (not_found or invalid) stops retrying instead of retrying 1,000,000 times and re-paging every 30 s (UnrecoverableError or a capped
+    attempt count, still logged and paged once); notify rejecting with a non-Error is wrapped like the store error; errorName keeps a useful name for non-Error rejections'
+  accept: worker typecheck, lint and test green; a test that a permanent store error ends the job after one page.
+  deps:
+  - 12.5f
+  risk: high
+  status: todo
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
@@ -6457,17 +6468,41 @@ tasks:
   deps:
   - 8.2l
   risk: low
-  status: running
+  status: done
   branch: m13/8.2n-studio-followups
-  model: plan:lead build:fable
+  model: plan:lead build:fable review:fable
+  metrics:
+    tool_calls: 47
+    tokens_in: 2678
+    tokens_out: 7192
+    cache_read_tokens: 2860342
+    wall_time_seconds: 570
+    models:
+    - claude-fable-5-1
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 1
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 8.2o
   milestone: M13
-  title: '8.2n review follow-ups: replace refuses (or clears live_class_id consistently) when a live-class-linked transcript row would become material, like create; replace refuses a teacher_note row; an IngestJobSchema parse test for the transcribe flag; name the material|transcript union in db; one shared YouTube refusal string instead of three copies'
+  title: '8.2n review follow-ups: replace refuses (or clears live_class_id consistently) when a live-class-linked transcript row would become material, like create; replace refuses a teacher_note row; an
+    IngestJobSchema parse test for the transcribe flag; name the material|transcript union in db; one shared YouTube refusal string instead of three copies'
   accept: web and db typecheck, lint and test green; a test that replacing a live-class recording with a PDF is refused or leaves no material row with a live_class_id.
   deps:
   - 8.2n
   risk: high
-  status: todo
+  status: running
+  branch: m13/8.2o-replace-guards
+  model: plan:lead build:fable
 - id: 12.3f
   milestone: M12
   title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
@@ -6592,15 +6627,21 @@ tasks:
     human_questions: 0
 - id: 9.4d
   milestone: M13
-  title: '9.4a review MEDIUMs (product-facing, do first): the live-class questions route (apps/web/app/api/live-classes/[id]/questions/handlers.ts) still gates on EDMATE_CHAT_AGENTS, so /home can show a live class whose ask POST 404s; resolve it from the student''s own live subscriptions like /home; the limits Redis client gets a commandTimeout so an unresponsive Redis gives the intended 503 on POST /api/sessions instead of hanging; a subscription resolve with no studentMarket fails loudly (integrity error or a required option) instead of a silent no_access'
-  accept: web and db typecheck, lint and test green; a test for each item (ask POST works for a live-subscription teacher not in EDMATE_CHAT_AGENTS; hung Redis returns 503 within the timeout; missing studentMarket throws).
+  title: '9.4a review MEDIUMs (product-facing, do first): the live-class questions route (apps/web/app/api/live-classes/[id]/questions/handlers.ts) still gates on EDMATE_CHAT_AGENTS, so /home can show a
+    live class whose ask POST 404s; resolve it from the student''s own live subscriptions like /home; the limits Redis client gets a commandTimeout so an unresponsive Redis gives the intended 503 on POST
+    /api/sessions instead of hanging; a subscription resolve with no studentMarket fails loudly (integrity error or a required option) instead of a silent no_access'
+  accept: web and db typecheck, lint and test green; a test for each item (ask POST works for a live-subscription teacher not in EDMATE_CHAT_AGENTS; hung Redis returns 503 within the timeout; missing studentMarket
+    throws).
   deps:
   - 9.4a
   risk: high
   status: todo
 - id: 9.4e
   milestone: M13
-  title: '9.4a review LOWs and left-to-do: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works; export the harness grounding/advice/route/summary schemas so devModel.test.ts drops its copies; cover the three 0 % .tsx files from Phase D item 1; ports.ts reads users.market once per resolve (learnerStatus already selects it); repositories README documents the listLiveForStudent bare-id exception; the listLiveForStudent grid case does not depend on CASES order; LiveChat.status typed as Entitlement status; the 429 carries Retry-After; turn-backend.ts sleep clamps NaN; drop the duplicate ended filter in liveChats.ts'
+  title: '9.4a review LOWs and left-to-do: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works; export the harness grounding/advice/route/summary schemas so devModel.test.ts
+    drops its copies; cover the three 0 % .tsx files from Phase D item 1; ports.ts reads users.market once per resolve (learnerStatus already selects it); repositories README documents the listLiveForStudent
+    bare-id exception; the listLiveForStudent grid case does not depend on CASES order; LiveChat.status typed as Entitlement status; the 429 carries Retry-After; turn-backend.ts sleep clamps NaN; drop the
+    duplicate ended filter in liveChats.ts'
   accept: web and db typecheck, lint and test green.
   deps:
   - 9.4a

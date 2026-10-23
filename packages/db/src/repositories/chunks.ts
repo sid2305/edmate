@@ -165,6 +165,11 @@ const ReplaceInputSchema = z.strictObject({
   storageKey: z.string().min(1).max(1024),
   /** Task 12.3b/12.3f: as on create, required; the new file gets a fresh declaration. */
   rightsDeclared: z.literal(true),
+  /**
+   * Task 8.2n: the new file's retrieval kind, when it differs from (or restates) the old one.
+   * Only the two kinds an uploaded file can be; `teacher_note` rows have no file to replace.
+   */
+  kind: z.enum(['material', 'transcript']).optional(),
 });
 
 const documentColumns = {
@@ -431,12 +436,13 @@ export function documentsRepo(db: Db) {
      * the revision. The required `rightsDeclared: true` re-stamps the declaration `now()` for the
      * new file (tasks 12.3b, 12.3f; without it, `invalid` and nothing is written). Returns the
      * previous storage key for the caller to delete. Another teacher's or a missing one is
-     * `not_found` and nothing is written.
+     * `not_found` and nothing is written. With `kind` (task 8.2n), the document's retrieval kind
+     * is set to the new file's; without it the kind is left as it was.
      */
     async startReplace(
       scope: TeacherScope,
       id: string,
-      input: { storageKey: string; rightsDeclared: true },
+      input: { storageKey: string; rightsDeclared: true; kind?: 'material' | 'transcript' },
     ): Promise<{ previousStorageKey: string | null }> {
       const method = 'documents.startReplace';
       const { teacherId } = teacherScope(scope, method);
@@ -450,6 +456,7 @@ export function documentsRepo(db: Db) {
             .update(documents)
             .set({
               storageKey: r.storageKey,
+              ...(r.kind === undefined ? {} : { kind: r.kind }),
               status: 'uploading',
               failureReason: null,
               rightsDeclaredAt: sql`now()`,
