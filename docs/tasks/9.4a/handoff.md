@@ -205,6 +205,12 @@ cases=27 leaks=0`) and `scope.test.ts`, passed. Typecheck and lint green for bot
 
 ## Decisions
 
+### 22 Oct 2026 · 9.4a: unentitled session starts count toward the limit in apps/web/src/turn/routes.ts · decided by lead · risk: low
+
+- Decided: keep counting session starts for an unknown or unentitled agent against the student's own 10-minute window (security-reviewer LOW, wontfix).
+- Why: the limit is keyed by the signed-in student only, so the worst case is a student slowing themselves down after repeated failed starts; counting every start keeps the limiter simple and stops probing.
+- risk: low
+
 ### 22 Oct 2026 · Playwright keeps Turbopack: webpack dev still breaks the server bundle · decided by builder · risk: low
 - Decided: `apps/web/playwright.config.ts` keeps `next dev` without `--webpack`; the comment names
   the current blocker (bullmq `crypto`/optional-dependency resolution in webpack's dev compile of
@@ -330,4 +336,4 @@ webpack's dev compile of `@edmate/queue`/bullmq is fixed in `next.config.ts` or 
 package; export the harness's grounding/advice/route/summary schemas so `devModel.test.ts` can
 drop its copies; the three 0 % `.tsx` files named under Phase D item 1.)
 
-Tool calls used: 36
+Tool calls used: 281 (harness count: Phase A 55 + Phase B 64 + B finisher 26 + Phase C 75 + Phase D 61; the agents reported fewer, e.g. A 36, C 51, D 46)
