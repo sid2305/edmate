@@ -97,4 +97,4 @@ None for this task's scope. Board follow-ups only (not blocking this task):
   asked for: a preview turn's usage job carries `source: 'teacher_preview'`.
 - risk: low — test-only; does not change what ships.
 
-Tool calls used: 82
+Tool calls used: 131 (harness count: builder 131; the agent reported 82)
