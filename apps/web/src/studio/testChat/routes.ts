@@ -10,9 +10,10 @@
 // A preview turn is the student turn's pipeline (`runTurn`, the same SSE wire format and body
 // rules) with `entitlementSource: 'teacher_preview'`: the student is the teacher themself, any
 // agent status is allowed, and the package is the session's own, at its newest version.
-import type { EntitlementStore } from '@edmate/contracts';
+import { LIMITS, type EntitlementStore } from '@edmate/contracts';
 import {
   RepositoryError,
+  teacherScope,
   type CorrectionRecordInput,
   type CorrectionRecordResult,
   type StudentScope,
@@ -25,13 +26,7 @@ import { z } from 'zod';
 import { apiError } from '../../auth/errors';
 import type { RoleContext } from '../../auth/guard';
 import { ClientTurnSchema, StartSessionSchema, toTurnInput } from '../../turn/clientInput';
-import {
-  errorName,
-  MAX_BODY_BYTES,
-  sseBody,
-  TurnUnavailableError,
-  type ServerLog,
-} from '../../turn/routes';
+import { errorName, readJson, sseBody, TOO_LARGE, TurnUnavailableError, type ServerLog } from '../../turn/routes';
 import { previewScope, teacherTestChatScope, type TeacherAgents } from './scope';
 
 /** A preview session as the turn route needs it. */
@@ -81,12 +76,18 @@ const Id = StartSessionSchema.shape.agentId;
 const AgentParams = z.object({ agentId: Id });
 const SessionParams = z.object({ id: Id });
 const StartTestSessionSchema = z.strictObject({ packageId: Id });
-/** Lengths and blanks are the repository's rule (`invalid` → 400); the body cap bounds size. */
+/**
+ * Blanks are the repository's rule (`invalid` → 400); each text field's own max (8.5d) matches
+ * `TEACHER_NOTE_PART_MAX` (= `LIMITS.turnTextMaxLength`), the bound `teacherNoteParts` already
+ * checks server-side, so an over-long correction is a 400 here rather than a round trip to find
+ * out. The 64 KB body cap still bounds the request as a whole.
+ */
+const CorrectionText = z.string().max(LIMITS.turnTextMaxLength);
 const CorrectionSchema = z.strictObject({
   moduleId: Id,
-  question: z.string(),
-  badAnswer: z.string(),
-  correctedAnswer: z.string(),
+  question: CorrectionText,
+  badAnswer: CorrectionText,
+  correctedAnswer: CorrectionText,
 });
 
 const MSG = {
@@ -102,42 +103,6 @@ const MSG = {
 const notFound = (message: string) => apiError('not_found', message, 404);
 const validation = () => apiError('validation', MSG.validation, 400);
 const tooLarge = () => apiError('input_too_large', 'The request is too large.', 413);
-
-const TOO_LARGE = Symbol('too large');
-
-/**
- * The body as JSON, `undefined` when it is not JSON or can't be read, or TOO_LARGE: a declared
- * content-length over the cap is refused before reading, and the bytes read are capped too (the
- * student turn route's rule, `MAX_BODY_BYTES`).
- */
-async function readJson(req: Request): Promise<unknown> {
-  if (Number(req.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) return TOO_LARGE;
-  if (req.body === null) return undefined;
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_BODY_BYTES) {
-        void reader.cancel().catch(() => undefined);
-        return TOO_LARGE;
-      }
-      chunks.push(value);
-    }
-    const bytes = new Uint8Array(size);
-    let at = 0;
-    for (const c of chunks) {
-      bytes.set(c, at);
-      at += c.byteLength;
-    }
-    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-  } catch {
-    return undefined;
-  }
-}
 
 /** The request's abort as the harness's runtime-neutral cancel. */
 function cancelOf(signal: AbortSignal): Cancel {
@@ -259,7 +224,7 @@ export function createTestChatHandlers(backend: () => Promise<TestChatBackend>) 
     const b = await load();
     if (b instanceof Response) return b;
     try {
-      const scope: TeacherScope = { teacherId: principal.userId };
+      const scope = teacherScope({ teacherId: principal.userId }, 'postCorrection');
       const ids = await b.corrections.record(scope, body.data);
       return Response.json(ids, { status: 201, headers: NO_STORE });
     } catch (error) {
