@@ -25,6 +25,7 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
   const t = useTranslations('onboarding');
   const [profile, setProfile] = useState(initialProfile);
   const [slug, setSlug] = useState('');
+  const [displayName, setDisplayName] = useState(initialProfile?.displayName ?? '');
   const [subject, setSubject] = useState(initialProfile?.subject ?? '');
   const [bio, setBio] = useState(initialProfile?.bio ?? '');
   const [languagesText, setLanguagesText] = useState((initialProfile?.languages ?? []).join(', '));
@@ -44,7 +45,14 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
     setSubmitting(true);
     setError(null);
     const languages = parseLanguages(languagesText);
-    const body = profile ? { subject, bio, languages } : { slug, subject, bio, languages };
+    const body = profile
+      ? {
+          ...(displayName.trim().length > 0 ? { displayName } : {}),
+          subject,
+          bio,
+          languages,
+        }
+      : { slug, displayName, subject, bio, languages };
     try {
       const res = await fetch('/api/studio/profile', {
         method: profile ? 'PUT' : 'POST',
@@ -58,6 +66,13 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
       }
       const { profile: saved } = (await res.json()) as { profile: TeacherProfileRow };
       setProfile(saved);
+      // Resync every field from the saved profile: a patch can omit a key (e.g. clearing
+      // displayName keeps the stored value server-side), so the form must reflect what was
+      // actually persisted, not what the teacher typed.
+      setDisplayName(saved.displayName ?? '');
+      setSubject(saved.subject ?? '');
+      setBio(saved.bio ?? '');
+      setLanguagesText((saved.languages ?? []).join(', '));
     } catch {
       setError(t('errors.generic'));
     } finally {
@@ -85,6 +100,20 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
           <span id="onboarding-slug-hint">{t('slugHint')}</span>
         </p>
       )}
+      <p>
+        <label htmlFor="onboarding-display-name">{t('displayNameLabel')}</label>
+        <input
+          id="onboarding-display-name"
+          value={displayName}
+          maxLength={60}
+          aria-describedby="onboarding-display-name-hint"
+          onChange={(e) => setDisplayName(e.target.value)}
+        />
+        <span id="onboarding-display-name-hint">{t('displayNameHint')}</span>
+        {profile && !profile.displayName ? (
+          <span>{t('displayNameFallback', { slug: profile.slug })}</span>
+        ) : null}
+      </p>
       <p>
         <label htmlFor="onboarding-subject">{t('subjectLabel')}</label>
         <input

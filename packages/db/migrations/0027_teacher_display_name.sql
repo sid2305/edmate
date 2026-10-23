@@ -1,0 +1,1 @@
+ALTER TABLE "teacher_profiles" ADD COLUMN "display_name" text;

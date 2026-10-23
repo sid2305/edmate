@@ -49,6 +49,12 @@ export const teacherProfiles = pgTable(
       .notNull()
       .references(() => users.id),
     slug: text('slug').notNull(),
+    /**
+     * Task 9.2d: the public name the teacher chose in onboarding, shown on discovery and the
+     * teacher page instead of the sign-in name (`users.name`). Null until the teacher sets one;
+     * the public reads fall back to `slug`, never to `users.name` (scope decision 2).
+     */
+    displayName: text('display_name'),
     subject: text('subject').notNull(),
     bio: text('bio').notNull().default(''),
     photo: text('photo'),

@@ -2462,6 +2462,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       await raw.query('delete from teacher_profiles where user_id = $1', [teacherId(actor)]);
       return r.teacherProfiles.create(scope, {
         slug: profileSlug(actor),
+        displayName: `Teacher ${actor} display`,
         subject: `[${actor}] subject ${++counter}`,
       });
     },
@@ -2475,13 +2476,22 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     mismatches: (a) => [
       [
         'a second profile for the same teacher',
-        (r) => r.teacherProfiles.create(tScope(a), { slug: `${profileSlug(a)}-2`, subject: 'x' }),
+        (r) =>
+          r.teacherProfiles.create(tScope(a), {
+            slug: `${profileSlug(a)}-2`,
+            displayName: 'X',
+            subject: 'x',
+          }),
         'invalid',
       ],
       [
         "another teacher's slug",
         (r) =>
-          r.teacherProfiles.create(tScope(a), { slug: profileSlug(otherTeacher(a)), subject: 'x' }),
+          r.teacherProfiles.create(tScope(a), {
+            slug: profileSlug(otherTeacher(a)),
+            displayName: 'X',
+            subject: 'x',
+          }),
         'invalid',
       ],
       [
@@ -2497,7 +2507,13 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       [
         'a student scope id',
         (r) =>
-          r.teacherProfiles.create({ teacherId: studentId('1') }, { slug: 'stu', subject: 'x' }),
+          r.teacherProfiles.create(
+            { teacherId: studentId('1') },
+            // displayName must be well-formed (2+ chars) so this case's shape passes CreateInput
+            // validation and actually exercises the scope check it's named for (task 9.2d: a
+            // too-short displayName like 'X' would fail validation first, hiding the scope bug).
+            { slug: 'stu', displayName: 'Student X', subject: 'x' },
+          ),
         'scope',
       ],
     ],
@@ -4282,6 +4298,7 @@ describe.skipIf(!up)(
       for (const t of TEACHERS) {
         await repos.teacherProfiles.create(tScope(t), {
           slug: profileSlug(t),
+          displayName: `Teacher ${t} display`,
           subject: `[${t}] subject`,
         });
       }

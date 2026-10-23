@@ -353,6 +353,11 @@ describe('enums match the contracts', () => {
     expect(col?.type).toBe('teacher_verification_status');
     expect(col?.notNull).toBe(true);
   });
+  it('teacher_profiles.display_name is a nullable text column (task 9.2d)', () => {
+    const col = table('teacher_profiles').columns['display_name'];
+    expect(col?.type).toBe('text');
+    expect(col?.notNull).toBe(false);
+  });
   it('document_status is uploading, processing, ready or failed (task 8.2)', () => {
     expect(values('document_status')).toEqual(['uploading', 'processing', 'ready', 'failed']);
     const docs = table('documents') as SnapshotTable & {

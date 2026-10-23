@@ -50,6 +50,7 @@ function memory() {
       id: `tp_${teacherId}`,
       teacherId,
       slug,
+      displayName: 'Asha',
       subject: 'Math',
       bio: '',
       languages: [],
