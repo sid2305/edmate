@@ -2322,9 +2322,10 @@ tasks:
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
-  status: planning
-  branch: null
+  status: running
+  branch: m13/9.4a-turn-followups
   risk: risky
+  model: plan:sonnet build:opus
 - id: 8.2a
   milestone: M13
   title: '8.2 follow-ups (review MEDIUM/LOW): the worker''s storageConfigFromEnv fails closed in production like the web (no dev key pair, edmate-dev bucket or http; code-only log), before any deploy; studio
@@ -2567,7 +2568,9 @@ tasks:
   accept: collect(".") equals collect(abs root) in a test; .claude tests green
   deps:
   - 0.16a
-  status: todo
+  status: running
+  branch: m13/0.16b-metrics-root
+  model: plan:lead build:sonnet
 - id: 7.1a
   milestone: M7
   title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the
@@ -6299,9 +6302,31 @@ tasks:
   accept: a test shows a link with U+202E or U+200B renders without it; "$5-$10" keeps its markdown; the existing renderReply and no-raw-html tests still pass
   deps:
   - 9.4b
-  status: running
+  status: done
   branch: m13/9.4c-render-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 216
+    tokens_in: 702
+    tokens_out: 58806
+    cache_read_tokens: 23949595
+    wall_time_seconds: 1070
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
@@ -6396,7 +6421,7 @@ tasks:
   model: plan:opus build:opus
 - id: 10.1c
   milestone: M10
-  title: The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53)
+  title: 'The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53); 10.1b review LOWs (suite hardening only, no caller change): the suite fails an adapter that changes provider state and then throws unsupported; expectFailing is not a public suite option (mutant tests only); Secret.of sets a minimum length and refuses invisible-only secrets'
   accept: the shared contract suite passes on the adapter with recorded fixtures; the sandbox test is skipped without keys.
   deps:
   - 10.1b
@@ -6682,7 +6707,7 @@ tasks:
 - id: '10.8'
   milestone: M10
   title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3); 10.1a review: match snapshots on subscriptionId
-    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names'
+    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names; 10.1b review: move the offer-name refusal cases into packages/contracts fixtures; an eslint no-restricted-imports rule for @edmate/payments/testing outside tests in apps/*'
   accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
   deps:
   - '10.2'
