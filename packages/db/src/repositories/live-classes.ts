@@ -3,6 +3,8 @@
 // B-45, 11.1 "Decision: in-app only"): no email/SMS, no background job. The window label
 // (`reminder_24h` / `reminder_1h` / `starting_soon` / `later`) is computed here, in
 // `listUpcomingForStudent`, from `startsAt` vs `now` — the one place it is computed (see README).
+// Task 11.1d: `status` (`scheduled` | `cancelled`), `update` and `cancel` before a class starts;
+// a cancelled class stays visible (status shown, nothing dropped) — see the task's own README note.
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -33,6 +35,10 @@ export const LIVE_CLASS_TITLE_MAX_LENGTH = 200;
 /** Fewest and most packages a class may be attached to. */
 export const LIVE_CLASS_PACKAGE_IDS_MIN = 1;
 export const LIVE_CLASS_PACKAGE_IDS_MAX = 20;
+/** Longest `link`, in characters (same cap the studio route already enforces in front of this). */
+export const LIVE_CLASS_LINK_MAX_LENGTH = 2048;
+/** Most rows one `listForTeacher` / `listUpcomingForStudent` call returns (`RECORDING_LIST_MAX` precedent). */
+export const LIVE_CLASS_LIST_MAX = 500;
 
 /** Subscription statuses that entitle a student to a reminder (lead answer, 22 Oct 2026, Q2). */
 const LIVE_SUBSCRIPTION_STATUSES = ['trial', 'active'] as const;
@@ -53,20 +59,29 @@ function windowLabel(startsAt: Date, now: Date): LiveClassWindow {
   return 'later';
 }
 
-/** `http(s)://host/path`, no whitespace, no userinfo (same shape as contracts' media.ts). */
-const HTTP_URL = /^https?:\/\/[^\s/?#@\\]+(?:[/?#]\S*)?$/;
+/**
+ * `https://host/path`, no whitespace, no userinfo (11.1a/11.1c review: http is no longer
+ * accepted). Length-capped before the regex so an over-length link fails fast and cheap.
+ */
+const HTTPS_URL = /^https:\/\/[^\s/?#@\\]+(?:[/?#]\S*)?$/;
 
 const unique = (xs: readonly string[]) => new Set(xs).size === xs.length;
 
+/** Shared title/link/startsAt field schemas, used by both `create` and `update` (11.1a review). */
+const TitleSchema = z.string().trim().min(1).max(LIVE_CLASS_TITLE_MAX_LENGTH);
+const LinkSchema = z
+  .string()
+  .max(LIVE_CLASS_LINK_MAX_LENGTH)
+  .regex(HTTPS_URL, 'https://host/path, no userinfo')
+  .pipe(z.url({ protocol: /^https$/ }));
+const StartsAtSchema = z.iso
+  .datetime({ offset: true })
+  .refine((s) => new Date(s).getTime() > Date.now(), 'startsAt must be in the future');
+
 const CreateInputSchema = z.strictObject({
-  title: z.string().trim().min(1).max(LIVE_CLASS_TITLE_MAX_LENGTH),
-  link: z
-    .string()
-    .regex(HTTP_URL, 'http(s)://host/path, no userinfo')
-    .pipe(z.url({ protocol: /^https?$/ })),
-  startsAt: z.iso
-    .datetime({ offset: true })
-    .refine((s) => new Date(s).getTime() > Date.now(), 'startsAt must be in the future'),
+  title: TitleSchema,
+  link: LinkSchema,
+  startsAt: StartsAtSchema,
   packageIds: z
     .array(IdSchema)
     .min(LIVE_CLASS_PACKAGE_IDS_MIN)
@@ -74,6 +89,14 @@ const CreateInputSchema = z.strictObject({
     .refine(unique, 'duplicate package id'),
 });
 export type CreateLiveClassInput = z.infer<typeof CreateInputSchema>;
+
+/** `update`'s input: title/link/startsAt only — no `packageIds` (not part of this task). */
+const UpdateInputSchema = z.strictObject({
+  title: TitleSchema,
+  link: LinkSchema,
+  startsAt: StartsAtSchema,
+});
+export type UpdateLiveClassInput = z.infer<typeof UpdateInputSchema>;
 
 const ListUpcomingOptionsSchema = z.strictObject({
   /** Overrides `now` for a deterministic window label in tests; the server clock otherwise. */
@@ -83,6 +106,9 @@ export interface ListUpcomingOptions {
   now?: string;
 }
 
+/** Whether a class is still on, or the teacher cancelled it (task 11.1d). */
+export type LiveClassStatus = 'scheduled' | 'cancelled';
+
 /** One of the teacher's own scheduled classes, soonest first. */
 export interface TeacherLiveClassRow {
   id: string;
@@ -90,6 +116,7 @@ export interface TeacherLiveClassRow {
   link: string | null;
   startsAt: string;
   packageIds: string[];
+  status: LiveClassStatus;
 }
 
 /** Most rows one `liveClasses.listRecordingsForTeacher` call returns (`DOCUMENT_LIST_MAX` precedent). */
@@ -112,6 +139,7 @@ export interface UpcomingLiveClass {
   link: string | null;
   startsAt: string;
   window: LiveClassWindow;
+  status: LiveClassStatus;
 }
 
 /**
@@ -138,7 +166,8 @@ export function liveClassesRepo(db: Db) {
   return {
     /**
      * Schedules one of the scope's teacher's live classes, attached to 1..20 of that teacher's
-     * own packages. `link` must be an http(s) URL and `startsAt` a future timestamp (`invalid`);
+     * own packages. `link` must be an https URL, at most `LIVE_CLASS_LINK_MAX_LENGTH` characters,
+     * and `startsAt` a future timestamp (`invalid`);
      * any package id that is not the scope's own is `not_found` and nothing is written. Writes
      * one `live_class.schedule` audit row (`after`: title, startsAt, packageIds).
      */
@@ -182,11 +211,17 @@ export function liveClassesRepo(db: Db) {
           link: liveClasses.link,
           startsAt: liveClasses.startsAt,
           packageIds: liveClasses.packageIds,
+          status: liveClasses.status,
         })
         .from(liveClasses)
         .where(eq(liveClasses.teacherId, teacherId))
-        .orderBy(asc(liveClasses.startsAt), asc(liveClasses.id));
-      return rows.map((r) => ({ ...r, startsAt: iso(r.startsAt) }));
+        .orderBy(asc(liveClasses.startsAt), asc(liveClasses.id))
+        .limit(LIVE_CLASS_LIST_MAX);
+      return rows.map((r) => ({
+        ...r,
+        startsAt: iso(r.startsAt),
+        status: r.status as LiveClassStatus,
+      }));
     },
 
     /**
@@ -239,12 +274,16 @@ export function liveClassesRepo(db: Db) {
       const opts = parseArg(ListUpcomingOptionsSchema, options ?? {}, method);
       const now = opts.now ? new Date(opts.now) : new Date();
 
+      // `.selectDistinct` collapses the duplicate row a student with two live subscriptions whose
+      // packages both overlap the class's `packageIds` would otherwise get from this join — one of
+      // the selected columns per class, not one per qualifying subscription (11.1a review LOW).
       const rows = await db
-        .select({
+        .selectDistinct({
           id: liveClasses.id,
           title: liveClasses.title,
           link: liveClasses.link,
           startsAt: liveClasses.startsAt,
+          status: liveClasses.status,
         })
         .from(liveClasses)
         .innerJoin(
@@ -263,14 +302,106 @@ export function liveClassesRepo(db: Db) {
             sql`${packageVersions.packageId} = any(${liveClasses.packageIds})`,
           ),
         )
-        .orderBy(asc(liveClasses.startsAt), asc(liveClasses.id));
+        .orderBy(asc(liveClasses.startsAt), asc(liveClasses.id))
+        .limit(LIVE_CLASS_LIST_MAX);
       return rows.map((r) => ({
         id: r.id,
         title: r.title,
         link: r.link,
         startsAt: iso(r.startsAt),
         window: windowLabel(r.startsAt, now),
+        status: r.status as LiveClassStatus,
       }));
+    },
+
+    /**
+     * Edits one of the scope's own classes' title/link/startsAt, only before it starts. Locks the
+     * row `FOR UPDATE` by id and teacherId first: another teacher's or a missing id is `not_found`
+     * before any other check. A cancelled class, or one whose own (current) `startsAt` is no
+     * longer in the future, is `invalid` — read inside the same lock, never the caller's value.
+     * Writes one `live_class.update` audit row (`link` left out of the payload, matching `create`).
+     */
+    async update(
+      scope: TeacherScope,
+      id: string,
+      input: UpdateLiveClassInput,
+    ): Promise<{ updated: true }> {
+      const method = 'liveClasses.update';
+      const { teacherId } = teacherScope(scope, method);
+      const classId = parseArg(IdSchema, id, method);
+      const i = parseArg(UpdateInputSchema, input, method);
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const [row] = await tx
+            .select({
+              status: liveClasses.status,
+              startsAt: liveClasses.startsAt,
+              title: liveClasses.title,
+            })
+            .from(liveClasses)
+            .where(and(eq(liveClasses.id, classId), eq(liveClasses.teacherId, teacherId)))
+            .for('update');
+          if (!row) throw new RepositoryError('not_found', method);
+          if (row.status === 'cancelled' || row.startsAt.getTime() <= Date.now()) {
+            throw new RepositoryError('invalid', method);
+          }
+          await tx
+            .update(liveClasses)
+            .set({ title: i.title, link: i.link, startsAt: new Date(i.startsAt) })
+            .where(and(eq(liveClasses.id, classId), eq(liveClasses.teacherId, teacherId)));
+          await insertAuditEntry(tx, method, teacherId, null, {
+            actor: teacherId,
+            actorRole: 'teacher',
+            action: 'live_class.update',
+            target: `live_class:${classId}`,
+            before: { title: row.title, startsAt: iso(row.startsAt) },
+            after: { title: i.title, startsAt: i.startsAt },
+          });
+          return { updated: true };
+        }),
+      );
+    },
+
+    /**
+     * Cancels one of the scope's own classes. Same lock and `not_found` shape as `update`. Already
+     * `'cancelled'` is an idempotent no-op (`{ cancelled: false }`, nothing written, no audit row —
+     * a double-click Cancel must not error). `'scheduled'` but no longer in the future is
+     * `invalid` (the class already happened). Otherwise sets `status = 'cancelled'` and writes one
+     * `live_class.cancel` audit row.
+     */
+    async cancel(scope: TeacherScope, id: string): Promise<{ cancelled: boolean }> {
+      const method = 'liveClasses.cancel';
+      const { teacherId } = teacherScope(scope, method);
+      const classId = parseArg(IdSchema, id, method);
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const [row] = await tx
+            .select({ status: liveClasses.status, startsAt: liveClasses.startsAt })
+            .from(liveClasses)
+            .where(and(eq(liveClasses.id, classId), eq(liveClasses.teacherId, teacherId)))
+            .for('update');
+          if (!row) throw new RepositoryError('not_found', method);
+          if (row.status === 'cancelled') return { cancelled: false };
+          if (row.startsAt.getTime() <= Date.now()) {
+            throw new RepositoryError('invalid', method);
+          }
+          await tx
+            .update(liveClasses)
+            .set({ status: 'cancelled' })
+            .where(and(eq(liveClasses.id, classId), eq(liveClasses.teacherId, teacherId)));
+          await insertAuditEntry(tx, method, teacherId, null, {
+            actor: teacherId,
+            actorRole: 'teacher',
+            action: 'live_class.cancel',
+            target: `live_class:${classId}`,
+            before: { status: 'scheduled' },
+            after: { status: 'cancelled' },
+          });
+          return { cancelled: true };
+        }),
+      );
     },
   };
 }

@@ -3623,6 +3623,60 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 11.1d: edit/cancel before a class starts. Isolation only here (ownership, the
+  // RepositoryMethod/CASES type contract); the richer validation and no-op cases
+  // (non-https/over-length link, a past startsAt, double-cancel) are in the dedicated
+  // test/live-classes.int.test.ts, which creates its own fresh classes throughout and never
+  // touches `liveClassFor` (depended on by `listForTeacher`/`listUpcomingForStudent`/
+  // `classQuestions.submit` above). The cross-teacher attempt below only *reads* `liveClassFor`
+  // (as the id to try, and only ever on the failing path, which writes nothing) — it never
+  // mutates it; the same-teacher (positive-control) path creates its own fresh class instead.
+  'liveClasses.update': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) {
+        const { id } = await r.liveClasses.create(scope, {
+          title: `[${actor}] update target ${uid('u')}`,
+          link: 'https://meet.example.com/upd',
+          startsAt: LIVE_CLASS_STARTS_AT,
+          packageIds: [ids.pkg(actor)],
+        });
+        return r.liveClasses.update(scope, id, {
+          title: `[${actor}] edited`,
+          link: 'https://meet.example.com/upd2',
+          startsAt: LIVE_CLASS_STARTS_AT,
+        });
+      }
+      return r.liveClasses.update(scope, liveClassFor[target]!, {
+        title: `[${actor}] edited`,
+        link: 'https://meet.example.com/upd2',
+        startsAt: LIVE_CLASS_STARTS_AT,
+      });
+    },
+    verify: async (_r, _actor, res) => {
+      expect(res).toEqual({ updated: true });
+    },
+  },
+  'liveClasses.cancel': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) {
+        const { id } = await r.liveClasses.create(scope, {
+          title: `[${actor}] cancel target ${uid('u')}`,
+          link: 'https://meet.example.com/cnl',
+          startsAt: LIVE_CLASS_STARTS_AT,
+          packageIds: [ids.pkg(actor)],
+        });
+        return r.liveClasses.cancel(scope, id);
+      }
+      return r.liveClasses.cancel(scope, liveClassFor[target]!);
+    },
+    verify: async (_r, _actor, res) => {
+      expect(res).toEqual({ cancelled: true });
+    },
+  },
   'liveClasses.listForTeacher': {
     scope: 'teacher',
     op: 'read',

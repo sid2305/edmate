@@ -38,6 +38,7 @@ describe('LiveClassesView', () => {
             link: 'https://meet.example.com/abc',
             startsAt: '2026-11-01T10:00:00.000Z',
             packageIds: ['pkg_1'],
+            status: 'scheduled',
           },
         ]}
         packages={PACKAGES}
@@ -202,6 +203,7 @@ describe('LiveClassesView', () => {
       link: 'https://meet.example.com/past',
       startsAt: '2026-10-20T10:00:00.000Z',
       packageIds: ['pkg_1', 'pkg_2'],
+      status: 'scheduled',
       ...over,
     });
     const PAST = cls({});
