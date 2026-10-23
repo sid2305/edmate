@@ -10,6 +10,142 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 7.3b ran over budget · decided by lead · risk: low
+- Decided: accept 59 tool calls against a 40-call budget; both reviews approve with no findings.
+- Why: the builder counted 26; the harness counted 59 (install, the evals gate with its dependencies, a merge of main and a re-run). The work is done and clean, so a second round would only cost more.
+- risk: low
+
+---
+
+### 22 Oct 2026 · PerAgentSuiteError structured field is `reason`, not an id · decided by builder · risk: low
+- Decided: added a `readonly reason: 'no-packages' | 'id-collision' | 'invalid-case'` field
+  rather than an offending-id field.
+- Why: one of the three throw sites (`no-packages`) has no case id to name — only `agentId`,
+  already in the message — so a single `reason` union is the field that fits every throw site
+  uniformly, as the brief allowed ("pick one that fits the existing throw sites").
+- risk: low
+
+Tool calls used: 59 (harness count: builder 59; the agent reported 26)
+
+---
+
+### 22 Oct 2026 · 0.16b ran over budget · decided by lead · risk: low
+- Decided: accept 30 tool calls against a 15-call budget; the fix is two lines plus a test and both reviews approve it.
+- Why: the builder counted 18; the harness counted 30 (setup, the full 357-test suite and the secret scan). A two-line fix doesn't justify a second round.
+- risk: low
+
+---
+
+### 22 Oct 2026 · .claude/skills/team-lead/metrics.py root resolution approved · decided by lead · risk: high
+- Decided: merge the `.resolve()` change in .claude/skills/team-lead/metrics.py (a `.claude/**` risk path) with security-reviewer and code-reviewer approval.
+- Why: it only normalises repo_root before deriving the transcript slug; no shell-outs, no new file reads, and the tests use a temp home, never the real ~/.claude.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 0.16b: task_id path join in .claude/skills/team-lead/metrics.py left as is · decided by lead · risk: low
+- Decided: wontfix the security LOW on .claude/skills/team-lead/metrics.py collect(): it joins docs/tasks/<task_id> without checking task_id.
+- Why: the code is older than this task, and task_id comes only from the lead's board and CLI, never from outside input; a read stays inside the repo and only feeds counts.
+- risk: low
+
+Tool calls used: 30 (harness count: builder 30; the agent reported 18)
+
+---
+
+### 22 Oct 2026 · 3.11g test-only change on a risky path · decided by lead · risk: high
+- Decided: merge the linear-time test in packages/harness/src/pedagogy/modelRequest.test.ts (a test-only change; no prompt-pack or production code changes). Leave the six-large-runs timeout-stacking MEDIUM as wontfix: a linear run takes well under a second, so it only delays the failure of an already-failing regression.
+- Why: the file sits on the pedagogy risky path, so the human sees it on the skim list; code-reviewer and typescript-reviewer reviewed it and the lead fixed the overclaiming comments.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 3.11g ran over budget · decided by lead · risk: low
+- Decided: accept 95 tool calls against the lead briefs' 20 + 15. The fixer ran the timing test many times under load to show it doesn't flake.
+- Why: the extra runs are the evidence that the test is stable; the change itself is one test.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 3.11g flaky timing bound → ratio check · decided by builder · risk: low
+
+- Decided: replace the 2000 ms absolute bound with a ratio check comparing best-of-3 timings
+  at `n` and `4n`, asserting the ratio stays under 10, plus a loose 15s gross bound on the
+  `4n` run as a hang guard only.
+- Why: the build plan's lessons say no tight timings; a ratio check still catches a true
+  quadratic/exponential regression (ratio ~16+) without failing on a slower or loaded CI
+  runner, which only scales both timings together and leaves the ratio near 4.
+
+---
+
+### 22 Oct 2026 · 5.6d HelpState carried keys must be non-empty · decided by lead · risk: high
+- Decided: merge the change to packages/harness/src/pedagogy/helpState.ts: a carried answer key must be a non-empty string, and the field comment says it lives for one saved turn. No prompt-pack or teaching-behaviour change.
+- Why: the file is on the pedagogy risky path. The code reviewer checked that a HelpState saved by an older deploy with an empty key does not crash a turn, and that no key can leak into a reply.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 5.6d ran over budget · decided by lead · risk: low
+- Decided: accept 77 tool calls against the lead brief's 35 (stop at 45). Six small items across two packages, with a test per behaviour change.
+- Why: the work is complete and reviewed clean; the overrun is the Sonnet under-reporting pattern the 0.22 review (24 Oct 2026) looks at.
+- risk: low
+
+- Item 5's brief cited `runner.ts:1128`, but no "exactly one turn" HelpState text exists there (or anywhere in `runner.ts`); the matching text is the `practiceCarriedKey` field comment in `helpState.ts` (line ~93). Fixed there instead, since that's clearly the comment the review meant (same "one turn" carried-key wording, same 5.6c/ADR-0011 context).
+- Item 3's type-level guard: used a homomorphic mapped type with the `-?` modifier to strip the optional modifier TurnContext's optional keys (e.g. `persona`) would otherwise carry into the mapped type, which made indexing by `[keyof TurnContext]` include `undefined` and broke the `[Mismatched] extends [never]` check even when every type actually matched. No runtime behaviour change.
+- Item 6's test keeps `loadedA`'s `practiceModuleId`/`practiceServed` (but not `practiceItemId`) so the tool serves the same `b` item as the sibling tests; otherwise the tool picks a different item and the assertion on the new `answerKey` wouldn't isolate the carried-key behaviour being tested.
+
+Tool calls used: 77 (harness count: builder 77; the agent reported 31)
+
+---
+
+### 22 Oct 2026 · 10.1b ran over budget · decided by lead · risk: low
+- Decided: accept 146 tool calls against Phase B's 70. The build itself was on budget (74); the fix round added mutant fakes, eight new suite cases and the per-operation `unsupported` capability.
+- Why: the plan says Phase C (10.1c) must not change the shared suite, so every suite gap the reviewers found had to land now.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b lead approves the contracts edits and the ADR-0015 §9 amendment · decided by lead · risk: high
+- Decided: merge the two contracts edits (the offer-name refusal set now also refuses \p{Cs}, \p{Co} and the Hangul fillers; the refund doc comment) under ADR-0015, with a dated amendment line in §9 and the 10.8 normalisation note updated to match. No new ADR: both edits tighten rules the ADR already states.
+- Why: architect, security-reviewer and an opus typescript-reviewer reviewed them (rule 2); the lead wrote the ADR wording and kept spec-types.ts and the build plan's Core contracts block identical.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b packages/payments: signature check, secrets and no network · decided by builder · risk: high
+- Decided: Webhook signatures are checked with `timingSafeEqual` over the exact bytes, with the length checked first, every candidate and secret compared, and no early exit. A bad candidate never throws, it just doesn't match. Tolerance is at most 300 s, and a larger value is refused as `validation`. `PaymentsError` has fixed words, no `cause`, and JSON with only name, code, retryable and message. Secrets are held in a local `Secret` copy. Tests run with fetch and sockets off, and key-shaped values are built at runtime. Market to provider comes from the locale pack: `tbd`, an unknown market or a provider with no adapter gives `unsupported` (no checkout). An unknown status or a missing `subscriptionId` gives `malformed_event`, never `active`. Required reviewer: **security-reviewer** (recommended: typescript-reviewer, silent-failure-hunter, code-reviewer).
+- Why: ADR-0015 §5–§8 and the plan's 10.1b decisions. `packages/payments/**` is a risky path (payments group).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b Two minimal contracts edits that tighten rules ADR-0015 already states · decided by builder · risk: high
+- Decided: (1) In `packages/contracts/src/payments.ts`, the offer name now also refuses lone surrogates (`\p{Cs}`), private-use characters (`\p{Co}`) and the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0. A ZWJ emoji is refused on purpose (U+200D is `\p{Cf}`), and a test pins it. (2) In `packages/contracts/src/ports.ts`, the refund JSDoc now says an adapter without provider idempotency checks the payment's existing refunds first and returns the one with the same key. No type, schema shape or registry count changed, and no new ADR. Required reviewers: **architect, security-reviewer, typescript-reviewer**.
+- Why: 10.1a review LOWs (deferred to 10.1b). ADR-0015 §9 already says the name is one line with no hidden characters, and §3 already states the refund safeguard; these edits make the code match.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b The shared input check lives in packages/payments · decided by builder · risk: low
+- Decided: `checkPortInput(op, input)` parses each port call with the contracts helper schemas (strict objects, so an extra field such as a student email is refused). Every failure is `validation`, and zod issues are never surfaced because they echo the input. The fake calls it first for every operation, and the suite tests it for all seven writes.
+- Why: 10.1a review LOW: one check every adapter calls, so they all refuse the same input the same way.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b A full refund is explicit, and a fully refunded payment refuses more · decided by builder · risk: low
+- Decided: When the amount is omitted, the fake refunds exactly what is left on the payment. Once nothing is left, a new refund is `conflict`. A refund larger than what is left, or in another currency, is `validation`. The refund safeguard (look up the payment's refunds by key first) is what makes a retry after a timeout safe.
+- Why: 10.1a review LOW; ADR-0015 §3.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b A local Secret copy, with no dependency on @edmate/gateway · decided by planner · risk: low
+- Decided: `src/secret.ts` is a copy of the gateway's `Secret`, with only the comments changed.
+- Why: The plan's decision, so payments doesn't pull in the model gateway.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.4c ran over budget · decided by lead · risk: low
 - Decided: accept 110 tool calls against the lead briefs' 40 + 35. The fix round had to prove the percent-encoded bidi case through the real react-markdown renderer, which took more calls than the brief allowed.
 - Why: the extra calls bought the HIGH fix and real-renderer tests; nothing was left unfinished.

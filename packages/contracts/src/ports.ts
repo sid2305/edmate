@@ -219,7 +219,11 @@ export interface Payments {
     idempotencyKey: string;
   }): Promise<ProviderSubscription>;
   getSubscription(providerRef: ProviderRef): Promise<ProviderSubscription>;
-  /** No amount = full refund. The caller claims the idempotency key first (ADR-0015 §3). */
+  /**
+   * No amount = full refund. The caller claims the idempotency key first; an adapter whose provider
+   * has no idempotency keys checks the payment's existing refunds first and returns the one with
+   * the same key, so it never refunds twice (ADR-0015 §3).
+   */
   refund(x: {
     paymentRef: ProviderRef;
     amount?: Money;

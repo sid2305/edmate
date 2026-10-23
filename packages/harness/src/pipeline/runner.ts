@@ -31,7 +31,6 @@ import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
 import {
   copyHelp,
   type HelpState,
-  holdsPracticeKey,
   INITIAL_HELP_STATE,
   PRACTICE_SERVED_MAX,
   practiceFields,
@@ -1170,9 +1169,12 @@ class Turn {
     const last = this.issued[this.issued.length - 1] as IssuedItem;
     const answerKey = this.issuedKeys();
     // 5.6c (ADR-0011 §2): the loaded item was replaced unsolved, so its key is guarded one more
-    // turn. Never merged into `answerKey`, which grades only the new item.
+    // turn. Carried whether the loaded item was a practice item (`holdsPracticeKey`) or not: any
+    // loaded `answerKey` is a key the student had not yet shown (5.6d; no production path sets a
+    // non-practice `answerKey` today, but a future one must not skip this guard). Never merged
+    // into `answerKey`, which grades only the new item.
     const carried =
-      loaded !== null && holdsPracticeKey(loaded.help)
+      loaded !== null && loaded.help.answerKey.length > 0
         ? loaded.help.answerKey.filter((k) => !answerKey.includes(k))
         : [];
     const help: HelpState = {
