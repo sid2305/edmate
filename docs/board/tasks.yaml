@@ -621,7 +621,9 @@ tasks:
   deps:
   - 1.7f
   risky: true
-  status: todo
+  status: running
+  branch: m13/1.7g-us-header
+  model: plan:lead build:sonnet
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
