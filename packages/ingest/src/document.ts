@@ -43,8 +43,14 @@ export function parseDocument(input: DocumentInput): Promise<ParsedDocument> {
         return parseVtt(input.bytes, input.sourceTitle);
       case 'srt':
         return parseSrt(input.bytes, input.sourceTitle);
-      default:
-        throw new IngestError('unsupported', false, 'unknown document kind');
+      default: {
+        const _exhaustive: never = input.kind;
+        throw new IngestError(
+          'unsupported',
+          false,
+          `unknown document kind: ${String(_exhaustive)}`,
+        );
+      }
     }
   });
 }
