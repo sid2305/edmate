@@ -130,6 +130,24 @@ describe('indexDocument', () => {
     ]);
   });
 
+  it('a BOM-prefixed Markdown document indexes without the BOM (5.6d)', async () => {
+    const writer = recordingWriter();
+    const md = '# Fractions\n\nA fraction names part of a whole.';
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(md)]);
+    const result = await indexDocument(
+      { writer, embedder: hashedEmbedder() },
+      {
+        scope,
+        documentId: 'doc-bom',
+        source: { kind: 'markdown', bytes, sourceTitle: 'Maths' },
+      },
+    );
+    expect(result).toEqual({ chunks: 1, embedded: true, embeddedChunks: 1 });
+    const text = writer.inserts[0]?.drafts[0]?.text ?? '';
+    expect(text.startsWith('﻿')).toBe(false);
+    expect(text).toBe('Fractions\nA fraction names part of a whole.');
+  });
+
   it(`embeds in batches of ${String(EMBED_BATCH_SIZE)}: 97 chunks are 2 calls (ScriptedGateway)`, async () => {
     const texts = Array.from({ length: 97 }, (_, i) => `Fact number ${String(i)}.`);
     const gateway = scripted({

@@ -1499,9 +1499,28 @@ tasks:
   accept: each listed LOW is fixed or closed with a logged reason; harness and ingest tests pass
   deps:
   - 5.6c
-  status: running
+  status: done
   branch: m13/5.6d-carried-key-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 110
+    tokens_out: 2401
+    cache_read_tokens: 2729430
+    wall_time_seconds: 338
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.6c
   milestone: M5
   title: '5.6 review follow-ups (before any real practice bank): PracticeBank requires a teacherId scope check (records carry teacherId, a teacher-only test); keep practice keys out of the model''s do-not-say
@@ -2739,9 +2758,9 @@ tasks:
   deps:
   - '7.3'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.3b-suite-polish
+  model: plan:lead build:sonnet
 - id: 0.19b
   milestone: M13
   title: 'closeout.py checks the handoff''s Decisions (each entry has a Decided: line) before it appends to the log. Today it appends first and then refuses, and a re-run skips the bad entries as duplicates
@@ -6416,12 +6435,34 @@ tasks:
   deps:
   - 10.1a
   risk: risky
-  status: running
+  status: done
   branch: m10/10.1b-payments-package
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 18
+      by_severity:
+        MEDIUM: 6
+        LOW: 12
+      by_status:
+        fixed: 13
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 10.1c
   milestone: M10
-  title: 'The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53); 10.1b review LOWs (suite hardening only, no caller change): the suite fails an adapter that changes provider state and then throws unsupported; expectFailing is not a public suite option (mutant tests only); Secret.of sets a minimum length and refuses invisible-only secrets'
+  title: 'The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53); 10.1b review LOWs (suite hardening only, no caller change):
+    the suite fails an adapter that changes provider state and then throws unsupported; expectFailing is not a public suite option (mutant tests only); Secret.of sets a minimum length and refuses invisible-only
+    secrets'
   accept: the shared contract suite passes on the adapter with recorded fixtures; the sandbox test is skipped without keys.
   deps:
   - 10.1b
@@ -6707,7 +6748,8 @@ tasks:
 - id: '10.8'
   milestone: M10
   title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3); 10.1a review: match snapshots on subscriptionId
-    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names; 10.1b review: move the offer-name refusal cases into packages/contracts fixtures; an eslint no-restricted-imports rule for @edmate/payments/testing outside tests in apps/*'
+    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names; 10.1b review: move the offer-name refusal cases into packages/contracts fixtures;
+    an eslint no-restricted-imports rule for @edmate/payments/testing outside tests in apps/*'
   accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
   deps:
   - '10.2'

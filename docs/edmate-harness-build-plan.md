@@ -268,7 +268,7 @@ type ProviderId = string;           // ^[a-z][a-z0-9_-]{1,31}$; equals LocalePac
 type ProviderRef = string;          // a provider's own id: ^[A-Za-z0-9_.:-]{1,128}$, at least one letter or digit
 interface PaymentOffer {            // built server-side from the package version; never from the client
   packageVersionId: string; name: string; price: Money; interval: 'month'; trialDays?: number;
-}                                   // price.amountMinor > 0; name 1..120 chars, one line (no Cc, Cf, Zl or Zp), a letter or digit; trialDays 1..90
+}                                   // price.amountMinor > 0; name 1..120 chars, one line (no Cc, Cf, Zl, Zp, Cs or Co, nor the Hangul fillers U+115F U+1160 U+3164 U+FFA0), a letter or digit; trialDays 1..90
 interface ProviderSubscription {    // the provider's view; 10.3's state machine decides the entitlement
   provider: ProviderId; providerRef: ProviderRef;
   subscriptionId: string;           // Edmate's subscriptions.id, carried as provider metadata; required

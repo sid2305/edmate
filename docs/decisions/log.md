@@ -10,6 +10,75 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 5.6d HelpState carried keys must be non-empty · decided by lead · risk: high
+- Decided: merge the change to packages/harness/src/pedagogy/helpState.ts: a carried answer key must be a non-empty string, and the field comment says it lives for one saved turn. No prompt-pack or teaching-behaviour change.
+- Why: the file is on the pedagogy risky path. The code reviewer checked that a HelpState saved by an older deploy with an empty key does not crash a turn, and that no key can leak into a reply.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 5.6d ran over budget · decided by lead · risk: low
+- Decided: accept 77 tool calls against the lead brief's 35 (stop at 45). Six small items across two packages, with a test per behaviour change.
+- Why: the work is complete and reviewed clean; the overrun is the Sonnet under-reporting pattern the 0.22 review (24 Oct 2026) looks at.
+- risk: low
+
+- Item 5's brief cited `runner.ts:1128`, but no "exactly one turn" HelpState text exists there (or anywhere in `runner.ts`); the matching text is the `practiceCarriedKey` field comment in `helpState.ts` (line ~93). Fixed there instead, since that's clearly the comment the review meant (same "one turn" carried-key wording, same 5.6c/ADR-0011 context).
+- Item 3's type-level guard: used a homomorphic mapped type with the `-?` modifier to strip the optional modifier TurnContext's optional keys (e.g. `persona`) would otherwise carry into the mapped type, which made indexing by `[keyof TurnContext]` include `undefined` and broke the `[Mismatched] extends [never]` check even when every type actually matched. No runtime behaviour change.
+- Item 6's test keeps `loadedA`'s `practiceModuleId`/`practiceServed` (but not `practiceItemId`) so the tool serves the same `b` item as the sibling tests; otherwise the tool picks a different item and the assertion on the new `answerKey` wouldn't isolate the carried-key behaviour being tested.
+
+Tool calls used: 77 (harness count: builder 77; the agent reported 31)
+
+---
+
+### 22 Oct 2026 · 10.1b ran over budget · decided by lead · risk: low
+- Decided: accept 146 tool calls against Phase B's 70. The build itself was on budget (74); the fix round added mutant fakes, eight new suite cases and the per-operation `unsupported` capability.
+- Why: the plan says Phase C (10.1c) must not change the shared suite, so every suite gap the reviewers found had to land now.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b lead approves the contracts edits and the ADR-0015 §9 amendment · decided by lead · risk: high
+- Decided: merge the two contracts edits (the offer-name refusal set now also refuses \p{Cs}, \p{Co} and the Hangul fillers; the refund doc comment) under ADR-0015, with a dated amendment line in §9 and the 10.8 normalisation note updated to match. No new ADR: both edits tighten rules the ADR already states.
+- Why: architect, security-reviewer and an opus typescript-reviewer reviewed them (rule 2); the lead wrote the ADR wording and kept spec-types.ts and the build plan's Core contracts block identical.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b packages/payments: signature check, secrets and no network · decided by builder · risk: high
+- Decided: Webhook signatures are checked with `timingSafeEqual` over the exact bytes, with the length checked first, every candidate and secret compared, and no early exit. A bad candidate never throws, it just doesn't match. Tolerance is at most 300 s, and a larger value is refused as `validation`. `PaymentsError` has fixed words, no `cause`, and JSON with only name, code, retryable and message. Secrets are held in a local `Secret` copy. Tests run with fetch and sockets off, and key-shaped values are built at runtime. Market to provider comes from the locale pack: `tbd`, an unknown market or a provider with no adapter gives `unsupported` (no checkout). An unknown status or a missing `subscriptionId` gives `malformed_event`, never `active`. Required reviewer: **security-reviewer** (recommended: typescript-reviewer, silent-failure-hunter, code-reviewer).
+- Why: ADR-0015 §5–§8 and the plan's 10.1b decisions. `packages/payments/**` is a risky path (payments group).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b Two minimal contracts edits that tighten rules ADR-0015 already states · decided by builder · risk: high
+- Decided: (1) In `packages/contracts/src/payments.ts`, the offer name now also refuses lone surrogates (`\p{Cs}`), private-use characters (`\p{Co}`) and the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0. A ZWJ emoji is refused on purpose (U+200D is `\p{Cf}`), and a test pins it. (2) In `packages/contracts/src/ports.ts`, the refund JSDoc now says an adapter without provider idempotency checks the payment's existing refunds first and returns the one with the same key. No type, schema shape or registry count changed, and no new ADR. Required reviewers: **architect, security-reviewer, typescript-reviewer**.
+- Why: 10.1a review LOWs (deferred to 10.1b). ADR-0015 §9 already says the name is one line with no hidden characters, and §3 already states the refund safeguard; these edits make the code match.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b The shared input check lives in packages/payments · decided by builder · risk: low
+- Decided: `checkPortInput(op, input)` parses each port call with the contracts helper schemas (strict objects, so an extra field such as a student email is refused). Every failure is `validation`, and zod issues are never surfaced because they echo the input. The fake calls it first for every operation, and the suite tests it for all seven writes.
+- Why: 10.1a review LOW: one check every adapter calls, so they all refuse the same input the same way.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b A full refund is explicit, and a fully refunded payment refuses more · decided by builder · risk: low
+- Decided: When the amount is omitted, the fake refunds exactly what is left on the payment. Once nothing is left, a new refund is `conflict`. A refund larger than what is left, or in another currency, is `validation`. The refund safeguard (look up the payment's refunds by key first) is what makes a retry after a timeout safe.
+- Why: 10.1a review LOW; ADR-0015 §3.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b A local Secret copy, with no dependency on @edmate/gateway · decided by planner · risk: low
+- Decided: `src/secret.ts` is a copy of the gateway's `Secret`, with only the comments changed.
+- Why: The plan's decision, so payments doesn't pull in the model gateway.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.4c ran over budget · decided by lead · risk: low
 - Decided: accept 110 tool calls against the lead briefs' 40 + 35. The fix round had to prove the percent-encoded bidi case through the real react-markdown renderer, which took more calls than the brief allowed.
 - Why: the extra calls bought the HIGH fix and real-renderer tests; nothing was left unfinished.

@@ -65,8 +65,12 @@ export const RefundResultSchema = z.strictObject({
 });
 export type RefundResult = z.infer<typeof RefundResultSchema>;
 
-/** Control, format (bidi, zero-width, BOM), line and paragraph separator characters. */
-const NOT_ONE_LINE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+/**
+ * Control, format (bidi, zero-width, BOM, so also the ZWJ inside emoji sequences), line and
+ * paragraph separator characters, lone surrogates, private-use characters and the Hangul fillers
+ * (U+115F, U+1160, U+3164, U+FFA0) that render as blanks.
+ */
+const NOT_ONE_LINE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}\p{Co}\u115F\u1160\u3164\uFFA0]/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
 export type ProviderId = string;
