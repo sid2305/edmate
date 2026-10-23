@@ -621,7 +621,9 @@ tasks:
   deps:
   - 1.7f
   risky: true
-  status: todo
+  status: running
+  branch: m13/1.7g-us-header
+  model: plan:lead build:sonnet
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -6017,9 +6019,30 @@ tasks:
     gross-regression bound or a ratio check (lessons: no tight timings)'
   accept: the test checks linearity without a tight wall-clock bound; harness test green
   deps: []
-  status: running
+  status: done
   branch: m13/3.11g-linear-time-test
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 51
+    tokens_in: 198
+    tokens_out: 1240
+    cache_read_tokens: 3269884
+    wall_time_seconds: 502
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 3
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
