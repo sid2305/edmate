@@ -11,12 +11,25 @@ export const TURN_CONTEXT_KEYS: readonly (keyof TurnContext)[] = Object.freeze(
   Object.keys(TurnContextSchema.shape) as (keyof TurnContext)[],
 );
 
-// Compile-time guard: every TurnContext field has a source here. A new contracts field that
-// neither Entitled nor BuiltContext supplies fails the typecheck instead of being dropped.
+// Compile-time guard: every TurnContext field has a source here, with a compatible value type. A
+// new contracts field that neither Entitled nor BuiltContext supplies fails the typecheck instead
+// of being dropped, and a value type that drifts between the source and TurnContext fails too
+// (type-only; no runtime check — zod already catches it at runtime via TurnContextSchema).
 type Supplied = keyof Entitled | keyof BuiltContext | 'intent' | 'attempt';
 type Unsupplied = Exclude<keyof TurnContext, Supplied>;
 const allSupplied: [Unsupplied] extends [never] ? true : never = true;
 void allSupplied;
+
+type SourceAll = Entitled & BuiltContext & { intent: Intent; attempt: Attempt };
+type Mismatched = {
+  [K in keyof TurnContext]-?: K extends keyof SourceAll
+    ? SourceAll[K] extends TurnContext[K]
+      ? never
+      : K
+    : never;
+}[keyof TurnContext];
+const allTypesMatch: [Mismatched] extends [never] ? true : never = true;
+void allTypesMatch;
 
 /**
  * The checked TurnContext, or null when TurnContextSchema refuses it (its refine: retrieved ⊆
