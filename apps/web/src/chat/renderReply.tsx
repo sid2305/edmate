@@ -41,15 +41,40 @@ const ALLOWED = [
 
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
+// Task 9.4c fix round: react-markdown + remark-gfm run every link destination through
+// micromark's normalizeUri before SafeLink/safeHref ever sees it, which percent-encodes every
+// non-ASCII character — so an invisible/bidi character the review named reaches here as a run of
+// %XX bytes (e.g. "%E2%80%AE"), not the raw codepoint. Matches one or more consecutive %XX groups.
+const PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
+
 /** The href if it is an absolute http(s)/mailto URL, else null. Exported for direct tests. */
 export function safeHref(href: unknown): string | null {
   if (typeof href !== 'string') return null;
   // Control/format/whitespace characters are dropped before parsing so `java\tscript:` and
   // zero-width tricks can't hide a protocol; URL() then lower-cases the scheme.
-  const cleaned = href.replace(/[\p{Cc}\p{Cf}\s]/gu, '');
+  // Task 9.4c: every invisible/bidi character the review named (U+200B-U+200F, U+202A-U+202E,
+  // U+2066-U+2069, U+FEFF, U+00AD) is a Unicode format or control character, so \p{Cf}/\p{Cc}
+  // already strips all of them here. The scheme and protocol checks below run on `cleaned`, so a
+  // character that only hides a scheme (e.g. "java<ZWSP>script:") is re-checked after cleaning
+  // and refused; `cleaned`, not `href`, is what gets returned and rendered.
+  let cleaned = href.replace(/[\p{Cc}\p{Cf}\s]/gu, '');
+  // Task 9.4c fix round: decode each run of %XX sequences that forms valid UTF-8 (a malformed run
+  // throws and is left alone, byte-for-byte) and drop the whole run if the decoded text contains
+  // a control/format character — the same percent-encoded invisible/bidi attack, just hidden as
+  // bytes. Every other run (e.g. a genuine non-ASCII path such as "%C3%A9") is kept exactly as it
+  // was: we never decode a legitimate percent-encoded byte back to its raw character.
+  cleaned = cleaned.replace(PERCENT_RUN, (run) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+    return /[\p{Cc}\p{Cf}]/u.test(decoded) ? '' : run;
+  });
   if (!/^[a-z][a-z0-9+.-]*:/i.test(cleaned)) return null;
   try {
-    return SAFE_PROTOCOLS.has(new URL(cleaned).protocol) ? href : null;
+    return SAFE_PROTOCOLS.has(new URL(cleaned).protocol) ? cleaned : null;
   } catch {
     return null;
   }
@@ -74,7 +99,12 @@ const COMPONENTS: Components = {
 // Fenced code (``` or ~~~, to its matching close or the end of the text) and inline code spans
 // are left as-is.
 const CODE = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[`~]*[ \t]*(?=\n|$)|(?![\s\S]))|(`+)[\s\S]*?[^`]\2(?!`)/gm;
-const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?=\S)[^$\n]*?\S\$|\$\S\$/g;
+// Task 9.4c: the single-`$` alternative requires its last character (before the closing `$`) to
+// not be `-`, so a price range written as two separate `$n` tokens without a space ("$5-$10") is
+// never read as one maths span. The old one-character alternative (`\$\S\$`) is dropped: it can
+// never match anything the span above does not already match (a one-char span is the zero-length
+// case of `[^$\n]*?`), so it was unreachable.
+const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?=\S)[^$\n]*?[^-$\n\s]\$/g;
 const ASCII_PUNCT = /[!-/:-@[-`{-~]/g;
 
 function escapeMath(text: string): string {
