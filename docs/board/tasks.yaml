@@ -2506,7 +2506,8 @@ tasks:
   deps:
   - 5.10b
   - 9.4a
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
@@ -3879,9 +3880,28 @@ tasks:
   deps:
   - 8.5b
   risk: medium
-  status: running
+  status: done
   branch: m13/8.5d-preview-ports
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 51
+    tokens_in: 168
+    tokens_out: 996
+    cache_read_tokens: 2516031
+    wall_time_seconds: 144
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.3c
   milestone: M9
   title: '9.2 plan Q5: the package page and subscriptions.start refuse a package whose teacher is not verified (a teacher rejected after publishing can''t be started by typing the URL)'

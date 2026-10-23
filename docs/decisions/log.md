@@ -10,6 +10,35 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · `configuredMarket` moved to a new `turn/previewMarket.ts`, not `turn/runtime.ts` · decided by builder · risk: low
+- Decided: export `configuredMarket` from a new file `apps/web/src/turn/previewMarket.ts`
+  (still under the brief's allowed `apps/web/src/turn/**` path) instead of adding it to
+  `apps/web/src/turn/runtime.ts` as the brief's wording suggested.
+- Why: `turn/runtime.ts` has a 9.4a safety-invariant test
+  (`src/deploy/stack-config.test.ts`) that textually scans the file and fails if the string
+  `EDMATE_MARKET` ever appears in it, so that the student turn runtime can never read a market
+  from the environment by accident — only `users.market` picks a student's market. Adding
+  `configuredMarket` (which reads `env.EDMATE_MARKET`) to that file broke the test. A new,
+  clearly-commented file keeps the invariant intact while still only touching `apps/web/src/turn/**`.
+- risk: low — no behaviour change; `testChat/runtime.ts`'s import path changed, no other caller existed.
+
+---
+
+### 23 Oct 2026 · usage-ledger-source test is a unit test on `testChatDepsFor`, not a full HTTP route test · decided by builder · risk: low
+- Decided: implement brief item 3 as a focused test in `deps.test.ts` that calls
+  `testChatDepsFor` directly and exercises `.usage.record()`, rather than a full
+  `postTestTurn` HTTP-route integration test.
+- Why: a true route-level test needs a `Repositories` double providing
+  `transcriptStoreFor`/`turnConfigStoreFor`/`retrievalIndexFor`'s DB-backed inputs; no
+  in-memory `Repositories` double exists anywhere in the codebase today, and building one was
+  out of scope for this task's budget. The unit test still proves the exact thing the brief
+  asked for: a preview turn's usage job carries `source: 'teacher_preview'`.
+- risk: low — test-only; does not change what ships.
+
+Tool calls used: 131 (harness count: builder 131; the agent reported 82)
+
+---
+
 ### 23 Oct 2026 · 1.4b A confirm page and an address-bound cookie stop a bare GET from finishing sign-in · decided by builder · risk: high
 - Decided: Mailed links now open `/sign-in/confirm`, not Auth.js's `/api/auth/callback/email`. The reason: `@auth/core@0.41.3` spends the single-use token on the bare GET of its callback, before Edmate's `signIn` callback runs, so a scanner's or a stranger's GET can't be refused from inside Auth.js.
 - Decided: The `/api/auth/signin/email` POST sets a binding cookie only when the request is same-origin (Origin equals AUTH_URL's origin or, with no Origin header, `Sec-Fetch-Site: same-origin`) AND Auth.js answered with its `verify-request` redirect. An error, rate-limit or MissingCSRF answer gets no cookie (fix round: both reviewers found that a cross-site auto-submitting form could plant a cookie for the attacker's own address). The gate looks only at Auth.js's answer, which is the same for known and unknown addresses, so it adds no enumeration signal. The value is `<issuedAt>.HMAC-SHA256(AUTH_SECRET, "linkbound:" + issuedAt + ":" + normalizeEmail(email))`: httpOnly, SameSite=Lax, `__Host-` when secure, 15 minutes. The server refuses it once it is older than 15 minutes, so a captured value can't outlive Max-Age. The confirm page forwards straight to the callback only when this cookie matches the link's own `email` (lead answer to Q3, after the plan security review's CRITICAL). Anyone else sees the address and must click: a scanner, another browser, or a browser that asked for a link to a different address.

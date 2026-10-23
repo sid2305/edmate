@@ -13,20 +13,11 @@ import {
 } from '@edmate/content';
 import { systemClock, systemIds } from '../../turn/deps';
 import { devFactories, devModelEnabled } from '../../turn/devModel';
+import { configuredMarket } from '../../turn/previewMarket';
 import { errorName, TurnUnavailableError } from '../../turn/routes';
 import { anthropicFactories, contentDir, type Env, type RuntimeHooks } from '../../turn/runtime';
 import { previewEntitlementsFor, testChatDepsFor, testChatPorts, type TestChatProcess } from './deps';
 import type { TestChatBackend } from './routes';
-
-/** The student runtime's market rule: production fails closed without a locale pack for it. */
-function configuredMarket(env: Env, packs: ReadonlyMap<string, unknown>): string {
-  const market = env.EDMATE_MARKET?.trim() ?? '';
-  if (env.NODE_ENV === 'production') {
-    if (!packs.has(market)) throw new TurnUnavailableError('EDMATE_MARKET');
-    return market;
-  }
-  return market || 'global';
-}
 
 async function build(env: Env, hooks: RuntimeHooks): Promise<TestChatBackend> {
   const redisUrl = env.REDIS_URL?.trim();
