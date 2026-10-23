@@ -35,11 +35,12 @@ Isolation between teachers and between students is enforced here, not by Postgre
    `evidence_events` alone) and in `outline.ts` (on `topics` and `topic_chunks`), each with the
    scope's columns (`teacherId`, and `studentId` for `evidence_events`) in the same statement
    (`test/scope.test.ts` checks).
-9. **No personal details.** No method selects from the user table, so display names, emails and
-   phone numbers never leave through a repository, except `discovery.ts` (`users.name` only, never
-   email or phone, § 11 below) and `teacherProfiles.listPendingForStaff` (task 12.1a, § 11 below):
-   staff-only, name and email, never phone. `teacherQuestions.listForTeacher` never selects
-   `student_id`.
+9. **No personal details.** No method selects from the user table, so sign-in names, emails and
+   phone numbers never leave through a repository, except `discovery.ts` (`users.role` only, to
+   find teacher accounts -- task 9.2d moved the public display name to
+   `teacher_profiles.display_name`, so `discovery.ts` no longer reads `users.name`, § 11 below)
+   and `teacherProfiles.listPendingForStaff` (task 12.1a, § 11 below): staff-only, name and
+   email, never phone. `teacherQuestions.listForTeacher` never selects `student_id`.
 
 10. **Driver errors are scrubbed.** `createRepositories` wraps every method in `guarded()`: any
     error that is not a `RepositoryError` becomes `RepositoryError('failed')` whose cause keeps
@@ -53,10 +54,12 @@ Isolation between teachers and between students is enforced here, not by Postgre
     one, because which teacher owns a live agent is public on teacher pages.
     `packageVersions.liveForAgent({ agentId })` (task 9.3) returns the public `offer` of each of a
     live agent's live packages, never the teacher's internal config. `discovery.search` and
-    `discovery.teacherBySlug` (task 9.2) are the only unauthenticated reads anyone can reach from a
-    page: a verified teacher with a live agent and at least one live, sellable package shows a
-    `PublicTeacherCard` (slug, `users.name` as `displayName`, subject, a 280-character bio excerpt
-    on search cards, languages, `packageCount`, `hasFree`) or, by slug, a `PublicTeacherPage`
+    `discovery.teacherBySlug` (task 9.2, display name task 9.2d) are the only unauthenticated
+    reads anyone can reach from a page: a verified teacher with a live agent and at least one
+    live, sellable package shows a `PublicTeacherCard` (slug, `displayName` -- the teacher's own
+    `teacher_profiles.display_name`, falling back to `slug` when the teacher has not set one yet,
+    never the sign-in name `users.name` -- subject, a 280-character bio excerpt on search cards,
+    languages, `packageCount`, `hasFree`) or, by slug, a `PublicTeacherPage`
     (the card plus the agent's live ids, capped at 5) — never `userId`, email, phone, photo,
     payout ref or verification status. A pending, rejected, role-changed, draft-agent,
     suspended-agent or no-live-package teacher is absent from `search` and `null` by slug, the

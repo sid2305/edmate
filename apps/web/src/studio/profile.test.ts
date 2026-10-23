@@ -14,6 +14,7 @@ const ROW: TeacherProfileRow = {
   id: 'tp_1',
   teacherId: 't_asha',
   slug: 'asha-math',
+  displayName: 'Asha',
   subject: 'Math',
   bio: '',
   languages: [],

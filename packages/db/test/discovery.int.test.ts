@@ -64,6 +64,10 @@ interface DecoyOpts {
   packageLiveVersion?: number | null;
   extraDraftPackageVersion?: boolean;
   bioToken?: string;
+  /** The sign-in name (`users.name`); defaults to `Decoy <id>`, never shown publicly (9.2d). */
+  signInName?: string;
+  /** `teacher_profiles.display_name`; omitted (null) falls back to `slug` on public reads. */
+  displayName?: string;
 }
 
 /** A private (or otherwise non-public) teacher, inserted directly (bypasses the repository's
@@ -72,11 +76,12 @@ async function insertDecoy(o: DecoyOpts): Promise<void> {
   const role = o.role ?? 'teacher';
   await handle.db
     .insert(s.users)
-    .values({ id: o.id, name: `Decoy ${o.id}`, locale: 'en', market: 'US', role });
+    .values({ id: o.id, name: o.signInName ?? `Decoy ${o.id}`, locale: 'en', market: 'US', role });
   await handle.db.insert(s.teacherProfiles).values({
     id: `${o.id}-profile`,
     userId: o.id,
     slug: o.slug,
+    ...(o.displayName === undefined ? {} : { displayName: o.displayName }),
     subject: 'Decoy Subject',
     bio: `${o.bioToken ?? 'uniquedecoytoken'} for isolation tests only, never a real teacher`,
     languages: ['en'],
@@ -167,6 +172,20 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       slug: 'decoy-draft-version',
       extraDraftPackageVersion: true,
       bioToken: 'draftversiontoken',
+    });
+    // Task 9.2d acceptance: a verified teacher's public display name, never the sign-in name.
+    await insertDecoy({
+      id: 'public-teacher-with-name',
+      slug: 'public-teacher-with-name',
+      signInName: 'Private Signin Name',
+      displayName: 'Public Teaching Name',
+      bioToken: 'publicnametoken',
+    });
+    await insertDecoy({
+      id: 'public-teacher-no-name',
+      slug: 'public-teacher-no-name',
+      signInName: 'Private Signin Name',
+      bioToken: 'publicfallbacktoken',
     });
     await raw.query('analyze teacher_profiles');
   }, 60_000);
@@ -259,6 +278,24 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       'missing-entirely',
     ]) {
       expect(await repos.discovery.teacherBySlug({ slug }), slug).toBeNull();
+    }
+  });
+
+  it('the public display name shows, set or falling back to the slug; the sign-in name never does (task 9.2d)', async () => {
+    const { teachers: withName } = await repos.discovery.search({ q: 'publicnametoken' });
+    expect(withName).toHaveLength(1);
+    expect(withName[0]?.displayName).toBe('Public Teaching Name');
+    const pageWithName = await repos.discovery.teacherBySlug({ slug: 'public-teacher-with-name' });
+    expect(pageWithName?.displayName).toBe('Public Teaching Name');
+
+    const { teachers: noName } = await repos.discovery.search({ q: 'publicfallbacktoken' });
+    expect(noName).toHaveLength(1);
+    expect(noName[0]?.displayName).toBe('public-teacher-no-name');
+    const pageNoName = await repos.discovery.teacherBySlug({ slug: 'public-teacher-no-name' });
+    expect(pageNoName?.displayName).toBe('public-teacher-no-name');
+
+    for (const payload of [withName[0], pageWithName, noName[0], pageNoName]) {
+      expect(JSON.stringify(payload)).not.toContain('Private Signin Name');
     }
   });
 
