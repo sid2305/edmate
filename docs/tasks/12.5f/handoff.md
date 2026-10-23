@@ -27,4 +27,4 @@ None. Only the two named files and this handoff changed.
 - Why: BullMQ records the thrown value as the job's failed reason; throwing `undefined` would fail the job with no reason, and the message must not carry driver detail (error name only, matching the log line).
 - risk: high (safety-alert path in apps/worker/src/alerts).
 
-Tool calls used: 16
+Tool calls used: 20 (harness count: builder 20; the agent reported 20)
