@@ -2322,9 +2322,10 @@ tasks:
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.4a-turn-followups
   risk: risky
+  model: plan:sonnet build:opus
 - id: 8.2a
   milestone: M13
   title: '8.2 follow-ups (review MEDIUM/LOW): the worker''s storageConfigFromEnv fails closed in production like the web (no dev key pair, edmate-dev bucket or http; code-only log), before any deploy; studio
@@ -2567,7 +2568,9 @@ tasks:
   accept: collect(".") equals collect(abs root) in a test; .claude tests green
   deps:
   - 0.16a
-  status: todo
+  status: running
+  branch: m13/0.16b-metrics-root
+  model: plan:lead build:sonnet
 - id: 7.1a
   milestone: M7
   title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the
@@ -6299,9 +6302,31 @@ tasks:
   accept: a test shows a link with U+202E or U+200B renders without it; "$5-$10" keeps its markdown; the existing renderReply and no-raw-html tests still pass
   deps:
   - 9.4b
-  status: running
+  status: done
   branch: m13/9.4c-render-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 216
+    tokens_in: 702
+    tokens_out: 58806
+    cache_read_tokens: 23949595
+    wall_time_seconds: 1070
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
