@@ -5,10 +5,12 @@ into a throwaway temp dir and pointed to via EDMATE_TRANSCRIPTS_DIR, so the real
 never touched.
 """
 import json
+import os
 import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 TEAM_LEAD = Path(__file__).resolve().parents[1] / "skills" / "team-lead"
@@ -367,6 +369,42 @@ class BoardIds(unittest.TestCase):
             self.assertEqual(metrics.collect(self.root, "0.16a", "m0/0.16a-x")["tool_calls"], 1)
         finally:
             os.environ.pop("EDMATE_TRANSCRIPTS_DIR", None)
+
+
+class RepoRootResolution(unittest.TestCase):
+    """collect(".", ...) must resolve repo_root before deriving the transcript slug, so a
+    relative "." root finds the same transcripts as the absolute root (and isn't silently
+    all-zero)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="edmate-metrics-root-")
+        self.addCleanup(self.tmp.cleanup)
+        self.fake_home = Path(self.tmp.name) / "home"
+        self.fake_home.mkdir()
+        self.root = Path(self.tmp.name) / "repo"
+        (self.root / "docs" / "tasks" / TASK_ID).mkdir(parents=True)
+
+        home_patch = unittest.mock.patch.object(Path, "home", lambda: self.fake_home)
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
+
+        slug = str(self.root.resolve()).replace(os.sep, "-")
+        transcripts = self.fake_home / ".claude" / "projects" / slug
+        transcripts.mkdir(parents=True)
+        shutil.copy(FIXTURE, transcripts / "session-a.jsonl")
+
+        self.old_cwd = os.getcwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, self.old_cwd)
+
+    def test_transcripts_dir_matches_for_dot_and_absolute(self):
+        self.assertEqual(metrics.transcripts_dir("."), metrics.transcripts_dir(self.root))
+
+    def test_collect_dot_matches_absolute_and_is_non_zero(self):
+        dot_result = metrics.collect(".", TASK_ID, BRANCH)
+        abs_result = metrics.collect(self.root, TASK_ID, BRANCH)
+        self.assertEqual(dot_result, abs_result)
+        self.assertGreater(dot_result["tool_calls"], 0)
 
 
 if __name__ == "__main__":
