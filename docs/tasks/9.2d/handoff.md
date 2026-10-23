@@ -2,7 +2,7 @@
 
 ## Phase A
 
-**Status:** DONE (Phase A stopped PARTIAL; Phase B and the fix round finished it)
+**Status:** DONE
 
 ### What changed
 
