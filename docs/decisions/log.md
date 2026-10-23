@@ -10,6 +10,15 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.5f: store-failure flag in apps/worker/src/alerts · decided by builder · risk: high
+- Decided: a failed `store.record` is tracked with a boolean; an Error rethrows as is, any non-Error rejection (including `undefined`) is wrapped in an Error whose message is `safety_alert.store_failed: <error name>` and whose `cause` is the original value.
+- Why: BullMQ records the thrown value as the job's failed reason; throwing `undefined` would fail the job with no reason, and the message must not carry driver detail (error name only, matching the log line).
+- risk: high (safety-alert path in apps/worker/src/alerts).
+
+Tool calls used: 20 (harness count: builder 20; the agent reported 20)
+
+---
+
 ### 22 Oct 2026 · 8.2n: replace updates document kind · decided by builder · risk: high
 - Decided: `documents.startReplace` (packages/db/src/repositories/chunks.ts) accepts an optional
   `kind: 'material' | 'transcript'` and writes it in the same transaction as the new storage key;
