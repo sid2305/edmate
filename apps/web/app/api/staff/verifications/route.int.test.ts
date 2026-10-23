@@ -149,6 +149,29 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
     expect(teachers.map((t) => t.teacherId)).not.toContain(teacherB);
   });
 
+  it('a safety rejection (9.3e) is rejected with no error and audited with the flag', async () => {
+    // Teacher B has no agents here, so this proves only "rejected + audited"; the agent takedown
+    // proof lives in packages/db (teacher-profiles / entitlement-store int tests).
+    const before = await verifyRows(teacherB);
+    const res = await routes().POST(
+      call('POST', 'staff', {
+        teacherId: teacherB,
+        status: 'rejected',
+        reason: 'safety concern',
+        safety: true,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ teacherId: teacherB, verificationStatus: 'rejected' });
+    const rows = await verifyRows(teacherB);
+    expect(rows).toHaveLength(before.length + 1);
+    expect(rows.find((r) => r.reason === 'safety concern')).toMatchObject({
+      actor: staffId,
+      after: { verificationStatus: 'rejected', safety: true, takedowns: [] },
+    });
+    await expect(publish(teacherB)).rejects.toMatchObject({ kind: 'scope' });
+  });
+
   it('staff approve: audited, and only now can the teacher publish', async () => {
     const res = await routes().POST(call('POST', 'staff', { teacherId: teacherA, status: 'verified' }));
     expect(res.status).toBe(200);

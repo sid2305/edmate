@@ -66,6 +66,11 @@ export interface DecideInput {
   status: Decision;
   /** Free text; blank is omitted, anything else is trimmed. */
   reason?: string;
+  /**
+   * Task 9.3e: a safety-reason rejection (also cuts every student's access at once). Sent only
+   * as `safety: true` on a rejection; `false`, unset or an approval sends no key.
+   */
+  safety?: boolean;
 }
 
 /** POST one approve/reject. The reply must name the same teacher and status, else it's a failure. */
@@ -81,6 +86,7 @@ export async function decide(
       teacherId: input.teacherId,
       status: input.status,
       ...(reason === '' ? {} : { reason }),
+      ...(input.safety === true && input.status === 'rejected' ? { safety: true } : {}),
     }),
     cache: 'no-store',
   });

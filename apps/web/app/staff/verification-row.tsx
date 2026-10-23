@@ -1,6 +1,8 @@
 'use client';
 // Task 12.1b: one pending teacher in the staff console, with an optional reason and the approve /
 // reject buttons. The reason is this row's own state; the busy flag belongs to the parent view.
+// Task 9.3e: a "safety concern" checkbox (row state too) makes Reject a safety rejection; Approve
+// always sends `false`.
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import type { Decision, QueueItem } from './client';
@@ -14,14 +16,17 @@ export interface VerificationRowProps {
   pending: Decision | null;
   /** Any action is in flight (one at a time). */
   disabled: boolean;
-  onDecide(status: Decision, reason: string): void;
+  onDecide(status: Decision, reason: string, safety: boolean): void;
 }
 
 export function VerificationRow({ item, pending, disabled, onDecide }: VerificationRowProps) {
   const t = useTranslations('staff');
   const [reason, setReason] = useState('');
+  const [safety, setSafety] = useState(false);
   const headingId = `staff-row-${item.teacherId}`;
   const reasonId = `staff-reason-${item.teacherId}`;
+  const safetyId = `staff-safety-${item.teacherId}`;
+  const safetyHintId = `staff-safety-hint-${item.teacherId}`;
   return (
     <li className="staff-row" aria-labelledby={headingId}>
       <h2 id={headingId}>{item.slug}</h2>
@@ -42,11 +47,24 @@ export function VerificationRow({ item, pending, disabled, onDecide }: Verificat
           onChange={(e) => setReason(e.target.value)}
         />
       </p>
+      <p className="staff-field">
+        <input
+          id={safetyId}
+          type="checkbox"
+          checked={safety}
+          aria-describedby={safetyHintId}
+          onChange={(e) => setSafety(e.target.checked)}
+        />{' '}
+        <label htmlFor={safetyId}>{t('safetyLabel')}</label>
+      </p>
+      <p id={safetyHintId} className="staff-hint">
+        {t('safetyHint')}
+      </p>
       <p className="staff-actions">
-        <button type="button" disabled={disabled} onClick={() => onDecide('verified', reason)}>
+        <button type="button" disabled={disabled} onClick={() => onDecide('verified', reason, false)}>
           {pending === 'verified' ? t('working') : t('approve')}
         </button>{' '}
-        <button type="button" disabled={disabled} onClick={() => onDecide('rejected', reason)}>
+        <button type="button" disabled={disabled} onClick={() => onDecide('rejected', reason, safety)}>
           {pending === 'rejected' ? t('working') : t('reject')}
         </button>
       </p>

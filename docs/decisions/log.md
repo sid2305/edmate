@@ -10,6 +10,29 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.3e Phase A: safety rejection takes down live agents in packages/db/src/repositories · decided by builder · risk: high
+- Decided: `setVerification` takes a `safety: true` flag (rejections only; refine makes it `invalid` on approval) and, in its transaction, takes down every live agent of the teacher via the new module-internal `takeDownAgentInTx` (category `harmful`, note = reason, agent `suspended`, audited; lock order role → profile → agents asc id → takedown rows). The `teacher.verify` audit row names the takedown ids. A re-verification lifts nothing. `takedowns.lift` returns an agent to `live` only when its teacher's profile is `verified`; with no profile, `pending`, `rejected` or any other state it returns it to `draft` (profile read FOR SHARE before the agent lock). Phase A first built "not `rejected`"; the lead kept verified-only and Phase A2 built it, so a safety-rejected teacher who edits their subject (back to `pending`) can't be reopened by a routine lift. A plain rejection is unchanged. The student sees the existing takedown texts; no new error code.
+- Why: B-46 (c): a safety rejection must cut existing subscribers off at once; every student path already refuses a non-live agent, so reusing 12.2b's takedown write needs no migration, contract or harness change and gives staff an audit trail and lift path. The lift rule closes the security review's MEDIUM (a routine lift reopening a rejected teacher).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.3e Phase A: takedowns.create checks a linked report before inserting the takedown row · decided by builder · risk: low
+- Decided: to share the agent write with setVerification, `create` now locks and checks the linked report before inserting the takedown row (it used to insert first). Same rows and audit rows are written; a bad report still writes nothing (the transaction rolls back either way).
+- Why: the helper writes the takedown row and its audit row together; the new row is invisible to other transactions, so the contended lock order (role → target → report) is unchanged.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.3e Phase B: staff safety flag in apps/web/app/api/staff/verifications · decided by builder · risk: high
+- Decided: the staff verification API accepts an optional `safety` boolean on a decision; `safety: true` is valid only with `status: 'rejected'` (else 400 `validation`) and is passed to `setVerification` only when `true`, so `false` and an absent key are the same plain rejection. The staff console adds a "safety concern" checkbox per row (with a hint saying existing subscribers lose access at once); Reject sends it, Approve always sends `false`, the client only puts `safety: true` in the body on a rejection, and a safety rejection shows its own notice. The body stays strict and `by` is still the session's principal.
+- Why: B-46 (c) needs staff to mark a rejection as safety-related; the refine mirrors the repository's own so a bad combination never reaches SQL, and dropping `false` keeps a plain rejection's call and audit row exactly as before.
+- risk: high
+
+Tool calls used: 114 (harness count: Phase A 51 + Phase A2+B 63; the agents reported 33 + 52)
+
+---
+
 ### 22 Oct 2026 · 9.4a: unentitled session starts count toward the limit in apps/web/src/turn/routes.ts · decided by lead · risk: low
 
 - Decided: keep counting session starts for an unknown or unentitled agent against the student's own 10-minute window (security-reviewer LOW, wontfix).

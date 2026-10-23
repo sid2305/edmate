@@ -4,6 +4,9 @@
 // audit row in the same transaction. The staff id is always the session's principal: the body is
 // a strict object, so a `by` (or any other unknown key) is a 400, never read. Repository errors map
 // to fixed codes; only the error's name is logged, never its message (it can hold personal data).
+// Task 9.3e: a rejection may carry `safety: true` (B-46 (c)): setVerification then takes down the
+// teacher's live agents in the same transaction, so existing subscribers lose access at once. The
+// flag is refused on an approval (400) and passed on only when `true`.
 import { RepositoryError, type Repositories, type TeacherVerificationQueueRow } from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -15,12 +18,18 @@ import { readJson, TOO_LARGE } from '../../../../src/studio/routes';
 /** setVerification's own reason cap (packages/db VerificationInput). */
 export const MAX_REASON_CHARS = 500;
 
-/** The one decision a staff user sends. Strict: unknown keys (a `by`, a `userId`) are refused. */
-const DecisionBody = z.strictObject({
-  teacherId: z.string().min(1).max(200),
-  status: z.enum(['verified', 'rejected']),
-  reason: z.string().trim().min(1).max(MAX_REASON_CHARS).optional(),
-});
+/**
+ * The one decision a staff user sends. Strict: unknown keys (a `by`, a `userId`) are refused.
+ * `safety: true` is only valid on a rejection (the repository's own refine, checked here first).
+ */
+const DecisionBody = z
+  .strictObject({
+    teacherId: z.string().min(1).max(200),
+    status: z.enum(['verified', 'rejected']),
+    reason: z.string().trim().min(1).max(MAX_REASON_CHARS).optional(),
+    safety: z.boolean().optional(),
+  })
+  .refine((b) => b.safety !== true || b.status === 'rejected');
 
 /** What the console shows for one pending teacher (no row id, no status: they're all pending). */
 export interface QueueItem {
@@ -94,11 +103,16 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
       if (raw === TOO_LARGE) return apiError('input_too_large', MSG.tooLarge, 413);
       const body = DecisionBody.safeParse(raw);
       if (!body.success) return validation();
-      const { teacherId, status, reason } = body.data;
+      const { teacherId, status, reason, safety } = body.data;
       try {
         const row = await backend.repos().teacherProfiles.setVerification(
           { teacherId },
-          { status, by: ctx.principal.userId, ...(reason === undefined ? {} : { reason }) },
+          {
+            status,
+            by: ctx.principal.userId,
+            ...(reason === undefined ? {} : { reason }),
+            ...(safety === true ? { safety: true } : {}),
+          },
         );
         return ok({ teacherId: row.teacherId, verificationStatus: row.verificationStatus });
       } catch (error) {

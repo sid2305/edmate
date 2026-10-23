@@ -99,6 +99,10 @@ describe('teacherProfiles input checks', () => {
     ['a malformed by', { status: 'verified', by: 'a b' }],
     ['an empty reason', { status: 'verified', by: 'stf_1', reason: '' }],
     ['an extra key naming a teacher', { status: 'verified', by: 'stf_1', teacherId: 'tch_b' }],
+    // Task 9.3e: the safety flag is a boolean and only ever goes with a rejection.
+    ['safety on an approval', { status: 'verified', by: 'stf_1', safety: true }],
+    ['a non-boolean safety', { status: 'rejected', by: 'stf_1', safety: 'yes' }],
+    ['a numeric safety', { status: 'rejected', by: 'stf_1', safety: 1 }],
   ])('setVerification rejects %s as invalid before any SQL', async (_label, input) => {
     expect(await failure(repo.setVerification(scope, input as never))).toEqual({
       kind: 'invalid',

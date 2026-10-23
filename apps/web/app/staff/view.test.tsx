@@ -22,6 +22,11 @@ const ASHA: QueueItem = {
 };
 const BEN: QueueItem = { teacherId: 'tch_b', slug: 'ben-physics', subject: 'Physics', name: 'Ben', email: null };
 
+const SAFETY_LABEL =
+  "Safety concern: also stop every student's access to this teacher's agent now";
+const SAFETY_HINT =
+  'Use this only for a safety reason. Students who already subscribed lose access at once; a paperwork rejection leaves them until their plan ends.';
+
 const never = () => new Promise<never>(() => undefined);
 
 function rowOf(slug: string) {
@@ -48,7 +53,12 @@ describe('StaffQueueView', () => {
     renderIntl(<StaffQueueView initial={[ASHA, BEN]} decide={decide} />);
     fireEvent.click(within(rowOf('asha-math')).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(screen.queryByRole('listitem', { name: 'asha-math' })).toBeNull());
-    expect(decide).toHaveBeenCalledWith({ teacherId: 'tch_a', status: 'verified', reason: '' });
+    expect(decide).toHaveBeenCalledWith({
+      teacherId: 'tch_a',
+      status: 'verified',
+      reason: '',
+      safety: false,
+    });
     expect(screen.getByRole('status')).toHaveTextContent('asha-math is now verified.');
     expect(within(rowOf('ben-physics')).getByRole('button', { name: 'Approve' })).toBeEnabled();
   });
@@ -66,8 +76,61 @@ describe('StaffQueueView', () => {
       teacherId: 'tch_a',
       status: 'rejected',
       reason: 'Name does not match',
+      safety: false,
     });
     expect(screen.getByText('No teachers are waiting for verification.')).toBeInTheDocument();
+  });
+
+  it('safety concern + Reject sends `safety: true` and shows the safety notice (9.3e)', async () => {
+    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    renderIntl(<StaffQueueView initial={[ASHA, BEN]} decide={decide} />);
+    const row = rowOf('asha-math');
+    const box = within(row).getByRole('checkbox', { name: SAFETY_LABEL });
+    expect(box).not.toBeChecked();
+    expect(box).toHaveAccessibleDescription(SAFETY_HINT);
+    fireEvent.click(box);
+    fireEvent.click(within(row).getByRole('button', { name: 'Reject' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'asha-math was rejected and their agent is no longer available to students.',
+      ),
+    );
+    expect(decide).toHaveBeenCalledWith({
+      teacherId: 'tch_a',
+      status: 'rejected',
+      reason: '',
+      safety: true,
+    });
+  });
+
+  it('Approve never sends the safety flag, even with the box ticked (9.3e)', async () => {
+    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'verified' as const }));
+    renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
+    const row = rowOf('asha-math');
+    fireEvent.click(within(row).getByRole('checkbox', { name: SAFETY_LABEL }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Approve' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('asha-math is now verified.'),
+    );
+    expect(decide).toHaveBeenCalledWith({
+      teacherId: 'tch_a',
+      status: 'verified',
+      reason: '',
+      safety: false,
+    });
+  });
+
+  it('a safety box ticked then unticked is a plain rejection (9.3e)', async () => {
+    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
+    const row = rowOf('asha-math');
+    const box = within(row).getByRole('checkbox', { name: SAFETY_LABEL });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    fireEvent.click(within(row).getByRole('button', { name: 'Reject' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('asha-math was rejected.'));
+    expect(screen.getByRole('status')).not.toHaveTextContent('no longer available');
+    expect(decide).toHaveBeenCalledWith(expect.objectContaining({ safety: false }));
   });
 
   it('while a decision is in flight every action is disabled and the row says so', async () => {
