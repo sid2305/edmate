@@ -6421,7 +6421,7 @@ tasks:
   model: plan:opus build:opus
 - id: 10.1c
   milestone: M10
-  title: The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53)
+  title: 'The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53); 10.1b review LOWs (suite hardening only, no caller change): the suite fails an adapter that changes provider state and then throws unsupported; expectFailing is not a public suite option (mutant tests only); Secret.of sets a minimum length and refuses invisible-only secrets'
   accept: the shared contract suite passes on the adapter with recorded fixtures; the sandbox test is skipped without keys.
   deps:
   - 10.1b
@@ -6707,7 +6707,7 @@ tasks:
 - id: '10.8'
   milestone: M10
   title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3); 10.1a review: match snapshots on subscriptionId
-    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names'
+    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names; 10.1b review: move the offer-name refusal cases into packages/contracts fixtures; an eslint no-restricted-imports rule for @edmate/payments/testing outside tests in apps/*'
   accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
   deps:
   - '10.2'
