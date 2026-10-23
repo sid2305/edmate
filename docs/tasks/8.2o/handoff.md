@@ -90,4 +90,4 @@ already there.
 
 None.
 
-Tool calls used: 22 (first builder) + 16 (this session)
+Tool calls used: 67 (first builder 22 as it reported, stopped at the usage limit; finisher 45 by harness count, it reported 16)
