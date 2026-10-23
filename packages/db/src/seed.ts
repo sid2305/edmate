@@ -215,6 +215,7 @@ export function buildDemoSeed(content: DemoTeacherContent, options: DemoSeedOpti
         id: DEMO_IDS.teacherProfile,
         userId: teacherId,
         slug: 'demo-teacher',
+        displayName: 'Demo Teacher',
         subject: course.title,
         bio: course.description,
         languages: ['en'],

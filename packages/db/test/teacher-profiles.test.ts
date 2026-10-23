@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../src/client.js';
 import { RepositoryError } from '../src/index.js';
-import { teacherProfilesRepo } from '../src/repositories/teacher-profiles.js';
+import { DisplayName, teacherProfilesRepo } from '../src/repositories/teacher-profiles.js';
 
 const noDb = new Proxy(
   {},
@@ -58,7 +58,7 @@ describe('teacherProfiles input checks', () => {
   ])('every method rejects %s as scope', async (_label, bad) => {
     const s = bad as never;
     for (const [m, p] of [
-      ['create', repo.create(s, { slug: 'abc', subject: 'Maths' })],
+      ['create', repo.create(s, { slug: 'abc', displayName: 'Abc', subject: 'Maths' })],
       ['get', repo.get(s)],
       ['update', repo.update(s, { subject: 'Maths' })],
       ['setVerification', repo.setVerification(s, { status: 'verified', by: 'stf_1' })],
@@ -69,23 +69,98 @@ describe('teacherProfiles input checks', () => {
   });
 
   it.each([
-    ['verificationStatus', { slug: 'abc', subject: 'Maths', verificationStatus: 'verified' }],
-    ['photo', { slug: 'abc', subject: 'Maths', photo: 'https://example.test/p.png' }],
-    ['payoutAccountRef', { slug: 'abc', subject: 'Maths', payoutAccountRef: 'acct_1' }],
-    ['no slug', { subject: 'Maths' }],
-    ['an upper-case slug', { slug: 'Abc', subject: 'Maths' }],
-    ['a slug with a space', { slug: 'a bc', subject: 'Maths' }],
-    ['a two-letter slug', { slug: 'ab', subject: 'Maths' }],
-    ['a 61-letter slug', { slug: 'a'.repeat(61), subject: 'Maths' }],
-    ['a leading hyphen', { slug: '-abc', subject: 'Maths' }],
-    ['no subject', { slug: 'abc' }],
-    ['an over-long bio', { slug: 'abc', subject: 'Maths', bio: 'x'.repeat(2001) }],
-    ['a bad language tag', { slug: 'abc', subject: 'Maths', languages: ['english!'] }],
-    ['too many languages', { slug: 'abc', subject: 'Maths', languages: Array(11).fill('en') }],
+    ['verificationStatus', { slug: 'abc', displayName: 'Abc', subject: 'Maths', verificationStatus: 'verified' }],
+    ['photo', { slug: 'abc', displayName: 'Abc', subject: 'Maths', photo: 'https://example.test/p.png' }],
+    ['payoutAccountRef', { slug: 'abc', displayName: 'Abc', subject: 'Maths', payoutAccountRef: 'acct_1' }],
+    ['no slug', { displayName: 'Abc', subject: 'Maths' }],
+    ['no displayName', { slug: 'abc', subject: 'Maths' }],
+    ['an upper-case slug', { slug: 'Abc', displayName: 'Abc', subject: 'Maths' }],
+    ['a slug with a space', { slug: 'a bc', displayName: 'Abc', subject: 'Maths' }],
+    ['a two-letter slug', { slug: 'ab', displayName: 'Abc', subject: 'Maths' }],
+    ['a 61-letter slug', { slug: 'a'.repeat(61), displayName: 'Abc', subject: 'Maths' }],
+    ['a leading hyphen', { slug: '-abc', displayName: 'Abc', subject: 'Maths' }],
+    ['no subject', { slug: 'abc', displayName: 'Abc' }],
+    ['an over-long bio', { slug: 'abc', displayName: 'Abc', subject: 'Maths', bio: 'x'.repeat(2001) }],
+    ['a bad language tag', { slug: 'abc', displayName: 'Abc', subject: 'Maths', languages: ['english!'] }],
+    [
+      'too many languages',
+      { slug: 'abc', displayName: 'Abc', subject: 'Maths', languages: Array(11).fill('en') },
+    ],
   ])('create rejects %s as invalid before any SQL', async (_label, input) => {
     expect(await failure(repo.create(scope, input as never))).toEqual({
       kind: 'invalid',
       method: 'teacherProfiles.create',
+    });
+  });
+
+  // Task 9.2d: the public display name a teacher sets in onboarding. Every row below is invalid
+  // before any SQL, on both create and update (minimally, { displayName } alone is already
+  // non-empty so update's "at least one key" refine never masks the displayName failure).
+  const BAD_DISPLAY_NAMES: [string, string][] = [
+    ['empty', ''],
+    ['one character', 'A'],
+    ['61 characters', 'a'.repeat(61)],
+    ['whitespace only', '   '],
+    ['no letter', '123'],
+    ['a URL (://)', 'https://x.y'],
+    ['a URL (www.)', 'www.example.com'],
+    ['a word.tld shape', 'ada.example.com'],
+    ['an email', 'ada@example.com'],
+    ['a phone number (spaced)', '+1 (415) 555-0100'],
+    ['a phone number (dotted)', '415.555.0100'],
+    ['a zero-width character', 'A​da'],
+    ['a bidi override', '‮Ada'],
+    ['an emoji', 'Ada 😀'],
+    ['a lone newline', '\n'],
+    ['the platform name', 'Edmate Support'],
+    ['an impersonation word', 'Official Tutor'],
+  ];
+
+  it.each(BAD_DISPLAY_NAMES)('create rejects displayName %s as invalid before any SQL', async (_label, bad) => {
+    expect(
+      await failure(repo.create(scope, { slug: 'abc', subject: 'Maths', displayName: bad } as never)),
+    ).toEqual({ kind: 'invalid', method: 'teacherProfiles.create' });
+  });
+
+  it.each(BAD_DISPLAY_NAMES)('update rejects displayName %s as invalid before any SQL', async (_label, bad) => {
+    expect(await failure(repo.update(scope, { displayName: bad } as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.update',
+    });
+  });
+
+  it('create without displayName is invalid before any SQL', async () => {
+    expect(await failure(repo.create(scope, { slug: 'abc', subject: 'Maths' } as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.create',
+    });
+  });
+
+  it('update({}) stays invalid even though displayName now exists (the non-empty refine)', async () => {
+    expect(await failure(repo.update(scope, {}))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.update',
+    });
+  });
+
+  describe('DisplayName schema', () => {
+    it('trims and collapses internal whitespace runs to one space', () => {
+      expect(DisplayName.parse('  Ada   Lovelace ')).toBe('Ada Lovelace');
+    });
+
+    it.each([
+      'Dr. Smith',
+      'J.R.R. Tolkien',
+      "Mary-Jane O'Neil",
+      'Teacher 2024',
+      'Søren Ålesund',
+      'प्रिया',
+    ])('accepts %s', (good) => {
+      expect(() => DisplayName.parse(good)).not.toThrow();
+    });
+
+    it.each(BAD_DISPLAY_NAMES)('rejects %s', (_label, bad) => {
+      expect(() => DisplayName.parse(bad)).toThrow();
     });
   });
 

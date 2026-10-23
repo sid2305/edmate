@@ -22,6 +22,7 @@ const PROFILE: TeacherProfileRow = {
   id: 'tp_1',
   teacherId: 'usr_t1',
   slug: 'fictional-teacher',
+  displayName: 'Fictional Teacher',
   subject: 'Maths',
   bio: '',
   languages: ['en'],

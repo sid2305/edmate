@@ -107,6 +107,7 @@ export function buildDiscoverySeed(n: number): DiscoverySeed {
       id: `seed-teacher-profile-${num}`,
       userId,
       slug: `seed-teacher-${num}`,
+      displayName: `Seed Teacher ${num}`,
       subject,
       bio:
         `Seed Teacher ${num} teaches ${subject} to beginners and advanced students preparing ` +

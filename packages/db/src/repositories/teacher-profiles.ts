@@ -3,6 +3,11 @@
 // never sets their own verification: no teacher-facing input has a `verificationStatus` key, and
 // the input objects are strict, so such a key is `invalid` before any SQL.
 //
+// Task 9.2d: `displayName` is the public name a teacher sets in onboarding (required at create,
+// optional in a patch; omitting it in a patch leaves it unchanged). It never resets verification
+// (unlike a subject change) and is validated server-side only (`DisplayName`, below) -- no URL,
+// email or phone shape, no platform-impersonation word, collapsed to one line.
+//
 // `photo` has no input yet (the column stays null until a storage port exists, 8.2 or later) and
 // `payoutAccountRef` belongs to payments (M10); neither is read or written here.
 import { and, asc, eq, sql } from 'drizzle-orm';
@@ -48,8 +53,51 @@ const Bio = z.string().max(2000);
 export const LanguageTag = z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/);
 const Languages = z.array(LanguageTag).max(10);
 
+// Task 9.2d: the public display name a teacher sets in onboarding. Only letters, marks, digits,
+// space, `'`, `.` and `-` -- the same intent as the `NOT_ONE_LINE` set in
+// `packages/contracts/src/payments.ts` (control, format, separator, surrogate, private-use and
+// Hangul-filler characters), copied as a comment here, not imported (that constant is not
+// exported and `packages/db` does not import from `packages/contracts` for this).
+const DISPLAY_NAME_SHAPE = /^[\p{L}\p{M}\p{N} '.-]+$/u;
+const DISPLAY_NAME_HAS_LETTER = /\p{L}/u;
+/** `://`, `www.` (case-insensitive) or a `word.tld` run with no space (no URL shape). */
+const DISPLAY_NAME_URL_SHAPE = /:\/\/|www\./i;
+const DISPLAY_NAME_WORD_TLD = /[\p{L}\p{N}-]\.[a-z]{2,}/iu;
+/** Seven or more digits, optionally separated by space, `(`, `)`, `.` or `-` (no phone number). */
+const DISPLAY_NAME_PHONE_LIKE = /(?:\d[\s().-]*){7,}/;
+/** No impersonation of the platform or staff (whole word, case-insensitive). */
+const DISPLAY_NAME_IMPERSONATION = /\b(edmate|staff|admin|official)\b/i;
+
+/**
+ * The public name a teacher sets in onboarding, shown on discovery and the teacher page instead
+ * of the sign-in name (task 9.2d). Trimmed, internal whitespace runs collapsed to one space,
+ * then 2-60 characters with at least one letter; no web address, email, phone number or
+ * platform-impersonation word. Exported for the unit test.
+ */
+export const DisplayName = z
+  .string()
+  .transform((s) => s.trim().replace(/\s+/g, ' '))
+  .pipe(
+    z
+      .string()
+      .min(2)
+      .max(60)
+      .refine((s) => DISPLAY_NAME_HAS_LETTER.test(s), 'needs at least one letter')
+      .refine(
+        (s) => DISPLAY_NAME_SHAPE.test(s),
+        "letters, numbers, spaces, ' . - only",
+      )
+      .refine(
+        (s) => !DISPLAY_NAME_URL_SHAPE.test(s) && !DISPLAY_NAME_WORD_TLD.test(s),
+        'no web address',
+      )
+      .refine((s) => !DISPLAY_NAME_PHONE_LIKE.test(s), 'no phone number')
+      .refine((s) => !DISPLAY_NAME_IMPERSONATION.test(s), 'no platform name'),
+  );
+
 const CreateInput = z.strictObject({
   slug: Slug,
+  displayName: DisplayName,
   subject: Subject,
   bio: Bio.optional(),
   languages: Languages.optional(),
@@ -58,6 +106,7 @@ const CreateInput = z.strictObject({
 /** What a teacher may edit. No verificationStatus, payoutAccountRef, photo or slug key. */
 const UpdateInput = z
   .strictObject({
+    displayName: DisplayName.optional(),
     subject: Subject.optional(),
     bio: Bio.optional(),
     languages: Languages.optional(),
@@ -86,6 +135,7 @@ const columns = {
   id: teacherProfiles.id,
   userId: teacherProfiles.userId,
   slug: teacherProfiles.slug,
+  displayName: teacherProfiles.displayName,
   subject: teacherProfiles.subject,
   bio: teacherProfiles.bio,
   languages: teacherProfiles.languages,
@@ -114,6 +164,7 @@ export function teacherProfilesRepo(db: Db) {
             .values({
               userId: teacherId,
               slug: p.slug,
+              displayName: p.displayName,
               subject: p.subject,
               ...(p.bio === undefined ? {} : { bio: p.bio }),
               ...(p.languages === undefined ? {} : { languages: p.languages }),
@@ -150,6 +201,7 @@ export function teacherProfilesRepo(db: Db) {
       const [row] = await db
         .update(teacherProfiles)
         .set({
+          ...(p.displayName === undefined ? {} : { displayName: p.displayName }),
           ...(p.subject === undefined
             ? {}
             : {
