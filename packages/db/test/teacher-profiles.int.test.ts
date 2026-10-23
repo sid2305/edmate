@@ -230,6 +230,223 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
   });
 
+  // Task 9.3e (B-46 (c)): a safety-reason rejection takes down every live agent of the teacher in
+  // the same transaction (one `harmful` takedown row each, agent suspended, audited); a plain
+  // rejection writes no takedown. Each case gets a fresh teacher (raw SQL, like takedowns tests).
+  describe('setVerification with safety: true takes the teacher\'s live agents down', () => {
+    let k = 0;
+    async function makeTeacher(liveAgents: number) {
+      const n = ++k;
+      const tid = `tch_sr${n}`;
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, 'SR Teacher', 'en', 'test', 'teacher')`,
+        [tid],
+      );
+      await raw.query(
+        `insert into teacher_profiles (id, user_id, slug, subject, verification_status)
+         values ($1, $2, $3, 'Maths', 'verified')`,
+        [`tp_sr${n}`, tid, `sr-teacher-${n}`],
+      );
+      const live = Array.from({ length: liveAgents }, (_, i) => `agt_sr${n}_${i}`);
+      for (const id of live) {
+        await raw.query(
+          `insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`,
+          [id, tid],
+        );
+      }
+      const draft = `agt_sr${n}_draft`;
+      await raw.query(`insert into agents (id, teacher_id, status) values ($1, $2, 'draft')`, [
+        draft,
+        tid,
+      ]);
+      return { scope: { teacherId: tid }, tid, live, draft };
+    }
+    const agentStatus = async (id: string) =>
+      (await raw.query<{ s: string }>('select status as s from agents where id = $1', [id]))
+        .rows[0]?.s;
+    const takedownsFor = async (tid: string) =>
+      (
+        await raw.query<{ id: string; target: string; reason: string; status: string; staff_actions: unknown }>(
+          `select id, target, reason, status, staff_actions from takedowns
+           where target in (select 'agent:' || id from agents where teacher_id = $1) order by target`,
+          [tid],
+        )
+      ).rows;
+    const auditFor = async (tid: string) =>
+      (
+        await raw.query<{ action: string; target: string; after: Record<string, unknown> }>(
+          `select action, target, after from audit_log where teacher_id = $1 order by created_at, id`,
+          [tid],
+        )
+      ).rows;
+    const rowCount = async () =>
+      Number(
+        (
+          await raw.query<{ n: string }>(
+            `select (select count(*) from takedowns) + (select count(*) from audit_log)
+                    + (select count(*) from agents where status = 'suspended') as n`,
+          )
+        ).rows[0]?.n,
+      );
+
+    it('suspends every live agent with one harmful takedown each; the draft is untouched', async () => {
+      const t = await makeTeacher(2);
+      const row = await repos.teacherProfiles.setVerification(t.scope, {
+        status: 'rejected',
+        by: STAFF,
+        reason: 'unsafe advice to students',
+        safety: true,
+      });
+      expect(row.verificationStatus).toBe('rejected');
+      expect(await statusOf(t.tid)).toBe('rejected');
+      for (const id of t.live) expect(await agentStatus(id)).toBe('suspended');
+      expect(await agentStatus(t.draft)).toBe('draft');
+
+      const tds = await takedownsFor(t.tid);
+      expect(tds.map((r) => [r.target, r.reason, r.status])).toEqual(
+        t.live.map((id) => [`agent:${id}`, 'harmful', 'active']),
+      );
+      for (const r of tds) {
+        expect(r.staff_actions).toEqual([
+          expect.objectContaining({
+            actor: STAFF,
+            action: 'create',
+            note: 'unsafe advice to students',
+            source: 'teacher.verify',
+          }),
+        ]);
+      }
+
+      const audit = await auditFor(t.tid);
+      expect(audit.filter((a) => a.action === 'takedown.create')).toHaveLength(2);
+      const verify = audit.filter((a) => a.action === 'teacher.verify');
+      expect(verify).toHaveLength(1);
+      expect(verify[0]?.after).toEqual({
+        verificationStatus: 'rejected',
+        safety: true,
+        takedowns: tds.map((r) => r.id),
+      });
+      // Each takedown audit row has the same shape as a staff agent takedown.
+      for (const a of audit.filter((x) => x.action === 'takedown.create')) {
+        expect(a.after).toMatchObject({
+          status: 'active',
+          category: 'harmful',
+          reportId: null,
+          agentStatus: 'suspended',
+        });
+      }
+    });
+
+    it('a plain rejection leaves the agents live, writes no takedown and no safety key', async () => {
+      const t = await makeTeacher(2);
+      await repos.teacherProfiles.setVerification(t.scope, { status: 'rejected', by: STAFF });
+      for (const id of t.live) expect(await agentStatus(id)).toBe('live');
+      expect(await takedownsFor(t.tid)).toEqual([]);
+      const audit = await auditFor(t.tid);
+      expect(audit.map((a) => a.action)).toEqual(['teacher.verify']);
+      expect(audit[0]?.after).toEqual({ verificationStatus: 'rejected' });
+    });
+
+    it('a safety rejection with no live agent is a rejection only', async () => {
+      const t = await makeTeacher(0);
+      await repos.teacherProfiles.setVerification(t.scope, {
+        status: 'rejected',
+        by: STAFF,
+        safety: true,
+      });
+      expect(await statusOf(t.tid)).toBe('rejected');
+      expect(await agentStatus(t.draft)).toBe('draft');
+      expect(await takedownsFor(t.tid)).toEqual([]);
+      const audit = await auditFor(t.tid);
+      expect(audit.map((a) => a.action)).toEqual(['teacher.verify']);
+      expect(audit[0]?.after).toEqual({
+        verificationStatus: 'rejected',
+        safety: true,
+        takedowns: [],
+      });
+    });
+
+    it('an agent already taken down is not taken down twice', async () => {
+      const t = await makeTeacher(2);
+      const { id } = await repos.takedowns.create(STAFF, {
+        kind: 'agent',
+        targetId: t.live[0]!,
+        category: 'copyright',
+      });
+      // Stale state: a live agent that still has an active takedown row (never written by the
+      // repositories; guards the one-active-takedown-per-target rule).
+      await raw.query(
+        `insert into takedowns (id, target, reason, status) values ('td_sr_stale', $1, 'other', 'active')`,
+        [`agent:${t.live[1]!}`],
+      );
+      await repos.teacherProfiles.setVerification(t.scope, {
+        status: 'rejected',
+        by: STAFF,
+        safety: true,
+      });
+      for (const a of t.live) expect(await agentStatus(a)).toBe('suspended');
+      const tds = await takedownsFor(t.tid);
+      expect(tds.map((r) => [r.id, r.status])).toEqual([
+        [id, 'active'],
+        ['td_sr_stale', 'active'],
+      ]);
+      const verify = (await auditFor(t.tid)).filter((a) => a.action === 'teacher.verify');
+      expect(verify[0]?.after).toEqual({
+        verificationStatus: 'rejected',
+        safety: true,
+        takedowns: ['td_sr_stale'],
+      });
+    });
+
+    it.each([
+      ['a non-staff user', () => FORMER_STAFF],
+      ['the teacher themself', () => 'self'],
+    ])('%s with safety: true is scope and nothing is written', async (_label, by) => {
+      const t = await makeTeacher(2);
+      const before = await rowCount();
+      const who = by() === 'self' ? t.tid : by();
+      expect(
+        await failure(
+          repos.teacherProfiles.setVerification(t.scope, {
+            status: 'rejected',
+            by: who,
+            safety: true,
+          }),
+        ),
+      ).toEqual({ kind: 'scope', method: 'teacherProfiles.setVerification' });
+      expect(await rowCount()).toBe(before);
+      expect(await statusOf(t.tid)).toBe('verified');
+      for (const id of t.live) expect(await agentStatus(id)).toBe('live');
+    });
+
+    it('safety: true on an approval is invalid and nothing is written', async () => {
+      const t = await makeTeacher(1);
+      const before = await rowCount();
+      expect(
+        await failure(
+          repos.teacherProfiles.setVerification(t.scope, {
+            status: 'verified',
+            by: STAFF,
+            safety: true,
+          } as never),
+        ),
+      ).toEqual({ kind: 'invalid', method: 'teacherProfiles.setVerification' });
+      expect(await rowCount()).toBe(before);
+    });
+
+    it('a re-verification does not lift the takedowns', async () => {
+      const t = await makeTeacher(1);
+      await repos.teacherProfiles.setVerification(t.scope, {
+        status: 'rejected',
+        by: STAFF,
+        safety: true,
+      });
+      await repos.teacherProfiles.setVerification(t.scope, { status: 'verified', by: STAFF });
+      expect(await agentStatus(t.live[0]!)).toBe('suspended');
+      expect((await takedownsFor(t.tid)).map((r) => r.status)).toEqual(['active']);
+    });
+  });
+
   // Task 8.1c (B-30): a subject change sends a verified teacher back to pending, in the same
   // UPDATE statement; bio, languages and a same-value subject leave the status alone.
   describe('update: a subject change resets verification', () => {
