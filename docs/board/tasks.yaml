@@ -2365,7 +2365,7 @@ tasks:
   status: running
   branch: m13/9.4a-turn-followups
   risk: risky
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus+fable
 - id: 8.2a
   milestone: M13
   title: '8.2 follow-ups (review MEDIUM/LOW): the worker''s storageConfigFromEnv fails closed in production like the web (no dev key pair, edmate-dev bucket or http; code-only log), before any deploy; studio
@@ -2422,9 +2422,30 @@ tasks:
   accept: removing .orderBy(teacherQuestions.id) from open()'s lock read fails a test; the db tests pass
   deps:
   - 5.10b
-  status: running
+  status: done
   branch: m13/5.10c-open-race-test
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:fable
+  metrics:
+    tool_calls: 289
+    tokens_in: 1450
+    tokens_out: 121175
+    cache_read_tokens: 32177280
+    wall_time_seconds: 130730
+    models:
+    - claude-fable-5-1
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.10d
   milestone: M13
   title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions
@@ -4886,6 +4907,14 @@ tasks:
   status: running
   branch: m13/11.1d-live-class-edit
   model: plan:sonnet build:sonnet
+- id: 11.1e
+  milestone: M13
+  title: '11.1d review LOWs (packages/db live-classes.ts): the live_class.update audit records the link before/after and normalises after.startsAt with iso(); listUpcomingForStudent returns no link on a cancelled row; listForTeacher keeps the newest classes past the 500 cap (order or window); status reads through a checked parse, not `as LiveClassStatus`; fix the "max before regex" comment (zod v4 checks do not abort); tests: update moves startsAt and writes exactly one audit row, over-length link on update, repositories.int.test.ts verify reads back for liveClasses.update/cancel'
+  accept: db typecheck, lint and test green with the new tests.
+  deps:
+  - 11.1d
+  risk: high
+  status: todo
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -5940,9 +5969,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/9.3e-safety-rejection
+  model: plan:fable build:opus
 - id: 8.2i
   milestone: M13
   title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h
@@ -5993,9 +6022,40 @@ tasks:
   deps:
   - 12.5b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/12.5e-alert-store-log
+  model: plan:lead build:fable review:fable
+  metrics:
+    tool_calls: 25
+    tokens_in: 1740
+    tokens_out: 653
+    cache_read_tokens: 1497926
+    wall_time_seconds: 317
+    models:
+    - claude-fable-5-1
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 12.5f
+  milestone: M13
+  title: 'Alert worker (12.5e silent-failure LOW): apps/worker/src/alerts/processors.ts uses `storeError !== undefined` as the store-failed sentinel, so a store that rejects with undefined logs but does
+    not retry; track failure with a boolean'
+  accept: a store rejecting with undefined still makes the job fail and retry, with a test; worker typecheck, lint and test green.
+  deps:
+  - 12.5e
+  risk: high
+  status: running
+  branch: m13/12.5f-alert-sentinel
+  model: plan:lead build:fable
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
@@ -6397,8 +6457,9 @@ tasks:
   deps:
   - 8.2l
   risk: low
-  status: todo
-  branch: null
+  status: running
+  branch: m13/8.2n-studio-followups
+  model: plan:lead build:fable
 - id: 12.3f
   milestone: M12
   title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
