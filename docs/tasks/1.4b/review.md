@@ -2,7 +2,7 @@
 
 Reviewers: security-reviewer, typescript-reviewer
 
-The plan had a security review before the build (it moved the binding cookie to an address-bound HMAC). The build then had a security review (sonnet) and a TypeScript review (opus). Two fix rounds closed a CRITICAL/HIGH cookie issue, a HIGH callback GET bypass and a HIGH callback POST pass-through. The TypeScript re-verify and two security re-verifies approved; no CRITICAL or HIGH is open. The fixers ran the web build, typecheck, lint and tests (2376/2376, nothing skipped); CI's e2e job runs the magic-link flows.
+The plan had a security review before the build (it moved the binding cookie to an address-bound HMAC). The build then had a security review and a TypeScript review. Two fix rounds closed a CRITICAL/HIGH cookie issue, a HIGH callback GET bypass and a HIGH callback POST pass-through. The TypeScript re-verify and two security re-verifies approved; no CRITICAL or HIGH is open. The fixers ran the web build, typecheck, lint and tests (2376/2376, nothing skipped); CI's e2e job runs the magic-link flows.
 
 ## Findings
 - [CRITICAL] [fixed] apps/web/app/api/auth/signin/email/route.ts:38 — the binding cookie was set even when Auth.js rejected the POST (missing CSRF), so a cross-site form could plant a cookie for the attacker's address; now set only on a same-origin POST that Auth.js answered with its verify-request redirect (typescript-reviewer CRITICAL, security-reviewer HIGH).
