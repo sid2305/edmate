@@ -75,4 +75,4 @@ handoff.
 
 None. The gate is green and the fix matches the brief in full.
 
-Tool calls used: 13 (first builder) + 22 (this session) = 35.
+Tool calls used: 36 (harness count: first builder 13 + finisher 23; the first builder stopped at the usage limit)
