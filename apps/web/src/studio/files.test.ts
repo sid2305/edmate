@@ -1,3 +1,4 @@
+import { IngestJobSchema } from '@edmate/queue';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_DOCUMENT_UPLOAD_BYTES,
@@ -48,6 +49,19 @@ describe('upload types', () => {
     expect(uploadTypeFor('text/vtt')?.transcribe).toBe(false);
     expect(uploadTypeFor('application/x-subrip')?.transcribe).toBe(false);
     expect(uploadTypeFor('audio/mp4')?.transcribe).toBe(true);
+  });
+
+  it("every row's transcribe flag agrees with the queue's mimeType rule (task 8.2o)", () => {
+    // `complete` builds the ingest job from `transcribe`; the queue's IngestJobSchema requires
+    // `mimeType` exactly for audio/video. A row that disagrees would fail at run time as
+    // enqueue_failed, so this pins every row to the queue's own parse.
+    for (const t of UPLOAD_TYPES) {
+      const base = { teacherId: 'tch_1', documentId: 'doc_1', fileKind: t.fileKind };
+      const asBuilt = { ...base, ...(t.transcribe ? { mimeType: t.contentType } : {}) };
+      expect(IngestJobSchema.safeParse(asBuilt).success, t.contentType).toBe(true);
+      const flipped = { ...base, ...(t.transcribe ? {} : { mimeType: t.contentType }) };
+      expect(IngestJobSchema.safeParse(flipped).success, t.contentType).toBe(false);
+    }
   });
 
   it('refuses anything not on the list, including near misses', () => {

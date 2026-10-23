@@ -21,6 +21,7 @@
     "liveClasses": {
       "title": "Upcoming live classes",
       "join": "Join",
+      "cancelled": "Cancelled",
       "window": {
         "reminder_24h": "Starting in 24 hours",
         "reminder_1h": "Starting in 1 hour",
@@ -651,6 +652,18 @@
     "scheduled": "The class is scheduled.",
     "empty": "No live classes scheduled yet.",
     "joinLink": "Join link",
+    "joinLinkLabel": "Join link for {title}",
+    "editButton": "Edit",
+    "editTitleLabel": "Title",
+    "editLinkLabel": "Join link (https://…)",
+    "editStartsAtLabel": "Start time",
+    "saveButton": "Save",
+    "saving": "Saving…",
+    "cancelEditButton": "Cancel",
+    "cancelButton": "Cancel class",
+    "cancelling": "Cancelling…",
+    "cancelConfirm": "Cancel this live class? Students will see it marked cancelled.",
+    "cancelledLabel": "Cancelled",
     "errors": {
       "validation": "Check the title, link, start time and packages, and try again.",
       "not_found": "One of those packages was not found. Reload and try again.",
