@@ -621,9 +621,28 @@ tasks:
   deps:
   - 1.7f
   risky: true
-  status: running
+  status: done
   branch: m13/1.7g-us-header
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 8
+    tokens_in: 28
+    tokens_out: 207
+    cache_read_tokens: 238698
+    wall_time_seconds: 44
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
