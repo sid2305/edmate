@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CaseLoadError, NoCasesFoundError, loadCasesFromDir, loadCasesWithFiles } from './loader.js';
+import { displayPath } from './displayPath.js';
 
 const FIXTURE_SUITE = fileURLToPath(new URL('../test/fixtures/suite', import.meta.url));
 
@@ -62,6 +63,11 @@ describe('loadCasesFromDir', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(NoCasesFoundError);
       expect((e as NoCasesFoundError).dir).toBe(dir);
+      // Message carries the display path (relative to cwd, or basename outside it), like
+      // CaseLoadError, never the caller's raw absolute path.
+      expect((e as NoCasesFoundError).message).toBe(
+        `${displayPath(dir)}: no .yaml or .yml cases found`,
+      );
     }
   });
 

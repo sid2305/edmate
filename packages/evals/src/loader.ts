@@ -15,7 +15,7 @@ export class NoCasesFoundError extends Error {
   override readonly name = 'NoCasesFoundError';
 
   constructor(readonly dir: string) {
-    super(`${dir}: no .yaml or .yml cases found`);
+    super(`${displayPath(dir)}: no .yaml or .yml cases found`);
   }
 }
 

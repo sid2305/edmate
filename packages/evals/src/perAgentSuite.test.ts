@@ -282,17 +282,45 @@ describe('generatePerAgentSuite: ids (rule 5)', () => {
     const run = () => generatePerAgentSuite(world({ packages: [BASIC], answerable: [one, two] }));
     expect(run).toThrow(PerAgentSuiteError);
     expect(run).toThrow(/gen-acc-pkg-basic-q-1.*toy#first.*toy#second/);
+    try {
+      run();
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(PerAgentSuiteError);
+      expect((e as PerAgentSuiteError).name).toBe('PerAgentSuiteError');
+      expect((e as PerAgentSuiteError).reason).toBe('id-collision');
+      expect((e as PerAgentSuiteError).cause).toBeUndefined();
+    }
   });
 
   it('throws when there are no packages to evaluate against', () => {
-    expect(() => generatePerAgentSuite(world({ packages: [] }))).toThrow(/no packages/);
+    const run = () => generatePerAgentSuite(world({ packages: [] }));
+    expect(run).toThrow(/no packages/);
+    try {
+      run();
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(PerAgentSuiteError);
+      expect((e as PerAgentSuiteError).name).toBe('PerAgentSuiteError');
+      expect((e as PerAgentSuiteError).reason).toBe('no-packages');
+    }
   });
 
-  it('throws when a generated case would not parse (e.g. an empty question)', () => {
+  it('throws when a generated case would not parse (e.g. an empty question), keeping the cause', () => {
     const empty: AnswerableItem = { ...A1, question: '' };
-    expect(() => generatePerAgentSuite(world({ packages: [BASIC], answerable: [empty] }))).toThrow(
+    const run = () => generatePerAgentSuite(world({ packages: [BASIC], answerable: [empty] }));
+    expect(run).toThrow(
       /gen-acc-pkg-basic-a-q1.*toy\/question-bank\/alpha\.yaml#a-q1/,
     );
+    try {
+      run();
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(PerAgentSuiteError);
+      expect((e as PerAgentSuiteError).name).toBe('PerAgentSuiteError');
+      expect((e as PerAgentSuiteError).reason).toBe('invalid-case');
+      expect((e as PerAgentSuiteError).cause).toBeDefined();
+    }
   });
 });
 
