@@ -160,6 +160,29 @@ describe('LiveClassesView', () => {
       expect(updateLiveClass).not.toHaveBeenCalled();
     });
 
+    it('Save then discard while the PUT is in flight disables discard and ignores a stale resolve (code review HIGH)', async () => {
+      let resolveUpdate: (value: { ok: true }) => void = () => {};
+      const updateLiveClass = vi.fn(
+        () => new Promise<{ ok: true }>((resolve) => (resolveUpdate = resolve)),
+      );
+      renderIntl(
+        <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
+      );
+      const row = within(screen.getByRole('list', { name: 'Live classes' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Changed' } });
+      fireEvent.click(row.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(updateLiveClass).toHaveBeenCalled());
+      // The discard "Cancel" button must be disabled while the save is still in flight, so a
+      // teacher cannot start a discard that the pending PUT would later silently undo.
+      expect(row.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      await act(async () => {
+        resolveUpdate({ ok: true });
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(screen.getByText('Changed')).toBeInTheDocument());
+    });
+
     it('a failed PUT shows an error and re-enables the row (not stuck disabled)', async () => {
       const updateLiveClass = vi.fn(async () => ({
         ok: false as const,

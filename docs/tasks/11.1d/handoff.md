@@ -317,3 +317,22 @@ Gate (one package at a time, `--force`):
   re-run the `--all` scan from the main checkout before merge.
 
 Fix round tool calls: 18
+
+## Fix round (code-review HIGH)
+
+- **HIGH (code-reviewer)** — `LiveClassesView.tsx`'s inline edit discard button
+  (`cancelEditDraft`) had no `disabled={rowBusy[c.id]}` guard, unlike Save/Edit/Cancel-class.
+  Clicking discard while the PUT from Save was still in flight closed the form immediately, but
+  `saveEdit`'s success branch still wrote the discarded draft into the row once the pending
+  request resolved. Fixed two ways: (1) the discard "Cancel" button is now disabled while
+  `rowBusy[c.id]`, so a discard cannot start mid-save; (2) defence in depth, `saveEdit`'s success
+  branch now checks a new `editingIdRef` (kept in sync with `editingId` via `useEffect`) and
+  skips `setClasses`/`setEditingId` if that row's edit is no longer current, so a stale resolve
+  can never overwrite a discarded or superseded draft even if the guard above is bypassed.
+- Added `LiveClassesView.test.tsx` case: Save clicked, PUT left pending via a controlled
+  promise, asserts the discard "Cancel" button is disabled while the save is in flight, then
+  resolves the PUT and asserts the row updates normally.
+- Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force` → 10/10 tasks
+  successful; Test Files 145 passed | 4 skipped (149); Tests 2235 passed | 26 skipped (2261).
+- Secret scan: `python3 .githooks/secret-scan.py --all` → clean (no findings).
+- Tool calls used: 17

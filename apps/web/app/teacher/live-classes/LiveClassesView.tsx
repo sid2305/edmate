@@ -235,6 +235,14 @@ export function LiveClassesView({
   const [editDraft, setEditDraft] = useState({ title: '', link: '', startsAt: '' });
   const [rowBusy, setRowBusy] = useState<Record<string, boolean>>({});
   const [rowError, setRowError] = useState<Record<string, ErrorKey | null>>({});
+  // Tracks the live `editingId` for in-flight saveEdit calls: a discard clears `editingId`
+  // immediately, but the async saveEdit closure only sees the value at call time, so without
+  // this ref a stale PUT resolving after discard would still overwrite the row (code review
+  // HIGH, 11.1d Phase B/C).
+  const editingIdRef = useRef(editingId);
+  useEffect(() => {
+    editingIdRef.current = editingId;
+  }, [editingId]);
 
   const startEdit = (c: TeacherLiveClassRow) => {
     setEditingId(c.id);
@@ -264,6 +272,11 @@ export function LiveClassesView({
       });
       if (!result.ok) {
         setRowError((errs) => ({ ...errs, [c.id]: errorKey(result.code) }));
+        return;
+      }
+      if (editingIdRef.current !== c.id) {
+        // The edit was discarded (or another row's edit started) while the PUT was in flight;
+        // applying this now-stale draft would silently undo the discard.
         return;
       }
       setClasses((cs) =>
@@ -453,7 +466,7 @@ export function LiveClassesView({
                   <button type="button" disabled={!!rowBusy[c.id]} onClick={() => void saveEdit(c)}>
                     {rowBusy[c.id] ? t('saving') : t('saveButton')}
                   </button>{' '}
-                  <button type="button" onClick={cancelEditDraft}>
+                  <button type="button" disabled={!!rowBusy[c.id]} onClick={cancelEditDraft}>
                     {t('cancelEditButton')}
                   </button>
                 </>
