@@ -21,6 +21,7 @@
     "liveClasses": {
       "title": "Upcoming live classes",
       "join": "Join",
+      "cancelled": "Cancelled",
       "window": {
         "reminder_24h": "Starting in 24 hours",
         "reminder_1h": "Starting in 1 hour",

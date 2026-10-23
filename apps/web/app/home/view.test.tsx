@@ -249,6 +249,81 @@ describe('HomeView', () => {
       expect(screen.getByTestId('ask-question-lc_2')).toBeInTheDocument();
     });
 
+    // Task 11.1d Phase C: a cancelled class shows "Cancelled" instead of the window label, with
+    // no join link and no ask-a-question form; a scheduled class is unaffected.
+    it('a cancelled class shows the Cancelled label, no join link, no ask-a-question form', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_6',
+              title: 'Cancelled class',
+              link: 'https://meet.example.com/cancelled',
+              startsAt: '2099-01-06T00:00:00.000Z',
+              status: 'cancelled',
+              window: 'reminder_1h',
+            },
+          ],
+        }),
+      );
+      expect(screen.getByText('Cancelled class')).toBeInTheDocument();
+      expect(screen.getByText('Cancelled')).toBeInTheDocument();
+      expect(screen.queryByText('Starting in 1 hour')).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Join' })).toBeNull();
+      expect(screen.queryByTestId('ask-question-lc_6')).toBeNull();
+    });
+
+    it('a scheduled class alongside a cancelled one keeps its own join link and ask form', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_7',
+              title: 'Still on',
+              link: 'https://meet.example.com/still-on',
+              startsAt: '2099-01-07T00:00:00.000Z',
+              status: 'scheduled',
+              window: 'later',
+            },
+            {
+              id: 'lc_8',
+              title: 'Called off',
+              link: 'https://meet.example.com/called-off',
+              startsAt: '2099-01-08T00:00:00.000Z',
+              status: 'cancelled',
+              window: 'later',
+            },
+          ],
+        }),
+      );
+      expect(screen.getByRole('link', { name: 'Join' })).toHaveAttribute(
+        'href',
+        'https://meet.example.com/still-on',
+      );
+      expect(screen.getByTestId('ask-question-lc_7')).toBeInTheDocument();
+      expect(screen.getByText('Called off')).toBeInTheDocument();
+      expect(screen.getByText('Cancelled')).toBeInTheDocument();
+      expect(screen.queryByTestId('ask-question-lc_8')).toBeNull();
+    });
+
+    it('no axe violations with a cancelled live class shown', async () => {
+      const { container } = render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_9',
+              title: 'Cancelled, axe check',
+              link: 'https://meet.example.com/axe',
+              startsAt: '2099-01-09T00:00:00.000Z',
+              status: 'cancelled',
+              window: 'later',
+            },
+          ],
+        }),
+      );
+      expect(await axe(container)).toHaveNoViolations();
+    });
+
     it('no axe violations with a live class shown', async () => {
       const { container } = render(
         await HomeView({
