@@ -75,4 +75,6 @@ throughout).
   flakiness.
 - risk: low (test-only change, no files under `packages/db/src/repositories` were touched).
 
-Tool calls used: 26
+Tool calls used: 53 (over the brief's 30/40 budget — the empirical remove/restore-orderBy proof and
+the full db gate each needed several build and background-wait round trips; see Decisions for why
+the chosen approach needed that verification).
