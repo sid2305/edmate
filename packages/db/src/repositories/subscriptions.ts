@@ -287,6 +287,50 @@ export function subscriptionsRepo(db: Db) {
     },
 
     /**
+     * Task 9.4a Phase C: the student's own not-ended subscriptions across **every** teacher, each
+     * with the **live** agent it is for, ordered by agent id -- /home's chat and paused links in
+     * one query (`subscriptions -> package_versions -> packages -> agents`). A draft or suspended
+     * agent, or an `ended` subscription, is left out.
+     *
+     * Scope exception (decision 9.4a Phase C, risk: high): this takes a bare `studentId`, not a
+     * `StudentScope`, because the list spans teachers by design. Call it **only** with the
+     * signed-in principal's own id (never a client-supplied id). The id is still parsed like a
+     * scope id (`scope` on anything else) so an `undefined` can never widen the query.
+     */
+    async listLiveForStudent(
+      studentId: string,
+    ): Promise<Array<{ agentId: string; teacherId: string; status: Entitlement['status'] }>> {
+      const method = 'subscriptions.listLiveForStudent';
+      const r = IdSchema.safeParse(studentId);
+      if (!r.success) throw new RepositoryError('scope', method);
+      return db
+        .select({
+          agentId: agents.id,
+          teacherId: subscriptions.teacherId,
+          status: subscriptions.status,
+        })
+        .from(subscriptions)
+        .innerJoin(
+          packageVersions,
+          and(
+            eq(packageVersions.id, subscriptions.packageVersionId),
+            eq(packageVersions.teacherId, subscriptions.teacherId),
+          ),
+        )
+        .innerJoin(packages, eq(packages.id, packageVersions.packageId))
+        .innerJoin(
+          agents,
+          and(
+            eq(agents.id, packages.agentId),
+            eq(agents.teacherId, subscriptions.teacherId),
+            eq(agents.status, 'live'),
+          ),
+        )
+        .where(and(eq(subscriptions.studentId, r.data), ne(subscriptions.status, 'ended')))
+        .orderBy(asc(agents.id));
+    },
+
+    /**
      * Starts a subscription with no payment (task 9.3; checkout is 10.8): the scope's student
      * subscribes to one of the scope's teacher's package versions. The write only lands when
      * `packageVersionId` names a `package_versions` row of this teacher (else `not_found` — a

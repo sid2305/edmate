@@ -32,6 +32,17 @@ function errorName(e: unknown): string {
   return e instanceof Error ? e.name : 'UnknownError';
 }
 
+/**
+ * The value to throw for a failed store write: an Error is rethrown as is; anything else
+ * (`undefined`, a string, ...) is wrapped in an Error that keeps it as `cause`, so BullMQ
+ * always gets a real failure reason. The message carries the error name only.
+ */
+function asStoreError(thrown: unknown): Error {
+  return thrown instanceof Error
+    ? thrown
+    : new Error(`safety_alert.store_failed: ${errorName(thrown)}`, { cause: thrown });
+}
+
 /** A notifier call that takes longer fails (and is retried): a hung vendor must not stall it. */
 export const ALERT_NOTIFY_TIMEOUT_MS = 20_000;
 
@@ -94,11 +105,14 @@ export function alertProcessor(d: AlertProcessorDeps) {
         const { alert } = parse(AlertRaiseJobSchema, job);
         // Logged in the catch, before notify is awaited (12.5e): if the notifier also throws,
         // the store failure must still have been logged; the notify error then makes the job
-        // retry, and the retry records again.
+        // retry, and the retry records again. The failure is tracked with a flag, not the
+        // thrown value (12.5f): a store that rejects with `undefined` must still fail the job.
+        let storeFailed = false;
         let storeError: unknown;
         try {
           await d.store.record(alert);
         } catch (error) {
+          storeFailed = true;
           storeError = error;
           d.log({
             level: 'error',
@@ -114,7 +128,7 @@ export function alertProcessor(d: AlertProcessorDeps) {
           alertId: alert.id,
           audience: 'trust_team',
         });
-        if (storeError !== undefined) throw storeError;
+        if (storeFailed) throw asStoreError(storeError);
         return 'notified';
       }
       case JOB.alertEscalateCheck: {

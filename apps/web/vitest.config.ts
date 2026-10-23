@@ -9,6 +9,9 @@ export default defineConfig({
       'src/**/*.test.ts',
       'src/**/*.test.tsx',
       'e2e/**/*.test.ts',
+      // The memory turn backend's own unit test (9.4a Phase D). `test/**` is otherwise helpers
+      // only; `test/build-smoke.test.ts` has its own config and must not run here.
+      'test/turn-backend.test.ts',
     ],
     // No real network: global fetch rejects, and sign-in env is cleared (rule 4).
     setupFiles: ['test/setup.ts'],
@@ -23,8 +26,8 @@ export default defineConfig({
     server: { deps: { inline: ['next-auth'] } },
     coverage: {
       provider: 'v8',
-      include: ['instrumentation.ts', 'app/api/**/*.ts', 'src/**/*.ts'],
-      exclude: ['**/*.test.ts'],
+      include: ['instrumentation.ts', 'app/api/**/*.ts', 'app/**/*.tsx', 'src/**/*.ts', 'src/**/*.tsx'],
+      exclude: ['**/*.test.ts', '**/*.test.tsx'],
       thresholds: {
         lines: 80,
         branches: 80,

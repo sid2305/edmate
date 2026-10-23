@@ -64,7 +64,9 @@ three, so sign-in does not use a repository. It uses this small store, which has
     it from the notices it loads), an answer naming any other version is `invalid`. An under-age
     erase blocked by a row the store does not own is `not_found` with nothing changed; the web
     closes that browser's session and staff erase the account (12.1). `learnerStatus` is for
-    students only: a teacher or staff user is `scope`.
+    students only: a teacher or staff user is `scope`. `getMarket(id)` (9.4a) reads only the
+    `market` column (`null` for an unknown id); the turn runtime wires it as the entitlement
+    store's `studentMarket`, so a student's turns run in their own market, never a deploy setting.
 
 `@edmate/db` exports `createIdentityStore`, and `openDatabase()` returns `{ repos, identity,
 close }`. Only `apps/web/src/auth/**` should use `identity`.

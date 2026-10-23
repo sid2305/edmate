@@ -239,7 +239,7 @@ export function LiveClassesView({
         return;
       }
       setClasses((cs) =>
-        [...cs, { id: result.id, title: title.trim(), link: link.trim(), startsAt: iso, packageIds }].sort(
+        [...cs, { id: result.id, title: title.trim(), link: link.trim(), startsAt: iso, packageIds, status: 'scheduled' as const }].sort(
           (a, b) => a.startsAt.localeCompare(b.startsAt),
         ),
       );

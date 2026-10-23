@@ -183,6 +183,13 @@
       "when": 1792707412816,
       "tag": "0025_teacher_questions_grouping_index",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792721914200,
+      "tag": "0026_live_class_status",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,7 @@ import {
   type Repositories,
   turnConfigStoreFor,
 } from '../src/index.js';
-import { learnerClear, locales, packMarket, seedAccess } from './access-seed.js';
+import { learnerClear, locales, packMarket, seedAccess, studentMarket } from './access-seed.js';
 import { packageConfig } from './isolation-seed.js';
 import {
   createDatabase,
@@ -43,7 +43,7 @@ const input: TurnInput = {
 };
 
 async function entitlementFor(studentId = 'stu_1', agentId = 'agt_a'): Promise<Entitlement> {
-  const e = await entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear }).resolve(
+  const e = await entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear, studentMarket }).resolve(
     { studentId, agentId, source: 'subscription' },
     AT,
   );
@@ -59,7 +59,7 @@ async function entitleCode(
 ) {
   const t = testDeps({
     overrides: {
-      entitlements: entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear: clear }),
+      entitlements: entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear: clear, studentMarket }),
       turnConfig: store,
       entitlementSource: 'subscription',
     },

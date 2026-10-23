@@ -8,6 +8,9 @@ const FAKE_KEY = 'sk-fake-not-a-real-key-0000000000000000'; // secret-scan: allo
 describe('createIngestGateway', () => {
   it('builds an embedder and a transcriber from the environment', async () => {
     const gateway = await createIngestGateway({ EDMATE_OPENAI_API_KEY: FAKE_KEY });
+    // Both must be present (not merely "undefined, so the optional chain is skipped").
+    expect(gateway.embedder).toBeDefined();
+    expect(gateway.transcriber).toBeDefined();
     expect(typeof gateway.embedder?.embed).toBe('function');
     expect(typeof gateway.transcriber?.transcribe).toBe('function');
   });
@@ -17,8 +20,11 @@ describe('createIngestGateway', () => {
       EDMATE_OPENAI_API_KEY: FAKE_KEY,
       S3_ENDPOINT: 'http://minio.internal:9000',
     });
+    // 9.0b review: assert the transcriber exists before calling it, so a missing transcriber
+    // fails here instead of `undefined` resolving and the `rejects` below passing vacuously.
+    expect(gateway.transcriber).toBeDefined();
     await expect(
-      gateway.transcriber?.transcribe({ url: 'https://evil.example/a.mp3', mimeType: 'audio/mpeg' }),
+      gateway.transcriber!.transcribe({ url: 'https://evil.example/a.mp3', mimeType: 'audio/mpeg' }),
     ).rejects.toThrow();
   });
 
