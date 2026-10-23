@@ -100,6 +100,11 @@ below.
 
 ## Decisions
 
+### 22 Oct 2026 · 3.11g test-only change on a risky path · decided by lead · risk: high
+- Decided: merge the linear-time test in packages/harness/src/pedagogy/modelRequest.test.ts (a test-only change; no prompt-pack or production code changes). Leave the six-large-runs timeout-stacking MEDIUM as wontfix: a linear run takes well under a second, so it only delays the failure of an already-failing regression.
+- Why: the file sits on the pedagogy risky path, so the human sees it on the skim list; code-reviewer and typescript-reviewer reviewed it and the lead fixed the overclaiming comments.
+- risk: high
+
 ### 22 Oct 2026 · 3.11g ran over budget · decided by lead · risk: low
 - Decided: accept 95 tool calls against the lead briefs' 20 + 15. The fixer ran the timing test many times under load to show it doesn't flake.
 - Why: the extra runs are the evidence that the test is stable; the change itself is one test.
