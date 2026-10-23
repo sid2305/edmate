@@ -90,7 +90,7 @@ export const HelpStateSchema = z.strictObject({
     .exactOptional(),
   /**
    * A skipped practice item's key (5.6c, ADR-0011 §2-3): when a turn issues a new item while the
-   * loaded state held an unsolved one, the runner saves the old key here for exactly one turn.
+   * loaded state held an unsolved one, the runner saves the old key here for one saved turn.
    * Guarded (policy puts it in `mustNotReveal` on every move, never released) but never in the
    * prompt, never graded (`classifyAttempt` reads only `answerKey`) and never read by
    * `holdsPracticeKey`. buildContext drops chunks that hold it. The runner alone sets it and
@@ -101,7 +101,7 @@ export const HelpStateSchema = z.strictObject({
    * none, so a cap here could make `serializeSessionHelp` throw on a state the tool let through.
    * The JSON caps above and LIMITS.helpStateMaxJsonLength bound it.
    */
-  practiceCarriedKey: z.array(z.string()).exactOptional(),
+  practiceCarriedKey: z.array(z.string().min(1)).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
