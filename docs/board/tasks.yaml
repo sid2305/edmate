@@ -6154,9 +6154,28 @@ tasks:
   accept: the test still fails on a quadratic implementation (shown once in the handoff) and passes 20 local runs under CPU load; harness tests pass
   deps:
   - 3.11g
-  status: running
+  status: done
   branch: m13/3.11h-linear-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 8
+    tokens_in: 28
+    tokens_out: 722
+    cache_read_tokens: 253616
+    wall_time_seconds: 91
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
