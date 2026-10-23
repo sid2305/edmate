@@ -55,6 +55,16 @@ the code does.
 
 ## Decisions
 
+### 22 Oct 2026 · 1.7g ran over budget · decided by lead · risk: low
+- Decided: accept 33 tool calls against a 15-call budget for a comment-only change.
+- Why: the builder counted 21; the harness counted 33, several of them retries after transient tool denials and three gate runs while it checked a harness timeout. The change is done and the review is clean.
+- risk: low
+
+### 22 Oct 2026 · 1.7g: US.yaml header reworded for the signed pack · decided by lead · risk: high
+- Decided: merge the comment-only change to content/locales/US.yaml (a locales risk path): the header now says the pack was signed on 21 Oct 2026, so the no-consent waiver applies, the three `pending` values still wait for a person, and the age rule fails closed again if `reviewedBy` is cleared.
+- Why: the code reviewer checked every claim against packages/content/src/agePolicy.ts; no value or key changed, no helpline, contact, law, reviewer or date was added, and the "agents must never fill in" warning is kept.
+- risk: high
+
 ### 22 Oct 2026 · Pre-existing flaky harness test is out of scope · decided by builder · risk: low
 - Decided: treated the `@edmate/harness#test` timeout on `runner.test.ts` (unrelated 4.3
   distress-check test) as a pre-existing flaky failure, not a regression from this change, and did
@@ -64,4 +74,4 @@ the code does.
   touches, and failed with the same timeout across repeated runs regardless of this change.
 - risk: low
 
-Tool calls used: 21
+Tool calls used: 33 (harness count: builder 33; the agent reported 21)
