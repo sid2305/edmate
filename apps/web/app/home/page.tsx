@@ -2,16 +2,14 @@
 // actual markup (kept pure so it can be tested directly, no server-only guard to stub).
 // 9.4: links to the chats of the student's live subscriptions (see src/chat/liveChats.ts).
 // 9.3 Phase C: also links to a "start a package" page for a live agent with no live subscription.
-// 11.1c Phase C: upcoming, entitled live classes (see docs/tasks/11.1/plan.md "Phase C"). There is
-// no repository method that lists a student's subscribed teachers directly, so the candidates are
-// the configured chat agents; `homeLinks` (src/chat/liveChats.ts) resolves each one's owning
-// teacher exactly once and returns the deduplicated list, which this page reuses here instead of
-// its own `agents.owner` pass. A failure here never blocks the chat/start/paused links: it is
+// 11.1c Phase C: upcoming, entitled live classes (see docs/tasks/11.1/plan.md "Phase C"), for the
+// teachers `homeLinks` returns. A failure here never blocks the chat/start/paused links: it is
 // caught here and logged, same shape as `homeLinks`.
-// 9.3b (9.3/9.6e review follow-up, MEDIUM): the chat/start/paused/live-classes loaders used to run
-// one after another, each re-querying `agents.owner`/`subscriptions.findLive`. `homeLinks` now
-// does that scan once, and the two independent loaders left (`homeLinks` and `homeLiveClasses`,
-// which only needs `homeLinks`' own teacher ids) run concurrently via `Promise.all`.
+// 9.3b: `homeLinks` and the live-classes loader (which only needs `homeLinks`' teacher ids) do
+// one pass each; no second `agents.owner` pass here.
+// 9.4a Phase C: the chat and paused links (and the teacher ids) come from the signed-in student's
+// own subscriptions (`subscriptions.listLiveForStudent`); the configured candidates
+// (`EDMATE_CHAT_AGENTS`) only feed the startable list.
 import { studentScope, type StudentScope, type UpcomingLiveClass } from '@edmate/db';
 import { requireRole, serverDatabase } from '../../src/auth';
 import type { Principal } from '../../src/auth/guard';

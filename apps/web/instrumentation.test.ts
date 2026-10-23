@@ -20,7 +20,8 @@ describe('register (web container start, task 9.0c)', () => {
   it('runs one warm-up read through serverDatabase on the Node.js runtime', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     const { register } = await import('./instrumentation');
-    register();
+    // `undefined`, not a Promise: pins `register()` as non-async, so Next never awaits the warm-up.
+    expect(register()).toBeUndefined();
     // The warm-up is a microtask chain (dynamic import + one query); flush it.
     await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
     expect(serverDatabase).toHaveBeenCalledTimes(1);

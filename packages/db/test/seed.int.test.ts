@@ -193,6 +193,7 @@ describe.skipIf(!up)(`demo seed on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       market: 'global',
       packMarket: () => 'global',
       learnerClear: async () => true,
+      studentMarket: async () => 'global',
     });
     const at = '2026-10-18T10:00:00.000Z';
     const resolve = (studentId: string) =>
