@@ -5993,9 +5993,9 @@ tasks:
   deps:
   - 12.5b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.5e-alert-store-log
+  model: plan:lead build:fable
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
