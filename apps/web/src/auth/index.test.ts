@@ -132,6 +132,10 @@ describe('src/auth wiring', () => {
     vi.stubEnv('DATABASE_URL', undefined);
     fakes.redis.length = 0;
     fakes.transports.length = 0;
+    // The dev-mode Redis singleton (task 1.4d) is cached on `globalThis`, deliberately surviving
+    // `vi.resetModules()`'s cold `load()` -- so each test starts with a clean slate here, and
+    // only the dedicated singleton test below exercises the reuse across two `load()` calls.
+    delete (globalThis as { __edmateAuthRedis?: unknown }).__edmateAuthRedis;
   });
 
   it(
@@ -216,6 +220,22 @@ describe('src/auth wiring', () => {
       socketTimeout: 10_000,
     });
   });
+
+  it(
+    'dev hot reload reuses one Redis client across module reloads (not a fresh client per reload)',
+    async () => {
+      setEmailOnlyEnv();
+      const auth1 = await load();
+      await auth1.handlers.GET(new NextRequest(`${ORIGIN}/api/auth/providers`));
+      expect(fakes.redis).toHaveLength(1);
+      // A second cold `load()` simulates a dev HMR reload of this module (resets every
+      // module-scoped variable, including `runtime`); only `globalThis` survives that.
+      const auth2 = await load();
+      await auth2.handlers.GET(new NextRequest(`${ORIGIN}/api/auth/providers`));
+      expect(fakes.redis).toHaveLength(1);
+    },
+    AUTH_IMPORT_TIMEOUT_MS,
+  );
 
   it(
     'cold start: a link request waits for Redis to be ready, then is counted and mailed',
