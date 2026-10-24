@@ -115,6 +115,40 @@ describe('QuestionsInboxView', () => {
     expect(screen.getByText('What is a fraction?')).toBeInTheDocument();
   });
 
+  it('a rejected answerGroup call shows the error banner and re-enables the button', async () => {
+    const answerGroup = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    renderIntl(
+      <QuestionsInboxView groups={[GROUP]} modules={MODULES} answerGroup={answerGroup} />,
+    );
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'An answer.' } });
+    const button = screen.getByRole('button', { name: 'Send answer' });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.');
+    expect(button).not.toBeDisabled();
+    expect(screen.getByText('What is a fraction?')).toBeInTheDocument();
+  });
+
+  it('a rejected dismissQuestion call shows the error banner and re-enables the button', async () => {
+    const dismissQuestion = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    renderIntl(
+      <QuestionsInboxView groups={[GROUP]} modules={MODULES} dismissQuestion={dismissQuestion} />,
+    );
+    const row = screen.getByText('What is a fraction?').closest('li') as HTMLElement;
+    const button = within(row).getByRole('button', { name: 'Dismiss' });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.');
+    expect(button).not.toBeDisabled();
+    expect(screen.getByText('What is a fraction?')).toBeInTheDocument();
+  });
+
   it('refuses to send an empty answer without calling the backend', async () => {
     const answerGroup = vi.fn();
     renderIntl(

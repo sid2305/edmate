@@ -3,6 +3,7 @@
 // a body field.
 import type { AnswerResult, Outline, TeacherQuestionGroup } from '@edmate/db';
 import { RepositoryError } from '@edmate/db';
+import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { Principal, RoleContext } from '../../auth/guard';
 import { StudioUnavailableError, type ServerLog } from '../routes';
@@ -59,12 +60,19 @@ function ctx(principal: Principal, params: Record<string, string> = {}): RoleCon
   return { principal, params: Promise.resolve(params) };
 }
 
-function req(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
-  return new Request(`${ORIGIN}${path}`, {
+/** A real `NextRequest` (not a cast plain `Request`) -- `readJson` and the role guard both read
+ * Next's own request shape, and other studio routes build one for the same reason. */
+function req(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): NextRequest {
+  return new NextRequest(`${ORIGIN}${path}`, {
     method,
     headers: { 'content-type': 'application/json', ...headers },
     ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
-  }) as unknown as Parameters<ReturnType<typeof createQuestionsHandlers>['list']>[0];
+  });
 }
 
 async function json(res: Response) {
@@ -190,6 +198,76 @@ describe('POST /api/studio/questions/answer', () => {
       ctx(ASHA),
     );
     expect(res.status).toBe(404);
+    expect((await json(res)).error?.code).toBe('not_found');
+  });
+
+  it("a repository scope error (an id outside the teacher's own scope) is 403", async () => {
+    const s = setup();
+    vi.mocked(s.backend.teacherQuestions.answer).mockRejectedValueOnce(
+      new RepositoryError('scope', 'teacherQuestions.answer'),
+    );
+    const res = await s.h.answer(
+      req('POST', '/api/studio/questions/answer', {
+        questionId: 'q1',
+        moduleId: 'm1',
+        answer: 'ok',
+      }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(403);
+    expect((await json(res)).error?.code).toBe('forbidden');
+  });
+
+  it('a repository invalid error (malformed argument) is 400', async () => {
+    const s = setup();
+    vi.mocked(s.backend.teacherQuestions.answer).mockRejectedValueOnce(
+      new RepositoryError('invalid', 'teacherQuestions.answer'),
+    );
+    const res = await s.h.answer(
+      req('POST', '/api/studio/questions/answer', {
+        questionId: 'q1',
+        moduleId: 'm1',
+        answer: 'ok',
+      }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(400);
+    expect((await json(res)).error?.code).toBe('validation');
+  });
+
+  it('a repository integrity error (a stored row disagrees with its own columns) is 400', async () => {
+    const s = setup();
+    vi.mocked(s.backend.teacherQuestions.answer).mockRejectedValueOnce(
+      new RepositoryError('integrity', 'teacherQuestions.answer'),
+    );
+    const res = await s.h.answer(
+      req('POST', '/api/studio/questions/answer', {
+        questionId: 'q1',
+        moduleId: 'm1',
+        answer: 'ok',
+      }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(400);
+    expect((await json(res)).error?.code).toBe('validation');
+  });
+
+  it('a repository failed error (the database failed) is a logged 500', async () => {
+    const s = setup();
+    vi.mocked(s.backend.teacherQuestions.answer).mockRejectedValueOnce(
+      new RepositoryError('failed', 'teacherQuestions.answer'),
+    );
+    const res = await s.h.answer(
+      req('POST', '/api/studio/questions/answer', {
+        questionId: 'q1',
+        moduleId: 'm1',
+        answer: 'ok',
+      }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(500);
+    expect((await json(res)).error?.code).toBe('provider_error');
+    expect(s.logs).toEqual([{ event: 'questions.failed', fields: { error: 'RepositoryError' } }]);
   });
 
   it('an unknown error is a logged 500, with the error name only (no question/answer text)', async () => {
