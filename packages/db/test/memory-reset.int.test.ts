@@ -184,6 +184,14 @@ describe.skipIf(!up)(
     });
 
     it('reset races sessions.end for the same pair without a deadlock', async () => {
+      // Task 5.10d: at most one open session per (teacher, student, agent). The seed's own
+      // session for sc1B/agt_b is still open; end it first so this loop's inserts don't conflict
+      // with the unique partial index.
+      await raw.query(
+        `update sessions set ended_at = now()
+         where teacher_id = $1 and student_id = $2 and agent_id = $3 and ended_at is null`,
+        [sc1B.teacherId, sc1B.studentId, ids.agent('B')],
+      );
       for (let i = 0; i < 10; i += 1) {
         const sid = `ses_race_${i}`;
         await raw.query(

@@ -110,6 +110,25 @@ export function sessionsRepo(db: Db) {
      * pinned to the package version the caller's entitlement resolved to just before (task 3.16).
      * Another teacher's agent or package, a package of another agent, or a version that doesn't
      * exist, is `not_found`.
+     *
+     * Task 5.10d: at most one open session per (teacher_id, student_id, agent_id) — reuse, not
+     * end-and-recreate, so a page refresh or a second tab never silently wipes `help_state` (the
+     * hint ladder, ADR-0005). Inside one transaction: the ownership-checked insert above, with
+     * `ON CONFLICT (teacher_id, student_id, agent_id) WHERE ended_at IS NULL DO NOTHING` appended
+     * (raw SQL, like `teacher-questions.ts`'s `open()` — drizzle's `onConflictDoNothing()` can't
+     * infer a partial-index target, see that file's comment on `42P10`/`42601`). 0 rows written
+     * from the insert is ambiguous between "lost the race" and "no such agent/package/version", and
+     * the conflict target is **not** version-specific, so it isn't safe to resolve that by just
+     * checking whether *some* open session already exists for the triple — a scope with a real
+     * open session (any version) but a bad `agentVersion`/`packageVersion` in *this* call would
+     * then wrongly "succeed" by reusing that unrelated session instead of `not_found`. Resolved
+     * instead by re-running the same ownership `WHERE` as a plain `SELECT` (no insert, no
+     * conflict): no row means the original FROM/WHERE matched nothing, `not_found` as before; a
+     * row means this call's agent/package/version really do resolve, so 0 rows written can only
+     * mean another call's insert won the race (now committed and visible, since Postgres's own
+     * `ON CONFLICT` blocks a second concurrent inserter until the first's transaction commits) —
+     * read that open row and return its id (reused). Same `201` status and body shape (`{ id }`)
+     * whether created or reused — the caller (`startSession`) needs no change.
      */
     async create(
       scope: StudentScope,
@@ -123,37 +142,70 @@ export function sessionsRepo(db: Db) {
         method,
       );
       const id = randomUUID();
-      const result = await translateWrite(method, () =>
-        db.execute(
-          insertSelect(
-            sessions,
-            [
-              [sessions.id, sql`${id}::text`],
-              [sessions.studentId, sql`${studentId}::text`],
-              [sessions.teacherId, sql`${agents.teacherId}`],
-              [sessions.agentId, sql`${agents.id}`],
-              [sessions.agentVersion, sql`${agentVersions.version}`],
-              [sessions.packageId, sql`${packageVersions.packageId}`],
-              [sessions.packageVersion, sql`${packageVersions.version}`],
-            ],
-            sql`from ${agentVersions} join ${agents} on ${agents.id} = ${agentVersions.agentId}
-                join ${packages} on ${packages.agentId} = ${agents.id}
-                join ${packageVersions} on ${packageVersions.packageId} = ${packages.id}
-                where ${and(
-                  eq(agents.id, agentId),
-                  eq(agents.teacherId, teacherId),
-                  eq(agentVersions.teacherId, teacherId),
-                  eq(agentVersions.version, agentVersion),
-                  eq(packages.id, packageId),
-                  eq(packages.teacherId, teacherId),
-                  eq(packageVersions.teacherId, teacherId),
-                  eq(packageVersions.version, packageVersion),
-                )}`,
-          ),
-        ),
+      const col = (c: { name: string }) => sql.identifier(c.name);
+      const ownershipWhere = and(
+        eq(agents.id, agentId),
+        eq(agents.teacherId, teacherId),
+        eq(agentVersions.teacherId, teacherId),
+        eq(agentVersions.version, agentVersion),
+        eq(packages.id, packageId),
+        eq(packages.teacherId, teacherId),
+        eq(packageVersions.teacherId, teacherId),
+        eq(packageVersions.version, packageVersion),
       );
-      if (written(result) !== 1) throw new RepositoryError('not_found', method);
-      return { id };
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const result = await tx.execute(sql`
+            ${insertSelect(
+              sessions,
+              [
+                [sessions.id, sql`${id}::text`],
+                [sessions.studentId, sql`${studentId}::text`],
+                [sessions.teacherId, sql`${agents.teacherId}`],
+                [sessions.agentId, sql`${agents.id}`],
+                [sessions.agentVersion, sql`${agentVersions.version}`],
+                [sessions.packageId, sql`${packageVersions.packageId}`],
+                [sessions.packageVersion, sql`${packageVersions.version}`],
+              ],
+              sql`from ${agentVersions} join ${agents} on ${agents.id} = ${agentVersions.agentId}
+                  join ${packages} on ${packages.agentId} = ${agents.id}
+                  join ${packageVersions} on ${packageVersions.packageId} = ${packages.id}
+                  where ${ownershipWhere}`,
+            )}
+            on conflict (${col(sessions.teacherId)}, ${col(sessions.studentId)}, ${col(sessions.agentId)})
+            where ${col(sessions.endedAt)} is null
+            do nothing
+          `);
+          if (written(result) === 1) return { id };
+          const [owned] = await tx
+            .select({ ok: sql`1` })
+            .from(agentVersions)
+            .innerJoin(agents, eq(agents.id, agentVersions.agentId))
+            .innerJoin(packages, eq(packages.agentId, agents.id))
+            .innerJoin(packageVersions, eq(packageVersions.packageId, packages.id))
+            .where(ownershipWhere)
+            .limit(1);
+          if (!owned) throw new RepositoryError('not_found', method);
+          const [existing] = await tx
+            .select({ id: sessions.id })
+            .from(sessions)
+            .where(
+              and(
+                eq(sessions.teacherId, teacherId),
+                eq(sessions.studentId, studentId),
+                eq(sessions.agentId, agentId),
+                isNull(sessions.endedAt),
+              ),
+            )
+            .limit(1);
+          /* v8 ignore next -- the insert's own ON CONFLICT only fired because a row matching
+           * (teacherId, studentId, agentId) WHERE ended_at IS NULL already existed at that
+           * statement; this only throws if a second, concurrent transaction ended that very row
+           * in the gap before this SELECT (same tiny window as teacher-questions.ts's `open`). */
+          if (!existing) throw new RepositoryError('not_found', method);
+          return { id: existing.id };
+        }),
+      );
     },
 
     /**

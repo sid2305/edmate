@@ -80,6 +80,14 @@ export const sessions = pgTable(
     index('sessions_open_teacher_id_student_id_idx')
       .on(t.teacherId, t.studentId)
       .where(sql`${t.endedAt} is null`),
+    // Task 5.10d: at most one open session per (teacher, student, agent) — `sessions.create`
+    // relies on this for its `ON CONFLICT ... WHERE ended_at is null` reuse. Declared here so
+    // `db:generate` stays a no-op; built by the post-migrate step with CREATE UNIQUE INDEX
+    // CONCURRENTLY, not by SQL in a migration file (same reasoning as the two indexes above:
+    // `sessions` is big and high-write, unlike `teacher_questions`'s plain-migration index 0011).
+    uniqueIndex('sessions_open_teacher_student_agent_key')
+      .on(t.teacherId, t.studentId, t.agentId)
+      .where(sql`${t.endedAt} is null`),
     check(
       'sessions_package_pin_complete',
       sql`(${t.packageId} is null) = (${t.packageVersion} is null)`,

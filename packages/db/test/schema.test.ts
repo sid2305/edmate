@@ -407,11 +407,17 @@ const RELAX_NOT_NULL = /ALTER TABLE "(\w+)" ALTER COLUMN "(\w+)" DROP NOT NULL;/
  *
  * Task 5.10: 0018 backfills `group_id = id` on every `teacher_questions` row that predates
  * grouping (the column has existed, unset, since 0001). No row is deleted.
+ *
+ * Task 5.10d: 0028 closes duplicate open `sessions` rows (keeps the newest per
+ * (teacher_id, student_id, agent_id), ends the rest) before the unique partial index is built by
+ * the post-migrate step, else that index build would fail on any duplicate that already exists.
+ * No row is deleted.
  */
 const REVIEWED_UPDATES: Record<string, string[]> = {
   '0009_session_package_pin.sql': ['sessions', 'learner_profiles', 'sessions'],
   '0011_teacher_question_open_dedup.sql': ['teacher_questions'],
   '0018_ask_the_teacher.sql': ['teacher_questions'],
+  '0028_sessions_open_unique.sql': ['sessions'],
 };
 const UPDATE_SET = /UPDATE "(\w+)" SET/g;
 
