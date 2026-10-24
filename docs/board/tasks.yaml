@@ -2553,9 +2553,28 @@ tasks:
   deps:
   - 5.10b
   - 9.4a
-  status: review
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/5.10d-one-open-session
+  metrics:
+    tool_calls: 321
+    tokens_in: 1060
+    tokens_out: 86736
+    cache_read_tokens: 41837059
+    wall_time_seconds: 259477
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
@@ -5174,9 +5193,29 @@ tasks:
   deps:
   - 9.5b
   risk: low
-  status: running
+  status: done
   branch: m13/9.5c-skill-launcher-a11y
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 12
+    tokens_in: 42
+    tokens_out: 823
+    cache_read_tokens: 331262
+    wall_time_seconds: 32
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7j
   milestone: M13
   title: '8.7c review follow-ups: apps/worker/src/gate/processor.ts replaces the `gateResult as GateResult` cast in the gatedPublish callback with a runtime guard (or returns the result through the gate
@@ -7634,7 +7673,9 @@ tasks:
   deps:
   - 5.6b
   risk: low
-  status: todo
+  status: running
+  branch: m13/5.6g-stream-gate-window
+  model: build:sonnet
 - id: 8.9e
   milestone: M13
   title: '8.9d review MEDIUM: apps/web/src/studio/questions/routes.ts fromError gets a `default` branch assigning error.kind to `never`, so a new RepositoryErrorKind fails to compile instead of falling
