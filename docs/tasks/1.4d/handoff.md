@@ -113,6 +113,18 @@ cases above; items 1/2 are docs/comments only, no test files). `python3
 
 Tool calls used (this fix round): 27
 
+### Gate verification (second fix round, resumed after a usage-limit interruption)
+
+The four items above were already implemented and committed (by the earlier, interrupted agent)
+when this round started; this round verified them against a clean gate rather than redoing the
+work. Re-ran: `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate
+TEST_REDIS_URL=redis://127.0.0.1:56379 corepack pnpm turbo run typecheck lint test
+--filter=@edmate/web --force` -- **10/10 tasks successful**; **157/157 test files passed,
+2418/2418 tests passed, 0 skipped**. `python3 .githooks/secret-scan.py --all` -- clean (0
+findings). No further code changes were needed.
+
+Tool calls used (gate-verification round): 9
+
 ## Decisions
 
 ### 23 Oct 2026 · Sign-in runtime hardening: dev Redis singleton, dynamic ioredis/nodemailer imports, shared ready-wait, Auth.js error type in logs · decided by builder · risk: high
