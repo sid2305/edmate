@@ -9,6 +9,11 @@
 # /api/auth/callback/*: the email sign-in link's single-use token is in the query (task 1.4).
 # X-Forwarded-For: reverse_proxy sets it itself; the app reads only its rightmost entry (the
 # peer Caddy saw), so this holds whether Caddy replaces or appends a client-sent value.
+# Production must also set `servers { trusted_proxies static <ranges>; trusted_proxies_strict }`
+# plus `header_up X-Forwarded-For {client_ip}` below -- trusted_proxies alone makes Caddy *append*
+# its peer (the load balancer) to the header, so the rightmost entry stays the load balancer's IP
+# and every client shares its bucket (not an "unknown" one); see
+# docs/setup/sign-in-mail-and-proxy.md.
 :80 {
 	encode gzip
 	reverse_proxy web:3000
