@@ -10,6 +10,22 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 0.22: review of 1 Opus + 2 Sonnet builders with the no-shared-files rule · decided by lead · risk: medium
+- Decided: recommend keeping three parallel builders under the no-shared-files rule (B-55), but run only two when the week's usage is tight, and record the harness tool count for every agent.
+- Why: merged PRs per Pacific day (`gh pr list --state merged`), CRITICAL/HIGH counted from each task's review.md:
+
+  | | before (20–21 Oct, 1 + 1) | after (22–23 Oct, 1 + 2) |
+  |---|---|---|
+  | PRs merged | 79 (29, 50) | 113 (102, 11) |
+  | CRITICAL/HIGH per task | 0.62 | 0.42 |
+  | tasks needing a fix round | 25 (32%) | 31 (27%) |
+  | shared-file clashes between builders | none seen | none seen |
+
+  The jump on 22 Oct mixes in Fable builders and many small follow-up tasks; the drop on 23 Oct came from bigger tasks (5.6b in three phases, 9.2d) and the weekly usage limit, which stopped every agent that evening. Three builders spend the weekly allowance faster. Idle builder time was not logged, so it is not compared. Agents under-report their tool calls (8.5d 131 vs 82, 9.2d 128 vs 83, 8.9d 75 vs 46), so budgets use the harness count.
+- risk: medium
+
+---
+
 ### 23 Oct 2026 · 8.9d maps `scope`/`integrity` the same way `profile.ts`/`packages.ts` do · decided by builder · risk: low
 - Decided: `questions/routes.ts`'s new `fromError` maps `RepositoryError('scope', …)` to
   `forbidden` 403 and `RepositoryError('integrity', …)` to the same `validation` 400 as `invalid`,
