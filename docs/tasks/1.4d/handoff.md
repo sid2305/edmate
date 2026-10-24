@@ -74,6 +74,45 @@ Phase B (docs/config, no code):
 - The real deploy guide (board task 13.6) should fold in `docs/setup/sign-in-mail-and-proxy.md`
   once it exists, per that doc's own pointer.
 
+## Fix round
+
+Four review follow-ups (security-reviewer, typescript-reviewer):
+
+1. [HIGH] `docs/setup/sign-in-mail-and-proxy.md` -- the `trusted_proxies` recipe was wrong: a
+   trusted Caddy *appends* its peer to `X-Forwarded-For` rather than replacing it, so
+   `clientIp` (`rate-limit.ts`'s rightmost-entry read) still gets the load balancer's IP, not
+   the real client's -- every client shares one per-IP bucket, not an "unknown" one. Replaced
+   with the reviewer's tested recipe: global `servers { trusted_proxies static <ranges>;
+   trusted_proxies_strict }` plus `header_up X-Forwarded-For {client_ip}` in the `reverse_proxy`
+   block, with the reasoning (append-not-replace; why `trusted_proxies_strict` matters) in plain
+   sentences. Placeholder only (`<your load balancer ranges>`), no real IPs or hosts.
+2. [MEDIUM] `docker/Caddyfile:12-14` -- the comment repeated the same wrong claim; corrected to
+   match the doc. Comment only; the live `:80` block is unchanged.
+3. [MEDIUM] `apps/web/src/auth/index.ts` (`emailSignIn`) -- `emailDeps ??= (async () => {...})()`
+   cached a rejected promise forever (a throw during the one-time build locked out every later
+   request until a process restart). Added a `.catch` that resets `emailDeps = undefined` before
+   rethrowing, so the next call rebuilds from scratch. New test: `'emailSignIn retries after a
+   throw during the one-time build (not cached forever)'` -- the first `requestLink` throws (the
+   fake `Redis` constructor is made to throw once), `fakes.redis` stays empty, and the next
+   `requestLink` succeeds and reaches `ready`.
+4. [LOW] `apps/web/src/auth/index.ts` -- the dev-mode Redis singleton's `error` listener was
+   attached every time the (memoized-per-reload) builder ran, including when it reused the
+   cached `globalThis` client across a hot reload, so repeated edits piled up listeners. Moved
+   the `.on('error', ...)` call inside the `if (!redis)` branch that creates a new client, so it
+   runs exactly once per client, in dev or production. New test: `'dev: a hot-reloaded module
+   reuses the singleton client without adding another error listener'` -- after four simulated
+   HMR reloads (`load()` + a providers request each), `fakes.redis` still has length 1 and its
+   instance's `listenerCount('error')` is still 1.
+
+Gate: `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate
+TEST_REDIS_URL=redis://127.0.0.1:56379 corepack pnpm turbo run typecheck lint test
+--filter=@edmate/web --force` -- **10/10 tasks successful**; **157/157 test files passed,
+2418/2418 tests passed, 0 skipped** (`index.test.ts` grew from 25 to 27 tests, the two new
+cases above; items 1/2 are docs/comments only, no test files). `python3
+.githooks/secret-scan.py --all` -- clean.
+
+Tool calls used (this fix round): 27
+
 ## Decisions
 
 ### 23 Oct 2026 · Sign-in runtime hardening: dev Redis singleton, dynamic ioredis/nodemailer imports, shared ready-wait, Auth.js error type in logs · decided by builder · risk: high

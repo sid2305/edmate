@@ -12,6 +12,9 @@ const fakes = vi.hoisted(() => ({
   db: [] as Array<{ options: unknown; identity: MemoryIdentity; repos: object }>,
   redis: [] as Array<{ url: string; options: Record<string, unknown>; take: unknown[][] }>,
   transports: [] as Array<{ options: Record<string, unknown>; sent: Record<string, unknown>[] }>,
+  // Task 1.4d fix round: how many times the next `new Redis(...)` call should throw before
+  // succeeding, to exercise emailSignIn's one-time-build retry.
+  redisFailuresLeft: 0,
 }));
 
 vi.mock('ioredis', async () => {
@@ -20,6 +23,10 @@ vi.mock('ioredis', async () => {
     status = 'connecting';
     readonly record: { url: string; options: Record<string, unknown>; take: unknown[][] };
     constructor(url: string, options: Record<string, unknown>) {
+      if (fakes.redisFailuresLeft > 0) {
+        fakes.redisFailuresLeft -= 1;
+        throw new Error('redis construction failed (test)');
+      }
       super();
       this.record = { url, options, take: [] };
       fakes.redis.push(this.record);
@@ -132,6 +139,7 @@ describe('src/auth wiring', () => {
     vi.stubEnv('DATABASE_URL', undefined);
     fakes.redis.length = 0;
     fakes.transports.length = 0;
+    fakes.redisFailuresLeft = 0;
     // The dev-mode Redis singleton (task 1.4d) is cached on `globalThis`, deliberately surviving
     // `vi.resetModules()`'s cold `load()` -- so each test starts with a clean slate here, and
     // only the dedicated singleton test below exercises the reuse across two `load()` calls.
@@ -233,6 +241,55 @@ describe('src/auth wiring', () => {
       const auth2 = await load();
       await auth2.handlers.GET(new NextRequest(`${ORIGIN}/api/auth/providers`));
       expect(fakes.redis).toHaveLength(1);
+    },
+    AUTH_IMPORT_TIMEOUT_MS,
+  );
+
+  it(
+    'emailSignIn retries after a throw during the one-time build (not cached forever)',
+    async () => {
+      setEmailOnlyEnv();
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const auth = await load();
+      fakes.redisFailuresLeft = 1;
+      // First request: the memoized builder's `new Redis(...)` throws. The per-request Auth.js
+      // config factory awaits emailSignIn and rejects; the route handler must not crash the
+      // process, and no Redis client or mail is recorded for this attempt.
+      await expect(requestLink(auth)).rejects.toThrow();
+      expect(fakes.redis).toHaveLength(0);
+      // Second request: with the rejection no longer cached, the builder retries and succeeds.
+      const pending = requestLink(auth);
+      const record = await vi.waitFor(() => {
+        const r = fakes.redis[0] as unknown as { instance: EventEmitter & { status: string } };
+        expect(r.instance.listenerCount('ready')).toBeGreaterThan(0);
+        return r;
+      });
+      record.instance.status = 'ready';
+      record.instance.emit('ready');
+      const res = await pending;
+      expect(res.status).toBe(302);
+      expect(fakes.redis).toHaveLength(1);
+      errors.mockRestore();
+    },
+    REDIS_READY_TIMEOUT_MS + AUTH_IMPORT_TIMEOUT_MS,
+  );
+
+  it(
+    'dev: a hot-reloaded module reuses the singleton client without adding another error listener',
+    async () => {
+      setEmailOnlyEnv();
+      const auth1 = await load();
+      await auth1.handlers.GET(new NextRequest(`${ORIGIN}/api/auth/providers`));
+      expect(fakes.redis).toHaveLength(1);
+      const instance = (fakes.redis[0] as unknown as { instance: EventEmitter }).instance;
+      expect(instance.listenerCount('error')).toBe(1);
+      // Three more simulated HMR reloads, each triggering a fresh request on the same singleton.
+      for (let i = 0; i < 3; i += 1) {
+        const auth = await load();
+        await auth.handlers.GET(new NextRequest(`${ORIGIN}/api/auth/providers`));
+      }
+      expect(fakes.redis).toHaveLength(1);
+      expect(instance.listenerCount('error')).toBe(1);
     },
     AUTH_IMPORT_TIMEOUT_MS,
   );

@@ -86,7 +86,10 @@ function getAgeContent(): AgeContent {
  * `withRole`/`Principal`) would otherwise pull in both packages at module-load time whether or
  * not email sign-in is even configured. The Redis client fails fast in an outage (no offline
  * queue, one retry), and each take first waits, bounded, for the connection to be ready, so the
- * first request after a cold start isn't refused just for being early.
+ * first request after a cold start isn't refused just for being early. A throw during the build
+ * (a bad dynamic import, or a synchronous throw from `new Redis(...)`/`createSignInLimiter`)
+ * resets the memo to `undefined` so the next request retries, instead of every later request
+ * getting the same cached rejection until the process restarts.
  */
 function emailSignIn(env: AuthEnv): Promise<AuthConfigDeps['emailSignIn']> {
   if (!env.email) return Promise.resolve(undefined);
@@ -95,12 +98,17 @@ function emailSignIn(env: AuthEnv): Promise<AuthConfigDeps['emailSignIn']> {
     const [{ Redis }, { smtpMailSender }, { createSignInLimiter, redisSignInCounters }] =
       await Promise.all([import('ioredis'), import('./mail'), import('./rate-limit')]);
     const dev = process.env.NODE_ENV !== 'production';
-    const redis =
-      (dev && globalThis.__edmateAuthRedis) ||
-      new Redis(config.redisUrl, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
-    if (dev) globalThis.__edmateAuthRedis = redis;
-    // ioredis errors can quote the host; log the name only. A take during an outage rejects.
-    redis.on('error', (error: unknown) => console.error(`[auth] redis ${describeError(error)}`));
+    const existing = dev && globalThis.__edmateAuthRedis;
+    let redis = existing;
+    if (!redis) {
+      redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+      // Attached only once, here, when the client is created: a dev-mode reload reuses the
+      // `existing` singleton above and skips this, so a listener added on every hot reload
+      // doesn't pile up (MaxListeners warning after ~10 edits). ioredis errors can quote the
+      // host; log the name only. A take during an outage rejects.
+      redis.on('error', (error: unknown) => console.error(`[auth] redis ${describeError(error)}`));
+      if (dev) globalThis.__edmateAuthRedis = redis;
+    }
     return {
       mail: smtpMailSender({
         server: config.server,
@@ -113,7 +121,13 @@ function emailSignIn(env: AuthEnv): Promise<AuthConfigDeps['emailSignIn']> {
         counters: readyCounters(redis, redisSignInCounters(redis)),
       }),
     };
-  })();
+  })().catch((error: unknown) => {
+    // Reset to `undefined` (not left as a settled rejected promise) so the next request's
+    // `emailSignIn` call retries the build from scratch, instead of every request after the
+    // first failure getting the same cached rejection until the process restarts.
+    emailDeps = undefined;
+    throw error;
+  });
   return emailDeps;
 }
 

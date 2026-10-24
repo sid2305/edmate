@@ -28,22 +28,37 @@ manager, never by relying on compose's placeholder default.
 
 ## Caddy's `trusted_proxies`
 
-The per-IP sign-in rate limit (`apps/web/src/auth/rate-limit.ts`'s `clientIp`) reads the
-right-most entry of `X-Forwarded-For`, trusting that Caddy (not the client) set it. That is true
-only when Caddy itself sits directly behind a reverse proxy, load balancer or CDN it is configured
-to trust. In production, `docker/Caddyfile`'s site block must set `trusted_proxies` to whatever
-sits in front of it, for example:
+The per-IP sign-in rate limit (`apps/web/src/auth/rate-limit.ts`'s `clientIp`) reads only the
+**right-most** entry of `X-Forwarded-For`, trusting that Caddy (not the client) set it. `reverse_proxy { trusted_proxies <ranges> }` alone
+does not fix that: when Caddy trusts the peer
+that connected to it, it *appends* that peer's own address to `X-Forwarded-For` rather than
+replacing the header, so the right-most entry `clientIp` reads is still Caddy's direct peer -- the
+load balancer, not the real client. In production, every client then shares the load balancer's
+single per-IP bucket (not an "unknown" bucket), so once `IP_LIMIT` sign-in emails are sent in the
+window, email sign-in fails for every client behind that load balancer, until the window rolls
+over.
+
+The fix is to have Caddy itself hand the app the real client IP, globally, with the trusted
+load balancer or CDN ranges locked down:
 
 ```
+{
+	servers {
+		trusted_proxies static <your load balancer ranges>
+		trusted_proxies_strict
+	}
+}
+
 :80 {
 	reverse_proxy web:3000 {
-		trusted_proxies 10.0.0.0/8
+		header_up X-Forwarded-For {client_ip}
 	}
 }
 ```
 
-(the real value is whatever private range or CDN IP list the load balancer uses -- check its
-docs). Without it, Caddy does not know which hop on the chain to trust, `clientIp` reads no real
-client IP, and every client collapses into the shared `unknown` bucket: the per-IP limit still
-fails toward limiting (it does not open up), but it no longer tells one client's requests apart
-from another's, so a single noisy client can exhaust the shared bucket for everyone.
+`<your load balancer ranges>` is a placeholder: the private range or CDN IP list your load
+balancer actually uses (check its docs). `{client_ip}` is Caddy's own best guess at the real
+client, computed from the trusted ranges rather than taken from client-sent headers.
+`trusted_proxies_strict` is required: without it, `{client_ip}` falls back to the left-most
+`X-Forwarded-For` entry, which an untrusted client can simply put there itself, defeating the
+per-IP limit entirely.
