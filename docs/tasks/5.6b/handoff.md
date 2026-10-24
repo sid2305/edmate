@@ -329,4 +329,8 @@ no test file skipped. `python3 .githooks/secret-scan.py --all` → clean, no fin
 - Why: the full-strength "correct option in the prompt" check stays, and a concept prompt never computes to an option (brief and Phase A note).
 - risk: low
 
-Tool calls used: Phase A 61; Phase B 108; Phase C 79
+### 24 Oct 2026 · 5.6b review findings deferred to 5.6g · decided by lead · risk: low
+- Decided: the security re-check MEDIUM in packages/harness/src/pipeline/generate/streamGate.ts (judge the window plus the piece for ruling-out) and the TypeScript LOWs in packages/harness/src/pipeline/generate/itemContext.ts and packages/harness/src/tools/practiceItems.ts go to board task 5.6g, started right after this merges.
+- Why: one fix round per task; postGuard's whole-draft check still fixes the stored reply for the MEDIUM.
+
+Tool calls used: 310 (harness count: Phase A 61, Phase B 108, Phase C 90, fix round 51; the fixer reported 32)
