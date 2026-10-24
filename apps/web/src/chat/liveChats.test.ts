@@ -13,14 +13,19 @@ import {
   homeLinks,
   type LiveChat,
   type LiveChatDeps,
+  type UnavailableChat,
 } from './liveChats';
 
 const STUDENT: Principal = { userId: 'stu_1', role: 'student' };
 
 const OWNERS: Record<string, string> = { agt_a: 'tch_a', agt_b: 'tch_b', agt_c: 'tch_c' };
 
-/** `live` is keyed by student id, as the real query is: one student never sees another's rows. */
-function deps(live: Record<string, LiveChat[]>): LiveChatDeps {
+/** `live` and `unavailable` are keyed by student id, as the real queries are: one student never
+ * sees another's rows. */
+function deps(
+  live: Record<string, LiveChat[]>,
+  unavailable: Record<string, UnavailableChat[]> = {},
+): LiveChatDeps {
   return {
     agents: {
       owner: vi.fn(async ({ agentId }: { agentId: string }) => {
@@ -30,6 +35,7 @@ function deps(live: Record<string, LiveChat[]>): LiveChatDeps {
     },
     subscriptions: {
       listLiveForStudent: vi.fn(async (studentId: string) => live[studentId] ?? []),
+      listUnavailableForStudent: vi.fn(async (studentId: string) => unavailable[studentId] ?? []),
     },
   };
 }
@@ -92,10 +98,13 @@ describe('homeLinks', () => {
       paused: ['agt_b'],
       startable: [],
       teacherIds: ['tch_a', 'tch_b'],
+      unavailable: [],
     });
     // Keyed by the signed-in principal's own id, once.
     expect(d.subscriptions.listLiveForStudent).toHaveBeenCalledTimes(1);
     expect(d.subscriptions.listLiveForStudent).toHaveBeenCalledWith('stu_1');
+    expect(d.subscriptions.listUnavailableForStudent).toHaveBeenCalledTimes(1);
+    expect(d.subscriptions.listUnavailableForStudent).toHaveBeenCalledWith('stu_1');
     expect(d.agents.owner).not.toHaveBeenCalled();
   });
 
@@ -120,6 +129,7 @@ describe('homeLinks', () => {
       startable: ['agt_c'],
       // Startable candidates are not part of the live-classes teacher set.
       teacherIds: ['tch_a', 'tch_b'],
+      unavailable: [],
     });
     // Only the candidates not already live are checked for a live agent.
     expect(d.agents.owner).toHaveBeenCalledTimes(2);
@@ -129,7 +139,13 @@ describe('homeLinks', () => {
   it('an ended subscription leaves its agent startable again', async () => {
     const d = deps({ stu_1: [row('agt_a', 'ended')] });
     const links = await homeLinks(() => d, STUDENT, ['agt_a'], { error: vi.fn() });
-    expect(links).toEqual({ chats: [], paused: [], startable: ['agt_a'], teacherIds: [] });
+    expect(links).toEqual({
+      chats: [],
+      paused: [],
+      startable: ['agt_a'],
+      teacherIds: [],
+      unavailable: [],
+    });
   });
 
   it('dedupes teacher ids across the live list', async () => {
@@ -145,7 +161,13 @@ describe('homeLinks', () => {
 
   it('no subscriptions and no candidates gives no links', async () => {
     const links = await homeLinks(() => deps({}), STUDENT, [], { error: vi.fn() });
-    expect(links).toEqual({ chats: [], paused: [], startable: [], teacherIds: [] });
+    expect(links).toEqual({
+      chats: [],
+      paused: [],
+      startable: [],
+      teacherIds: [],
+      unavailable: [],
+    });
   });
 
   it('a database failure gives no links and logs the error name only', async () => {
@@ -158,7 +180,13 @@ describe('homeLinks', () => {
       ['agt_a'],
       log,
     );
-    expect(links).toEqual({ chats: [], paused: [], startable: [], teacherIds: [] });
+    expect(links).toEqual({
+      chats: [],
+      paused: [],
+      startable: [],
+      teacherIds: [],
+      unavailable: [],
+    });
     expect(log.error).toHaveBeenCalledWith('home.links_failed', { error: 'RangeError' });
     expect(JSON.stringify(log.error.mock.calls)).not.toContain('connection details');
   });
@@ -172,8 +200,83 @@ describe('homeLinks', () => {
       paused: [],
       startable: [],
       teacherIds: [],
+      unavailable: [],
     });
     expect(log.error).toHaveBeenCalledWith('home.links_failed', { error: 'TypeError' });
     expect(JSON.stringify(log.error.mock.calls)).not.toContain('secret sql');
+  });
+
+  // Task 9.3f Phase C / B-49: a subscription whose agent is no longer live shows up as a
+  // blame-free "unavailable" line, not as a chat.
+  describe('unavailable (task 9.3f Phase C / B-49)', () => {
+    it('a subscription whose agent is suspended appears in unavailable, not chats', async () => {
+      const d = deps(
+        { stu_1: [row('agt_a', 'active')] },
+        { stu_1: [{ agentId: 'agt_s', teacherId: 'tch_s' }] },
+      );
+      const links = await homeLinks(() => d, STUDENT, [], { error: vi.fn() });
+      expect(links.chats).toEqual(['agt_a']);
+      expect(links.unavailable).toEqual(['agt_s']);
+    });
+
+    it('a draft agent (taken back off live) also appears in unavailable', async () => {
+      const d = deps({}, { stu_1: [{ agentId: 'agt_d', teacherId: 'tch_d' }] });
+      const links = await homeLinks(() => d, STUDENT, [], { error: vi.fn() });
+      expect(links.unavailable).toEqual(['agt_d']);
+    });
+
+    it('dedupes unavailable agent ids', async () => {
+      const d = deps(
+        {},
+        {
+          stu_1: [
+            { agentId: 'agt_s', teacherId: 'tch_s' },
+            { agentId: 'agt_s', teacherId: 'tch_s' },
+          ],
+        },
+      );
+      const links = await homeLinks(() => d, STUDENT, [], { error: vi.fn() });
+      expect(links.unavailable).toEqual(['agt_s']);
+    });
+
+    it('a different student only sees their own unavailable rows', async () => {
+      const d = deps(
+        {},
+        { stu_1: [{ agentId: 'agt_s', teacherId: 'tch_s' }], stu_2: [] },
+      );
+      const links = await homeLinks(() => d, { userId: 'stu_2', role: 'student' }, [], {
+        error: vi.fn(),
+      });
+      expect(links.unavailable).toEqual([]);
+    });
+
+    it('a failure still returns unavailable: [] (fails closed, one shared catch)', async () => {
+      const log = { error: vi.fn() };
+      const links = await homeLinks(
+        () => {
+          throw new RangeError('boom');
+        },
+        STUDENT,
+        [],
+        log,
+      );
+      expect(links.unavailable).toEqual([]);
+    });
+
+    it('a failing unavailable-list query gives no links at all (fails closed, shared catch)', async () => {
+      const d = deps({ stu_1: [row('agt_a', 'active')] });
+      vi.mocked(d.subscriptions.listUnavailableForStudent).mockRejectedValue(
+        new TypeError('secret sql'),
+      );
+      const log = { error: vi.fn() };
+      expect(await homeLinks(() => d, STUDENT, [], log)).toEqual({
+        chats: [],
+        paused: [],
+        startable: [],
+        teacherIds: [],
+        unavailable: [],
+      });
+      expect(log.error).toHaveBeenCalledWith('home.links_failed', { error: 'TypeError' });
+    });
   });
 });

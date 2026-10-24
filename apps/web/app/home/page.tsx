@@ -54,7 +54,20 @@ export default async function HomePage() {
   const principal = await requireRole(['student']);
   const candidates = chatAgentCandidates(process.env);
   const open = () => serverDatabase().repos;
-  const { chats, startable, paused, teacherIds } = await homeLinks(open, principal, candidates, log);
+  const { chats, startable, paused, teacherIds, unavailable } = await homeLinks(
+    open,
+    principal,
+    candidates,
+    log,
+  );
   const liveClasses = await homeLiveClasses(open, principal, teacherIds, log);
-  return <HomeView chats={chats} startable={startable} paused={paused} liveClasses={liveClasses} />;
+  return (
+    <HomeView
+      chats={chats}
+      startable={startable}
+      paused={paused}
+      liveClasses={liveClasses}
+      unavailable={unavailable}
+    />
+  );
 }

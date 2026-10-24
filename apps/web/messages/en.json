@@ -18,6 +18,7 @@
     "startLink": "Start a package",
     "pausedTitle": "Paused",
     "pausedLink": "Manage plan",
+    "unavailableLine": "{count, plural, one {One of your teachers' agents isn't available right now.} other {{count} of your teachers' agents aren't available right now.}}",
     "liveClasses": {
       "title": "Upcoming live classes",
       "join": "Join",
