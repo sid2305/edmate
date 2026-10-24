@@ -434,9 +434,9 @@ tasks:
   accept: a short comparison (before/after table, 10 lines) in docs/decisions/log.md under a 24 Oct 2026 entry and a blocker with the recommendation; no code change.
   deps: []
   risk: normal
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: lead
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
@@ -560,10 +560,33 @@ tasks:
     pass
   deps:
   - '1.4'
-  status: running
+  status: done
   risk: risky
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
   branch: m13/1.4d-signin-followups
+  metrics:
+    tool_calls: 88
+    tokens_in: 286
+    tokens_out: 44240
+    cache_read_tokens: 6704895
+    wall_time_seconds: 127817
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 1.4c
   milestone: M13
   title: 'Google sign-in after a link sign-up (1.4 plan Q4): link the accounts when both sides have a verified email instead of OAuthAccountNotLinked (changes a 1.3 risk-high decision)'
@@ -1539,7 +1562,7 @@ tasks:
   accept: an MCQ item and a code_output item are served, re-shown and answered without a false leak block, and a real leak of either key is still blocked
   deps:
   - '5.6'
-  status: running
+  status: review
   branch: m13/5.6b-answer-context
   model: plan:opus build:opus
 - id: 5.6d
@@ -2506,8 +2529,9 @@ tasks:
   deps:
   - 5.10b
   - 9.4a
-  status: planning
-  model: plan:sonnet
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/5.10d-one-open-session
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
@@ -4494,9 +4518,29 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: running
+  status: done
   branch: m13/8.9d-questions-followups
-  model: plan:lead-brief build:sonnet
+  model: plan:lead-brief build:sonnet review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 116
+    tokens_out: 1935
+    cache_read_tokens: 1470199
+    wall_time_seconds: 127
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 9.2e
   milestone: M13
   title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table
@@ -7514,7 +7558,9 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/9.3f-staff-verified-reject
 - id: 9.3g
   milestone: M13
   title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift
@@ -7544,3 +7590,32 @@ tasks:
   - 5.6b
   risk: high
   status: todo
+- id: 1.4e
+  milestone: M13
+  title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs
+    against the full compose stack and record the result'
+  accept: web typecheck, lint and test green; redis-ready.ts documents or handles a differing timeoutMs; the sandbox magic-link script run is recorded in the handoff.
+  deps:
+  - 1.4d
+  risk: low
+  status: todo
+- id: 5.6g
+  milestone: M13
+  title: '5.6b review LOWs: packages/harness/src/pipeline/generate/itemContext.ts ItemContext prompt/options fields become readonly (like PostGuardCtx); packages/harness/src/tools/practiceItems.ts validMcq
+    checks answerKey.length before reading answerKey[0] instead of relying on short-circuit order'
+  accept: harness typecheck, lint and test green; no behaviour change.
+  deps:
+  - 5.6b
+  risk: low
+  status: todo
+- id: 8.9e
+  milestone: M13
+  title: '8.9d review MEDIUM: apps/web/src/studio/questions/routes.ts fromError gets a `default` branch assigning error.kind to `never`, so a new RepositoryErrorKind fails to compile instead of falling
+    through to a 500 (the comment claims this today); the same check in studio/profile.ts fromError'
+  accept: web typecheck, lint and test green; a type-level test or a comment shows the switch is exhaustive.
+  deps:
+  - 8.9d
+  risk: low
+  status: running
+  branch: m13/8.9e-fromerror-never
+  model: build:sonnet
