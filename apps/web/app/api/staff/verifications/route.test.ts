@@ -83,6 +83,30 @@ function memory() {
           email: p.teacherId === 'tch_c' ? null : `${p.teacherId}@example.test`,
         }));
     }),
+    findBySlugForStaff: vi.fn(
+      async (by: unknown, slug: unknown): Promise<TeacherVerificationQueueRow | null> => {
+        if (typeof by !== 'string' || by === '') {
+          throw new RepositoryError('invalid', 'teacherProfiles.findBySlugForStaff');
+        }
+        if (typeof slug !== 'string' || slug === '') {
+          throw new RepositoryError('invalid', 'teacherProfiles.findBySlugForStaff');
+        }
+        if (roles.get(by) !== 'staff') {
+          throw new RepositoryError('scope', 'teacherProfiles.findBySlugForStaff');
+        }
+        const p = order.map((id) => profiles.get(id)!).find((x) => x.slug === slug);
+        if (!p) return null;
+        return {
+          id: p.id,
+          teacherId: p.teacherId,
+          slug: p.slug,
+          subject: p.subject,
+          verificationStatus: p.verificationStatus,
+          name: `Name ${p.teacherId}`,
+          email: p.teacherId === 'tch_c' ? null : `${p.teacherId}@example.test`,
+        };
+      },
+    ),
     setVerification: vi.fn(
       async (
         scope: { teacherId: string },
@@ -138,6 +162,11 @@ function post(body: unknown, raw?: string): NextRequest {
   });
 }
 const get = () => new NextRequest(`${ORIGIN}${PATH}`, { method: 'GET' });
+const getLookup = (slug?: string) =>
+  new NextRequest(
+    `${ORIGIN}${PATH}/lookup${slug === undefined ? '' : `?slug=${encodeURIComponent(slug)}`}`,
+    { method: 'GET' },
+  );
 
 async function codeOf(res: Response): Promise<string> {
   return ((await res.json()) as { error: { code: string } }).error.code;
@@ -200,6 +229,76 @@ describe('GET: the pending queue', () => {
     m.roles.set('stf_1', 'student');
     const res = await m.h.list(get(), ctx());
     expect(res.status).toBe(403);
+  });
+});
+
+describe('GET lookup: find one teacher by slug, any status', () => {
+  it('finds a pending teacher by slug', async () => {
+    const m = memory();
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.json()).toEqual({
+      teacher: {
+        teacherId: 'tch_a',
+        slug: 'asha-math',
+        subject: 'Math',
+        name: 'Name tch_a',
+        email: 'tch_a@example.test',
+        verificationStatus: 'pending',
+      },
+    });
+    expect(m.teacherProfiles.findBySlugForStaff).toHaveBeenCalledWith('stf_1', 'asha-math');
+  });
+
+  it('finds a verified or a rejected teacher too (9.3f: no status filter, unlike list)', async () => {
+    const m = memory();
+    await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx());
+    const verified = await m.h.lookup(getLookup('asha-math'), ctx());
+    expect((await verified.json() as { teacher: { verificationStatus: string } }).teacher.verificationStatus).toBe(
+      'verified',
+    );
+    await m.h.decide(post({ teacherId: 'tch_b', status: 'rejected' }), ctx());
+    const rejected = await m.h.lookup(getLookup('ben-physics'), ctx());
+    expect((await rejected.json() as { teacher: { verificationStatus: string } }).teacher.verificationStatus).toBe(
+      'rejected',
+    );
+  });
+
+  it('an unknown slug is 200 with a null teacher', async () => {
+    const m = memory();
+    const res = await m.h.lookup(getLookup('no-such-teacher'), ctx());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ teacher: null });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['blank', ''],
+    ['whitespace only', '   '],
+  ])('a %s slug param is 400, no repo call', async (_label, slug) => {
+    const m = memory();
+    const res = await m.h.lookup(getLookup(slug), ctx());
+    expect(res.status).toBe(400);
+    expect(await codeOf(res)).toBe('validation');
+    expect(m.teacherProfiles.findBySlugForStaff).not.toHaveBeenCalled();
+  });
+
+  it('a non-staff session is 403', async () => {
+    const m = memory();
+    const res = await m.h.lookup(getLookup('asha-math'), ctx({ userId: 'tch_a', role: 'teacher' }));
+    expect(res.status).toBe(403);
+  });
+
+  it('an unexpected throw is 500 and logs only the error name', async () => {
+    const m = memory();
+    m.teacherProfiles.findBySlugForStaff.mockRejectedValueOnce(
+      new TypeError('secret detail person@example.test'),
+    );
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    expect(res.status).toBe(500);
+    expect(await codeOf(res)).toBe('provider_error');
+    expect(m.logs).toEqual(['[staff] verifications.lookup failed: TypeError']);
   });
 });
 
@@ -432,6 +531,7 @@ describe('through the real guard and ROUTE_POLICY', () => {
       ...m,
       GET: guard.withRole(['staff'], m.h.list),
       POST: guard.withRole(['staff'], m.h.decide),
+      LOOKUP: guard.withRole(['staff'], m.h.lookup),
     };
   }
   const call = (method: 'GET' | 'POST', who: string | null, origin = ORIGIN) =>
@@ -490,6 +590,33 @@ describe('through the real guard and ROUTE_POLICY', () => {
     expect(res.status).toBe(403);
     expect(g.audits).toEqual([]);
   });
+
+  it.each([
+    [null, 401],
+    ['student', 403],
+    ['teacher', 403],
+  ])('lookup as %s is %i, nothing read', async (who, status) => {
+    const g = guarded();
+    const res = await g.LOOKUP(
+      new NextRequest(`${ORIGIN}${PATH}/lookup?slug=ben-physics`, {
+        method: 'GET',
+        headers: who ? { cookie: `who=${who}` } : {},
+      }),
+    );
+    expect(res.status).toBe(status);
+    expect(g.teacherProfiles.findBySlugForStaff).not.toHaveBeenCalled();
+  });
+
+  it('staff lookup is 200', async () => {
+    const g = guarded();
+    const res = await g.LOOKUP(
+      new NextRequest(`${ORIGIN}${PATH}/lookup?slug=ben-physics`, {
+        method: 'GET',
+        headers: { cookie: 'who=staff' },
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
 });
 
 describe('route.ts', () => {
@@ -498,6 +625,15 @@ describe('route.ts', () => {
     const route = await import('./route');
     expect((route.GET as unknown as Record<symbol, unknown>)[GUARD]).toEqual(['staff']);
     expect((route.POST as unknown as Record<symbol, unknown>)[GUARD]).toEqual(['staff']);
+    expect(route.dynamic).toBe('force-dynamic');
+  });
+});
+
+describe('lookup/route.ts', () => {
+  it('exports GET guarded for staff only', async () => {
+    const { GUARD } = await import('../../../../src/auth/guard');
+    const route = await import('./lookup/route');
+    expect((route.GET as unknown as Record<symbol, unknown>)[GUARD]).toEqual(['staff']);
     expect(route.dynamic).toBe('force-dynamic');
   });
 });

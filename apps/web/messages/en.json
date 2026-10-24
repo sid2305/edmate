@@ -634,6 +634,17 @@
     "rejectedSafety": "{slug} was rejected and their agent is no longer available to students.",
     "safetyLabel": "Safety concern: also stop every student's access to this teacher's agent now",
     "safetyHint": "Use this only for a safety reason. Students who already subscribed lose access at once; a paperwork rejection leaves them until their plan ends.",
+    "lookupLabel": "Find a teacher by their profile URL",
+    "lookupPlaceholder": "profile-url-slug",
+    "lookupButton": "Find",
+    "lookupBusy": "Looking…",
+    "lookupNotFound": "No teacher has that profile URL.",
+    "currentStatusLabel": "Current status",
+    "status": {
+      "pending": "Pending",
+      "verified": "Verified",
+      "rejected": "Rejected"
+    },
     "errors": {
       "forbidden": "You can't verify this teacher: it may be your own profile, or your staff access changed.",
       "not_found": "That teacher was not found. Reload the list.",

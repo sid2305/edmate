@@ -7,6 +7,10 @@
 // Task 9.3e: a rejection may carry `safety: true` (B-46 (c)): setVerification then takes down the
 // teacher's live agents in the same transaction, so existing subscribers lose access at once. The
 // flag is refused on an approval (400) and passed on only when `true`.
+// Task 9.3f: a new `lookup` handler reaches a teacher by slug regardless of status (9.3e's
+// `setVerification({safety:true})` already worked from any starting status; staff just had no way
+// to name a verified or already-rejected teacher). It is a read, same role check as `list`; the
+// existing `decide` is unchanged.
 import { RepositoryError, type Repositories, type TeacherVerificationQueueRow } from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -50,6 +54,15 @@ export function toQueueItem(row: TeacherVerificationQueueRow): QueueItem {
   };
 }
 
+/** Task 9.3f: a lookup result also names the teacher's current status (no status filter). */
+export interface LookupItem extends QueueItem {
+  verificationStatus: 'pending' | 'verified' | 'rejected';
+}
+
+export function toLookupItem(row: TeacherVerificationQueueRow): LookupItem {
+  return { ...toQueueItem(row), verificationStatus: row.verificationStatus };
+}
+
 export interface StaffVerificationBackend {
   repos(): Pick<Repositories, 'teacherProfiles'>;
   /** One line per unexpected failure (name only); defaults to console.error. */
@@ -60,6 +73,7 @@ const MSG = {
   validation: 'Check the request and try again.',
   tooLarge: 'The request is too large.',
   listForbidden: 'Only staff can see the verification queue.',
+  lookupForbidden: 'Only staff can look up a teacher.',
   decideForbidden:
     "You can't verify this teacher: it may be your own profile, or your staff access changed.",
   notFound: 'That teacher was not found.',
@@ -75,6 +89,7 @@ type Handler = (req: NextRequest, ctx: RoleContext) => Promise<Response>;
 export function createStaffVerificationHandlers(backend: StaffVerificationBackend): {
   list: Handler;
   decide: Handler;
+  lookup: Handler;
 } {
   const log = backend.log ?? ((line: string) => console.error(line));
   const failed = (op: string, error: unknown) => {
@@ -95,6 +110,24 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
           }
         }
         return failed('list', error);
+      }
+    },
+
+    lookup: async (req, ctx) => {
+      const slug = req.nextUrl.searchParams.get('slug')?.trim() ?? '';
+      if (slug === '') return validation();
+      try {
+        const row = await backend
+          .repos()
+          .teacherProfiles.findBySlugForStaff(ctx.principal.userId, slug);
+        return ok({ teacher: row ? toLookupItem(row) : null });
+      } catch (error) {
+        if (error instanceof RepositoryError) {
+          if (error.kind === 'scope' || error.kind === 'invalid' || error.kind === 'not_found') {
+            return apiError('forbidden', MSG.lookupForbidden, 403);
+          }
+        }
+        return failed('lookup', error);
       }
     },
 

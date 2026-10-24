@@ -1,4 +1,4 @@
-**Status:** PARTIAL (Phase A done; Phases B and C left to do)
+**Status:** PARTIAL (Phases A and B done; Phase C left to do)
 
 ## Phase A
 
@@ -43,15 +43,78 @@ Built `packages/db` only, tests first.
 
 `python3 .githooks/secret-scan.py --all`: clean (no output).
 
+## Phase B
+
+Built `apps/web`'s staff console reaching a verified (or already-rejected) teacher, tests first.
+
+- `apps/web/app/api/staff/verifications/handlers.ts`: added a `lookup: Handler` (GET
+  `?slug=`). Missing/blank slug is 400 `validation`, before any repo call. Calls
+  `teacherProfiles.findBySlugForStaff(ctx.principal.userId, slug)`; `200 {teacher: LookupItem |
+  null}`; the same `RepositoryError` → `scope`/`invalid`/`not_found` → 403 mapping as `list`
+  (read-only, no `not_found` distinction needed since the repo itself returns `null` for an
+  unknown slug). Added `LookupItem` (`QueueItem & {verificationStatus}`) and `toLookupItem`.
+  `decide` and `list` are byte-for-byte unchanged.
+- `apps/web/app/api/staff/verifications/lookup/route.ts` (new file): `export const GET =
+  withRole(['staff'], handlers.lookup)`, same shape as the existing `route.ts`.
+- `apps/web/app/staff/client.ts`: `LookupItemSchema`/`LookupItem`, `findTeacherBySlug(slug,
+  fetchImpl?)` — same settle-never-reject shape as `loadQueue`/`decide` (a network failure,
+  non-2xx, unreadable JSON or wrong shape is a fixed error code; an unknown slug is `{ok: true,
+  teacher: null}`, not a failure).
+- `apps/web/app/staff/verification-row.tsx`: `VerificationRow` gains an optional
+  `currentStatus?: 'pending'|'verified'|'rejected'` prop; when set, a `dt`/`dd` pair ("Current
+  status" / the status) renders first in the row's definition list. The pending-queue list
+  passes nothing (unchanged rendering).
+- `apps/web/app/staff/view.tsx`: a "find a teacher" `<form>` (slug text input + Find button,
+  disabled while blank/whitespace-only or busy) above the queue list, own `slug`/`found`/
+  `notFound` state; `onFind` follows the same try/catch/finally, reset-on-every-action pattern as
+  `onDecide`/`onReload` (lessons: "UI state and server replies: trust neither, reset
+  everything"). A found teacher renders through the existing `VerificationRow` (with
+  `currentStatus`); its `onDecide` reuses the same `decide` call as the queue — on success it
+  clears `found` (instead of filtering a list) and shows the existing `notice`
+  (approved/rejected/rejectedSafety), no new notice copy.
+- `apps/web/messages/en.json` (`staff`): `lookupLabel`, `lookupPlaceholder`, `lookupButton`,
+  `lookupBusy`, `lookupNotFound`, `currentStatusLabel`, `status.pending`/`verified`/`rejected`.
+- `apps/web/app/staff/page.tsx`: untouched — the search box is entirely client-side (its own
+  `client.ts` calls), so the server page needs no new read.
+- Tests (written first): `route.test.ts` (new `lookup` describe: finds pending/verified/rejected
+  by slug, unknown slug is `200 {teacher: null}`, missing/blank/whitespace slug is 400 with no
+  repo call, non-staff is 403, an unexpected throw is 500 logging only the error name; plus
+  guard/ROUTE_POLICY cases and a `lookup/route.ts` exports case); `route.int.test.ts` (one real
+  round trip over Postgres: find teacher A — already verified by the preceding "staff approve"
+  test — by slug, then POST a safety rejection for that `teacherId`: 200, the audit `after`
+  carries `safety: true`; plus signed-out/non-staff 401/403 and an unknown-slug `null` case);
+  `client.test.ts` (`findTeacherBySlug`: found/not-found/400-shape/network-failure/non-2xx/
+  default-fetch cases, slug URL-encoding); `view.test.tsx` (new describe: type a slug, Find, see
+  the row with its current status and Approve/Reject/safety checkbox; safety-ticked Reject sends
+  `safety: true`, clears the found row, shows `rejectedSafety`; an unknown slug shows
+  `lookupNotFound`; finding again replaces it with a found row; Find disabled while blank; error
+  reply and thrown-call cases reset the busy flag; the pending queue itself never shows a
+  current-status line; axe clean with a found row and a not-found message visible together).
+
+### Gate
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force`:
+- typecheck: pass. lint: pass.
+- test: **155 test files passed, 2456 tests passed**, 0 skipped, 0 failed.
+- Coverage thresholds met (task exits 0 across all 10 web tasks; no threshold failure reported).
+
+`python3 .githooks/secret-scan.py --all`: clean (no output).
+
 ## Decisions
 
 1. "`setVerification({safety:true})` already worked from any starting `verificationStatus`
    (9.3e); the security review's MEDIUM was a console gap, not a repository one. Fixed with a new
-   staff-only `findBySlugForStaff` (status-independent) and a `lookup` route (Phase B, not yet
-   built), both read-only, so a verified teacher can now be found and safety-rejected through the
-   existing, unchanged `decide` call."
-   Decided: Phase A builds and proves only the repository half of this (over Postgres, in
-   `teacher-profiles.int.test.ts`'s acceptance case); the route/console half is Phase B.
+   staff-only `findBySlugForStaff` (status-independent) and a `lookup` route, both read-only, so a
+   verified teacher can now be found and safety-rejected through the existing, unchanged `decide`
+   call."
+   Decided: Phase A proved the repository half over Postgres (`teacher-profiles.int.test.ts`'s
+   acceptance case). Phase B added the console half: a `lookup` GET route/handler
+   (`apps/web/app/api/staff/verifications/{handlers.ts,lookup/route.ts}`), the client call
+   (`apps/web/app/staff/client.ts`'s `findTeacherBySlug`), and a search box in the staff console
+   (`apps/web/app/staff/view.tsx`) that reuses the existing `VerificationRow`/`decide` unchanged —
+   proved end to end over Postgres in `route.int.test.ts` (find teacher A, already verified,
+   by slug; safety-reject; 200; audit `after.safety === true`). `decide` and `list` are
+   byte-for-byte unchanged by this task.
 2. "B-49: a subscription whose agent stopped being `live` no longer silently disappears from
    `/home` with zero trace. A new read-only `listUnavailableForStudent` (deliberately separate
    from `listLiveForStudent`, which also feeds the live-classes question route unchanged) surfaces
@@ -60,16 +123,11 @@ Built `packages/db` only, tests first.
    for an agent they can't reach)."
    Decided: Phase A builds and proves only the read itself; wiring it into `/home` is Phase C.
 
-(Both carry `risk: high` per the plan — `packages/db/src/repositories/**` is a required-reviewer
-group.)
+(Phase A carries `risk: high` — `packages/db/src/repositories/**` is a required-reviewer group.
+Phase B also carries `risk: high` — `apps/web/app/api/staff/**` is a required-reviewer group.)
 
 ## Left to do
 
-- **Phase B** (`apps/web/app/api/staff/**`, risky): `lookup` handler + route, `LookupItem` /
-  `toLookupItem`, `apps/web/app/staff/client.ts` (`findTeacherBySlug`), `apps/web/app/staff/view.tsx`
-  search box wired to the existing `VerificationRow`/`decide`, `en.json` copy, and
-  `route.test.ts` / `route.int.test.ts` / `client.test.ts` / `view.test.tsx` cases (plan § Phase B,
-  items 4-9).
 - **Phase C** (`apps/web/src/chat/liveChats.ts`, `/home`, not risky by path): thread
   `listUnavailableForStudent` into `homeLinks`'s new `unavailable` field, `HomeView`'s new
   paragraph, `en.json`'s `unavailableLine` ICU plural, and the `liveChats.test.ts` /

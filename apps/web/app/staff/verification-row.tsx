@@ -16,10 +16,22 @@ export interface VerificationRowProps {
   pending: Decision | null;
   /** Any action is in flight (one at a time). */
   disabled: boolean;
+  /**
+   * Task 9.3f: set only when this row comes from the slug lookup, where the teacher's current
+   * status isn't implied by the list it's in (unlike the pending queue). Shown as an extra
+   * `dt`/`dd` pair so staff see what they are about to change.
+   */
+  currentStatus?: 'pending' | 'verified' | 'rejected';
   onDecide(status: Decision, reason: string, safety: boolean): void;
 }
 
-export function VerificationRow({ item, pending, disabled, onDecide }: VerificationRowProps) {
+export function VerificationRow({
+  item,
+  pending,
+  disabled,
+  currentStatus,
+  onDecide,
+}: VerificationRowProps) {
   const t = useTranslations('staff');
   const [reason, setReason] = useState('');
   const [safety, setSafety] = useState(false);
@@ -31,6 +43,12 @@ export function VerificationRow({ item, pending, disabled, onDecide }: Verificat
     <li className="staff-row" aria-labelledby={headingId}>
       <h2 id={headingId}>{item.slug}</h2>
       <dl>
+        {currentStatus === undefined ? null : (
+          <>
+            <dt>{t('currentStatusLabel')}</dt>
+            <dd>{t(`status.${currentStatus}`)}</dd>
+          </>
+        )}
         <dt>{t('subject')}</dt>
         <dd>{item.subject}</dd>
         <dt>{t('name')}</dt>

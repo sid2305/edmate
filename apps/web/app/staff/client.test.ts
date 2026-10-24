@@ -2,7 +2,7 @@
 // never rejects: a network failure, a non-2xx, unreadable JSON or a 200 of the wrong shape is a
 // fixed error code (lessons: "UI state and server replies: trust neither, reset everything").
 import { describe, expect, it, vi } from 'vitest';
-import { decide, loadQueue } from './client';
+import { decide, findTeacherBySlug, loadQueue } from './client';
 
 const ITEM = { teacherId: 'tch_a', slug: 'asha-math', subject: 'Math', name: 'Asha', email: null };
 const json = (body: unknown, status = 200) =>
@@ -98,5 +98,52 @@ describe('decide', () => {
       ok: false,
       code: 'forbidden',
     });
+  });
+});
+
+describe('findTeacherBySlug (9.3f)', () => {
+  const LOOKUP_ITEM = { ...ITEM, verificationStatus: 'verified' as const };
+
+  it('GETs the lookup endpoint with the slug, no-store, and returns the teacher', async () => {
+    const f = vi.fn(async () => json({ teacher: LOOKUP_ITEM }));
+    expect(await findTeacherBySlug('asha-math', f)).toEqual({ ok: true, teacher: LOOKUP_ITEM });
+    expect(f).toHaveBeenCalledWith('/api/staff/verifications/lookup?slug=asha-math', {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  });
+
+  it('encodes the slug', async () => {
+    const f = vi.fn(async () => json({ teacher: null }));
+    await findTeacherBySlug('a b/c', f);
+    expect(f).toHaveBeenCalledWith('/api/staff/verifications/lookup?slug=a%20b%2Fc', {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  });
+
+  it('an unknown slug is a null teacher, not a failure', async () => {
+    const f = async () => json({ teacher: null });
+    expect(await findTeacherBySlug('no-such-teacher', f)).toEqual({ ok: true, teacher: null });
+  });
+
+  it.each([
+    ['a network failure', async () => Promise.reject(new TypeError('offline'))],
+    ['unreadable JSON', async () => new Response('{nope', { status: 200 })],
+    ['a wrong shape', async () => json({ teacher: { teacherId: 1 } })],
+    ['no teacher key', async () => json({})],
+  ])('%s is provider_error', async (_label, f) => {
+    expect(await findTeacherBySlug('asha-math', f)).toEqual({ ok: false, code: 'provider_error' });
+  });
+
+  it("a non-2xx keeps the server's error code", async () => {
+    const f = async () =>
+      json({ error: { code: 'forbidden', message: 'no', retryable: false } }, 403);
+    expect(await findTeacherBySlug('asha-math', f)).toEqual({ ok: false, code: 'forbidden' });
+  });
+
+  it('uses the global fetch by default', async () => {
+    // test/setup.ts makes the global fetch reject: the call still settles.
+    expect(await findTeacherBySlug('asha-math')).toEqual({ ok: false, code: 'provider_error' });
   });
 });
