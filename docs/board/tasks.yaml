@@ -560,10 +560,33 @@ tasks:
     pass
   deps:
   - '1.4'
-  status: running
+  status: done
   risk: risky
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
   branch: m13/1.4d-signin-followups
+  metrics:
+    tool_calls: 88
+    tokens_in: 286
+    tokens_out: 44240
+    cache_read_tokens: 6704895
+    wall_time_seconds: 127817
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 1.4c
   milestone: M13
   title: 'Google sign-in after a link sign-up (1.4 plan Q4): link the accounts when both sides have a verified email instead of OAuthAccountNotLinked (changes a 1.3 risk-high decision)'
@@ -7569,7 +7592,8 @@ tasks:
   status: todo
 - id: 1.4e
   milestone: M13
-  title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs against the full compose stack and record the result'
+  title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs
+    against the full compose stack and record the result'
   accept: web typecheck, lint and test green; redis-ready.ts documents or handles a differing timeoutMs; the sandbox magic-link script run is recorded in the handoff.
   deps:
   - 1.4d
@@ -7577,7 +7601,8 @@ tasks:
   status: todo
 - id: 5.6g
   milestone: M13
-  title: '5.6b review LOWs: packages/harness/src/pipeline/generate/itemContext.ts ItemContext prompt/options fields become readonly (like PostGuardCtx); packages/harness/src/tools/practiceItems.ts validMcq checks answerKey.length before reading answerKey[0] instead of relying on short-circuit order'
+  title: '5.6b review LOWs: packages/harness/src/pipeline/generate/itemContext.ts ItemContext prompt/options fields become readonly (like PostGuardCtx); packages/harness/src/tools/practiceItems.ts validMcq
+    checks answerKey.length before reading answerKey[0] instead of relying on short-circuit order'
   accept: harness typecheck, lint and test green; no behaviour change.
   deps:
   - 5.6b
@@ -7591,4 +7616,6 @@ tasks:
   deps:
   - 8.9d
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.9e-fromerror-never
+  model: build:sonnet

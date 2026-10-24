@@ -4,7 +4,7 @@
 // Only this folder imports next-auth (lint rule in @edmate/config/eslint/app).
 import { resolve as resolvePath } from 'node:path';
 import { openDatabase, type IdentityStore, type Repositories } from '@edmate/db';
-import { Redis } from 'ioredis';
+import type { Redis } from 'ioredis';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import NextAuth, { type NextAuthResult } from 'next-auth';
@@ -42,8 +42,6 @@ import { describeError } from './describe-error';
 import { EMAIL_PROVIDER_ID } from './email';
 import { readAuthEnv, type AuthEnv } from './env';
 import { createGuard, resolvePrincipal, type GuardDeps, type Principal } from './guard';
-import { smtpMailSender } from './mail';
-import { createSignInLimiter, redisSignInCounters } from './rate-limit';
 import { readyCounters } from './redis-ready';
 
 interface Runtime {
@@ -54,8 +52,21 @@ interface Runtime {
   guard: GuardDeps;
 }
 
+/**
+ * The dev-mode ioredis singleton (task 1.4d): one client reused across repeated module reloads
+ * (Next's dev server hot-reloads this module on every edit, which would otherwise open a fresh
+ * connection per edit). Cached on `globalThis` because `runtime` below is a module-scoped
+ * variable and does not survive a reload; `globalThis` does. Never reused across a real process
+ * restart: a fresh process starts with no entry here. Unused in production, where `runtime` is
+ * cached once per process and no reload ever happens.
+ */
+declare global {
+  var __edmateAuthRedis: Redis | undefined;
+}
+
 let runtime: Runtime | undefined;
 let ageContent: AgeContent | undefined;
+let emailDeps: Promise<AuthConfigDeps['emailSignIn']> | undefined;
 
 /**
  * Locale packs and privacy notices for the age gate (1.7), loaded on first use from
@@ -69,30 +80,55 @@ function getAgeContent(): AgeContent {
 }
 
 /**
- * The email magic link's mail sender and rate limiter. The Redis client fails fast in an outage
- * (no offline queue, one retry), and each take first waits, bounded, for the connection to be
- * ready, so the first request after a cold start isn't refused just for being early.
+ * The email magic link's mail sender and rate limiter, built once (memoized) on first use.
+ * `ioredis`, `nodemailer` and the rate-limit module are imported here, dynamically, not at the
+ * top of this file: every other consumer of this module (about 30 route files that only want
+ * `withRole`/`Principal`) would otherwise pull in both packages at module-load time whether or
+ * not email sign-in is even configured. The Redis client fails fast in an outage (no offline
+ * queue, one retry), and each take first waits, bounded, for the connection to be ready, so the
+ * first request after a cold start isn't refused just for being early. A throw during the build
+ * (a bad dynamic import, or a synchronous throw from `new Redis(...)`/`createSignInLimiter`)
+ * resets the memo to `undefined` so the next request retries, instead of every later request
+ * getting the same cached rejection until the process restarts.
  */
-function emailSignIn(env: AuthEnv): AuthConfigDeps['emailSignIn'] {
-  if (!env.email) return undefined;
-  const redis = new Redis(env.email.redisUrl, {
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
+function emailSignIn(env: AuthEnv): Promise<AuthConfigDeps['emailSignIn']> {
+  if (!env.email) return Promise.resolve(undefined);
+  const config = env.email;
+  emailDeps ??= (async () => {
+    const [{ Redis }, { smtpMailSender }, { createSignInLimiter, redisSignInCounters }] =
+      await Promise.all([import('ioredis'), import('./mail'), import('./rate-limit')]);
+    const dev = process.env.NODE_ENV !== 'production';
+    const existing = dev && globalThis.__edmateAuthRedis;
+    let redis = existing;
+    if (!redis) {
+      redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+      // Attached only once, here, when the client is created: a dev-mode reload reuses the
+      // `existing` singleton above and skips this, so a listener added on every hot reload
+      // doesn't pile up (MaxListeners warning after ~10 edits). ioredis errors can quote the
+      // host; log the name only. A take during an outage rejects.
+      redis.on('error', (error: unknown) => console.error(`[auth] redis ${describeError(error)}`));
+      if (dev) globalThis.__edmateAuthRedis = redis;
+    }
+    return {
+      mail: smtpMailSender({
+        server: config.server,
+        from: config.from,
+        requireTls: env.secureCookies,
+      }),
+      limiter: createSignInLimiter({
+        secret: env.secret,
+        trustHost: env.trustHost,
+        counters: readyCounters(redis, redisSignInCounters(redis)),
+      }),
+    };
+  })().catch((error: unknown) => {
+    // Reset to `undefined` (not left as a settled rejected promise) so the next request's
+    // `emailSignIn` call retries the build from scratch, instead of every request after the
+    // first failure getting the same cached rejection until the process restarts.
+    emailDeps = undefined;
+    throw error;
   });
-  // ioredis errors can quote the host; log the name only. A take during an outage rejects.
-  redis.on('error', (error: unknown) => console.error(`[auth] redis ${describeError(error)}`));
-  return {
-    mail: smtpMailSender({
-      server: env.email.server,
-      from: env.email.from,
-      requireTls: env.secureCookies,
-    }),
-    limiter: createSignInLimiter({
-      secret: env.secret,
-      trustHost: env.trustHost,
-      counters: readyCounters(redis, redisSignInCounters(redis)),
-    }),
-  };
+  return emailDeps;
 }
 
 function getRuntime(): Runtime {
@@ -105,20 +141,21 @@ function getRuntime(): Runtime {
       noticeVersion: (market) => getAgeContent().notice(market).version,
     },
   });
-  const email = emailSignIn(env);
   runtime = {
     env,
     identity,
     repos,
-    // Per-request config: the signIn callback needs the request's cookies and headers.
-    nextAuth: NextAuth((req) =>
-      createAuthConfig({
+    // Per-request config: the signIn callback needs the request's cookies and headers, and (on
+    // the first call only) awaits emailSignIn's dynamic imports and Redis client.
+    nextAuth: NextAuth(async (req) => {
+      const email = await emailSignIn(env);
+      return createAuthConfig({
         identity,
         env,
         ...(email ? { emailSignIn: email } : {}),
         ...(req ? { request: req } : {}),
-      }),
-    ),
+      });
+    }),
     guard: {
       getPrincipal: principalFromIdentity(identity, sessionCookieName(env.secureCookies)),
       learnerStatus: (userId) => identity.learnerStatus(userId),
