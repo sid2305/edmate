@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Task 9.5a/9.5b: the skill launcher -- Practice, the feedback toggle, and the mock-interview
 // persona picker.
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderIntl } from '../../test/intl';
@@ -58,5 +58,12 @@ describe('SkillLauncher', () => {
     expect(onStartMockInterview).toHaveBeenCalledWith('job-interview');
     fireEvent.click(screen.getByRole('button', { name: 'Viva' }));
     expect(onStartMockInterview).toHaveBeenCalledWith('viva');
+  });
+
+  it('groups the mock-interview persona buttons under a labelled group', () => {
+    setup();
+    const group = screen.getByRole('group', { name: 'Start mock interview' });
+    expect(within(group).getByRole('button', { name: 'Job interview' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Viva' })).toBeInTheDocument();
   });
 });
