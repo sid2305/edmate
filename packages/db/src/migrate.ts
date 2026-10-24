@@ -108,9 +108,11 @@ export type PostMigrateStep =
  * `agents_regulated_approval_check` as `NOT VALID` the same way (and migration 0024, task 11.4a,
  * `documents_live_class_id_live_classes_id_fk`), so the validation scan of the
  * existing `agents` rows runs outside drizzle's migration transaction. This is what makes the
- * constraints valid and the indexes built, outside any transaction. Append here, don't edit past
- * entries: migrations are forward-only and this list is replayed, idempotently, on every
- * migrateDatabase() call.
+ * constraints valid and the indexes built, outside any transaction. Migration 0028 (task 5.10d)
+ * adds `sessions_open_teacher_student_agent_key` the same schema-only way, after first ending any
+ * existing duplicate open sessions in its own migration-file UPDATE (so the index build below
+ * never sees a duplicate). Append here, don't edit past entries: migrations are forward-only and
+ * this list is replayed, idempotently, on every migrateDatabase() call.
  */
 export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
   { kind: 'validateConstraint', table: 'sessions', constraint: 'sessions_package_version_fk' },
@@ -138,6 +140,13 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'validateConstraint',
     table: 'documents',
     constraint: 'documents_live_class_id_live_classes_id_fk',
+  },
+  // Migration 0028 (task 5.10d): at most one open session per (teacher_id, student_id, agent_id);
+  // sessions.create relies on this for its ON CONFLICT ... WHERE ended_at is null reuse.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'sessions_open_teacher_student_agent_key',
+    sql: `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "sessions_open_teacher_student_agent_key" ON "sessions" USING btree ("teacher_id","student_id","agent_id") WHERE "sessions"."ended_at" is null`,
   },
 ];
 
