@@ -4495,9 +4495,29 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: review
+  status: done
   branch: m13/8.9d-questions-followups
-  model: plan:lead-brief build:sonnet
+  model: plan:lead-brief build:sonnet review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 116
+    tokens_out: 1935
+    cache_read_tokens: 1470199
+    wall_time_seconds: 127
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 9.2e
   milestone: M13
   title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table
@@ -7545,4 +7565,13 @@ tasks:
   deps:
   - 5.6b
   risk: high
+  status: todo
+- id: 8.9e
+  milestone: M13
+  title: '8.9d review MEDIUM: apps/web/src/studio/questions/routes.ts fromError gets a `default` branch assigning error.kind to `never`, so a new RepositoryErrorKind fails to compile instead of falling
+    through to a 500 (the comment claims this today); the same check in studio/profile.ts fromError'
+  accept: web typecheck, lint and test green; a type-level test or a comment shows the switch is exhaustive.
+  deps:
+  - 8.9d
+  risk: low
   status: todo

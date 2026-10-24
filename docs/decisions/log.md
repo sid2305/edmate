@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · 8.9d maps `scope`/`integrity` the same way `profile.ts`/`packages.ts` do · decided by builder · risk: low
+- Decided: `questions/routes.ts`'s new `fromError` maps `RepositoryError('scope', …)` to
+  `forbidden` 403 and `RepositoryError('integrity', …)` to the same `validation` 400 as `invalid`,
+  copying `studio/profile.ts`'s `fromError` exactly (not inventing a new status for this route).
+- Why: `scope`/`integrity` are not reachable from `teacherQuestions.answer`/`dismiss`/
+  `listGroupsForTeacher` today (only `teacherQuestions.open`, used elsewhere, throws `scope`), so
+  there was no existing call site to infer a mapping from; the brief asked to match how other
+  studio routes map these kinds, and `profile.ts` is the sibling with the most complete mapping
+  (all five kinds, one switch, no default fallthrough).
+- risk: low
+
+---
+
+### 23 Oct 2026 · 8.9d: fromError exhaustiveness in apps/web/src/studio/questions/routes.ts deferred to 8.9e · decided by lead · risk: low
+- Decided: the TypeScript-review MEDIUM at apps/web/src/studio/questions/routes.ts:126 (the switch is not compiler-enforced exhaustive although its comment says so) moves to 8.9e, together with the same check in studio/profile.ts.
+- Why: every current kind is mapped and tested, and an unknown kind still fails closed with a logged 500; MEDIUM findings go to board tasks.
+- risk: low
+
+---
+
 ### 23 Oct 2026 · teacher_profiles.display_name replaces users.name as the public teacher name · decided by planner · risk: high
 
 - Decided: add a nullable `teacher_profiles.display_name text` column (additive migration, no
