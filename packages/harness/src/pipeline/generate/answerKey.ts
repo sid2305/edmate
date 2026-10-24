@@ -340,17 +340,39 @@ function spansOf(text: string, items: readonly ItemContext[]): Span[][] {
   return items.map((it) => [...promptSpans(folded, it), ...listingSpans(folded, it)]);
 }
 
+/** Which of `item`'s options (by label or by its own text) are named in `masked` text. */
+function namedOptions(masked: string, item: ItemContext): Set<number> {
+  const options = item.options ?? [];
+  const named = labelsNamedIn(foldLabels(masked));
+  const out = new Set<number>();
+  options.forEach((o, j) => {
+    if (named.has(String.fromCharCode(0x41 + j))) {
+      out.add(j);
+      return;
+    }
+    const text = optionText(o);
+    if (text !== '' && compileAnswerKeys([text]).leaks(masked)) out.add(j);
+  });
+  return out;
+}
+
 /** The ruling-out check (design 3): every wrong option named, the correct one not. */
 function rulesOut(masked: string, item: ItemContext, k: number): boolean {
   const options = item.options ?? [];
-  const named = labelsNamedIn(foldLabels(masked));
-  const names = (j: number): boolean => {
-    if (named.has(String.fromCharCode(0x41 + j))) return true;
-    const text = optionText(options[j] as string);
-    return text !== '' && compileAnswerKeys([text]).leaks(masked);
-  };
-  if (names(k)) return false;
-  return options.every((_, j) => j === k || names(j));
+  const named = namedOptions(masked, item);
+  if (named.has(k)) return false;
+  return options.every((_, j) => j === k || named.has(j));
+}
+
+/**
+ * Which of `item`'s options are named in `text` alone, its own spans blanked first (fix round 1:
+ * the stream gate's per-reply ruling-out record needs this on each newly released piece, not the
+ * reach-bounded window `rulesOut` above sees, so evidence spread further apart than `reach` still
+ * completes the set).
+ */
+export function namedOptionsIn(text: string, item: ItemContext): ReadonlySet<number> {
+  const spans = spansOf(text, [item])[0] ?? [];
+  return namedOptions(blank(text, spans), item);
 }
 
 /** A key's owners: the items whose spans exempt it (it is their own key or option text). */

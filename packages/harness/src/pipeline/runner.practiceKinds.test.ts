@@ -361,6 +361,29 @@ describe('5.6b: a real leak is still blocked', () => {
     expectHint(await later(MCQ, pieces(text, 3)), 'The answer is B.');
   });
 
+  it('ruling out across the whole reply (fix round 1): two sentences, more than `reach` apart, ' +
+    'that together name every wrong option get the hint; the second never streams', async () => {
+    const s1 = 'Continue just skips ahead to the next loop iteration, so continue is wrong here.';
+    const s2 = 'Pass does nothing at all, so pass is also wrong here.';
+    const filler = 'Let us slow down and think about this one step at a time before we go further. '.repeat(3);
+    const text = `${s1} ${filler}${s2}`;
+    const issuing = await issue(MCQ_A, [say(text)]);
+    expect(issuing.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+    expect(tokens(issuing.events)).not.toContain('pass is also wrong');
+
+    const laterTurn = await later(MCQ_A, [say(text)]);
+    expect(laterTurn.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+    expect(tokens(laterTurn.events)).not.toContain('pass is also wrong');
+  });
+
+  it('ruling out only one wrong option across a long reply still streams normally', async () => {
+    const s1 = 'Continue just skips ahead to the next loop iteration, so continue is wrong here.';
+    const filler = 'Let us slow down and think about this one step at a time before we go further. '.repeat(3);
+    const text = `${s1} ${filler}All good so far.`;
+    expectDelivered(await issue(MCQ_A, [say(text)]), text);
+    expectDelivered(await later(MCQ_A, [say(text)]), text);
+  });
+
   it('the generated sum restated and then answered gets the hint', async () => {
     const g = await turn([main(call('c1'), used), main(say('Ok.'), used)], { records: [] });
     const prompt = skillPrompts(g.events)[0] ?? '';

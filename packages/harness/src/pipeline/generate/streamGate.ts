@@ -17,6 +17,11 @@
 //     stays linear; more than LIMITS.modelTextMaxLength pushed trips the gate (fix round 1);
 //   - held text is checked and shown only by `flush()`, which the tool loop calls once, at the end
 //     of the attempt, never between tool rounds;
+//   - the ruling-out check (design 3) holds across the whole reply, not just the reach window
+//     (fix round 1): a per-item record of which wrong options released text has already named is
+//     kept for the attempt; a newly released piece that would complete the set (every wrong
+//     option named, not the correct one) is held back as a leak exactly as a single-piece
+//     ruling-out is, even when the two mentions are pushed more than `reach` apart;
 //   - a possible re-show of an active practice item (5.6b) is held back: text that is a prefix of
 //     an item's prompt or of its option listing (compared in the matcher's compact folded form)
 //     waits until the restatement is complete, then is judged as one piece (sentence ends inside
@@ -26,8 +31,8 @@
 // `passThroughGate` shows every piece as it comes (tests that need exact chunks use it).
 import { LIMITS, type PedagogyDecision, type TurnContext } from '@edmate/contracts';
 import { isFormatChar } from '../../guardrails/textFold.js';
-import { type AnswerKeyMatcher, compileAnswerKeys, normaliseForMatch } from './answerKey.js';
-import type { ItemContext } from './itemContext.js';
+import { type AnswerKeyMatcher, compileAnswerKeys, namedOptionsIn, normaliseForMatch } from './answerKey.js';
+import { correctIndex, type ItemContext } from './itemContext.js';
 import { foldLabels } from './labelKeys.js';
 
 export interface StreamGate {
@@ -201,6 +206,33 @@ export function sentenceGate(
     spans.push([s, e]);
   };
   const holds = items.map((it) => reShow(it, onSpan));
+  /**
+   * Per-item record of which wrong options have been named by released text so far (fix round 1):
+   * the ruling-out check must hold across the whole reply, not only the reach-bounded window.
+   */
+  const ruledOut = new Map<ItemContext, Set<number>>();
+  const itemsWithKey = (): ItemContext[] =>
+    [...items, ...extraItems].filter((it) => correctIndex(it) !== undefined);
+  /** Whether releasing `piece` now would complete an item's wrong-option set. */
+  const ruleOutCompletes = (piece: string): boolean =>
+    itemsWithKey().some((it) => {
+      const k = correctIndex(it) as number;
+      const options = it.options ?? [];
+      const now = namedOptionsIn(piece, it);
+      const have = ruledOut.get(it);
+      const total = have === undefined ? now : new Set([...have, ...now]);
+      return !total.has(k) && options.every((_, j) => j === k || total.has(j));
+    });
+  /** Records the wrong options `piece` names, once it is actually released. */
+  const commitRuledOut = (piece: string) => {
+    for (const it of itemsWithKey()) {
+      const now = namedOptionsIn(piece, it);
+      if (now.size === 0) continue;
+      const have = ruledOut.get(it);
+      if (have === undefined) ruledOut.set(it, new Set(now));
+      else for (const j of now) have.add(j);
+    }
+  };
   let released = '';
   let buf = '';
   /** Units of `buf` already scanned for sentence ends (never rescanned). */
@@ -245,6 +277,7 @@ export function sentenceGate(
       scanned -= n;
       ends = ends.filter((e) => e > n).map((e) => e - n);
       out.push(piece);
+      commitRuledOut(piece);
     };
     /** Where a possible re-show starts in `buf` (held back), else `buf.length`. */
     const holdAt = (): number => {
@@ -273,9 +306,13 @@ export function sentenceGate(
       for (const [s] of spans) if (s < from) from = s;
       const whole = released.slice(from) + buf.slice(0, end);
       if (keys.leaks(whole)) return -1;
-      if (atFinalEnd) return end;
-      const tail = keys.tailStart(whole);
-      return tail < 0 ? end : Math.max(0, tail - (released.length - from));
+      let ok = end;
+      if (!atFinalEnd) {
+        const tail = keys.tailStart(whole);
+        ok = tail < 0 ? end : Math.max(0, tail - (released.length - from));
+      }
+      if (ok > 0 && ruleOutCompletes(buf.slice(0, ok))) return -1;
+      return ok;
     };
     /** Judges one sentence end: shown, held (its tail may start a key) or a leak. */
     const judge = (end: number): boolean => {

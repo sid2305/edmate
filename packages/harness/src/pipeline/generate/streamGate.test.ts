@@ -229,6 +229,48 @@ describe('the re-show hold-back (5.6b)', () => {
   });
 });
 
+// Fix round 1 (security finding): the ruling-out check (design 3, lead answer 4) must hold across
+// the whole reply, not only `reach` units back, so two sentences spread further apart than `reach`
+// that together name every wrong option still trip, instead of streaming live before postGuard's
+// whole-draft check can catch it.
+const RULE_OUT_ITEM: ItemContext = {
+  prompt: 'Which keyword stops a loop early?',
+  options: ['A) break', 'B) continue', 'C) pass'],
+  answerKey: ['A'],
+};
+const RULE_OUT_S1 = 'Continue just skips ahead to the next loop iteration, so continue is wrong here.';
+const RULE_OUT_S2 = 'Pass does nothing at all, so pass is also wrong here.';
+/** More than `reach` (a non-numeric MCQ key's reach is well under 200 units) non-whitespace units. */
+const RULE_OUT_FILLER =
+  'Let us slow down and think about this one step at a time before we go further. '.repeat(3);
+
+describe('the ruling-out check holds across the whole reply (5.6b fix round 1)', () => {
+  it('two sentences, more than `reach` apart, that together name every wrong option: held, the second never shown', () => {
+    const text = `${RULE_OUT_S1} ${RULE_OUT_FILLER}${RULE_OUT_S2}`;
+    const g = itemGate([RULE_OUT_ITEM]);
+    const shown = runAll(g, [text]);
+    expect(g.tripped).toBe(true);
+    expect(shown).not.toContain('pass is also wrong');
+  });
+
+  it('the same two sentences pushed in small chunks are still held', () => {
+    const text = `${RULE_OUT_S1} ${RULE_OUT_FILLER}${RULE_OUT_S2}`;
+    for (const chunks of splits(text)) {
+      const g = itemGate([RULE_OUT_ITEM]);
+      const shown = runAll(g, chunks);
+      expect(g.tripped).toBe(true);
+      expect(shown).not.toContain('pass is also wrong');
+    }
+  });
+
+  it('ruling out only one wrong option across a long reply still streams normally', () => {
+    const text = `${RULE_OUT_S1} ${RULE_OUT_FILLER}All good so far.`;
+    const g = itemGate([RULE_OUT_ITEM]);
+    expect(runAll(g, [text])).toBe(text);
+    expect(g.tripped).toBe(false);
+  });
+});
+
 describe('addKeys with items (5.6b)', () => {
   const growGate = () =>
     answerLeakStreamGate({

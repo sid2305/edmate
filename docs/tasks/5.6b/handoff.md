@@ -194,7 +194,60 @@ World!" · a reordered listing "B) 7 A) 6 C) 8" · restated items that should pa
 - Q5 (pilot-blocking; the lead adds the task, 5.6f): release the practice key on a turn that route
   grades correct, so "Yes, B is right!" is delivered.
 
+## Fix round
+
+Security finding (CRITICAL): the live stream gate judged each sentence against only `keys.reach`
+units of prior text, so a reply that ruled out one wrong option in one sentence, then more than
+`reach` non-whitespace units later ruled out the other, streamed both sentences to the student
+(`i.show(p)` in `toolLoop.ts`, right after `gate.push`) before postGuard's whole-draft check ever
+ran. The repro: MCQ_A (key A, options "A) break" / "B) continue" / "C) pass"), a sentence naming
+"continue" wrong, 150+ ordinary characters of filler, then a sentence naming "pass" wrong; neither
+sentence alone trips `rulesOut`, and the gap exceeds `reach`.
+
+**What changed:**
+- `packages/harness/src/pipeline/generate/answerKey.ts`: `rulesOut`'s "which options are named"
+  logic is pulled into a new `namedOptions(masked, item)`, and a new exported `namedOptionsIn(text,
+  item)` applies it to a bare text with the item's own spans blanked first (no dependence on a
+  reach-bounded window).
+- `packages/harness/src/pipeline/generate/streamGate.ts`: `sentenceGate` keeps a per-reply,
+  per-item `Map<ItemContext, Set<number>>` of which wrong options the attempt's *released* text has
+  already named. `safeUpTo` checks, for the piece about to be released, whether the union of that
+  record and the piece's own named-wrong-options would cover every wrong option (and not the
+  correct one); if so it returns -1 (held, same as a leak) instead of the release length. Only an
+  actual `release(n)` commits the piece's named options into the record, so a candidate that is
+  re-judged (or never released) never pollutes it. This is a second, independent check from
+  `keys.leaks`/`keys.tailStart` (it is never routed through the matcher, so the existing
+  linear-work test's `work.units`/`work.checks` counters are unaffected) and holds across the whole
+  attempt, not just the reach window, closing the gap. The existing whole-draft postGuard check is
+  unchanged and stays the backstop.
+- Tests: `pipeline/generate/streamGate.test.ts`, new "the ruling-out check holds across the whole
+  reply (5.6b fix round 1)": the repro pushed whole and split across chunks (held, the second
+  sentence never shown), plus "ruling out only one wrong option across a long reply still streams
+  normally" (not tripped). `pipeline/runner.practiceKinds.test.ts`: the same repro and the
+  single-wrong-option case through the real pipeline (issuing turn and later turn), confirming the
+  delivered text is `ANSWER_LEAK_SAFE_HINT` and the second sentence never reaches `tokens(events)`.
+  The existing "the re-show hold-back stays linear at the item caps" test (`streamGate.test.ts`)
+  passes unchanged, since the new check never calls `keys.leaks`/`keys.tailStart`.
+
+**Gate:** `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness --force` →
+`Tasks: 4 successful, 4 total`; harness `Test Files 122 passed (122)`, `Tests 5527 passed (5527)`;
+no test file skipped. `python3 .githooks/secret-scan.py --all` → clean, no findings.
+
 ## Decisions
+
+### 24 Oct 2026 · 5.6b The ruling-out check holds across the whole reply, not just `reach` · decided by builder · risk: high
+- Decided: the stream gate keeps a per-reply, per-item record of which wrong options its released
+  text has already named (updated only when a piece is actually released). A piece whose release
+  would complete the set (every wrong option named, not the correct one, across the whole reply so
+  far) is held back as a leak exactly as a single-piece ruling-out is, even when the two mentions
+  are pushed further apart than `keys.reach`. The check is independent of the matcher's
+  `leaks`/`tailStart` (so the gate's linear-work bound is unaffected) and the whole-draft postGuard
+  check is kept as the backstop.
+- Why: a security finding (CRITICAL) showed the live gate only ever judged a sentence against
+  `reach` units of prior text, so an ordinary long-winded reply that ruled out each wrong option in
+  a separate, far-apart sentence streamed the full ruling-out to the student before postGuard's
+  whole-draft check could replace it with the hint.
+- risk: high
 
 ### 23 Oct 2026 · 5.6b The leak matcher gets an answer-context mode · decided by builder · risk: high
 - Decided: A single-letter (label) key leaks unless it sits in an exempt shape (a separator-only list of two or more of the item's labels, or the item's exact option listing), and an answer word overrides every exemption except a list naming every label of an item. The active item's prompt and exact listing are exempt spans (matches fully inside are ignored, never deleted). The correct option's text is a full-strength key outside those spans, its position counts in an answer context or alone, and naming every wrong option (over the whole text) is a leak. Practice keys never get the own-code exemption. A label answer is graded only when it's the one label in the message. The bank serves mcq and code_output items once Phase C lands. Known limits, also risk: high: an unresolved item and a `practiceCarriedKey` guard only their label (the option text, position and ruling-out checks don't run on that turn); buildContext doesn't drop chunks holding the option text.
