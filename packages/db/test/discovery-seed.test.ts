@@ -21,6 +21,13 @@ describe('buildDiscoverySeed', () => {
     for (const u of users) expect(u.email).toMatch(/@example\.invalid$/);
   });
 
+  it('every seeded profile carries a displayName equal to "Seed Teacher NNN" (task 9.2d)', () => {
+    const { teacherProfiles } = buildDiscoverySeed(50);
+    for (const t of teacherProfiles) {
+      expect(t.displayName).toMatch(/^Seed Teacher \d{3}$/);
+    }
+  });
+
   it('every teacher is verified with a live agent', () => {
     const { teacherProfiles, agents } = buildDiscoverySeed(50);
     for (const t of teacherProfiles) expect(t.verificationStatus).toBe('verified');

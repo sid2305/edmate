@@ -272,10 +272,10 @@ describe('repositories source', () => {
   });
 
   it('never reads from users (no names, emails or phones), except discovery.ts and the staff-only queue in teacher-profiles.ts', () => {
-    // Task 9.2a lead decision (Q2): a teacher's public sign-in name is their public display name
-    // on the discovery page and card -- teacherProfiles has no separate displayName column, and
-    // the WHERE clause (verified + live agent + live package) already keeps this to public rows
-    // only. discovery.ts reads only `users.role` and `users.name`, never email or phone.
+    // Task 9.2d: a teacher's public display name now comes from `teacher_profiles.display_name`
+    // (falling back to `slug`), never the sign-in name (`users.name`) -- the only exception left
+    // is `users.role`, which discovery's WHERE clause needs to find teacher accounts. The WHERE
+    // clause (verified + live agent + live package) already keeps this to public rows only.
     for (const f of readdirSync(dir).filter(
       (x) => x.endsWith('.ts') && x !== 'discovery.ts' && x !== 'teacher-profiles.ts',
     )) {
@@ -283,7 +283,7 @@ describe('repositories source', () => {
       expect(/\busers\b/.test(src), `${f} mentions users`).toBe(false);
     }
     const discoverySrc = readFileSync(join(dir, 'discovery.ts'), 'utf8');
-    expect(/\busers\.(email|phone)\b/.test(discoverySrc)).toBe(false);
+    expect(/\busers\.(name|email|phone)\b/.test(discoverySrc)).toBe(false);
     // Task 12.1a lead decision (Q2): the staff verification queue is the one place a teacher's
     // declared name and email reach a repository caller, and only staff see it (checked by role
     // in listPendingForStaff). `users.phone` stays out even here.

@@ -10,6 +10,63 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · 8.9d maps `scope`/`integrity` the same way `profile.ts`/`packages.ts` do · decided by builder · risk: low
+- Decided: `questions/routes.ts`'s new `fromError` maps `RepositoryError('scope', …)` to
+  `forbidden` 403 and `RepositoryError('integrity', …)` to the same `validation` 400 as `invalid`,
+  copying `studio/profile.ts`'s `fromError` exactly (not inventing a new status for this route).
+- Why: `scope`/`integrity` are not reachable from `teacherQuestions.answer`/`dismiss`/
+  `listGroupsForTeacher` today (only `teacherQuestions.open`, used elsewhere, throws `scope`), so
+  there was no existing call site to infer a mapping from; the brief asked to match how other
+  studio routes map these kinds, and `profile.ts` is the sibling with the most complete mapping
+  (all five kinds, one switch, no default fallthrough).
+- risk: low
+
+---
+
+### 23 Oct 2026 · 8.9d: fromError exhaustiveness in apps/web/src/studio/questions/routes.ts deferred to 8.9e · decided by lead · risk: low
+- Decided: the TypeScript-review MEDIUM at apps/web/src/studio/questions/routes.ts:126 (the switch is not compiler-enforced exhaustive although its comment says so) moves to 8.9e, together with the same check in studio/profile.ts.
+- Why: every current kind is mapped and tested, and an unknown kind still fails closed with a logged 500; MEDIUM findings go to board tasks.
+- risk: low
+
+---
+
+### 23 Oct 2026 · teacher_profiles.display_name replaces users.name as the public teacher name · decided by planner · risk: high
+
+- Decided: add a nullable `teacher_profiles.display_name text` column (additive migration, no
+  backfill); public reads (`discovery.ts`) use `coalesce(display_name, slug)`, never
+  `users.name`; `CreateInput.displayName` is required (validated by a new exported zod
+  `DisplayName` schema: 2-60 chars, at least one letter, letters/marks/digits/space/'.-  only, no
+  URL/email/phone shape, no `edmate`/`staff`/`admin`/`official` impersonation word),
+  `UpdateInput.displayName` is optional; a display-name change does not reset verification; the
+  staff queue (`listPendingForStaff`) keeps reading `users.name`/`email` unchanged, since staff
+  verify identity, not the public name; seeds set `displayName` explicitly.
+- Why: the sign-in name was doubling as the public teacher name, so any pending/rejected/unverified
+  teacher's real name was visible wherever `users.name` leaked into a public read; splitting the
+  public name into its own teacher-set, validated column removes that leak at the source and lets
+  the teacher choose what strangers see without the staff identity check or the onboarding slug
+  changing. Existing teachers without a display name fall back to the slug, which is already
+  public in the URL, so nothing new leaks; backfilling from `users.name` was rejected because it
+  keeps the exact leak this task removes.
+- risk: high (this is a risky-path change per `.claude/skills/merge-gate/risk-paths.txt` —
+  `packages/db/src/repositories/**` — and a teacher-written string now reaches every anonymous
+  visitor; `security-reviewer` is the required reviewer, named in the plan).
+
+---
+
+### 23 Oct 2026 · 9.2d: budget overrun across two build phases and a fix round · decided by lead · risk: low
+- Decided: accept 319 tool calls against the plan's 120-call cap.
+- Why: Phase A stopped at 142 with nothing committed and Phase B spent many calls polling a slow web gate under load; one security and one TypeScript HIGH needed a fix round. The work is complete and every gate is green; the overrun goes to the 0.22 review.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 9.2d: weak mismatch cases in packages/db/test/repositories.int.test.ts deferred to 9.2g · decided by lead · risk: low
+- Decided: the code-review LOW at packages/db/test/repositories.int.test.ts:2478 (two mismatch cases use a 1-character displayName, so they may fail validation before the duplicate-profile or slug check they are named for) moves to 9.2g.
+- Why: the expected result still holds and the cases pass; fixing it here would need another builder round. MEDIUM/LOW findings go to board tasks.
+- risk: low
+
+---
+
 ### 23 Oct 2026 · `configuredMarket` moved to a new `turn/previewMarket.ts`, not `turn/runtime.ts` · decided by builder · risk: low
 - Decided: export `configuredMarket` from a new file `apps/web/src/turn/previewMarket.ts`
   (still under the brief's allowed `apps/web/src/turn/**` path) instead of adding it to

@@ -51,6 +51,10 @@ export function QuestionsInboxView({
   dismissQuestion: doDismiss = dismissQuestion,
 }: QuestionsInboxViewProps) {
   const t = useTranslations('questionsInbox');
+  // `groups`/`moduleId` are seeded once from props and never resynced against a later prop
+  // change: this view is only ever mounted fresh per server-rendered page load (8.9c review),
+  // so a prop update after mount cannot happen today. If this view is ever reused across a
+  // prop change (for example, kept mounted across client-side navigation), resync both here.
   const [groups, setGroups] = useState(initialGroups);
   const [moduleId, setModuleId] = useState<Record<string, string>>(
     () => Object.fromEntries(initialGroups.map((g) => [g.groupId, modules[0]?.id ?? ''])),
@@ -92,6 +96,11 @@ export function QuestionsInboxView({
       }
       removeGroup(group.groupId);
       setNotice('answered');
+    } catch {
+      // Defence in depth (8.9c review): `answerGroup` already settles to a result and never
+      // rejects, but an injected action in a future caller might; never leave an unhandled
+      // rejection, show the same error banner instead.
+      setError('generic');
     } finally {
       setBusy(null);
     }
@@ -109,6 +118,9 @@ export function QuestionsInboxView({
       }
       removeQuestion(group.groupId, questionId);
       setNotice('dismissed');
+    } catch {
+      // Defence in depth (8.9c review): same as `onAnswer` above.
+      setError('generic');
     } finally {
       setBusy(null);
     }

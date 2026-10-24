@@ -5,6 +5,10 @@
 // pending, rejected, role-changed, draft-agent, suspended-agent or no-live-package teacher is
 // absent from `search` and `null` by slug -- the same as a missing one (no enumeration). Only the
 // documented public fields ever leave this file.
+//
+// Task 9.2d: `displayName` comes from the teacher's own `teacher_profiles.display_name`, never
+// the account's sign-in name -- it falls back to the public `slug` when the teacher has not
+// set one yet (scope decision 2). The `users` join stays only for `users.role`.
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -27,7 +31,9 @@ const SearchInput = z.strictObject({
 const TeacherBySlugInput = z.strictObject({ slug: Slug });
 
 /** What a search card or a teacher page shows (scope decision 2): never userId, email, phone,
- * photo, payout ref or verification status. */
+ * photo, payout ref or verification status. `displayName` is the teacher's own public name
+ * (`teacher_profiles.display_name`, falling back to `slug`), never the account's sign-in
+ * name. */
 export interface PublicTeacherCard {
   slug: string;
   displayName: string;
@@ -126,7 +132,7 @@ export function searchQuery(db: Db, { q, language, page }: SearchArgs) {
   const query = db
     .select({
       slug: teacherProfiles.slug,
-      displayName: users.name,
+      displayName: sql<string>`coalesce(${teacherProfiles.displayName}, ${teacherProfiles.slug})`,
       subject: teacherProfiles.subject,
       bio: teacherProfiles.bio,
       languages: teacherProfiles.languages,
@@ -183,7 +189,7 @@ export function discoveryRepo(db: Db) {
       const [row] = await db
         .select({
           slug: teacherProfiles.slug,
-          displayName: users.name,
+          displayName: sql<string>`coalesce(${teacherProfiles.displayName}, ${teacherProfiles.slug})`,
           subject: teacherProfiles.subject,
           bio: teacherProfiles.bio,
           languages: teacherProfiles.languages,
