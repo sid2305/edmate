@@ -7575,6 +7575,14 @@ tasks:
   - 1.4d
   risk: low
   status: todo
+- id: 5.6g
+  milestone: M13
+  title: '5.6b review LOWs: packages/harness/src/pipeline/generate/itemContext.ts ItemContext prompt/options fields become readonly (like PostGuardCtx); packages/harness/src/tools/practiceItems.ts validMcq checks answerKey.length before reading answerKey[0] instead of relying on short-circuit order'
+  accept: harness typecheck, lint and test green; no behaviour change.
+  deps:
+  - 5.6b
+  risk: low
+  status: todo
 - id: 8.9e
   milestone: M13
   title: '8.9d review MEDIUM: apps/web/src/studio/questions/routes.ts fromError gets a `default` branch assigning error.kind to `never`, so a new RepositoryErrorKind fails to compile instead of falling
