@@ -434,9 +434,9 @@ tasks:
   accept: a short comparison (before/after table, 10 lines) in docs/decisions/log.md under a 24 Oct 2026 entry and a blocker with the recommendation; no code change.
   deps: []
   risk: normal
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: lead
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
