@@ -10,6 +10,52 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · Sign-in runtime hardening: dev Redis singleton, dynamic ioredis/nodemailer imports, shared ready-wait, Auth.js error type in logs · decided by builder · risk: high
+- Decided: `index.ts` reuses one ioredis client across dev module reloads via a `globalThis`
+  cache; the `ioredis`/`nodemailer`/`rate-limit` imports `emailSignIn()` needs moved inside the
+  function as dynamic imports (`emailSignIn` is now async, memoized), and the per-request Auth.js
+  config factory inside `getRuntime()` is now async and awaits it -- `getRuntime()` itself stays
+  synchronous, since the guard dependencies it returns never depended on email/Redis/mail and
+  `createGuard`'s `() => getRuntime().guard` callback is called synchronously and is out of this
+  task's scope to change. This satisfies the accept line ("guard helpers import without ioredis or
+  nodemailer") without the `server-only` package (lead's Q1 answer: skip it) and without a deeper
+  structural split (lead's Q2 answer: no). `redis-ready.ts` now shares one in-flight "ready"
+  promise per Redis instance (a `WeakMap`) instead of registering a new listener per request.
+  `describe-error.ts` now logs Auth.js's own `type` field when present, instead of the (possibly
+  minified) `Error.name`. Nodemailer's exact `8.x` patch pin (`8.0.11`) is unchanged: the npm
+  registry shows no newer `8.x` patch exists today (lead's Q3 answer: bump only if one exists);
+  the major-version bump stays out of scope regardless, since `@auth/core@0.41.3` still caps it
+  below `9.0.0`.
+- Why: these are the 1.4 review's deferred findings; this is the sign-in path
+  (`apps/web/src/auth/**`), so risk: high.
+
+---
+
+### 23 Oct 2026 · Production sign-in mail is Resend's SMTP relay, by config only; a new setup doc covers Mailpit and trusted_proxies · decided by builder · risk: low
+- Decided: no code change for Resend (human decision B-25, Resolved) -- `EMAIL_SERVER`/
+  `EMAIL_FROM` already route through any SMTP endpoint via the existing `smtpMailSender`. A new
+  doc, `docs/setup/sign-in-mail-and-proxy.md` (lead's Q4 answer: the existing `docs/setup/`
+  folder, not a new `docs/deploy-notes/`), states that production must override the Mailpit
+  default and must set Caddy's `trusted_proxies`; both `docker/env.example` and `docker/Caddyfile`
+  get a one-line pointer to it. The real deploy guide (board task 13.6) folds this in later.
+- Why: this is documentation and config comments, not production-path code; low risk.
+
+---
+
+### 24 Oct 2026 · 1.4d ran over its tool budget · decided by lead · risk: low
+- Decided: accept 130 tool calls against the plan's 80 (cap 96). The builder used 81; the first fix round was cut off by the weekly usage limit, so a second fixer re-ran the gate.
+- Why: the overrun is the interrupted fix round, not scope growth.
+
+---
+
+### 24 Oct 2026 · 1.4d review LOW deferred · decided by lead · risk: low
+- Decided: the whenReady timeout LOW in apps/web/src/auth/redis-ready.ts, and running apps/web/scripts/sandbox-magic-link.mjs against the full stack, go to board task 1.4e.
+- Why: one fix round per task; neither blocks sign-in today.
+
+Tool calls used: 130 (harness count: builder 81, second fix round 22; the first fix round was cut off by the usage limit and reported 27; the agents reported 70, 27 and 9)
+
+---
+
 ### 24 Oct 2026 · 0.22: review of 1 Opus + 2 Sonnet builders with the no-shared-files rule · decided by lead · risk: medium
 - Decided: recommend keeping three parallel builders under the no-shared-files rule (B-55), but run only two when the week's usage is tight, and record the harness tool count for every agent.
 - Why: merged PRs per Pacific day (`gh pr list --state merged`), CRITICAL/HIGH counted from each task's review.md:

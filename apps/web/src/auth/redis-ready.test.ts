@@ -44,6 +44,33 @@ describe('whenReady', () => {
     expect(REDIS_READY_TIMEOUT_MS).toBeGreaterThan(0);
     expect(REDIS_READY_TIMEOUT_MS).toBeLessThanOrEqual(5_000);
   });
+
+  it('20 concurrent callers register exactly one listener and all resolve together', async () => {
+    const redis = fakeRedis('connecting');
+    const onceSpy = vi.spyOn(redis, 'once');
+    const calls = Array.from({ length: 20 }, () => whenReady(redis, 1_000));
+    expect(onceSpy).toHaveBeenCalledTimes(1);
+    expect(redis.listenerCount('ready')).toBe(1);
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(Promise.all(calls)).resolves.toEqual(new Array(20).fill(undefined));
+    expect(redis.listenerCount('ready')).toBe(0);
+  });
+
+  it('a second outage after the first resolves registers a fresh listener (not stuck cached)', async () => {
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 1_000);
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(first).resolves.toBeUndefined();
+    redis.status = 'connecting';
+    const onceSpy = vi.spyOn(redis, 'once');
+    const second = whenReady(redis, 1_000);
+    expect(onceSpy).toHaveBeenCalledTimes(1);
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(second).resolves.toBeUndefined();
+  });
 });
 
 describe('readyCounters', () => {

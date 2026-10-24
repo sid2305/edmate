@@ -22,20 +22,32 @@ export class RedisNotReadyError extends Error {
   }
 }
 
+// One in-flight "ready" promise per Redis instance (task 1.4d): N concurrent sign-in requests
+// during an outage previously registered N `once('ready', …)` listeners (a MaxListeners warning
+// past 10); now every concurrent caller awaits the same promise, and only its first caller
+// registers a listener.
+const pending = new WeakMap<ReadySource, Promise<void>>();
+
 /** Resolves when `redis` is ready; rejects with RedisNotReadyError after `timeoutMs`. */
 export function whenReady(redis: ReadySource, timeoutMs: number): Promise<void> {
   if (redis.status === 'ready') return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
+  const inFlight = pending.get(redis);
+  if (inFlight) return inFlight;
+  const promise = new Promise<void>((resolve, reject) => {
     const onReady = () => {
       clearTimeout(timer);
+      pending.delete(redis);
       resolve();
     };
     const timer = setTimeout(() => {
       redis.removeListener('ready', onReady);
+      pending.delete(redis);
       reject(new RedisNotReadyError());
     }, timeoutMs);
     redis.once('ready', onReady);
   });
+  pending.set(redis, promise);
+  return promise;
 }
 
 /** Wraps both counters so every take first waits for `redis` to be ready. */

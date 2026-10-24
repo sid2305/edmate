@@ -476,7 +476,7 @@ describe('createAuthConfig', () => {
     c.logger!.debug!('details', { email: 'asha@example.test' });
     expect(lines).toEqual([
       '[auth] error CallbackRouteError',
-      '[auth] error Error (AdapterError)',
+      '[auth] error AdapterError',
       '[auth] error non-error',
       '[auth] warn debug-enabled',
     ]);
