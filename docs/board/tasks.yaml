@@ -7567,6 +7567,14 @@ tasks:
   - 5.6b
   risk: high
   status: todo
+- id: 1.4e
+  milestone: M13
+  title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs against the full compose stack and record the result'
+  accept: web typecheck, lint and test green; redis-ready.ts documents or handles a differing timeoutMs; the sandbox magic-link script run is recorded in the handoff.
+  deps:
+  - 1.4d
+  risk: low
+  status: todo
 - id: 8.9e
   milestone: M13
   title: '8.9d review MEDIUM: apps/web/src/studio/questions/routes.ts fromError gets a `default` branch assigning error.kind to `never`, so a new RepositoryErrorKind fails to compile instead of falling
