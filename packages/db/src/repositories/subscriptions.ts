@@ -331,6 +331,47 @@ export function subscriptionsRepo(db: Db) {
     },
 
     /**
+     * The mirror of `listLiveForStudent` right above (task 9.3f, B-49): not-ended subscriptions
+     * whose current package's agent is **not** `live` (suspended or draft), read-only, so `/home`
+     * can show one blame-free "unavailable" line instead of the chat silently vanishing. Kept as
+     * a separate method rather than a flag on `listLiveForStudent` because that method also feeds
+     * the live-classes question route's candidate list
+     * (`apps/web/app/api/live-classes/[id]/questions/handlers.ts`), whose behaviour this task must
+     * not change. Same bare-id scope exception and guard as `listLiveForStudent`.
+     */
+    async listUnavailableForStudent(
+      studentId: string,
+    ): Promise<Array<{ agentId: string; teacherId: string }>> {
+      const method = 'subscriptions.listUnavailableForStudent';
+      const r = IdSchema.safeParse(studentId);
+      if (!r.success) throw new RepositoryError('scope', method);
+      return db
+        .select({
+          agentId: agents.id,
+          teacherId: subscriptions.teacherId,
+        })
+        .from(subscriptions)
+        .innerJoin(
+          packageVersions,
+          and(
+            eq(packageVersions.id, subscriptions.packageVersionId),
+            eq(packageVersions.teacherId, subscriptions.teacherId),
+          ),
+        )
+        .innerJoin(packages, eq(packages.id, packageVersions.packageId))
+        .innerJoin(
+          agents,
+          and(
+            eq(agents.id, packages.agentId),
+            eq(agents.teacherId, subscriptions.teacherId),
+            ne(agents.status, 'live'),
+          ),
+        )
+        .where(and(eq(subscriptions.studentId, r.data), ne(subscriptions.status, 'ended')))
+        .orderBy(asc(agents.id));
+    },
+
+    /**
      * Starts a subscription with no payment (task 9.3; checkout is 10.8): the scope's student
      * subscribes to one of the scope's teacher's package versions. The write only lands when
      * `packageVersionId` names a `package_versions` row of this teacher (else `not_found` — a

@@ -2045,6 +2045,42 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 9.3f (B-49): the mirror of the previous case -- a subscription whose agent is no longer
+  // live. Suspends teacher A's agent for the duration of this check, restored in `finally` so
+  // later grid entries see the seed's usual all-live state.
+  'subscriptions.listUnavailableForStudent': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      await raw.query(`update agents set status = 'suspended' where id = $1`, [ids.agent('A')]);
+      try {
+        for (const st of ['1', '2'] as const) {
+          const got = await r.subscriptions.listUnavailableForStudent(studentId(st));
+          expect(got, `stu_${st}'s own list`).toEqual([
+            { agentId: ids.agent('A'), teacherId: teacherId('A') },
+          ]);
+          n += 1;
+        }
+        const rand = prng(93406);
+        for (let i = 0; i < 20; i += 1) {
+          expect(await r.subscriptions.listUnavailableForStudent(randomId(rand))).toEqual([]);
+          n += 1;
+        }
+        for (const bad of ['', 'has space', 'x'.repeat(129), undefined, 42]) {
+          await expectFailsClosed(
+            () => r.subscriptions.listUnavailableForStudent(bad as never),
+            ['scope'],
+            `listUnavailableForStudent(${String(bad).slice(0, 10)})`,
+          );
+          n += 1;
+        }
+      } finally {
+        await raw.query(`update agents set status = 'live' where id = $1`, [ids.agent('A')]);
+      }
+      return n;
+    },
+  },
   'subscriptions.pauseFreeForTeacher': {
     scope: 'teacher',
     op: 'write',
@@ -2677,6 +2713,29 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
           ['email', 'id', 'name', 'slug', 'subject', 'teacherId', 'verificationStatus'].sort(),
         );
       }
+      n += 1;
+      return n;
+    },
+  },
+  // Task 9.3f: the staff-only slug lookup, no status filter -- finds any teacher's own row
+  // regardless of verificationStatus, same staff/non-staff split as listPendingForStaff.
+  'teacherProfiles.findBySlugForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expect(
+          r.teacherProfiles.findBySlugForStaff(by, profileSlug('A')),
+        ).rejects.toMatchObject({ kind: 'scope' });
+        n += 1;
+      }
+      for (const t of TEACHERS) {
+        const row = await r.teacherProfiles.findBySlugForStaff(ISO_STAFF, profileSlug(t));
+        expect(row?.teacherId, `finds ${t} by slug`).toBe(teacherId(t));
+        n += 1;
+      }
+      expect(await r.teacherProfiles.findBySlugForStaff(ISO_STAFF, 'no-such-teacher-slug')).toBeNull();
       n += 1;
       return n;
     },
