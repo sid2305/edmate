@@ -2529,7 +2529,7 @@ tasks:
   deps:
   - 5.10b
   - 9.4a
-  status: running
+  status: review
   model: plan:sonnet build:sonnet
   branch: m13/5.10d-one-open-session
 - id: 9.3b
@@ -5150,7 +5150,9 @@ tasks:
   deps:
   - 9.5b
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.5c-skill-launcher-a11y
+  model: build:sonnet
 - id: 8.7j
   milestone: M13
   title: '8.7c review follow-ups: apps/worker/src/gate/processor.ts replaces the `gateResult as GateResult` cast in the gatedPublish callback with a runtime guard (or returns the result through the gate
@@ -7601,8 +7603,9 @@ tasks:
   status: todo
 - id: 5.6g
   milestone: M13
-  title: '5.6b review LOWs: packages/harness/src/pipeline/generate/itemContext.ts ItemContext prompt/options fields become readonly (like PostGuardCtx); packages/harness/src/tools/practiceItems.ts validMcq
-    checks answerKey.length before reading answerKey[0] instead of relying on short-circuit order'
+  title: '5.6b review MEDIUM and LOWs: packages/harness/src/pipeline/generate/streamGate.ts:301-316 ruleOutCompletes/commitRuledOut judge the released window plus the piece (like keys.leaks), not the bare
+    piece, so a wrong-option mention split by a cap-forced cut is still caught live (with a test); packages/harness/src/pipeline/generate/itemContext.ts ItemContext prompt/options fields become readonly
+    (like PostGuardCtx); packages/harness/src/tools/practiceItems.ts validMcq checks answerKey.length before reading answerKey[0] instead of relying on short-circuit order'
   accept: harness typecheck, lint and test green; no behaviour change.
   deps:
   - 5.6b
@@ -7616,6 +7619,6 @@ tasks:
   deps:
   - 8.9d
   risk: low
-  status: running
+  status: review
   branch: m13/8.9e-fromerror-never
   model: build:sonnet
