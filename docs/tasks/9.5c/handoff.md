@@ -32,7 +32,9 @@
   the CI `e2e` job.
 
 ## Decisions
-
-None
+### 24 Oct 2026 · 9.5c fixed label id kept · decided by lead · risk: low
+- Decided: won't fix the review LOW in apps/web/src/chat/SkillLauncher.tsx (a fixed id instead of useId() for the group label). SkillLauncher renders once per page, in ChatView.tsx.
+- Why: no collision is possible today; switch to useId() if the component is ever reused.
 
 ## Budget
+Tool calls used: 27 (harness count: builder 27; the agent reported 18)
