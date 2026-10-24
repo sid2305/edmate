@@ -239,6 +239,43 @@ describe('classifyAttempt', () => {
   it('a short non-numeric answer next to a key part is still a match', () => {
     expect(classifyAttempt(msg('is it a cat?'), stored(['cat']))).toBe('correct');
   });
+
+  describe('label keys (5.6b, design 5): only the one label named in the message counts', () => {
+    it.each([
+      ['B', 'message', 'correct'],
+      ['b', 'message', 'correct'],
+      ['(b)', 'message', 'correct'],
+      ["I think it's b", 'message', 'correct'],
+      ['B.', 'check_answer', 'correct'],
+      ['C', 'message', 'wrong'],
+      ['a b c', 'check_answer', 'wrong'],
+      ['a or b', 'check_answer', 'wrong'],
+      ['a or b', 'message', 'wrong'],
+      ['is it a or b?', 'check_answer', 'wrong'],
+      ['A, B or C', 'check_answer', 'wrong'],
+      ['b b b', 'check_answer', 'correct'],
+      ["I'd say b", 'check_answer', 'correct'],
+    ] as const)('%j (%s) against key B → %s', (text, kind, expected) => {
+      expect(classifyAttempt(msg(text, kind), stored(['B']))).toBe(expected);
+      expect(classifyAttempt(msg(text, kind), stored(['(B)']))).toBe(expected);
+    });
+
+    it('the article "a" is never a label, but a message-initial "a" is', () => {
+      expect(classifyAttempt(msg('A because it loops', 'check_answer'), stored(['A']))).toBe(
+        'correct',
+      );
+      expect(classifyAttempt(msg('it is a loop', 'check_answer'), stored(['A']))).toBe('wrong');
+      expect(classifyAttempt(msg("it's a", 'check_answer'), stored(['A']))).toBe('correct');
+      expect(classifyAttempt(msg('a or b', 'check_answer'), stored(['B']))).toBe('wrong');
+    });
+
+    it('numeric and text keys grade as before', () => {
+      expect(classifyAttempt(msg('7'), stored(['7']))).toBe('correct');
+      expect(classifyAttempt(msg('a 7'), stored(['7']))).toBe('correct');
+      expect(classifyAttempt(msg('Photosynthesis'), stored(['photosynthesis']))).toBe('correct');
+      expect(classifyAttempt(msg('x = 4'), stored(['x = 4']))).toBe('correct');
+    });
+  });
 });
 
 describe('normaliseText', () => {

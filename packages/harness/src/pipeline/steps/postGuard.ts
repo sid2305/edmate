@@ -390,10 +390,16 @@ export function createPostGuard(
 ): Steps['postGuard'] {
   return async (
     env,
-    { ctx, decision, draft, raw, withheld, locked, sources },
+    { ctx, decision, draft, raw, withheld, locked, sources, items, practiceKeys },
   ): Promise<PostGuardResult> => {
     const studentText = env.input.text;
     const own = studentText === undefined ? {} : { studentText };
+    // 5.6b: the active items (re-shows exempt, derived keys guarded) and the practice keys (no
+    // own-code exemption), for the raw re-check and every post guard.
+    const answerContext = {
+      ...(items === undefined ? {} : { items }),
+      ...(practiceKeys === undefined ? {} : { practiceKeys }),
+    };
     const hint = (guards: GuardTrace[], usage: Usage[]): PostGuardResult => ({
       result: 'replace',
       text: ANSWER_LEAK_SAFE_HINT,
@@ -407,7 +413,7 @@ export function createPostGuard(
       withheld === true ||
       (raw !== undefined &&
         raw !== draft &&
-        compileAnswerKeys(decision.mustNotReveal, own).leaks(raw));
+        compileAnswerKeys(decision.mustNotReveal, { ...own, ...answerContext }).leaks(raw));
     const subject = leaked ? (raw ?? draft) : draft;
     const lockedReply = lockedReplyFor(env, ctx);
 
@@ -474,6 +480,7 @@ export function createPostGuard(
       ctx,
       decision,
       ...own,
+      ...answerContext,
       rewrite: rewriter(env, () => share('answerLeak', REWRITE_SHARE)),
       lockedCheck: lockedCheckFor(env, ctx),
       lockedReply,

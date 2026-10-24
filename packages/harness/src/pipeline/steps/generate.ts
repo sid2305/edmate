@@ -26,6 +26,11 @@
 // The key is never put in the model's prompt on this turn. A gate that cannot take new keys
 // (no `addKeys`) shows nothing more once an item is issued, and the attempt counts as withheld,
 // so postGuard puts the safe hint in its place (fail closed).
+//
+// Answer context (5.6b): the gate is built with the active items the runner passes (the item the
+// loaded help state holds, and those earlier attempts issued) and the turn's practice keys; each
+// item issued here goes to the gate with its key (`addKeys(fresh, [item])`, even when `fresh` is
+// empty), so the model may restate an item's prompt and exact option listing, never its answer.
 import type { AgentConfig, PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
 import { decisionRequest, regulatedTopic } from '../../guardrails/adviceGuard.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
@@ -34,6 +39,7 @@ import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
 import { citedSources } from '../generate/citations.js';
 import { SkillEventDropped, skillEvent } from '../generate/skillEvent.js';
 import { revealsAnswerKey } from '../generate/answerKey.js';
+import { itemContextOf } from '../generate/itemContext.js';
 import { answerLeakStreamGate } from '../generate/streamGate.js';
 import { DEFAULT_COVERAGE_THRESHOLD } from '../../pedagogy/coverage.js';
 import { HarnessError } from '../errors.js';
@@ -129,6 +135,8 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       practice,
       issuedKeys,
       onPracticeItem,
+      items,
+      practiceKeys,
     },
     emit,
   ) => {
@@ -160,11 +168,15 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     };
     guard(issuedKeys ?? []);
     const gateDecision = { ...decision, mustNotReveal: [...guarded] };
-    const gate = (deps.streamGate ?? answerLeakStreamGate)(
-      studentText === undefined
-        ? { ctx, decision: gateDecision }
-        : { ctx, decision: gateDecision, studentText },
-    );
+    // 5.6b: the active items (the loaded one, earlier attempts' issued ones) and every practice
+    // key: a re-show of an item is exempt and held back until whole; its keys stay guarded.
+    const gate = (deps.streamGate ?? answerLeakStreamGate)({
+      ctx,
+      decision: gateDecision,
+      ...(studentText === undefined ? {} : { studentText }),
+      ...(items === undefined ? {} : { items }),
+      practiceKeys: [...(practiceKeys ?? []), ...(issuedKeys ?? [])],
+    });
 
     const lockedCheck = lockedCheckOf(env, ctx);
     const held = holdsReply(ctx, decision.move, undefined, fromFallback === true, studentText);
@@ -191,8 +203,10 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
         const before = [...guarded];
         if (item !== undefined) {
           const fresh = guard(item.answerKey);
+          // The item goes to the gate even when its key is already guarded (5.6b): its re-show
+          // is then exempt and held back until whole.
           if (gate.addKeys === undefined) holdRest = true;
-          else gate.addKeys(fresh);
+          else gate.addKeys(fresh, [itemContextOf(item)]);
           for (const k of item.answerKey) {
             if (!issued.includes(k)) issued.push(k);
             if (!turnIssued.includes(k)) turnIssued.push(k);

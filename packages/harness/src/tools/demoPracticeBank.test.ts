@@ -34,7 +34,7 @@ describe('DEMO_PRACTICE_RECORDS', () => {
     for (const { item } of DEMO_PRACTICE_RECORDS) expect(item.teacherId).toBe(T);
   });
 
-  it('includes an mcq and a code_output record, kept to prove the bank never serves them', () => {
+  it('includes an mcq and a code_output record (served since 5.6b)', () => {
     const kinds = new Set(DEMO_PRACTICE_RECORDS.map((r) => r.item.kind));
     expect(kinds.has('mcq')).toBe(true);
     expect(kinds.has('code_output')).toBe(true);
@@ -92,14 +92,47 @@ describe('demoPracticeBank: scoped reads (architect review point 1)', () => {
     expect(bank.answerKeyFor('no-such-id', scopeAll)).toBeUndefined();
   });
 
-  it('never serves the mcq or code_output fixture records (point 4)', () => {
+  it('serves the mcq and code_output records at their level (5.6b Phase C)', () => {
     const bank = demoPracticeBank();
+    const mcq = bank.pick({ teacherId: T, allowedModuleIds: ['module-algebra'] }, 3, []);
+    expect(mcq).toMatchObject({ id: 'demo:algebra:3:a', kind: 'mcq' });
+    expect(mcq?.options).toEqual(['A) 6', 'B) 7', 'C) 8']);
+    const python = { teacherId: T, allowedModuleIds: ['module-python'] };
+    expect(bank.pick(python, 1, [])).toMatchObject({ id: 'demo:python:1:a', kind: 'code_output' });
+    expect(bank.pick(python, 2, [])).toMatchObject({ id: 'demo:python:2:a', kind: 'code_output' });
+    // Served through pickItem too: each passes the runtime item checks.
+    expect(pickItem(bank, python, 1, [])?.item.id).toBe('demo:python:1:a');
+    expect(pickItem(bank, { teacherId: T, allowedModuleIds: ['module-algebra'] }, 3, [])?.item.id).toBe(
+      'demo:algebra:3:a',
+    );
+  });
+
+  it('the code_output prompts hold no giveaway, and one has its output on line 2', () => {
+    const python = DEMO_PRACTICE_RECORDS.filter((r) => r.item.kind === 'code_output');
+    for (const r of python) expect(r.item.prompt).not.toMatch(/it prints/iu);
+    const one = python.find((r) => r.item.id === 'demo:python:1:a');
+    expect(one?.item.prompt.split('\n')[1]).toContain(one?.answerKey[0]);
+  });
+});
+
+describe('demoPracticeBank: itemFor (5.6b), scoped like answerKeyFor', () => {
+  const bank = demoPracticeBank();
+  const arithmetic = { teacherId: T, allowedModuleIds: ['module-arithmetic'] };
+
+  it('returns the item in scope, and the mcq record with its options', () => {
+    expect(bank.itemFor('demo:arithmetic:1:a', arithmetic)?.prompt).toBe('What is 3 + 4?');
+    const mcq = bank.itemFor('demo:algebra:3:a', scopeAll);
+    expect(mcq?.options).toEqual(['A) 6', 'B) 7', 'C) 8']);
+  });
+
+  it('returns undefined for another teacher, another module or an unknown id', () => {
+    expect(bank.itemFor('demo:arithmetic:1:a', { ...arithmetic, teacherId: 'tch_other' })).toBe(
+      undefined,
+    );
     expect(
-      bank.pick({ teacherId: T, allowedModuleIds: ['module-algebra'] }, 3, []),
+      bank.itemFor('demo:arithmetic:1:a', { teacherId: T, allowedModuleIds: ['module-python'] }),
     ).toBeUndefined();
-    expect(
-      bank.pick({ teacherId: T, allowedModuleIds: ['module-python'] }, 1, []),
-    ).toBeUndefined();
+    expect(bank.itemFor('demo:nope:1:a', scopeAll)).toBeUndefined();
   });
 });
 
@@ -131,6 +164,7 @@ describe('demoPracticeBank: topic choice (architect review point 2)', () => {
         { topicId: 'arithmetic', mastery: 5 },
         { topicId: 'fractions', mastery: 9 },
         { topicId: 'algebra', mastery: 1 },
+        { topicId: 'python-loops', mastery: 7 },
       ],
     });
     expect(item?.topicId).toBe('algebra');

@@ -227,6 +227,30 @@ describe('grounding: Rule C (numbers recomputed)', () => {
     expect(j.calls).toEqual([]);
   });
 
+  it('5.6b: a fix that would show the active item’s correct option text is the hint', async () => {
+    const item = { prompt: 'Pick one.', options: ['A) 2', 'B) 3', 'C) 5'], answerKey: ['B'] };
+    const decision = { ...explain, mustNotReveal: ['B'] };
+    const hinted = await run('So 7 // 2 is 4.', x({ judge: judgeOf(GROUNDED).judge, decision, items: [item] }));
+    expect(hinted.result).toEqual({
+      ok: false,
+      action: 'rewrite',
+      text: ANSWER_LEAK_SAFE_HINT,
+      reason: 'answer_key',
+    });
+    // Without the item, the label key alone is not in the fixed text: the fix goes out.
+    const fixed = await run('So 7 // 2 is 4.', x({ judge: judgeOf(GROUNDED).judge, decision }));
+    expect(fixed.result).toMatchObject({ ok: false, text: 'So 7 // 2 is 3.' });
+  });
+
+  it('5.6b: a chunk holding the active item’s correct option text never reaches the judge', async () => {
+    const item = { prompt: 'Pick one.', options: ['A) 2', 'B) 3', 'C) 5'], answerKey: ['B'] };
+    const { j, judge } = judgeOf(GROUNDED);
+    const ctx = ctxWith([chunk(FLOOR), chunk('Rubric: the answer is 3.', 0.7, 'chk_b')]);
+    const decision = { ...explain, mustNotReveal: ['B'] };
+    await run('It rounds down.', x({ ctx, judge, decision, items: [item], practiceKeys: ['B'] }));
+    expect(JSON.stringify(j.calls)).not.toContain('Rubric');
+  });
+
   it('works with no student message at all', async () => {
     const { j, judge } = judgeOf(GROUNDED);
     const noStudent: PostGuardCtx = {

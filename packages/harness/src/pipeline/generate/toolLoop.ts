@@ -27,6 +27,7 @@ import type { UsageRecorder } from '../types.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { stringLeaves } from '../../guardrails/lockedMatch.js';
 import { revealsAnswerKey } from './answerKey.js';
+import { issueCheckContext } from './itemContext.js';
 import { lockedStream } from './lockedStream.js';
 import type { StreamGate } from './streamGate.js';
 import { raceCancel, StreamReader } from './streamReader.js';
@@ -255,8 +256,11 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
           continue;
         }
         // Only the item's prompt and options are checked against earlier keys: its id or
-        // `"level":1` must not count as showing a held key "1" (5.6 review).
-        if (revealsAnswerKey(issued.shown, i.mustNotReveal)) {
+        // `"level":1` must not count as showing a held key "1" (5.6 review). They are read as one
+        // joined text with the item's spans (5.6b), so "B) 9" in its own exact listing is not a
+        // held "B"; the item's key is left out, so a held key it shares stays guarded.
+        const shownText = issued.shown.join('\n');
+        if (revealsAnswerKey(shownText, i.mustNotReveal, { items: [issueCheckContext(issued)] })) {
           i.report(new ToolFailed(entry.tool.name, 'answer_key'));
           results.push(fail('failed'));
           continue;

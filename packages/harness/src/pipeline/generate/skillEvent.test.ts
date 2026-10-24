@@ -235,4 +235,13 @@ describe('skillEvent', () => {
     });
     dropped(await skillEvent(entry, {}, turnContextFull, ['5'], NONE, [payload.prompt]), 'answer_key');
   });
+
+  it('an MCQ after an MCQ with the same key B is sent; one that says B is dropped (5.6b)', async () => {
+    const shown = ['What is 4 + 5?', 'A) 8', 'B) 9', 'C) 10'];
+    const entry = withPresent(() => ({ skill: 'practice', payload: { prompt: shown[0] } }));
+    const sent = await skillEvent(entry, {}, turnContextFull, ['B'], NONE, shown);
+    expect(sent).toMatchObject({ type: 'skill', skill: 'practice' });
+    const said = ['What is 4 + 5? The answer is B.', 'A) 8', 'B) 9', 'C) 10'];
+    dropped(await skillEvent(entry, {}, turnContextFull, ['B'], NONE, said), 'answer_key');
+  });
 });

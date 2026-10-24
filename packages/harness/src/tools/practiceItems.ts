@@ -12,12 +12,35 @@
 //   3. The answer key is never part of the model-visible item shape. `PracticeItem` has no
 //      `answerKey` field; a key is obtained only through `PracticeBank.answerKeyFor` (bank items)
 //      or `generatedAnswerKeyFor` (generated items, recomputed from the item id).
-//   4. `mcq` and `code_output` stay as item kinds (so the model, when it exists, is representable)
-//      but are not in `SERVABLE_KINDS`: no bank built here ever hands one out yet.
+//   4. `mcq` and `code_output` are served (5.6b Phase C): the pipeline passes the active item's
+//      context to the stream gate and the post guards, so a re-show of the item is exempt while
+//      a real leak of its key (a label, the correct option's text, its output) is still held.
+//
+// 5.6b Phase B: `validateItem` enforces the item rules (an MCQ has 3-6 options labelled "A) ",
+// "B) ", ... in order and one bare capital label key in range; prompts and options are capped;
+// label keys are checked with the label matcher; an MCQ's correct option text and position stay
+// out of its prompt). `PracticeBank.itemFor` and `generatedPrompt` let the harness rebuild the
+// active item each turn (its prompt and options are never stored in HelpState).
 import { evaluateExpression } from './sandbox.js';
 import { PRACTICE_ID_MAX } from '../pedagogy/helpState.js';
-import { normaliseForMatch } from '../pipeline/generate/answerKey.js';
+import { compileAnswerKeys, normaliseForMatch } from '../pipeline/generate/answerKey.js';
 import { contextAnswerKeys } from '../pipeline/generate/answerKeyContext.js';
+import { type ItemContext, optionText } from '../pipeline/generate/itemContext.js';
+import {
+  foldLabels,
+  labelLeaks,
+  labelOf,
+  NO_ITEM_SCOPE,
+  positionLeaks,
+} from '../pipeline/generate/labelKeys.js';
+
+/** Longest prompt an item may have (5.6b): bounds the stream gate's re-show hold-back. */
+export const PRACTICE_PROMPT_MAX = 600;
+/** Longest option an item may have (5.6b), for the same reason. */
+export const PRACTICE_OPTION_MAX = 160;
+/** An MCQ has 3 to 6 options (5.6b, Q1). */
+export const MCQ_OPTIONS_MIN = 3;
+export const MCQ_OPTIONS_MAX = 6;
 
 /** Difficulty tier (distinct from the help-ladder rung in `pedagogy/ladder.ts`). */
 export type PracticeLevel = 1 | 2 | 3;
@@ -29,8 +52,13 @@ export type PracticeLevel = 1 | 2 | 3;
  */
 export type PracticeItemKind = 'numeric' | 'mcq' | 'short' | 'code_output';
 
-/** Kinds a `PracticeBank` built in this task may actually serve (architect review point 4). */
-export const SERVABLE_KINDS: ReadonlySet<PracticeItemKind> = new Set(['numeric', 'short']);
+/** Kinds a `PracticeBank` may serve (architect review point 4; mcq and code_output since 5.6b). */
+export const SERVABLE_KINDS: ReadonlySet<PracticeItemKind> = new Set([
+  'numeric',
+  'short',
+  'mcq',
+  'code_output',
+]);
 
 /** The model-visible item shape: never the answer key (architect review point 3). */
 export interface PracticeItem {
@@ -93,6 +121,11 @@ export interface PracticeBank {
   ): PracticeItem | undefined;
   /** The server-only answer key for an item this bank can serve, re-checked against `scope`. */
   answerKeyFor(itemId: string, scope: PracticeScope): readonly string[] | undefined;
+  /**
+   * The item itself (prompt, options), scoped exactly like `answerKeyFor` (5.6b): the harness
+   * rebuilds the active item each turn to exempt its re-show. `undefined` outside `scope`.
+   */
+  itemFor(itemId: string, scope: PracticeScope): PracticeItem | undefined;
 }
 
 /**
@@ -233,7 +266,9 @@ function generateArithmeticItem(
 ): PickedPracticeItem {
   const template = TEMPLATES[level];
   // Variant 0 keeps the original seed; later variants vary the operands deterministically.
-  const seed0 = hashString(variant === 0 ? `${topicId}:${level}` : `${topicId}:${level}:${variant}`);
+  const seed0 = hashString(
+    variant === 0 ? `${topicId}:${level}` : `${topicId}:${level}:${variant}`,
+  );
   const draw1 = nextOperand(seed0, template.min, template.max);
   const draw2 = nextOperand(draw1.seed, template.min, template.max);
   let a = draw1.value;
@@ -259,7 +294,7 @@ function generateArithmeticItem(
       moduleId,
       level,
       kind: 'numeric',
-      prompt: `What is ${a} ${template.op} ${b}?`,
+      prompt: generatedPrompt({ topicId, moduleId, level, a, op: template.op, b }),
     },
     answerKey: [answer],
   };
@@ -291,6 +326,11 @@ export function generateItem(
     if (servable(picked, scope, exclude, accept)) return picked;
   }
   return undefined;
+}
+
+/** A generated item's prompt, rebuilt from its id (5.6b): the one source `generateItem` uses too. */
+export function generatedPrompt(g: GeneratedId): string {
+  return `What is ${String(g.a)} ${g.op} ${String(g.b)}?`;
 }
 
 /**
@@ -342,15 +382,58 @@ function keyInPrompt(prompt: string, key: string): boolean {
 export function validateItem(item: PracticeItem, answerKey: readonly string[]): boolean {
   if (answerKey.length === 0) return false;
   if (answerKey.some((k) => normaliseForMatch(k) === '' || k.trim() === '')) return false;
-  if (item.kind === 'mcq') {
-    const optionTexts = new Set((item.options ?? []).map((o) => normaliseForMatch(o)));
-    if (answerKey.some((k) => optionTexts.has(normaliseForMatch(k)))) return false;
-  }
   const options = item.options ?? [];
-  if (answerKey.some((k) => options.some((o) => keyInPrompt(o, k)))) return false;
+  if (item.prompt.length > PRACTICE_PROMPT_MAX) return false;
+  if (options.some((o) => o.length > PRACTICE_OPTION_MAX)) return false;
+  if (item.kind === 'mcq') return validMcq(item.id, item.prompt, options, answerKey);
+  if (answerKey.some((k) => options.some((o) => keyShown(o, k)))) return false;
   const exempt = new Set(answerKey.filter((k) => /^\s*\d+\s*$/.test(k)));
   for (const k of contextAnswerKeys([...exempt])) exempt.delete(k);
-  if (answerKey.some((k) => !exempt.has(k) && keyInPrompt(item.id, k))) return false;
+  if (answerKey.some((k) => !exempt.has(k) && keyInId(item.id, k))) return false;
   if (item.kind === 'code_output') return true;
-  return !answerKey.some((k) => keyInPrompt(item.prompt, k));
+  return !answerKey.some((k) => keyShown(item.prompt, k));
+}
+
+/** Whether `text` shows `key`: the label matcher for a label key (5.6b), else `keyInPrompt`. */
+function keyShown(text: string, key: string): boolean {
+  return labelOf(key) === undefined ? keyInPrompt(text, key) : compileAnswerKeys([key]).leaks(text);
+}
+
+/**
+ * Whether an item id names `key`. A label counts in an id only in an answer context or as the
+ * whole id, as in decoded base64 (5.6b): ids end in a variant letter ("demo:algebra:3:a").
+ */
+function keyInId(id: string, key: string): boolean {
+  const label = labelOf(key);
+  if (label === undefined) return keyInPrompt(id, key);
+  return labelLeaks(foldLabels(id), label, NO_ITEM_SCOPE, true);
+}
+
+/**
+ * The MCQ item rules (5.6b, Q1): 3-6 options, each "A) text", "B) text", ... in order; the key is
+ * exactly one bare capital label in range. The key is checked in the prompt and every option text
+ * with the label matcher (the item's own labels as the list scope) and in the id as `keyInId`
+ * does. The correct option's text (full strength, like any `mustNotReveal` key) and its position
+ * must not appear in the prompt.
+ */
+function validMcq(
+  id: string,
+  prompt: string,
+  options: readonly string[],
+  answerKey: readonly string[],
+): boolean {
+  if (options.length < MCQ_OPTIONS_MIN || options.length > MCQ_OPTIONS_MAX) return false;
+  const labelled = (o: string, k: number) =>
+    o.startsWith(`${String.fromCharCode(0x41 + k)}) `) && optionText(o) !== '';
+  if (!options.every(labelled)) return false;
+  const key = answerKey[0] as string;
+  if (answerKey.length !== 1 || !/^[A-Z]$/u.test(key)) return false;
+  const index = key.charCodeAt(0) - 0x41;
+  if (index >= options.length) return false;
+  const listing: ItemContext = { prompt: '', options, answerKey: [] };
+  const label = compileAnswerKeys([key], { items: [listing] });
+  if (label.leaks(prompt) || options.some((o) => label.leaks(optionText(o)))) return false;
+  if (keyInId(id, key)) return false;
+  const correct = optionText(options[index] as string);
+  return !compileAnswerKeys([correct]).leaks(prompt) && !positionLeaks(prompt, index);
 }

@@ -149,3 +149,58 @@ describe('answerLeak', () => {
     ]);
   });
 });
+
+// 5.6b Phase C: the guard judges with the active items and the practice keys.
+describe('answerLeak: answer context (5.6b)', () => {
+  const MCQ = {
+    prompt: 'Which of these numbers is prime?',
+    options: ['A) 6', 'B) 7', 'C) 8'],
+    answerKey: ['B'],
+  };
+  const listing = [MCQ.prompt, ...MCQ.options].join('\n');
+  const leak = { ok: false, action: 'rewrite', text: ANSWER_LEAK_SAFE_HINT, reason: 'answer_key' };
+
+  it('the item prompt and its exact listing are exempt', async () => {
+    const sum = { prompt: 'What is 3 + 4?', answerKey: ['7'] };
+    expect((await run(`Again: ${listing}`, ctxFor(['B'], { items: [MCQ] }))).result.ok).toBe(true);
+    expect((await run('Again: What is 3 + 4?', ctxFor(['7'], { items: [sum] }))).result.ok).toBe(
+      true,
+    );
+    // Without the item context the same re-shows are leaks (today's behaviour).
+    expect((await run(`Again: ${listing}`, ctxFor(['B']))).result).toEqual(leak);
+    expect((await run('Again: What is 3 + 4?', ctxFor(['7']))).result).toEqual(leak);
+  });
+
+  it.each([`${listing}\nThe answer is B.`, `${listing}\n7 works.`, "It's not A or C."])(
+    'a leak beside the item still rewrites: %j',
+    async (text) => {
+      expect((await run(text, ctxFor(['B'], { items: [MCQ] }))).result).toEqual(leak);
+    },
+  );
+
+  it('the rewrite is re-checked with the same matcher: a derived-key leak falls back to the hint', async () => {
+    const calls: string[] = [];
+    const x = ctxFor(['B'], { items: [MCQ], rewrite: rewriteTo('Try 7, it works.', calls) });
+    const r = await run('Definitely B.', x);
+    expect(calls).toEqual(['Definitely B.']);
+    expect(r.result).toEqual(leak);
+  });
+
+  it('a rewrite that re-shows the item is accepted', async () => {
+    const x = ctxFor(['B'], { items: [MCQ], rewrite: rewriteTo(`Look again:\n${listing}`) });
+    expect((await run('Definitely B.', x)).result).toEqual({
+      ...leak,
+      text: `Look again:\n${listing}`,
+    });
+  });
+
+  it('a practice key is never quoted back as the student’s own code', async () => {
+    const key = 'marks >= 80';
+    const student = { studentText: 'elif marks >= 80 print Distinction' };
+    const text = 'Your second line, marks >= 80, never runs.';
+    expect((await run(text, ctxFor([key], student))).result.ok).toBe(true);
+    expect((await run(text, ctxFor([key], { ...student, practiceKeys: [key] }))).result).toEqual(
+      leak,
+    );
+  });
+});
