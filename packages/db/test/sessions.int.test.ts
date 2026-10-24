@@ -167,4 +167,80 @@ describe.skipIf(!up)(`sessionsRepo.end on Postgres${up ? '' : ` (${SKIP_REASON})
     expect(row?.summary).toBeNull();
     expect(await lastSummary()).toBe('[kept] summary before the oversized attempt');
   });
+
+  // Task 5.10d: at most one open session per (teacher, student, agent) — create() reuses an
+  // existing open session for the triple instead of inserting a second one.
+  describe('create() reuse on the open (teacher, student, agent) triple', () => {
+    const input = {
+      agentId: ids.agent('A'),
+      agentVersion: 1,
+      packageId: ids.pkg('A'),
+      packageVersion: 1,
+    };
+
+    async function openRowsFor(scope: StudentScope, agentId = input.agentId): Promise<number> {
+      const r = await raw.query(
+        'select count(*) as n from sessions where teacher_id = $1 and student_id = $2 and agent_id = $3 and ended_at is null',
+        [scope.teacherId, scope.studentId, agentId],
+      );
+      return Number(r.rows[0].n);
+    }
+
+    it('two concurrent create() calls for the same triple both resolve to the same session id and leave one open row', async () => {
+      const scope: StudentScope = { studentId: studentId('1'), teacherId: teacherId('A') };
+      const [a, b] = await Promise.all([
+        repos.sessions.create(scope, input),
+        repos.sessions.create(scope, input),
+      ]);
+      expect(a.id).toBe(b.id);
+      expect(await openRowsFor(scope)).toBe(1);
+    });
+
+    it('a second, sequential create() call for the same triple returns the first id and leaves one open row', async () => {
+      const scope: StudentScope = { studentId: studentId('2'), teacherId: teacherId('A') };
+      const first = await repos.sessions.create(scope, input);
+      const second = await repos.sessions.create(scope, input);
+      expect(second.id).toBe(first.id);
+      expect(await openRowsFor(scope)).toBe(1);
+    });
+
+    it('a bad agent/package/version combo is still not_found, not swallowed by the reuse fallback', async () => {
+      const scope: StudentScope = { studentId: studentId('2'), teacherId: teacherId('B') };
+      expect(
+        await kind(
+          repos.sessions.create(scope, {
+            ...input,
+            agentId: 'agt_nowhere',
+          }),
+        ),
+      ).toBe('not_found');
+      expect(await openRowsFor(scope)).toBe(0);
+    });
+
+    it('a bad agentVersion is not_found even while a real open session exists for the triple (not reused)', async () => {
+      // The conflict target is (teacher, student, agent) only, not version-specific, so an
+      // unrelated already-open session on the same triple must never make this call look like a
+      // lost race.
+      const scope: StudentScope = { studentId: studentId('1'), teacherId: teacherId('B') };
+      const existing = await repos.sessions.create(scope, {
+        agentId: ids.agent('B'),
+        agentVersion: 1,
+        packageId: ids.pkg('B'),
+        packageVersion: 1,
+      });
+      expect(
+        await kind(
+          repos.sessions.create(scope, {
+            agentId: ids.agent('B'),
+            agentVersion: 99,
+            packageId: ids.pkg('B'),
+            packageVersion: 1,
+          }),
+        ),
+      ).toBe('not_found');
+      expect(await openRowsFor(scope, ids.agent('B'))).toBe(1);
+      const row = await repos.sessions.get(scope, existing.id);
+      expect(row?.endedAt).toBeNull();
+    });
+  });
 });

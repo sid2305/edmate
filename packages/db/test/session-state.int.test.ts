@@ -86,6 +86,13 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
     expect(await kind(store.saveHelpState('ses_nowhere', { v: 1 }))).toBe('not_found');
     expect(await helpStateOf(ids.session('2A'))).toEqual(before);
 
+    // task 5.10d: create() reuses an open session on the same triple — ids.session('1A') (the
+    // seed's own, already open) would otherwise come back here. End it first so this gets a
+    // genuinely fresh session to end and test not_found on.
+    await raw.query(
+      "update sessions set ended_at = now() where id = $1 and ended_at is null",
+      [ids.session('1A')],
+    );
     const { id } = await repos.sessions.create(own, {
       agentId: ids.agent('A'),
       agentVersion: 1,
@@ -95,10 +102,18 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
     await raw.query('update sessions set ended_at = now() where id = $1', [id]);
     expect(await kind(store.saveHelpState(id, { v: 1 }))).toBe('not_found');
     expect(await helpStateOf(id)).toEqual({});
+    // Reopen the seed's own session (now that the fresh one above is ended, no conflict with
+    // the unique open-session index) for later tests in this file that still expect it open.
+    await raw.query('update sessions set ended_at = null where id = $1', [ids.session('1A')]);
   });
 
   it('messages.append also refuses an ended session (like saveHelpState)', async () => {
     const transcripts = transcriptStoreFor(repos, own);
+    // task 5.10d: end the seed's own open session on this triple first, same reason as above.
+    await raw.query(
+      "update sessions set ended_at = now() where teacher_id = $1 and student_id = $2 and agent_id = $3 and ended_at is null",
+      [own.teacherId, own.studentId, ids.agent('A')],
+    );
     const { id } = await repos.sessions.create(own, {
       agentId: ids.agent('A'),
       agentVersion: 1,
@@ -118,6 +133,8 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
       ),
     ).toBe('not_found');
     expect(await repos.messages.history(own, id, 200)).toEqual(before);
+    // Reopen the seed's own session, same reason as above.
+    await raw.query('update sessions set ended_at = null where id = $1', [ids.session('1A')]);
   });
 
   it('a value over LIMITS.helpStateMaxJsonLength is refused before any write', async () => {
