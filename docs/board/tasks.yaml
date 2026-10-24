@@ -1562,9 +1562,33 @@ tasks:
   accept: an MCQ item and a code_output item are served, re-shown and answered without a false leak block, and a real leak of either key is still blocked
   deps:
   - '5.6'
-  status: review
+  status: done
   branch: m13/5.6b-answer-context
-  model: plan:opus build:opus
+  model: plan:opus build:opus fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 487
+    tokens_in: 1582
+    tokens_out: 201697
+    cache_read_tokens: 53648501
+    wall_time_seconds: 354205
+    models:
+    - <synthetic>
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        CRITICAL: 1
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 1
 - id: 5.6d
   milestone: M13
   title: '5.6c review LOWs: carried-key entries are z.string().min(1); assemble allow-list test asserts a literal key list; assemble compile-time guard also checks value types; drop the redundant BOM replace
@@ -7619,6 +7643,25 @@ tasks:
   deps:
   - 8.9d
   risk: low
-  status: review
+  status: done
   branch: m13/8.9e-fromerror-never
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 11
+    tokens_in: 42
+    tokens_out: 145
+    cache_read_tokens: 328273
+    wall_time_seconds: 63
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
