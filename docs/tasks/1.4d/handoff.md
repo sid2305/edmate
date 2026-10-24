@@ -155,4 +155,12 @@ Tool calls used (gate-verification round): 9
   get a one-line pointer to it. The real deploy guide (board task 13.6) folds this in later.
 - Why: this is documentation and config comments, not production-path code; low risk.
 
-Tool calls used: 70
+### 24 Oct 2026 · 1.4d ran over its tool budget · decided by lead · risk: low
+- Decided: accept 130 tool calls against the plan's 80 (cap 96). The builder used 81; the first fix round was cut off by the weekly usage limit, so a second fixer re-ran the gate.
+- Why: the overrun is the interrupted fix round, not scope growth.
+
+### 24 Oct 2026 · 1.4d review LOW deferred · decided by lead · risk: low
+- Decided: the whenReady timeout LOW in apps/web/src/auth/redis-ready.ts, and running apps/web/scripts/sandbox-magic-link.mjs against the full stack, go to board task 1.4e.
+- Why: one fix round per task; neither blocks sign-in today.
+
+Tool calls used: 130 (harness count: builder 81, second fix round 22; the first fix round was cut off by the usage limit and reported 27; the agents reported 70, 27 and 9)
