@@ -7535,8 +7535,9 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: planning
-  model: plan:opus
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/9.3f-staff-verified-reject
 - id: 9.3g
   milestone: M13
   title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift
