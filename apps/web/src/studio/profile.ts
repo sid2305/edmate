@@ -33,7 +33,12 @@ const ok = (body: unknown, status: number) =>
 const validation = () => apiError('validation', MSG.validation, 400);
 const tooLarge = () => apiError('input_too_large', MSG.bodyTooLarge, 413);
 
-/** A thrown `RepositoryError`'s kind mapped to this route's fixed response; anything else is 500. */
+/**
+ * A thrown `RepositoryError`'s kind mapped to this route's fixed response; anything else is 500.
+ * The `default` branch assigns `error.kind` to a `const unreachable: never`, so adding a new
+ * `RepositoryErrorKind` fails to compile here instead of silently falling through to the same
+ * 500 that branch also returns.
+ */
 function fromError(error: unknown): Response {
   if (error instanceof RepositoryError) {
     switch (error.kind) {
@@ -46,6 +51,11 @@ function fromError(error: unknown): Response {
         return validation();
       case 'failed':
         return apiError('provider_error', MSG.failed, 500);
+      default: {
+        const unreachable: never = error.kind;
+        void unreachable;
+        return apiError('provider_error', MSG.failed, 500);
+      }
     }
   }
   return apiError('provider_error', MSG.failed, 500);

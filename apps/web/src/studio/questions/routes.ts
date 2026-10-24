@@ -116,10 +116,12 @@ const dismiss: Work = async (b, scope, req) => {
 };
 
 /**
- * A thrown `RepositoryError`'s kind mapped to a fixed response, every kind named explicitly (no
- * default case falls through silently): `scope` is 403, `not_found` is 404, `invalid` and
- * `integrity` are 400, `failed` is a logged 500. Anything that is not a `RepositoryError` is also
- * a logged 500. The logged field is always the error's name, never a question's or an answer's
+ * A thrown `RepositoryError`'s kind mapped to a fixed response, every kind named explicitly:
+ * `scope` is 403, `not_found` is 404, `invalid` and `integrity` are 400, `failed` is a logged
+ * 500. The `default` branch assigns `error.kind` to a `const unreachable: never`, so adding a
+ * new `RepositoryErrorKind` fails to compile here instead of silently falling through to the
+ * same logged 500 that branch also returns. Anything that is not a `RepositoryError` is also a
+ * logged 500. The logged field is always the error's name, never a question's or an answer's
  * text. Same shape as `studio/profile.ts`'s `fromError`.
  */
 function fromError(log: ServerLog, error: unknown): Response {
@@ -135,6 +137,12 @@ function fromError(log: ServerLog, error: unknown): Response {
       case 'failed':
         log.error('questions.failed', { error: errorName(error) });
         return apiError('provider_error', MSG.failed, 500);
+      default: {
+        const unreachable: never = error.kind;
+        void unreachable;
+        log.error('questions.failed', { error: errorName(error) });
+        return apiError('provider_error', MSG.failed, 500);
+      }
     }
   }
   log.error('questions.failed', { error: errorName(error) });
