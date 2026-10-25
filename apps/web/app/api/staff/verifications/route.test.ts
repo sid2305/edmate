@@ -622,7 +622,9 @@ describe('POST: approve or reject', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const repos = {
       teacherProfiles: { listPendingForStaff: async () => Promise.reject(new RangeError('x')) },
-    } as unknown as Pick<Repositories, 'teacherProfiles'>;
+      takedowns: { listActiveForStaff: async () => [] },
+      audit: { findLastVerifyForStaff: async () => null },
+    } as unknown as Pick<Repositories, 'teacherProfiles' | 'takedowns' | 'audit'>;
     const h = createStaffVerificationHandlers({ repos: () => repos });
     expect((await h.list(get(), ctx())).status).toBe(500);
     expect(spy).toHaveBeenCalledWith('[staff] verifications.list failed: RangeError');

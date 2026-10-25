@@ -4101,8 +4101,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         [tBad],
       );
       await raw.query(
-        `insert into audit_log (actor, actor_role, action, target, teacher_id, after)
-         values ($1, 'staff', 'teacher.verify', $2, $3, '{"bogus": true}'::jsonb)`,
+        `insert into audit_log (id, actor, actor_role, action, target, teacher_id, after)
+         values ('al_93h_bad', $1, 'staff', 'teacher.verify', $2, $3, '{"bogus": true}'::jsonb)`,
         [ISO_STAFF, `teacher:${tBad}`, tBad],
       );
       await expect(r.audit.findLastVerifyForStaff(ISO_STAFF, tBad)).rejects.toMatchObject({
