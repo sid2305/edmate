@@ -204,6 +204,13 @@
       "when": 1792749816610,
       "tag": "0028_sessions_open_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792910216271,
+      "tag": "0029_turn_traces_created_at_index",
+      "breakpoints": true
     }
   ]
 }

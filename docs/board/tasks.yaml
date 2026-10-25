@@ -2672,8 +2672,18 @@ tasks:
   accept: tests cover each item; harness tests pass
   deps:
   - '6.1'
+  status: running
+  branch: m13/6.1a-topic-map-strict
+  model: plan:sonnet build:sonnet
+- id: 6.1b
+  milestone: M13
+  title: '6.1a Phase B (deferred by the lead, 25 Oct 2026): courseOutlineInputFromDraft in packages/harness/src/memory/fromOutlineDraft.ts, duck-typing ingest''s OutlineDraft (no new dependency), so studio-drafted
+    outlines can feed buildTopicMap; design in docs/tasks/6.1a/plan.md Phase B. Build when a task wires studio outlines into buildTopicMap.'
+  accept: a converted draft builds a topic map, and unknown-module and duplicate ids are rejected, in tests; harness typecheck, lint and test green.
+  deps:
+  - 6.1a
+  risk: low
   status: todo
-  branch: null
 - id: 5.8a
   milestone: M5
   title: 'Role-play wiring: personas in CLI chat/eval and web runtime, newest set'
@@ -2713,9 +2723,29 @@ tasks:
   accept: the report shows p50/p95 latency (incl. first token), error and guard rates for one teacher over a window; the index lands in a migration; invalid limit/since tests fail closed
   deps:
   - '7.7'
-  status: review
+  status: done
   branch: m13/7.7a-health-report
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 112
+    tokens_in: 358
+    tokens_out: 31710
+    cache_read_tokens: 8240006
+    wall_time_seconds: 439
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 5.11b
   milestone: M7
   title: 'Flaky ingest test (CI on PR #98): draftOutline ''drafts independent modules in parallel, keeping output order equal to input order'' got ''values-variables'' instead of ''conditions''; the scripted
@@ -7980,7 +8010,9 @@ tasks:
   deps:
   - 8.1b
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.1d-cli-arg-union
+  model: plan:lead build:sonnet
 - id: 9.3k
   milestone: M13
   title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'
@@ -8006,6 +8038,24 @@ tasks:
   deps:
   - 5.6f
   risk: low
-  status: review
+  status: done
   branch: m13/5.6h-real-question-guess-test
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
