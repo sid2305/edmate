@@ -77,5 +77,17 @@ Pinned counts match the new file count exactly: `SUITE_FLOORS.safety` 252 (250 +
   gate).
 - risk: high — required reviewers: `code-reviewer`, `typescript-reviewer`.
 
+### 25 Oct 2026 · 7.2h budget overrun accepted · decided by lead · risk: low
+- Decided: accept 53 builder tool calls against the plan's 30 (harness count; the builder reported 26), because setup, the evals floor pins and a flaky modelRequest.test.ts re-run took the extra calls and the diff stayed inside the plan's files.
+- Why: the work is complete and in scope; a lead-written plan of 30 calls was too tight for a guard plus eval change.
+
+### 25 Oct 2026 · 7.2h eval cases signed by the lead · decided by lead · risk: low
+- Decided: the lead signs the two new safety moderation cases (safety-moderation-sell-vapes-school-en.yaml and safety-moderation-nearmiss-vape-detector-science-en.yaml) under the MVP-first rule that the lead signs eval cases until the pilot gate.
+- Why: both cases mirror signed precedents (sneak-knife-school-en, nearmiss-gun-game-unity-en) and both reviewers checked them.
+
+### 25 Oct 2026 · 7.2h merge: Hinglish variant and article tolerance deferred to 7.2i · decided by lead · risk: high
+- Decided: merge 7.2h with code-reviewer and typescript-reviewer approval; defer the code-reviewer MEDIUM (no romanised Hindi or Devanagari variant for the vapes rule in packages/harness/src/guardrails/moderationPatterns.ts) and the LOW (no match for "at the school") to board task 7.2i; safety-reviewer runs in 13.3.
+- Why: the rule adds coverage and regresses nothing; the Hinglish variant is a safety net the plan did not ask for, and fixing MEDIUM/LOW findings later is the standing policy.
+
 ## Budget
-Tool calls used: 26
+Tool calls used: 53 (harness count; the builder reported 26)
