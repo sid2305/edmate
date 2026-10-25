@@ -2941,9 +2941,30 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: review
+  status: done
   branch: m13/5.8d-eval-pipeline-agent
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 279
+    tokens_in: 946
+    tokens_out: 105992
+    cache_read_tokens: 27383823
+    wall_time_seconds: 277532
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.19a
   milestone: M13
   title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest

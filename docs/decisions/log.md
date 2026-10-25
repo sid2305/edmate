@@ -10,6 +10,29 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 5.8d persona-test reply text must carry no spurious citation · decided by builder · risk: low
+- Decided: use a citation-free scripted reply (`'Here is your next question.'`) for the three
+  live persona tests (1-3) instead of the file's default reply, which carries a `[1]` citation.
+- Why: a role-play turn has no retrieved sources, so a reply citing `[1]` has nothing to back it;
+  the grounding guard rewrites it to a safe fallback, and the runner then (correctly, by design)
+  keeps the loaded persona count rather than the one just decided, since the student never saw
+  the model's own reply. That's working as the pipeline intends — the test's own reply choice was
+  the bug, not `liveAgent.ts` or anything in `packages/harness`.
+
+---
+
+### 24 Oct 2026 · 5.8d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 114 tool calls against the plan's 45.
+- Why: the Mac slept mid-build and the first builder stalled after 37 calls; its WIP was kept and a fresh builder finished it, but that builder under-counted and ran 77 calls past its stop point. The diff stayed inside the two planned files and both reviewers approve.
+
+---
+
+### 24 Oct 2026 · 5.8d setupFor cache ordering left as is · decided by lead · risk: low
+- Decided: wontfix the LOW finding in apps/cli/src/commands/eval/liveAgent.ts (`setupFor` caches before validating the persona ref; possible race on concurrent calls for one case id).
+- Why: `runSuite` and the `--models` sweep are strictly sequential and never retry a case id after a throw, so neither path is reachable; changing it adds code with no current effect.
+
+---
+
 ### 24 Oct 2026 · 9.7d the shared send-retry helpers live in fixtures.ts · decided by builder · risk: low
 - Decided: `postOnce`, `SEND_PATH` and `STEP_TIMEOUT` moved from `full-flow.spec.ts` into
   `fixtures.ts` and are imported by both specs, instead of copying `postOnce` into
