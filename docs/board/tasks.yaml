@@ -3914,9 +3914,28 @@ tasks:
   deps:
   - 8.3b
   risk: normal
-  status: running
+  status: done
   branch: m13/8.3d-outline-schema-reuse
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 46
+    tokens_in: 160
+    tokens_out: 920
+    cache_read_tokens: 1781267
+    wall_time_seconds: 259
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 4
 - id: 8.4b
   milestone: M8
   title: 'Teacher style-card studio page (8.4 Phase B): interview, draft, edit and save the style card'
@@ -4478,7 +4497,9 @@ tasks:
   deps:
   - 9.5b
   risk: high
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/13.skillpresent-a-harness-events
 - id: 8.7a
   milestone: M8
   title: Publish repository and eval_runs migration (8.7 Phase A, packages/db)
@@ -8029,9 +8050,29 @@ tasks:
   deps:
   - 8.1b
   risk: low
-  status: running
+  status: done
   branch: m13/8.1d-cli-arg-union
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 17
+    tokens_in: 68
+    tokens_out: 405
+    cache_read_tokens: 720574
+    wall_time_seconds: 76
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.3k
   milestone: M13
   title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'

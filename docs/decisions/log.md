@@ -10,6 +10,55 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.3d outline schema reuse (packages/db/src/repositories) · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/outline.ts` and `index.ts` are touched only to add/re-export `OutlineInputSchema` (export-visibility change, no logic or shape change); reviewed per plan as `security-reviewer`, `code-reviewer`, `typescript-reviewer`.
+- Why: the plan's risky-paths check matches `packages/db/src/repositories/**` by glob regardless of diff size, and CLAUDE.md non-negotiable 6 requires a logged `risk: high` decision whenever that group is touched.
+
+---
+
+### 25 Oct 2026 · 8.3d Promise.all null-filter typing · decided by builder · risk: low
+- Decided: `moduleInputs`'s mapper callback gets an explicit `Promise<OutlineModuleInput | null>` return type, and the filter uses `x is NonNullable<typeof x>` instead of `x is OutlineModuleInput`.
+- Why: TypeScript couldn't assign the inferred `{ ... } | null` union to `OutlineModuleInput` in the type predicate (readonly `chunks` vs the inferred mutable array, plus the `null` branch); annotating the callback's return type and predicate against its own inferred type fixes both without touching `@edmate/ingest`'s `OutlineModuleInput` definition.
+
+---
+
+### 25 Oct 2026 · 8.3d zod import-type fix · decided by builder · risk: low
+- Decided: `zod`'s `z` import became `import type { z } from 'zod'`.
+- Why: after removing the locally re-declared schemas, `z` is used only in type position (`z.ZodType`, `z.infer`) in this file; eslint's `consistent-type-imports` rule failed the gate otherwise.
+
+---
+
+### 25 Oct 2026 · 8.3d merge of a packages/db/src/repositories change · decided by lead · risk: high
+- Decided: merge 8.3d; the only repositories change is exporting the existing `OutlineInputSchema` (same shape and refinements) and re-exporting it from the index, so the web route validates with the same schema `replaceOutline` re-parses.
+- Why: security-reviewer, code-reviewer and typescript-reviewer all approved with no findings; teacher scoping is unchanged and validation is not looser (the shared id schema allows 128 characters where the old web copy allowed 122, and the repository re-parses every input).
+
+---
+
+### 25 Oct 2026 · 8.3d budget overrun (91 calls against a 30-call plan) · decided by lead · risk: low
+- Decided: accept the overrun.
+- Why: the first builder stalled when the Mac slept on battery (B-57) and the finisher repeated setup and the db and web gates (db integration tests included); the change itself stayed inside the plan's three files.
+
+---
+
+### 25 Oct 2026 · 8.1d shared buildUserTarget helper · decided by builder · risk: low
+- Decided: added one `buildUserTarget` helper (not inlined per-CLI) reused by both
+  `parseGrantArgs` and `parseVerifyArgs`, narrowing via two explicit `if` branches
+  (`email !== undefined && userId === undefined` / the reverse) rather than a ternary, so
+  TypeScript narrows each branch without any non-null assertion.
+- Why: the plan's suggested single-line equality check (`(email === undefined) === (userId
+  === undefined)`) does not let TypeScript narrow `userId`/`email` to `string` afterward, so
+  building the tagged target from it still needed an assertion. The two-branch form keeps the
+  same semantics (reject both/neither) with no assertion anywhere, and sharing it avoids
+  duplicating the either-or logic between the two CLIs.
+
+---
+
+### 25 Oct 2026 · 8.1d budget overrun (42 calls against a 25-call plan) · decided by lead · risk: low
+- Decided: accept the overrun; the change is done and reviewed clean.
+- Why: the lead-written plan's 25-call budget did not count setup (pnpm install, building db's dependencies) and a full db... gate with its dependents; the code change itself stayed inside the plan.
+
+---
+
 ### 25 Oct 2026 · 6.1a Phase B deferred to 6.1b · decided by lead · risk: low
 - Decided: this task (6.1a) builds Phase A only (items 1–3: strict schemas, heap ready-queue, Q1
   topic-map wiring for practice items). Phase B (item 4, `courseOutlineInputFromDraft`, the plan's

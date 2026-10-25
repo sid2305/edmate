@@ -9,16 +9,10 @@
 //   POST /api/studio/outline/generate   draft an outline from each module's ready chunks and save it
 import type { ModelGateway } from '@edmate/contracts';
 import type { Outline, OutlineInput, Repositories, TeacherScope } from '@edmate/db';
-import {
-  OUTLINE_MODULES_MAX,
-  OUTLINE_TITLE_MAX_LENGTH,
-  OUTLINE_TOPICS_MAX,
-  RepositoryError,
-  TOPIC_CHUNKS_MAX,
-} from '@edmate/db';
+import { OutlineInputSchema, RepositoryError } from '@edmate/db';
 import { draftOutline, type OutlineModuleInput } from '@edmate/ingest';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { MAX_BODY_BYTES, readJson, TOO_LARGE, type ServerLog } from './routes';
@@ -51,32 +45,6 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-// Module/topic/chunk ids: same shape as `routes.ts`'s own `Id` (the repository's id format).
-const Id = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]+$/)
-  .max(122);
-const TitleSchema = z.string().trim().min(1).max(OUTLINE_TITLE_MAX_LENGTH);
-// Mirrors `packages/db/src/repositories/outline.ts`'s own `OrderSchema` cap.
-const OrderSchema = z.int().min(0).max(10_000);
-const unique = (xs: readonly string[]) => new Set(xs).size === xs.length;
-
-const TopicInputSchema = z.strictObject({
-  id: Id.optional(),
-  title: TitleSchema,
-  order: OrderSchema,
-  chunkIds: z.array(Id).max(TOPIC_CHUNKS_MAX).refine(unique),
-});
-const ModuleInputSchema = z.strictObject({
-  id: Id,
-  title: TitleSchema,
-  order: OrderSchema,
-  topics: z.array(TopicInputSchema).max(OUTLINE_TOPICS_MAX),
-});
-const PutSchema = z.strictObject({
-  modules: z.array(ModuleInputSchema).min(1).max(OUTLINE_MODULES_MAX),
-});
-
 async function parseBody<S extends z.ZodType>(
   req: Request,
   schema: S,
@@ -95,17 +63,18 @@ async function moduleInputs(
   scope: TeacherScope,
   outline: Outline,
 ): Promise<OutlineModuleInput[]> {
-  const inputs: OutlineModuleInput[] = [];
-  for (const m of outline.modules) {
-    const chunks = await b.chunks.listForModule(scope, m.id);
-    if (chunks.length === 0) continue;
-    inputs.push({
-      moduleId: m.id,
-      title: m.title,
-      chunks: chunks.map((c) => ({ id: c.id, text: c.text, locator: c.locator })),
-    });
-  }
-  return inputs;
+  const candidates = await Promise.all(
+    outline.modules.map(async (m): Promise<OutlineModuleInput | null> => {
+      const chunks = await b.chunks.listForModule(scope, m.id);
+      if (chunks.length === 0) return null;
+      return {
+        moduleId: m.id,
+        title: m.title,
+        chunks: chunks.map((c) => ({ id: c.id, text: c.text, locator: c.locator })),
+      };
+    }),
+  );
+  return candidates.filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
 /** The drafted topics, mapped back onto `replaceOutline`'s input shape: only the modules that
@@ -146,9 +115,9 @@ const get: Work = async (b, scope) => {
 };
 
 const put: Work = async (b, scope, req) => {
-  const body = await parseBody(req, PutSchema);
+  const body = await parseBody(req, OutlineInputSchema);
   if (body instanceof Response) return body;
-  const result = await b.outline.replaceOutline(scope, body as OutlineInput);
+  const result = await b.outline.replaceOutline(scope, body);
   return ok(result);
 };
 
