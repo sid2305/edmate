@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.4c schedule failure keeps current behaviour · decided by builder · risk: low
+- Decided: left `scheduleRetention(...).catch` in `apps/worker/src/index.ts` as log + set
+  `process.exitCode = 1`, with no new shutdown path.
+- Why: the plan said to keep current behaviour and record the choice if nothing else in
+  index.ts stops the process on a schedule failure — nothing does; `scheduleWeeklyInsights`'s
+  own `.catch` right above it does exactly the same thing, so this already matches that pattern.
+
+---
+
+### 25 Oct 2026 · 13.4c purgeLimit passed to dry-run calls too · decided by builder · risk: low
+- Decided: `purgeTable` passes `purgeLimit` to the dry-run call as well as every live call, even
+  though finding 1 only named live calls.
+- Why: `PurgeMethod`'s new signature requires a third `limit` argument for every call; passing
+  the same `purgeLimit` to the dry-run call keeps one call shape instead of a special case, and
+  `@edmate/db`'s dry-run methods ignore `limit` (dry-run counts are already unbounded per
+  `workers.ts`'s file comment), so behaviour is unchanged.
+
+---
+
+### 25 Oct 2026 · 13.4c review LOWs · decided by lead · risk: low
+- Decided: wontfix the three LOWs. (1) apps/worker/src/retention/workers.ts: a failed dry-run call throws the raw error instead of a RetentionPurgeError, so it skips the `retention.purge_failed` log line (silent-failure-hunter). A dry run deletes nothing, so there is no partial count to keep, and the job still fails and `onJobFailed` logs the error. (2) and (3) apps/worker/src/retention/workers.ts: two lines exceed Prettier's 100-character width (typescript-reviewer); CI runs eslint, not Prettier.
+- Why: none of them loses data or hides a failure. The next edit to the file can wrap the long lines.
+
+---
+
+### 25 Oct 2026 · 13.4c budget · decided by lead · risk: low
+- Decided: accept 51 tool calls (harness count; the builder reported 26 in the handoff and 32 in its return) against the plan's 30.
+- Why: five separate findings, each with its own tests first, plus a full worker gate.
+
+---
+
 ### 25 Oct 2026 · 9.1c copy `.next/static` into the standalone server before spawning it · decided by builder · risk: low
 - Decided: `apps/web/test/lighthouse-a11y.test.ts`'s `beforeAll` now copies the real build's
   `.next/static` into `.next/standalone/apps/web/.next/static` (idempotent, `force: true`)
