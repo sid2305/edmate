@@ -6713,9 +6713,30 @@ tasks:
   deps:
   - 7.2d
   risk: high
-  status: running
+  status: done
   branch: m13/7.2h-vapes-rule
-  model: plan:sonnet build:sonnet review:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 52
+    tokens_in: 184
+    tokens_out: 11506
+    cache_read_tokens: 2907479
+    wall_time_seconds: 1164
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 2
 - id: 7.2i
   milestone: M13
   title: '7.2h review follow-ups: the vapes-at-school rule in packages/harness/src/guardrails/moderationPatterns.ts gets a romanised Hindi and Devanagari safety-net variant like the weapons and threat rules

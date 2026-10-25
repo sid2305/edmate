@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 7.2h vapes rule coded under `other_unsafe` · decided by builder · risk: low
+- Decided: code the new vapes-at-school transaction rule under `other_unsafe`, the same code the
+  drug buy/sell precedent already uses in this table.
+- Why: no existing `ModerationCode` is a closer fit (not a weapon, not a drug-named substance); the
+  plan named `other_unsafe` as the default unless a closer fit turned up while reading the file —
+  none did.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2h no `unless` exemption needed · decided by builder · risk: low
+- Decided: skip the `unless` exemption mechanism (the bomb-making `GAME` pattern) and rely only on
+  the transaction-verb requirement to keep near-misses from matching.
+- Why: the plan offered either approach ("or simply rely on the transaction-verb requirement");
+  both near-miss themes (science project, health-class essay) contain no buy/sell/get/resell/trade
+  verb, so the rule never fires on them without any extra exemption clause, proven by the two new
+  near-miss test assertions.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2h guard-table change on a safety path · decided by lead (per plan) · risk: high
+- Decided: `packages/harness/src/guardrails/` and `evals/suites/safety/` are risky paths
+  (risk-paths.txt); required reviewers for this PR are `code-reviewer` and `typescript-reviewer`
+  (always required). `safety-reviewer` is deferred to task 13.3's whole-system review per the
+  MVP-first policy, even though the board task's accept line names it — same pattern as every
+  7.2d/4.4-era guard change.
+- Why: per plan note and the MVP-first memory rule (no safety-reviewer per PR until the pilot
+  gate).
+- risk: high — required reviewers: `code-reviewer`, `typescript-reviewer`.
+
+---
+
+### 25 Oct 2026 · 7.2h budget overrun accepted · decided by lead · risk: low
+- Decided: accept 53 builder tool calls against the plan's 30 (harness count; the builder reported 26), because setup, the evals floor pins and a flaky modelRequest.test.ts re-run took the extra calls and the diff stayed inside the plan's files.
+- Why: the work is complete and in scope; a lead-written plan of 30 calls was too tight for a guard plus eval change.
+
+---
+
+### 25 Oct 2026 · 7.2h eval cases signed by the lead · decided by lead · risk: low
+- Decided: the lead signs the two new safety moderation cases (safety-moderation-sell-vapes-school-en.yaml and safety-moderation-nearmiss-vape-detector-science-en.yaml) under the MVP-first rule that the lead signs eval cases until the pilot gate.
+- Why: both cases mirror signed precedents (sneak-knife-school-en, nearmiss-gun-game-unity-en) and both reviewers checked them.
+
+---
+
+### 25 Oct 2026 · 7.2h merge: Hinglish variant and article tolerance deferred to 7.2i · decided by lead · risk: high
+- Decided: merge 7.2h with code-reviewer and typescript-reviewer approval; defer the code-reviewer MEDIUM (no romanised Hindi or Devanagari variant for the vapes rule in packages/harness/src/guardrails/moderationPatterns.ts) and the LOW (no match for "at the school") to board task 7.2i; safety-reviewer runs in 13.3.
+- Why: the rule adds coverage and regresses nothing; the Hinglish variant is a safety net the plan did not ask for, and fixing MEDIUM/LOW findings later is the standing policy.
+
+---
+
 ### 25 Oct 2026 · 13.1 devDependency pin · decided by builder · risk: low
 - Decided: Added `@axe-core/playwright` pinned to the exact version `4.14.0` (no `^`/`~`) as an
   `apps/web` devDependency, no ADR.
