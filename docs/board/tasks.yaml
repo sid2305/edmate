@@ -3136,9 +3136,9 @@ tasks:
   deps:
   - 5.8a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.8e-persona-cli-followups
+  model: plan:sonnet build:sonnet
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
@@ -3994,9 +3994,30 @@ tasks:
   deps:
   - 8.6a
   risk: low
-  status: running
+  status: done
   branch: m13/8.6e-model-mix-readonly
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 31
+    tokens_in: 122
+    tokens_out: 763
+    cache_read_tokens: 1435747
+    wall_time_seconds: 156
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.9a
   milestone: M8
   title: 'teacherQuestions.dismiss (8.9 Phase A, packages/db): close one open question, teacher-scoped'

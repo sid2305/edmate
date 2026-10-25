@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.6e type-only ts-expect-error test does not run at runtime · decided by builder · risk: low
+- Decided: the three `@ts-expect-error` nested-assignment checks live in a module-scope function that is never called (referenced once via `void fn;` to satisfy lint), not inside an `it()` body.
+- Why: `MODEL_MIX` is deep-frozen at runtime (`Object.freeze`), so executing the assignment inside a test body throws `TypeError: Cannot assign to read only property` at runtime before the `@ts-expect-error` comment's compile-time check is reached; a type-only, uncalled function gets the same `tsc --noEmit` guarantee without a spurious runtime failure.
+
+---
+
+### 25 Oct 2026 · 8.6e added TurnCostError to the keys/exports.test.ts export-name list · decided by builder · risk: low
+- Decided: added `'TurnCostError'` to `packages/gateway/test/keys/exports.test.ts`'s sorted list, one file outside the plan's Files list.
+- Why: that test enumerates every named export from the package root and fails if the list drifts; exporting `TurnCostError` (required by the plan) made it fail with no code-behaviour change, so updating the list was the minimal fix rather than skipping the new export.
+
+---
+
+### 25 Oct 2026 · 8.6e budget overrun (69 calls against 35) · decided by lead · risk: low
+- Decided: accept 8.6e at 69 tool calls (harness count: build 47, fix round 22) against the plan's 35; no rework.
+- Why: the build ran 47 including setup the lead-written budget left out, and the fix round for the typescript-reviewer's HIGH (DeepReadonly arrays) was a separate fresh agent; the reviewer verified the fix.
+
+---
+
+### 25 Oct 2026 · 8.6e array-element expect-error test left as is · decided by lead · risk: low
+- Decided: keep the `nested.a[0].b = 1` case in packages/gateway/test/router/default-policy.test.ts unchanged (wontfix the typescript-reviewer's LOW that it also passes from noUncheckedIndexedAccess).
+- Why: the `string[]` `.push` and index-assignment cases in the same file already fail under the old DeepReadonly branch, so the array recursion is pinned; element readonly follows from the same branch.
+
+---
+
 ### 25 Oct 2026 · 9.3h staff console shows active takedowns and the last decision · decided by builder · risk: high
 - Decided: a new staff-only, read-only `audit.findLastVerifyForStaff` (own role check, no lock)
   and the existing `takedowns.listActiveForStaff` feed a new `enrichQueueRows` helper in

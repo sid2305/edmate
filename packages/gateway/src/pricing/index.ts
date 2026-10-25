@@ -8,6 +8,7 @@ export {
 } from './load.js';
 export {
   TURN_TOKEN_ASSUMPTIONS,
+  TurnCostError,
   turnCostMicroUsd,
   UnpricedModelError,
   type TurnTokenAssumptions,
