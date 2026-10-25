@@ -29,6 +29,18 @@ import type { NextConfig } from 'next';
 // sibling `safeRegex.js` import) along, not just the entry file Next's default tracing would find
 // from static imports -- `EDMATE_CONTENT_WORKER_DIR` only says where to look, not that anything is
 // there to find.
+// Task 13.3a: the three security headers that need no per-request data, set once here so a
+// reviewer sees the full static policy in one array literal. The nonce-bearing
+// `Content-Security-Policy` and production-only HSTS live in `./proxy.ts` instead: Next's own
+// App Router hydration/RSC bootstrap emits inline `<script>` content that differs per request, so
+// a build-time hash (static `headers()`) can never match it, and only `proxy.ts` can mint a nonce
+// per request. See `proxy.ts`'s own comment for the full CSP.
+const SECURITY_HEADERS = [
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -39,6 +51,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@edmate/content'],
   outputFileTracingIncludes: {
     '/**': ['../../packages/content/dist/**'],
+  },
+  async headers() {
+    return [{ source: '/(.*)', headers: SECURITY_HEADERS }];
   },
 };
 
