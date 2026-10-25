@@ -63,6 +63,14 @@ this task's own changes).
   the model's own reply. That's working as the pipeline intends — the test's own reply choice was
   the bug, not `liveAgent.ts` or anything in `packages/harness`.
 
+### 24 Oct 2026 · 5.8d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 114 tool calls against the plan's 45.
+- Why: the Mac slept mid-build and the first builder stalled after 37 calls; its WIP was kept and a fresh builder finished it, but that builder under-counted and ran 77 calls past its stop point. The diff stayed inside the two planned files and both reviewers approve.
+
+### 24 Oct 2026 · 5.8d setupFor cache ordering left as is · decided by lead · risk: low
+- Decided: wontfix the LOW finding in apps/cli/src/commands/eval/liveAgent.ts (`setupFor` caches before validating the persona ref; possible race on concurrent calls for one case id).
+- Why: `runSuite` and the `--models` sweep are strictly sequential and never retry a case id after a throw, so neither path is reachable; changing it adds code with no current effect.
+
 ## Budget
 
-Tool calls used: 32
+Tool calls used: 114 (harness count: stalled builder 37, finishing builder 77; the agents reported 32)
