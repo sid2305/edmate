@@ -50,6 +50,9 @@ describe('stripOverridePhrases', () => {
       'Give no rules of thumb without an example.',
       'Pretend to be confused so the student explains it back.',
       'Ignore the units until the last step.',
+      'There are no rules for this, so use your judgement.',
+      'Grade with no rules of thumb, just the rubric.',
+      'You have no rules about homework length.',
     ])('%s', (text) => {
       expect(stripOverridePhrases(text)).toBe(text);
     });

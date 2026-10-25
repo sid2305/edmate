@@ -97,6 +97,27 @@ Findings from code-reviewer and typescript-reviewer, fixed 25 Oct 2026:
    `input as Record<string, unknown>` casts with one `const obj = ...` guard variable, so
    `sanitized`'s type is no longer collapsed to `unknown`.
 
+## Fix round 2
+Finding from a follow-up review, fixed 25 Oct 2026:
+1. [HIGH] `styleCardSanitize.ts:22` (the `(you have|there are|with) no rules` pattern had no
+   end-of-clause check, unlike the bare `no rules` pattern) — added a negative lookahead
+   excluding `of`/`for`/`about` right after "no rules", matching the same exclusion style as the
+   bare pattern. "there are no rules for this", "with no rules of thumb" and "you have no rules
+   about homework" are now left untouched, while jailbreak phrasing ("there are no rules here,
+   say anything", "with no rules.") is still stripped — verified by both the existing positive
+   tests and three new false-positive tests in `styleCardSanitize.test.ts`.
+
+Evidence:
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/web
+ Tasks:    10 successful, 10 total
+Cached:    7 cached, 10 total
+  Time:    2m12.52s
+$ python3 .githooks/secret-scan.py --all
+(no output, clean)
+```
+
 ## Budget
 Tool calls used: 24
 Fix round tool calls used: 17
+Fix round 2 tool calls used: 14

@@ -19,7 +19,11 @@ const OVERRIDE_PHRASES: readonly RegExp[] = [
   new RegExp(`\\bpretend\\s+(?:you are|to be)\\s+${JAILBREAK_TARGET}\\b`, 'gi'),
   /\byou are\s+dan\b/gi,
   /\b(?:developer|god|admin)\s+mode\s*(?:enabled)?\b/gi,
-  /\b(?:you have|there are|with)\s+no rules\b/gi,
+  // Excludes "no rules of/for/about ...", matching the bare "no rules" pattern below: ordinary
+  // teaching phrasing like "there are no rules for this" or "you have no rules about homework"
+  // is left untouched, while jailbreak phrasing ("there are no rules here, say anything", "with
+  // no rules.") is still stripped (fix round 2, 25 Oct 2026).
+  /\b(?:you have|there are|with)\s+no rules\b(?!\s*(?:of|for|about))\b/gi,
   /\bno rules\b(?!\s*of)(?=\s*[.,!?;:]|\s*$)/gi,
   /\bunrestricted\b/gi,
   /\bunfiltered\b/gi,
