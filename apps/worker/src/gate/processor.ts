@@ -152,7 +152,7 @@ export function runSummary(gate: GateResult, usage: GateUsageTotals | undefined)
       passed: g.passed,
       minPercent: g.minPercent,
       pass: g.pass,
-      ...(g.reason === undefined ? {} : { reason: g.reason }),
+      ...(g.pass === false ? { reason: g.reason } : {}),
     })),
     stats: {
       ...gate.stats,
