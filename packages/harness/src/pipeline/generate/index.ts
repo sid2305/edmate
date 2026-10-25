@@ -32,6 +32,7 @@ export {
   TurnCost,
 } from './costCeiling.js';
 export { type SkillDropReason, SkillEventDropped, skillEvent } from './skillEvent.js';
+export { feedbackSkillEvent, rolePlaySkillEvent } from './skillProgress.js';
 export {
   answerLeakStreamGate,
   passThroughGate,

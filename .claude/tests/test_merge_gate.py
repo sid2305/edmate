@@ -903,3 +903,42 @@ class HtmlCommentDecoyTest(unittest.TestCase):
     def test_real_reviewers_line_after_closed_comment_found(self):
         review = "<!-- Reviewers: fake -->\nReviewers: code-reviewer, architect\n"
         self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+
+class TaskBranchPatternTest(unittest.TestCase):
+    """0.19c: task ids with a word after the dot (13.skillpresent) must match TASK_BRANCH,
+    the same as digit-only and letter-suffixed ids (3.11d), while a missing slug or malformed
+    branch is still rejected."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_accepts_digit_letter_and_word_ids(self):
+        for branch, task in (
+            ("m3/3.11d-foo", "3.11d"),
+            ("m13/13.skillpresent-a-harness-events", "13.skillpresent"),
+            ("m13/0.19c-gate-word-ids", "0.19c"),
+        ):
+            with self.subTest(branch=branch):
+                m = self.g.TASK_BRANCH.match(branch)
+                self.assertIsNotNone(m, branch)
+                self.assertEqual(m.group(1), task)
+
+    def test_rejects_malformed_branches(self):
+        for branch in ("feature/x", "m13/13.skillpresent", "m13/.5-x"):
+            with self.subTest(branch=branch):
+                self.assertIsNone(self.g.TASK_BRANCH.match(branch))
+
+
+class PrModeWordTaskIdTest(GateCase):
+    """A PR branch whose task id has a word after the dot (13.skillpresent) must reach the
+    `--pr` path's checks instead of failing the branch-shape check (PR #276's bug)."""
+
+    def test_pr_branch_with_word_task_id_passes(self):
+        branch = "m13/13.skillpresent-a-harness-events"
+        files = self.repo.task_files("13.skillpresent")
+        files["apps/cli.ts"] = "x\n"
+        self.repo.branch(branch, files)
+        code, out = self.gate("--pr", "5", env=self.gh_env(branch=branch))
+        self.assertEqual(code, 0, out)

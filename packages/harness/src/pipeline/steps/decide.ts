@@ -29,6 +29,9 @@ function decided(env: StepEnv, ctx: TurnContext, policy: PolicyResult): DecideRe
     reason: policy.reason,
     promptPack: c.promptPack,
     sources: c.sources,
+    // 13.skillpresent: carried alongside `decision`, never inside it (see DecideResult).
+    skill: policy.skill,
+    ...(policy.rolePlay === undefined ? {} : { rolePlay: policy.rolePlay }),
   };
 }
 

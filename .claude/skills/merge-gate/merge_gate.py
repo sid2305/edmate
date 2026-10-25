@@ -59,6 +59,9 @@ DESTRUCTIVE_SQL = re.compile(
     r"|ALTER\s+TABLE\b[^;]*?\bDROP\b|TRUNCATE|DELETE\s+FROM|UPDATE\s+\S+\s+SET)\b", re.I)
 # SQL, or JS/TS migration files (which hold SQL in strings), in any migrations/ folder.
 MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
+# Task ids: a digit, a dot, then digits/letters/words (3.11d, 13.skillpresent, 0.19c). The
+# slug after the hyphen stays required, since ids never contain a hyphen.
+TASK_BRANCH = re.compile(r"m\d+/(\d+\.[0-9a-z]+)-")
 REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
@@ -469,7 +472,7 @@ def pr_head(pr):
         return 1, None, None, None, f"FAIL  cannot read PR {pr} with gh: {out}"
     data = json.loads(out)
     branch = data["headRefName"]
-    m = re.match(r"m\d+/(\d+\.\d+[a-z]*)", branch)  # task ids may carry a letter: 3.11d
+    m = TASK_BRANCH.match(branch)
     if not m:
         return 1, None, None, None, f"FAIL  branch {branch} is not m<milestone>/<task-id>-<slug>"
     oid = data.get("headRefOid")
@@ -501,7 +504,7 @@ def main(argv):
         if oid != local:
             print(f"FAIL  PR head {oid[:7]} is not local {branch} ({local[:7] or 'missing'}): git fetch the branch and re-run")
             return 1
-        m = re.match(r"m\d+/(\d+\.\d+[a-z]*)", branch)
+        m = TASK_BRANCH.match(branch)
         task = m.group(1)
     elif len(argv) == 1:
         task, branch = argv[0], board_branch(argv[0])
