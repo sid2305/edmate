@@ -10,6 +10,42 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 0.20c keep the 16x factor and n = 8,000 · decided by builder · risk: low
+- Decided: kept the 16x input-size factor (rather than switching to 8x) and raised the base size
+  to n = 8,000, keeping the existing bound of 64.
+- Why: the plan allowed either option depending on whether the 16x run (128,000 units) stayed well
+  under the 10 s cap. Measured runs of the large input took well under 1s for both
+  `breakFenceRuns` and `neutraliseForgedLabel`, with no risk of approaching 10s, so there was no
+  need to shrink the factor and rescale the bound; keeping 16x/64 also meant less of the test and
+  its comments needed to change.
+- Superseded in the fix round: n = 4,000, minimum of 3 runs, 120 s timeout (CI ran 83 s).
+
+---
+
+### 25 Oct 2026 · 0.20c merge a test-only change under the pedagogy risk path · decided by lead · risk: high
+- Decided: merge 0.20c. It touches packages/harness/src/pedagogy/**, a risky path, but changes only modelRequest.test.ts (how the linear-time check is timed). modelRequest.ts, the prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it; typescript-reviewer re-ran the suite under load.
+- Why: the test failed CI on PR #297 from timing noise. The new measurement keeps the same 64 bound, which a quadratic regression (ratio 256) still fails.
+
+---
+
+### 25 Oct 2026 · 0.20c warm-up run outside the time cap · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW on packages/harness/src/pedagogy/modelRequest.test.ts: the untimed warm-up run of the large input is not checked against the 10 s cap. The test's 60 s timeout still bounds it, and the timed runs that follow are capped.
+- Why: a quadratic regression would show in the timed runs and fail the ratio check, so a separate cap on the warm-up adds nothing.
+
+---
+
+### 25 Oct 2026 · 0.20c budget · decided by lead · risk: low
+- Decided: accept 46 tool calls (harness count; the builder reported 19) against the plan's 20.
+- Why: the plan asked for 10 repeated full-suite runs plus standalone runs to prove the fix holds under load; those runs account for most of the overrun.
+
+---
+
+### 25 Oct 2026 · 0.20c fix round · decided by lead · risk: low
+- Decided: accept the fix round (n = 4,000, the minimum of 3 runs, a 120 s timeout; 38 tool calls by harness count) without re-running the reviewers, since only constants and comments changed and CI passed. Wontfix the inaccurate "120s test timeout" wording in packages/harness/src/pedagogy/modelRequest.test.ts's self-test comment (the earlier attempt hit 60 s); the next edit to the file can correct it.
+- Why: the reviewers' checks (the self-test still fails a quadratic function, and the bound sits between linear and quadratic) do not depend on n or the run count.
+
+---
+
 ### 25 Oct 2026 · 13.4c schedule failure keeps current behaviour · decided by builder · risk: low
 - Decided: left `scheduleRetention(...).catch` in `apps/worker/src/index.ts` as log + set
   `process.exitCode = 1`, with no new shutdown path.
