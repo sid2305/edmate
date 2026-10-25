@@ -251,7 +251,7 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
       teacher: {
         teacherId: teacherA,
         activeTakedowns: [],
-        lastDecision: { status: 'rejected', reason: 'safety concern found via lookup' },
+        lastDecision: { status: 'rejected' },
       },
     });
   });
