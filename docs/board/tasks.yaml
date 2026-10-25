@@ -6961,9 +6961,29 @@ tasks:
   deps:
   - 9.1a
   risk: low
-  status: running
+  status: done
   branch: m13/9.1c-teacher-a11y
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 131
+    tokens_in: 404
+    tokens_out: 52957
+    cache_read_tokens: 11408117
+    wall_time_seconds: 720
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 13.4a
   milestone: M13
   title: '13.4 database review: packages/db/migrations/0032_retention_indexes.sql builds its three indexes with plain CREATE INDEX; move them to the concurrentIndex post-migrate pattern in packages/db/src/migrate.ts

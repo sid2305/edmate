@@ -10,6 +10,42 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 9.1c copy `.next/static` into the standalone server before spawning it · decided by builder · risk: low
+- Decided: `apps/web/test/lighthouse-a11y.test.ts`'s `beforeAll` now copies the real build's
+  `.next/static` into `.next/standalone/apps/web/.next/static` (idempotent, `force: true`)
+  before spawning the standalone server, mirroring `apps/web/Dockerfile`'s own
+  `COPY .../.next/static` step.
+- Why: without it, `/_next/static/**` 404s for the whole suite and both pages render with zero
+  CSS — the test was (and, for `/home`, still is by luck) measuring unstyled markup, not the
+  real deployed site. This task's own CSS fix for `/teacher`'s `target-size` audit could not
+  take effect without it. Not an ADR matter: it is a one-line correctness fix inside the test's
+  own setup, not a tech-stack or contracts change, and it makes the test *more* faithful to
+  production (the Dockerfile), not less.
+
+---
+
+### 25 Oct 2026 · 9.1c name failing audits in the assertion message, not temporary logging · decided by builder · risk: low
+- Decided: `accessibilityScore` now returns `{ score, failingAuditIds }`; both `it()`s pass
+  `` `failing audits: ${failingAuditIds.join(', ') || 'none'}` `` as the assertion message. No
+  env-gated debug logging was committed.
+- Why: the plan's preferred form ("when a page drops below the threshold, the message names the
+  failing audit ids"); keeps the file tidy and makes a future regression self-diagnosing in CI
+  output, without adding a permanent opt-in debug flag nobody will remember exists.
+
+---
+
+### 25 Oct 2026 · 9.1c typescript-reviewer LOWs · decided by lead · risk: low
+- Decided: wontfix both typescript-reviewer LOWs. apps/web/test/lighthouse-a11y.test.ts has two destructuring lines over Prettier's 100-character width; CI runs eslint, not Prettier, and the next edit to the file can wrap them. apps/web/app/globals.css keeps the 8px gap between nav links; the 44px targets alone take /teacher to 100.
+- Why: neither affects behaviour or the gate. If a later page adds longer nav labels and the target-size audit drops, that page's own test will fail and show it.
+
+---
+
+### 25 Oct 2026 · 9.1c budget · decided by lead · risk: low
+- Decided: accept 87 tool calls (harness count; the builder reported 34) against the plan's 35.
+- Why: the builder also found and fixed a real test gap: the Lighthouse test never copied .next/static into the standalone server, so since 9.1a both pages had been scored with no CSS. Finding it took several full build-smoke runs.
+
+---
+
 ### 25 Oct 2026 · 11.4f merge: the 413 message follows a splittable flag · decided by lead · risk: low
 - Decided: merge 11.4f. `UploadType` in apps/web/src/studio/files.ts carries `splittable`, `media()` takes `{ splittable }`, and `newFile` in apps/web/src/studio/routes.ts picks the media wording from `transcribe && !splittable`. code-reviewer and typescript-reviewer approved with no findings.
 - Why: no behaviour change for any current type, and a new test fails if the message is chosen by size again.
