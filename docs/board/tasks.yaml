@@ -5224,7 +5224,7 @@ tasks:
   deps:
   - 8.7c
   risk: low
-  status: running
+  status: review
   branch: m13/8.7j-gate-result-guard
   model: build:sonnet
 - id: 9.6f
