@@ -51,7 +51,7 @@ lead-written plans for small web tasks budget at least 30.
 Plan item 2 asked for a test showing a stored scorecard missing a key returns null. The guard in
 apps/web/src/discovery/scorecard.ts cannot be reached through toPublicScorecard: the stored schema's
 length-3 check over a 3-value enum rejects such a row first, and the existing "a missing category"
-test covers that path. The guard stays as fail-closed defence in depth. Likewise the new throw in
+test in apps/web/src/discovery/scorecard.test.ts covers that path. The guard stays as fail-closed defence in depth. Likewise the new throw in
 apps/web/src/discovery/format.ts has no test because Intl always resolves maximumFractionDigits.
 code-reviewer raised the missing record of this as MEDIUM; this entry is that record (wontfix).
 
