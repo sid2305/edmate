@@ -2,7 +2,7 @@
 // public `PackageOffer` fields only (name, price, trial, daily messages, live classes, skills);
 // teacher-written text renders as plain React text (scope decision 5). No ids reach the markup.
 import type { PackageOffer } from '@edmate/db';
-import { formatPrice, type Translate } from './format';
+import { dynamicLabel, formatPrice, type Translate } from './format';
 
 export interface PackageListProps {
   packages: readonly PackageOffer[];
@@ -30,7 +30,7 @@ export function PackageList({ packages, t }: PackageListProps) {
               <p>{t('skillsLabel')}</p>
               <ul>
                 {offer.skills.map((skill) => (
-                  <li key={skill}>{t(`skills.${skill}`)}</li>
+                  <li key={skill}>{dynamicLabel(t, `skills.${skill}`)}</li>
                 ))}
               </ul>
             </>
