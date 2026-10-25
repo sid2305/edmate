@@ -50,6 +50,14 @@ No contracts change. `EvalTurnInput` and `RunOptions` only gained optional field
 - Why: keeps the one caller and the one callee in lock-step without an unreachable `undefined`
   branch to test or reason about.
 
+### 25 Oct 2026 · 7.4d merge: quality gate cancels timed-out cases · decided by lead · risk: low
+- Decided: merge 7.4d. The quality gate now aborts a timed-out case through a per-case AbortSignal, the runner stops before the next turn or judge call, and the timer follows the injected clock. code-reviewer, typescript-reviewer and silent-failure-hunter approved; typescript-reviewer ran the dependents gate (`--filter=...@edmate/evals`, 19/19 green, apps/worker and apps/cli unchanged). Its one LOW (packages/evals/src/runner.test.ts asserts the literal cancel message instead of importing `CASE_CANCELLED`) is wontfix: the test pinning the exact wording is intended, and a drift fails the test loudly.
+- Why: both 7.4a LOWs are fixed inside packages/evals with no change to implementers, and nothing blocks merge.
+
+### 25 Oct 2026 · 7.4d budget 46 vs 35 · decided by lead · risk: low
+- Decided: accept 46 builder tool calls against the plan's 35 (harness count; the builder reported 32), recorded in docs/tasks/7.4d/handoff.md.
+- Why: the extra calls went to tests for the abort race and the injected timer; the diff stayed inside the plan's files.
+
 ## Left to do
 None.
 
@@ -66,4 +74,4 @@ None.
 - `python3 .githooks/secret-scan.py --all` → no output, exit 0 (clean).
 
 ## Budget
-Tool calls used: 30
+Tool calls used: 46 (harness count; the builder reported 32)
