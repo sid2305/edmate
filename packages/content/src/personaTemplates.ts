@@ -16,6 +16,8 @@ import { AgentConfigSchema, type Persona, PersonaSchema } from '@edmate/contract
 import { createPersonaLibrary, type PersonaLibrary } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { z } from 'zod';
+import { compareSemver } from './semver.js';
+import { isSignedOff } from './signOff.js';
 import type { ValidationResult } from './validate.js';
 
 const TEMPLATE_FILE = /^([a-z][a-z0-9_-]*)@(.+)\.yaml$/;
@@ -125,43 +127,15 @@ export function validatePersonaTemplateDir(dir: string): ValidationResult {
 
 /** A template is live only once someone signed it: `reviewed_by` is not "pending" (5.8, ADR-0013). */
 function isSigned(t: Readonly<PersonaTemplate>): boolean {
-  return t.reviewedBy.trim().toLowerCase() !== 'pending';
-}
-
-/** Compares one prerelease identifier per semver 2.0.0 §11: numeric < alphanumeric. */
-function compareIdentifier(a: string, b: string): number {
-  const an = /^\d+$/.test(a);
-  const bn = /^\d+$/.test(b);
-  if (an && bn) return Number(a) - Number(b);
-  if (an !== bn) return an ? -1 : 1;
-  return a < b ? -1 : a > b ? 1 : 0;
+  return isSignedOff(t.reviewedBy);
 }
 
 /**
  * Semver precedence of two template versions (already checked by `Semver`): numeric
- * major.minor.patch, a release above its prereleases, and build metadata ignored.
+ * major.minor.patch, a release above its prereleases, and build metadata ignored. Re-exported
+ * under its historical name (5.8e: the shared comparator lives in `semver.ts`).
  */
-export function comparePersonaVersions(a: string, b: string): number {
-  const split = (v: string) => {
-    const core = v.split('+')[0] as string;
-    const dash = core.indexOf('-');
-    const main = (dash < 0 ? core : core.slice(0, dash)).split('.').map(Number);
-    const pre = dash < 0 ? [] : core.slice(dash + 1).split('.');
-    return { main, pre };
-  };
-  const x = split(a);
-  const y = split(b);
-  for (let i = 0; i < 3; i += 1) {
-    const d = (x.main[i] as number) - (y.main[i] as number);
-    if (d !== 0) return d;
-  }
-  if (x.pre.length === 0 || y.pre.length === 0) return y.pre.length - x.pre.length;
-  for (let i = 0; i < Math.min(x.pre.length, y.pre.length); i += 1) {
-    const d = compareIdentifier(x.pre[i] as string, y.pre[i] as string);
-    if (d !== 0) return d;
-  }
-  return x.pre.length - y.pre.length;
-}
+export { compareSemver as comparePersonaVersions } from './semver.js';
 
 /** Drops the review metadata: the harness gets `Persona`-shaped values only. */
 function asPersona(t: Readonly<PersonaTemplate>): Persona {
@@ -190,7 +164,7 @@ export function selectPersonaLibrary(templates: readonly Readonly<PersonaTemplat
   const best = new Map<string, Readonly<PersonaTemplate>>();
   for (const t of templates) {
     const versions = seen.get(t.id) ?? [];
-    if (versions.some((v) => comparePersonaVersions(v, t.version) === 0)) {
+    if (versions.some((v) => compareSemver(v, t.version) === 0)) {
       issues.push(`${t.id}@${t.version}: duplicate persona template`);
       continue;
     }
@@ -198,7 +172,7 @@ export function selectPersonaLibrary(templates: readonly Readonly<PersonaTemplat
     seen.set(t.id, versions);
     if (!isSigned(t)) continue;
     const current = best.get(t.id);
-    if (current === undefined || comparePersonaVersions(t.version, current.version) > 0) {
+    if (current === undefined || compareSemver(t.version, current.version) > 0) {
       best.set(t.id, t);
     }
   }
