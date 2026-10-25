@@ -6,8 +6,10 @@
 Run this once a task's PR has merged to main (so docs/tasks/<id>/handoff.md is in the working
 tree). It:
 
-  1. appends the handoff's `## Decisions` entries to docs/decisions/log.md, word for word
-     (skips entries already logged by heading -- safe to run twice);
+  1. checks that every `## Decisions` entry has a `Decided:` line; if any entry is missing one,
+     nothing is appended and nothing else runs (step 1a). Otherwise appends the handoff's
+     `## Decisions` entries to docs/decisions/log.md, word for word (skips entries already
+     logged by heading -- safe to run twice);
   2. prints a one-line reminder to add a docs/lessons.md entry when the handoff has a
      `## Fix round` heading or a just-appended decision is "decided by you" (never blocks);
   3. runs `board.py set <id> done` (which itself refuses unless every `Decided:` line is logged);
@@ -40,6 +42,8 @@ ENTRY_HEADING = re.compile(r"^###\s", re.M)
 NEXT_H2 = re.compile(r"^##\s", re.M)
 LOG_SEP = re.compile(r"\n-{3,}\n")
 FIX_ROUND = re.compile(r"^## Fix round\b", re.M)
+# Mirrors .claude/skills/board/board.py's DECIDED_LINE -- must stay in step with it.
+DECIDED_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*Decided:")
 
 
 def repo_root():
@@ -113,6 +117,16 @@ def append_decision_entries(log_path, handoff_path, handoff_text=None):
     return [heading for heading, _ in to_add]
 
 
+def entries_missing_decided(body):
+    """The heading of every `decision_entries(body)` entry that has no line matching
+    DECIDED_LINE."""
+    missing = []
+    for heading, text in decision_entries(body):
+        if not any(DECIDED_LINE.match(line) for line in text.splitlines()):
+            missing.append(heading)
+    return missing
+
+
 def needs_lesson(handoff_text, appended_headings):
     """True when the handoff has a `## Fix round` heading or a just-appended decision heading
     says "decided by you" (a human correction). closeout then nudges the lead toward a
@@ -174,6 +188,14 @@ def main(argv):
     handoff = root / "docs" / "tasks" / task_id / "handoff.md"
     log = root / "docs" / "decisions" / "log.md"
     handoff_text = handoff.read_text() if handoff.exists() else ""
+    body = decisions_body(handoff_text)
+    if body is not None and norm(body).rstrip(".").lower() != "none":
+        missing = entries_missing_decided(body)
+        if missing:
+            for heading in missing:
+                print(f'{task_id}: decision entry "{heading}" has no \'Decided:\' line; '
+                      f"nothing appended, board unchanged")
+            return 1
     appended = append_decision_entries(log, handoff, handoff_text)
     added = len(appended)
     if needs_lesson(handoff_text, appended):

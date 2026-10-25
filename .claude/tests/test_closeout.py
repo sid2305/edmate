@@ -208,7 +208,9 @@ class LessonsReminder(CloseoutCase):
         self.assertNotIn("lessons.md", out)
 
     def test_fix_round_in_prose_or_h3_is_not_a_heading(self):
-        self.set_handoff(HANDOFF + "\nNo ## Fix round happened.\n### Fix round notes\n")
+        # "## Notes" closes the Decisions section first, so "### Fix round notes" isn't parsed
+        # as a (Decided:-less) decision entry -- this test is only about the lessons reminder.
+        self.set_handoff(HANDOFF + "\n## Notes\nNo ## Fix round happened.\n### Fix round notes\n")
         code, out = self.closeout("9.9")
         self.assert_normal_closeout(code, out)
         self.assertNotIn("lessons.md", out)
@@ -260,6 +262,72 @@ class DigestRegeneration(CloseoutCase):
         self.assertEqual(code, 1, out)
         self.assertIn("could not regenerate docs/decisions/digest.md", out)
         self.assertIn("status: done", self.board_text())
+
+
+TWO_ENTRY_HANDOFF = """# 9.9 handoff
+Status: DONE
+
+## Decisions
+### 18 Oct 2026 · 9.9 Thing · decided by lead · risk: low
+Decided: Keep it simple.
+Why: x.
+
+### 19 Oct 2026 · 9.9 Other thing · decided by lead · risk: low
+Why: no decided line here.
+"""
+
+
+class DecidedLineCheck(CloseoutCase):
+    """0.19b: closeout checks every `## Decisions` entry has a `Decided:` line (matching
+    board.py's DECIDED_LINE) before it appends anything -- so a bad entry never gets silently
+    skipped as a duplicate on a later, fixed run (the 7.3 failure)."""
+
+    def set_handoff(self, text):
+        self.repo.write("docs/tasks/9.9/handoff.md", text)
+
+    def test_missing_decided_line_leaves_log_unchanged_and_reports_heading(self):
+        self.set_handoff(TWO_ENTRY_HANDOFF)
+        before = self.log_text()
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 1, out)
+        self.assertIn('9.9 Other thing', out)
+        self.assertIn("has no 'Decided:' line", out)
+        self.assertIn("nothing appended, board unchanged", out)
+        self.assertEqual(self.log_text(), before)
+        self.assertNotIn("status: done", self.board_text())
+
+    def test_fixing_handoff_then_appends_both_entries(self):
+        self.set_handoff(TWO_ENTRY_HANDOFF)
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 1, out)
+        self.set_handoff(TWO_ENTRY_HANDOFF.replace(
+            "Why: no decided line here.",
+            "Decided: Fixed now.\nWhy: no decided line here.",
+        ))
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertIn("9.9 Thing", self.log_text())
+        self.assertIn("9.9 Other thing", self.log_text())
+        self.assertEqual(self.log_text().count("9.9 Other thing"), 1)
+
+    def test_bullet_and_bare_decided_both_accepted(self):
+        text = """# 9.9 handoff
+Status: DONE
+
+## Decisions
+### 18 Oct 2026 · 9.9 Thing · decided by lead · risk: low
+- Decided: Keep it simple.
+Why: x.
+
+### 19 Oct 2026 · 9.9 Other thing · decided by lead · risk: low
+Decided: Fine too.
+Why: x.
+"""
+        self.set_handoff(text)
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertIn("9.9 Thing", self.log_text())
+        self.assertIn("9.9 Other thing", self.log_text())
 
 
 if __name__ == "__main__":
