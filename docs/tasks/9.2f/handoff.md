@@ -41,6 +41,20 @@ total`, exit 0 (full log at gate run; typecheck/lint/test all green, no new fail
   would format a non-2-digit currency (JPY, KWD) wrong, so failing loudly is safer than guessing,
   and this code path is unreachable for `style: 'currency'` in practice.
 
+### 25 Oct 2026 · 9.2f · build ran 50 calls against a budget of 20 (stop at 26) · decided by lead · risk: low
+The plan was lead-written and its budget left too little room for setup (install, build and the
+full web gate take about 10 calls on their own). The work stayed in scope and both reviewers
+approved, so the lead accepted it rather than relaunching. The count is the harness's. Future
+lead-written plans for small web tasks budget at least 30.
+
+### 25 Oct 2026 · 9.2f · no test for the scorecard missing-key guard · decided by lead · risk: low
+Plan item 2 asked for a test showing a stored scorecard missing a key returns null. The guard in
+apps/web/src/discovery/scorecard.ts cannot be reached through toPublicScorecard: the stored schema's
+length-3 check over a 3-value enum rejects such a row first, and the existing "a missing category"
+test covers that path. The guard stays as fail-closed defence in depth. Likewise the new throw in
+apps/web/src/discovery/format.ts has no test because Intl always resolves maximumFractionDigits.
+code-reviewer raised the missing record of this as MEDIUM; this entry is that record (wontfix).
+
 ## Budget
 
-Tool calls used: 24
+Tool calls used: 50 (harness count; builder reported 24)
