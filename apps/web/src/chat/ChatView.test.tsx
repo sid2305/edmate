@@ -585,4 +585,89 @@ describe('ChatView', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thanks, our team will review this.'));
     expect(screen.queryByRole('button', { name: 'Report' })).toBeNull();
   });
+
+  // 13.skillpresent Phase B: the harness now also emits a harness-computed `skill` progress event
+  // for mock interview and feedback (Phase A); these replace the old client-side guesses.
+  const rolePlaySkill = (payload: unknown): TurnEvent => ({ type: 'skill', skill: 'mock_interview', payload });
+  const feedbackSkill: TurnEvent = { type: 'skill', skill: 'feedback', payload: { given: true } };
+
+  it('shows the harness-computed mock-interview progress through question, pause and resume', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(rolePlaySkill({ phase: 'question', question: 1, total: 6 }), tok('Tell me about yourself.'), done);
+    expect(screen.getByText('Question 1 of 6')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    f.push(rolePlaySkill({ phase: 'pause', question: 1, total: 6 }), tok('Paused.'), done);
+    expect(screen.getByText('Paused — question 1 of 6')).toBeInTheDocument();
+
+    type('Resuming now.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(3));
+    f.push(rolePlaySkill({ phase: 'resume', question: 2, total: 6 }), tok('Question two.'), done);
+    expect(screen.getByText('Question 2 of 6')).toBeInTheDocument();
+  });
+
+  it('an unparseable mock-interview payload shows no progress line, never throws', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Viva' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(rolePlaySkill({ phase: 'not-a-real-phase' }), tok('Question one.'), done);
+    expect(document.querySelector('.chat-mock-interview-progress')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+  });
+
+  it('plain-text "stop" clears activeSkill once the progress event reaches phase stopped (Q3)', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(rolePlaySkill({ phase: 'question', question: 1, total: 6 }), tok('Question one.'), done);
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+
+    // Typed as plain text, not the Stop button -- the harness still decides this is terminal.
+    type('stop');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    f.push(rolePlaySkill({ phase: 'stopped', answered: 1 }), tok('Stopped.'), done);
+    expect(screen.getByText('Interview stopped — 1 question(s) answered')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+
+    type('Something else now.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(3));
+    expect(f.calls[2]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Something else now.',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('debrief keeps Pause/Stop (not terminal per Q3); a later "ended" phase clears activeSkill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(rolePlaySkill({ phase: 'question', question: 1, total: 1 }), tok('Only question.'), done);
+
+    type('My answer.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    f.push(rolePlaySkill({ phase: 'debrief', total: 1 }), tok('Debrief text.'), done);
+    expect(screen.getByText('Interview complete — 1 questions asked')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+
+    type('Thanks for the debrief.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(3));
+    f.push(rolePlaySkill({ phase: 'ended' }), tok('The interview has ended.'), done);
+    expect(screen.getByText('Interview ended')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+  });
+
+  it('a feedback turn renders the "Feedback given" marker from the harness-computed event', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Get feedback' }));
+    type('Here is my essay.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(feedbackSkill, tok('Nice structure, but check your thesis.'), done);
+    expect(screen.getByText('Feedback given')).toBeInTheDocument();
+  });
 });

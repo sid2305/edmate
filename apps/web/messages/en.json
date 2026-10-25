@@ -127,7 +127,8 @@
       "submit": "Submit answer"
     },
     "feedback": {
-      "toggle": "Get feedback"
+      "toggle": "Get feedback",
+      "given": "Feedback given"
     },
     "mockInterview": {
       "launcher": "Start mock interview",
@@ -137,7 +138,14 @@
       },
       "start": "Let's start the mock interview.",
       "pause": "Pause",
-      "stop": "Stop"
+      "stop": "Stop",
+      "progress": {
+        "question": "Question {question} of {total}",
+        "paused": "Paused — question {question} of {total}",
+        "debrief": "Interview complete — {total} questions asked",
+        "stopped": "Interview stopped — {answered} question(s) answered",
+        "ended": "Interview ended"
+      }
     },
     "errors": {
       "unauthorized": "Please sign in again to keep chatting.",
