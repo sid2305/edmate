@@ -98,10 +98,18 @@ Cached:    9 cached, 12 total
   failing audit ids"); keeps the file tidy and makes a future regression self-diagnosing in CI
   output, without adding a permanent opt-in debug flag nobody will remember exists.
 
+### 25 Oct 2026 · 9.1c typescript-reviewer LOWs · decided by lead · risk: low
+- Decided: wontfix both typescript-reviewer LOWs. apps/web/test/lighthouse-a11y.test.ts has two destructuring lines over Prettier's 100-character width; CI runs eslint, not Prettier, and the next edit to the file can wrap them. apps/web/app/globals.css keeps the 8px gap between nav links; the 44px targets alone take /teacher to 100.
+- Why: neither affects behaviour or the gate. If a later page adds longer nav labels and the target-size audit drops, that page's own test will fail and show it.
+
+### 25 Oct 2026 · 9.1c budget · decided by lead · risk: low
+- Decided: accept 87 tool calls (harness count; the builder reported 34) against the plan's 35.
+- Why: the builder also found and fixed a real test gap: the Lighthouse test never copied .next/static into the standalone server, so since 9.1a both pages had been scored with no CSS. Finding it took several full build-smoke runs.
+
 ## Left to do
 
 None — status DONE.
 
 ## Budget
 
-Tool calls used: 34
+Tool calls used: 87 (harness count; the builder reported 34)
