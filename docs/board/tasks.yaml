@@ -6840,9 +6840,30 @@ tasks:
   deps:
   - 7.2j
   risk: high
-  status: running
+  status: done
   branch: m13/7.2k-devanagari-conjugations
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 61
+    tokens_in: 220
+    tokens_out: 21987
+    cache_read_tokens: 3452515
+    wall_time_seconds: 1469
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 7.4d
   milestone: M13
   title: '7.4a review LOWs (silent-failure-hunter): packages/evals/src/qualityGate.ts threads an AbortSignal so a timed-out case is cancelled, not left running; the per-case timeout follows the injected
@@ -7566,9 +7587,9 @@ tasks:
   deps:
   - 11.4b
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4f-splittable-flag
+  model: plan:lead build:sonnet
 - id: 11.4g
   milestone: M11
   title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the
