@@ -1,6 +1,6 @@
 # Handoff: 11.1e — live-class review follow-ups
 
-**Status:** PARTIAL (Phase B is still to do)
+**Status:** DONE
 
 ## What changed (Phase A)
 
@@ -64,15 +64,67 @@ clean (no output, exit 0).
 
 ## Left for Phase B
 
-- `apps/web/app/teacher/live-classes/LiveClassesView.tsx` (`saveEdit`'s stale-guard split,
-  `aria-label`s on Edit/Cancel-class buttons), its test, and `apps/web/messages/en.json` — per the
-  brief, a fresh builder does Phase B. Not touched here.
 - The 500-cap fix (item 3) has no dedicated integration test inserting 501+ rows, per the lead's
   Q2 answer. Reasoning instead: the query shape (`orderBy(desc(startsAt), desc(id)).limit(500)`,
   then an ascending JS re-sort of the kept rows) is a small, reversible change whose correctness
   follows directly from the `ORDER BY ... DESC ... LIMIT N` + re-sort pattern already used
   elsewhere in this file (e.g. `listRecordingsForTeacher`'s own `desc(createdAt)` + limit); no
   teacher is near 500 scheduled classes in the pilot.
+
+## What changed (Phase B)
+
+`apps/web/app/teacher/live-classes/LiveClassesView.tsx`:
+1. **MEDIUM fix (stale-save guard over-skips).** `saveEdit`'s success branch now applies the
+   server's saved values to `c`'s row via `setClasses` unconditionally (so a successful save
+   never keeps showing stale pre-edit values until reload, even if another row's edit started or
+   this one was discarded while the PUT was in flight). Only `setEditingId(null)` stays guarded
+   behind `editingIdRef.current === c.id`, so a save never closes a different row's edit form or
+   clobbers `editingId`.
+2. **LOW fix (no per-row accessible name).** The Edit and Cancel-class buttons now carry
+   `aria-label={t('editButtonLabel', { title: c.title })}` /
+   `aria-label={t('cancelButtonLabel', { title: c.title })}`, mirroring the existing join-link
+   `joinLinkLabel` pattern. Visible button text (`Edit` / `Cancel class`) is unchanged.
+
+`apps/web/messages/en.json`: added `editButtonLabel: "Edit {title}"` and
+`cancelButtonLabel: "Cancel {title}"` inside the existing `liveClassesStudio` namespace (lead
+answer Q3: builder's choice of key names).
+
+`apps/web/app/teacher/live-classes/LiveClassesView.test.tsx`:
+- Updated the existing Edit/Cancel-class button queries (`row.getByRole('button', { name: 'Edit'
+  })` → `'Edit Ratios review'`, `screen.getByRole('button', { name: 'Cancel class' })` →
+  `'Cancel Ratios review'`) across the edit/cancel describe block, following the join-link test's
+  own precedent of updating the query rather than the visible text.
+- Added explicit `toHaveTextContent` assertions (accessible name via `aria-label` + visible text
+  unchanged) on the first Edit-flow test and the confirmed-cancel test, mirroring the existing
+  join-link assertion shape.
+- Added a new test, `"another row's edit starting mid-save still applies the first row's saved
+  values (review MEDIUM)"`: starts an edit + save on row 1 (PUT held open), starts an edit on row
+  2 while row 1's PUT is still in flight, resolves the PUT, and asserts row 1 shows the saved
+  title ("Changed") while row 2's edit form (its `Title` input) is still open — covering both
+  halves of the split guard.
+- The two `queryByRole('button', { name: 'Edit' | 'Cancel class' })` absence checks (cancelled
+  class, already-started class) were left unchanged: they assert the button is entirely absent,
+  so the query name doesn't matter there.
+
+## Evidence (Phase B)
+
+```
+export PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH
+corepack pnpm turbo run build --filter=@edmate/web^...
+ Tasks:    7 successful, 7 total
+
+corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force
+ Test Files  153 passed | 4 skipped (157)
+      Tests  2478 passed | 30 skipped (2508)
+ Tasks:    10 successful, 10 total
+```
+(typecheck, lint and test all green; no `apps/web/src/auth/index.test.ts` timeout seen, no
+separate re-run needed.)
+
+```
+python3 .githooks/secret-scan.py --all
+```
+clean (no output, exit 0).
 
 ## Decisions
 
@@ -90,5 +142,12 @@ clean (no output, exit 0).
 - Why: the lead's Q2 answer in the plan explicitly agreed this is acceptable given the budget and
   that no teacher is near the cap in the pilot.
 
+### 25 Oct 2026 · 11.1e Phase B · decided by builder · risk: low
+- Decided: `editButtonLabel`/`cancelButtonLabel` are the key names used inside the
+  `liveClassesStudio` namespace (lead answer Q3 left the exact names to the builder).
+- Why: they mirror the existing `joinLinkLabel` naming pattern (`<action>Label`) already used in
+  the same namespace, so the three per-row accessible-name keys read consistently.
+
 ## Budget
 Phase A tool calls used: 19
+Phase B tool calls used: 15
