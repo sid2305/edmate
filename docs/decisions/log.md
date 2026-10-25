@@ -10,6 +10,17 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 6.1a Phase B deferred to 6.1b · decided by lead · risk: low
+- Decided: this task (6.1a) builds Phase A only (items 1–3: strict schemas, heap ready-queue, Q1
+  topic-map wiring for practice items). Phase B (item 4, `courseOutlineInputFromDraft`, the plan's
+  Q2 answer converting an ingest `OutlineDraft` into a `buildTopicMap` input) moves to board task
+  6.1b and waits until a later task wires studio-drafted outlines into `buildTopicMap`.
+- Why: MVP first — an unwired converter whose cycle check can never fire (no outline draft today
+  can express a prerequisite) adds no pilot value yet; building it now would be plumbing ahead of
+  its first real caller.
+
+---
+
 ### 25 Oct 2026 · 5.6h budget over the plan cap · decided by lead · risk: low
 - Decided: accept 48 tool calls against the plan's 25 (stop at 35); the first builder stalled when the Mac slept, the lead committed its work, and a fresh finisher re-ran the gate, did the hardcode check and wrote the handoff.
 - Why: the overrun came from the restart (repeated setup and gate runs), not rework; both reviewers approve with no findings.

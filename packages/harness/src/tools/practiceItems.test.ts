@@ -1,5 +1,6 @@
 // Task 5.6 Phase A: the item model, bank interface and generator (pure, no pipeline wiring).
 import { describe, expect, it } from 'vitest';
+import { buildTopicMap } from '../memory/topicMap.js';
 import { PRACTICE_ID_MAX } from '../pedagogy/helpState.js';
 import { prng } from '../testing/prng.js';
 import {
@@ -696,6 +697,60 @@ describe('validateItem: the mcq item rules (5.6b)', () => {
     expect(validateItem(code, ['4'])).toBe(true);
     expect(validateItem({ ...code, options: ['it prints 4'] }, ['4'])).toBe(false);
     expect(validateItem({ ...code, id: 'bank:py:hello' }, ['hello'])).toBe(false);
+  });
+});
+
+describe('pickItem with topicMap (6.1a Q1)', () => {
+  const topicMapResult = buildTopicMap({
+    courseId: 'course-1',
+    teacherId: 'teacher-1',
+    modules: [{ moduleId: 'module-fractions', title: 'Fractions', order: 0 }],
+    topics: [
+      { topicId: 'fractions', moduleId: 'module-fractions', title: 'Fractions', order: 0 },
+    ],
+  });
+  if (!topicMapResult.ok) throw new Error('test fixture topic map failed to build');
+  const topicMap = topicMapResult.value;
+
+  it('serves a bank item whose topicId/moduleId match the topic map', () => {
+    const bank = fixedBank([BANK_RECORD]);
+    const picked = pickItem(bank, SCOPE, 2, [], undefined, () => true, topicMap);
+    expect(picked?.item).toEqual(BANK_ITEM);
+  });
+
+  it('skips a bank item whose topicId is not in the topic map; the generator steps in', () => {
+    const unknownTopic: PracticeItem = { ...BANK_ITEM, id: 'bank:unknown-topic', topicId: 'unknown' };
+    const bank = fixedBank([{ item: unknownTopic, answerKey: ['1/2'] }]);
+    const picked = pickItem(bank, SCOPE, 2, [], undefined, () => true, topicMap);
+    expect(picked?.item.id).not.toBe(unknownTopic.id);
+    expect(picked?.item.id).toMatch(/^gen:/);
+  });
+
+  it('skips a bank item whose topicId exists but under a different moduleId; the generator steps in', () => {
+    // 'fractions' is a real topic in topicMap, but under module-fractions, not module-mismatch.
+    const mismatched: PracticeItem = {
+      ...BANK_ITEM,
+      id: 'bank:mismatched',
+      moduleId: 'module-fractions',
+      topicId: 'fractions',
+    };
+    const otherMapResult = buildTopicMap({
+      courseId: 'course-1',
+      teacherId: 'teacher-1',
+      modules: [{ moduleId: 'module-other', title: 'Other', order: 0 }],
+      topics: [{ topicId: 'fractions', moduleId: 'module-other', title: 'Fractions', order: 0 }],
+    });
+    if (!otherMapResult.ok) throw new Error('test fixture topic map failed to build');
+    const bank = fixedBank([{ item: mismatched, answerKey: ['1/2'] }]);
+    const picked = pickItem(bank, SCOPE, 2, [], undefined, () => true, otherMapResult.value);
+    expect(picked?.item.id).not.toBe(mismatched.id);
+    expect(picked?.item.id).toMatch(/^gen:/);
+  });
+
+  it('is unchanged when no topicMap argument is given (today\'s behaviour)', () => {
+    const bank = fixedBank([BANK_RECORD]);
+    const withoutMap = pickItem(bank, SCOPE, 2, []);
+    expect(withoutMap?.item).toEqual(BANK_ITEM);
   });
 });
 
