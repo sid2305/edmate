@@ -36,6 +36,14 @@ No other files touched; no schema shape, validation message or route behaviour c
 - Decided: `zod`'s `z` import became `import type { z } from 'zod'`.
 - Why: after removing the locally re-declared schemas, `z` is used only in type position (`z.ZodType`, `z.infer`) in this file; eslint's `consistent-type-imports` rule failed the gate otherwise.
 
+### 25 Oct 2026 · 8.3d merge of a packages/db/src/repositories change · decided by lead · risk: high
+- Decided: merge 8.3d; the only repositories change is exporting the existing `OutlineInputSchema` (same shape and refinements) and re-exporting it from the index, so the web route validates with the same schema `replaceOutline` re-parses.
+- Why: security-reviewer, code-reviewer and typescript-reviewer all approved with no findings; teacher scoping is unchanged and validation is not looser (the shared id schema allows 128 characters where the old web copy allowed 122, and the repository re-parses every input).
+
+### 25 Oct 2026 · 8.3d budget overrun (91 calls against a 30-call plan) · decided by lead · risk: low
+- Decided: accept the overrun.
+- Why: the first builder stalled when the Mac slept on battery (B-57) and the finisher repeated setup and the db and web gates (db integration tests included); the change itself stayed inside the plan's three files.
+
 ## Budget
 
-Tool calls used: 26 (this run; the lead adds the first builder's 25).
+Tool calls used: 91 (harness count across both runs: first builder 25, finisher 66; the finisher self-reported 26)
