@@ -93,6 +93,14 @@ matches on the first word, a shared semver helper, a shared isSignedOff helper
   this matches `docs/lessons.md`'s "A check that silently skips looks like a pass" lesson: the fix
   keeps the detail instead of discarding it.
 
+### 25 Oct 2026 · 5.8e budget overrun (56 calls against 40) accepted · decided by lead · risk: low
+- Decided: merge 5.8e although the builder used 56 tool calls against a budget of 40 (stop at 50).
+- Why: both reviewers approved with no blocking findings and the gate is green; the extra calls went to setup and to the full content and cli test runs, not to rework.
+
+### 25 Oct 2026 · 5.8e merge: semver and sign-off helpers moved out of the prompt-pack files (packages/content/src/promptPacks.ts, personaTemplates.ts) · decided by lead · risk: high
+- Decided: merge the helper moves in packages/content/src/promptPacks.ts and personaTemplates.ts after code-reviewer and typescript-reviewer approved.
+- Why: code-reviewer diffed the moved bodies line by line and found them identical; the public names (comparePersonaVersions, complianceSigned) and the index.ts barrel are unchanged; prompt-pack selection, sign-off checks and version ordering behave exactly as before, and the 537 content tests pass unchanged.
+
 ## Budget
 
-Tool calls used: 26
+Tool calls used: 56 (harness count; the builder reported 26)
