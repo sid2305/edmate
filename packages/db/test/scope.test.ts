@@ -128,6 +128,11 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // before any SQL. Its own malformed/non-staff cases are covered in teacher-profiles.test.ts
     // and teacher-profiles.int.test.ts.
     if (name === 'teacherProfiles.listPendingForStaff') continue;
+    // teacherProfiles.findBySlugForStaff (9.3f) takes a bare staff id first, like
+    // listPendingForStaff, plus a slug: a plain id string among BAD_SCOPES is well-formed by its
+    // own IdSchema and would reach the database. Its malformed/non-staff cases are in
+    // teacher-profiles.test.ts and teacher-profiles.int.test.ts.
+    if (name === 'teacherProfiles.findBySlugForStaff') continue;
     // reports.listOpenForStaff and reports.review (12.2a) take a bare staff id first, like
     // listPendingForStaff: a plain id string among BAD_SCOPES is well-formed for them and would
     // reach the database. Their malformed/non-staff cases are in reports.test.ts and
@@ -150,6 +155,9 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // not a scope object, so the plain string 'tch_a' above is a well-formed id for it. Its own
     // malformed-id cases are the test right after this loop.
     if (name === 'subscriptions.listLiveForStudent') continue;
+    // subscriptions.listUnavailableForStudent (9.3f, B-49) is the same bare-id exception as
+    // listLiveForStudent right above it.
+    if (name === 'subscriptions.listUnavailableForStudent') continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(
@@ -182,6 +190,28 @@ describe('every repository method rejects a bad scope before any SQL', () => {
       expect(err, String(id)).toBeInstanceOf(RepositoryError);
       expect((err as RepositoryError).kind).toBe('scope');
       expect((err as RepositoryError).method).toBe('subscriptions.listLiveForStudent');
+    }
+  });
+
+  it('subscriptions.listUnavailableForStudent rejects a malformed student id before any SQL', async () => {
+    const bad: unknown[] = [
+      undefined,
+      null,
+      '',
+      "x' or 1=1",
+      'a'.repeat(129),
+      { studentId: 'stu_1' },
+      ['stu_1'],
+      42,
+    ];
+    for (const id of bad) {
+      const err = await repos.subscriptions.listUnavailableForStudent(id as never).then(
+        () => new Error('resolved'),
+        (e: unknown) => e,
+      );
+      expect(err, String(id)).toBeInstanceOf(RepositoryError);
+      expect((err as RepositoryError).kind).toBe('scope');
+      expect((err as RepositoryError).method).toBe('subscriptions.listUnavailableForStudent');
     }
   });
 

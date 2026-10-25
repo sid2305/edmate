@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 8.7j inline the gate/publish steps instead of guarding the cast in place · decided by builder · risk: low
+- Decided: of the two options in the task (a runtime guard at the cast site, or returning the
+  result through the gate step so no cast is needed), picked inlining `gatedPublish`'s two
+  callbacks directly in `gateProcessor`. The gate step's return value is read as one local `const`
+  used by both the publish and fail branches, so there is no mutable, nullable closure variable to
+  guard or cast at all.
+- Why: a guard placed only at the old cast site would be unreachable in every real call (the gate
+  callback always either throws before assigning the closure variable, or assigns it before
+  returning, so the publish callback could never see it unset) -- it would pass review as "a
+  guard" but could never be exercised by a test. Inlining removes the unreachable state entirely
+  and gives a genuinely reachable guard: `runGate` is an injected dependency, so a test can make it
+  resolve without a result and watch the run end `error`.
+- risk: low
+
+---
+
+### 24 Oct 2026 · 8.7j empty changes list is a hard error, not a silent style-only scope · decided by builder · risk: low
+- Decided: `caseResults` throws `GateChangesEmptyError` when `input.changes` is empty, before the
+  `styleOnly` check (`[].every(...)` is vacuously `true`).
+- Why: an empty changes list is not "only the style card changed" -- it is a run with nothing to
+  gate, and scoping it as style-only would silently run the wrong, narrower suite instead of
+  failing closed.
+- risk: low
+
+---
+
+### 24 Oct 2026 · 8.7j tool calls over the brief's cap · decided by lead · risk: low
+- Decided: accept 42 tool calls (harness count) against the brief's cap of 30.
+- Why: the overrun was setup in a fresh worktree (install and build) that the cap did not allow for; the builder finished with a green gate and both reviewers approved with no findings.
+
+---
+
+### 24 Oct 2026 · 9.3f a verified teacher is found by slug and safety-rejected through the unchanged decide call · decided by builder · risk: high
+- Decided: a new staff-only, status-independent `findBySlugForStaff` read in `packages/db` and a read-only `lookup` route (`apps/web/app/api/staff/verifications/{handlers.ts,lookup/route.ts}`), a `findTeacherBySlug` client call and a search box in `apps/web/app/staff/view.tsx` that reuses `VerificationRow` and `decide` unchanged; `decide` and `list` are byte-for-byte unchanged.
+- Why: `setVerification({safety:true})` already worked from any starting `verificationStatus` (9.3e), so the security review's MEDIUM was a console gap, not a repository one; proved over Postgres in `teacher-profiles.int.test.ts` and `route.int.test.ts` (find an already verified teacher by slug, safety-reject, 200, audit `after.safety === true`). `packages/db/src/repositories/**` and `apps/web/app/api/staff/**` are required-reviewer groups.
+
+---
+
+### 24 Oct 2026 · 9.3f a subscription whose agent is no longer live shows one blame-free line on /home · decided by builder · risk: low
+- Decided: a read-only `listUnavailableForStudent` (separate from `listLiveForStudent`, which also feeds the live-classes question route) feeds one aggregate line in `homeLinks`, `HomeView` and `en.json`, with no teacher name and no link, deduped by agent id and placed after the chats, startable and paused block under the existing single catch.
+- Why: B-49: such a subscription used to vanish from `/home` with no trace. Pause or cancel while suspended and the chat and plan pages' 404 stay unchanged (plan Q5, deferred to 9.3i: no payment is live, so nobody is billed for an agent they cannot reach).
+
+---
+
+### 24 Oct 2026 · 9.3f a malformed lookup slug is 400, not 403 · decided by builder · risk: high
+- Decided: `lookup`'s catch in `apps/web/app/api/staff/verifications/handlers.ts` switches on `error.kind` like `decide`: `invalid` is 400 validation, `scope` and `not_found` stay 403 forbidden, and `integrity` and `failed` fall through to the generic 500.
+- Why: the review's HIGH: a typo or pasted URL told staff they were not allowed, which is the wrong error and inconsistent with `decide` in the same file.
+
+---
+
+### 24 Oct 2026 · 9.3f tool calls over the plan's budget · decided by lead · risk: low
+- Decided: accept 316 tool calls (harness count over phase A, phase B, the stalled and finishing phase C builders and the fixer) against the plan's 230.
+- Why: phase C stalled when the Mac slept and its work was preserved and finished by a second builder, and one fix round ran; every phase finished with a green gate.
+
+---
+
 ### 24 Oct 2026 · 12.5g alert worker: permanent store error ends the job after one page · decided by builder · risk: high
 - Decided: `apps/worker/src/alerts/processors.ts`'s `alert.raise` branch now reuses
   `commit/processors.ts`'s `classify` to end the job (`PermanentJobError`) on a permanent

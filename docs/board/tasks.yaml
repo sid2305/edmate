@@ -2137,8 +2137,9 @@ tasks:
   deps:
   - '8.1'
   - '8.7'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/8.1b-verification-followups
+  model: plan:sonnet build:sonnet
 - id: '8.2'
   milestone: M8
   title: Upload centre with live processing status, delete and replace
@@ -2940,9 +2941,9 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.8d-eval-pipeline-agent
+  model: plan:sonnet build:sonnet
 - id: 0.19a
   milestone: M13
   title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest
@@ -5224,9 +5225,27 @@ tasks:
   deps:
   - 8.7c
   risk: low
-  status: review
+  status: done
   branch: m13/8.7j-gate-result-guard
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.6f
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
@@ -7658,9 +7677,32 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/9.3f-staff-verified-reject
+  metrics:
+    tool_calls: 351
+    tokens_in: 1098
+    tokens_out: 101782
+    cache_read_tokens: 33971648
+    wall_time_seconds: 286028
+    models:
+    - <synthetic>
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 3
 - id: 9.3g
   milestone: M13
   title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift
@@ -7782,4 +7824,6 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: todo
+  status: review
+  branch: m13/9.3j-home-reads-parallel
+  model: build:sonnet

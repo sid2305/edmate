@@ -33,6 +33,9 @@ export interface HomeViewProps {
   paused?: readonly string[];
   /** The scope's own upcoming, entitled live classes, soonest first (task 11.1c). */
   liveClasses?: readonly UpcomingLiveClass[];
+  /** Agent ids of a not-ended subscription whose agent is no longer live (suspended or back to
+   * draft) -- task 9.3f Phase C / B-49. Shown as one blame-free line, no teacher name. */
+  unavailable?: readonly string[];
 }
 
 export async function HomeView({
@@ -40,6 +43,7 @@ export async function HomeView({
   startable = [],
   paused = [],
   liveClasses = [],
+  unavailable = [],
 }: HomeViewProps = {}) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('home');
@@ -100,6 +104,7 @@ export async function HomeView({
           )}
         </>
       )}
+      {unavailable.length > 0 && <p>{t('unavailableLine', { count: unavailable.length })}</p>}
       {liveClasses.length > 0 && (
         <>
           <h2>{t('liveClasses.title')}</h2>

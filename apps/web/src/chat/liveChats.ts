@@ -23,9 +23,19 @@ export interface LiveChat {
   status: string;
 }
 
+/** One of the student's not-ended subscriptions whose current package's agent is no longer
+ * `live` (suspended or back to draft) -- task 9.3f Phase C / B-49. */
+export interface UnavailableChat {
+  agentId: string;
+  teacherId: string;
+}
+
 export interface LiveChatDeps {
   agents: AgentOwners;
-  subscriptions: { listLiveForStudent(studentId: string): Promise<readonly LiveChat[]> };
+  subscriptions: {
+    listLiveForStudent(studentId: string): Promise<readonly LiveChat[]>;
+    listUnavailableForStudent(studentId: string): Promise<readonly UnavailableChat[]>;
+  };
 }
 
 const IdSchema = StartSessionSchema.shape.agentId;
@@ -65,12 +75,16 @@ export interface HomeLinks {
   /** The live list's teachers, deduplicated -- /home's live-classes block reuses this. Startable
    * candidates are not part of it. */
   teacherIds: string[];
+  /** Agent ids of a not-ended subscription whose agent is no longer live -- /home shows one
+   * blame-free line for these, no teacher name (task 9.3f Phase C / B-49). Deduplicated. */
+  unavailable: string[];
 }
 
-const EMPTY: HomeLinks = { chats: [], paused: [], startable: [], teacherIds: [] };
+const EMPTY: HomeLinks = { chats: [], paused: [], startable: [], teacherIds: [], unavailable: [] };
 
-/** The /home chat, paused and startable links and teacher ids. A failure shows none of them and
- * logs the error name only. */
+/** The /home chat, paused, startable and unavailable links and teacher ids. A failure shows none
+ * of them and logs the error name only (one catch for the whole pass -- an extra failure mode for
+ * one more read-only field is not worth its own try/catch). */
 export async function homeLinks(
   open: () => LiveChatDeps,
   principal: Principal,
@@ -91,7 +105,9 @@ export async function homeLinks(
     );
     const startable = owned.filter((agentId): agentId is string => agentId !== null);
     const teacherIds = [...new Set(live.map((row) => row.teacherId))];
-    return { chats, paused, startable, teacherIds };
+    const unavailableRows = await deps.subscriptions.listUnavailableForStudent(principal.userId);
+    const unavailable = [...new Set(unavailableRows.map((row) => row.agentId))];
+    return { chats, paused, startable, teacherIds, unavailable };
   } catch (error) {
     log.error('home.links_failed', { error: errorName(error) });
     return EMPTY;

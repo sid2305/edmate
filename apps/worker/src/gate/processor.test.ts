@@ -36,6 +36,7 @@ import {
   basisOf,
   caseResults,
   errorCodeOf,
+  GateChangesEmptyError,
   gateProcessor,
   type GatePreparation,
   type GateProcessorDeps,
@@ -402,6 +403,16 @@ describe('gateProcessor: errors end the run as error, nothing publishes', () => 
     expect(t.f.finished).toMatchObject([{ summary: { errorCode: 'result_mismatch' } }]);
   });
 
+  it('a gate that resolves without a result ends error, not a crash, not a pass', async () => {
+    const s = setup({ gate: () => Promise.resolve(undefined as unknown as GateResult) });
+    expect(await s.process(JOB)).toBe('error');
+    expect(s.f.calls).toEqual(['getRun', 'markRunning', 'finishRun']);
+    expect(s.f.live).toEqual([]);
+    expect(s.f.recorded).toEqual([]);
+    expect(s.f.finished).toMatchObject([{ status: 'error', summary: { errorCode: 'gate_result_missing' } }]);
+    expect(s.lines.at(-1)).toMatchObject({ event: 'gate.error', errorCode: 'gate_result_missing' });
+  });
+
   it('a markRunning failure ends the run error too', async () => {
     const f = fakePublish();
     (f.repos.publish.markRunning as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
@@ -516,6 +527,12 @@ describe('helpers', () => {
     const byId = new Map(g.results.map((r) => [r.id, r]));
     const ordered = { ...g, results: scope.cases.map((c) => byId.get(c.evalCase.id) ?? { id: c.evalCase.id, suite: c.evalCase.suite, pass: true, turns: [] }) };
     expect(caseResults(input, ordered).every((r) => r.details.origin === 'platform')).toBe(true);
+  });
+
+  it('an empty changes list throws instead of scoping as style-only', () => {
+    const input = gateInput({ changes: [] });
+    const g = scripted(gateInput());
+    expect(() => caseResults(input, g)).toThrow(GateChangesEmptyError);
   });
 
   it('passRate is 0 for an empty gate; usage is optional in the summary', () => {

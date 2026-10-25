@@ -227,3 +227,136 @@ describe('StaffQueueView', () => {
     }
   });
 });
+
+describe('StaffQueueView: find a teacher by slug (9.3f)', () => {
+  const VERIFIED = { ...ASHA, verificationStatus: 'verified' as const };
+
+  it('shows a verified teacher with its current status, Approve/Reject and a safety checkbox', async () => {
+    const findTeacherBySlug = vi.fn(async () => ({ ok: true as const, teacher: VERIFIED }));
+    renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'asha-math' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(rowOf('asha-math')).toBeInTheDocument());
+    expect(findTeacherBySlug).toHaveBeenCalledWith('asha-math');
+    const row = rowOf('asha-math');
+    expect(within(row).getByText('Verified')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+    expect(within(row).getByRole('checkbox', { name: SAFETY_LABEL })).toBeInTheDocument();
+  });
+
+  it('safety concern + Reject on the found row sends safety: true, clears it, shows rejectedSafety', async () => {
+    const findTeacherBySlug = vi.fn(async () => ({ ok: true as const, teacher: VERIFIED }));
+    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    renderIntl(
+      <StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} decide={decide} />,
+    );
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'asha-math' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(rowOf('asha-math')).toBeInTheDocument());
+    const row = rowOf('asha-math');
+    fireEvent.click(within(row).getByRole('checkbox', { name: SAFETY_LABEL }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Reject' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'asha-math was rejected and their agent is no longer available to students.',
+      ),
+    );
+    expect(decide).toHaveBeenCalledWith({
+      teacherId: 'tch_a',
+      status: 'rejected',
+      reason: '',
+      safety: true,
+    });
+    expect(screen.queryByRole('listitem', { name: 'asha-math' })).toBeNull();
+  });
+
+  it('an unknown slug shows lookupNotFound, no row', async () => {
+    const findTeacherBySlug = vi.fn(async () => ({ ok: true as const, teacher: null }));
+    renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'no-such-teacher' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() =>
+      expect(screen.getByText('No teacher has that profile URL.')).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('finding again after an unknown slug replaces lookupNotFound with the found row', async () => {
+    const findTeacherBySlug = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, teacher: null })
+      .mockResolvedValueOnce({ ok: true, teacher: VERIFIED });
+    renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
+    const input = screen.getByLabelText('Find a teacher by their profile URL');
+    fireEvent.change(input, { target: { value: 'no-such-teacher' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() =>
+      expect(screen.getByText('No teacher has that profile URL.')).toBeInTheDocument(),
+    );
+    fireEvent.change(input, { target: { value: 'asha-math' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(rowOf('asha-math')).toBeInTheDocument());
+    expect(screen.queryByText('No teacher has that profile URL.')).toBeNull();
+  });
+
+  it('Find is disabled while a blank or whitespace-only slug is entered', () => {
+    renderIntl(<StaffQueueView initial={[]} />);
+    expect(screen.getByRole('button', { name: 'Find' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: '   ' },
+    });
+    expect(screen.getByRole('button', { name: 'Find' })).toBeDisabled();
+  });
+
+  it('a find error reply shows the message and does not crash', async () => {
+    const findTeacherBySlug = vi.fn(async () => ({ ok: false as const, code: 'provider_error' as const }));
+    renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'asha-math' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Try again.'),
+    );
+  });
+
+  it('a find call that throws still resets the busy flag', async () => {
+    const findTeacherBySlug = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'asha-math' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Try again.'),
+    );
+    expect(screen.getByRole('button', { name: 'Find' })).toBeEnabled();
+  });
+
+  it('the pending queue list never shows a current-status line (only lookup results do)', () => {
+    renderIntl(<StaffQueueView initial={[ASHA]} />);
+    expect(screen.queryByText('Current status')).toBeNull();
+  });
+
+  it('has no axe violations with a found row and a not-found message', async () => {
+    const findTeacherBySlug = vi.fn(async () => ({ ok: true as const, teacher: VERIFIED }));
+    const { container } = renderIntl(
+      <StaffQueueView initial={[BEN]} findTeacherBySlug={findTeacherBySlug} />,
+    );
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'asha-math' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(rowOf('asha-math')).toBeInTheDocument());
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});

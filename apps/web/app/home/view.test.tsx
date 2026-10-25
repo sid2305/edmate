@@ -3,6 +3,7 @@
 // before `view.tsx` exists (TDD).
 import { render, screen } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
+import { createTranslator } from 'next-intl';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import messages from '../../messages/en.json';
 
@@ -19,15 +20,13 @@ vi.mock('./AskQuestionForm', () => ({
 }));
 // Same reason as `app/sign-in/page.test.tsx`: next-intl's real server API isn't callable under
 // jsdom (no server/client runtime split there); the mock reads the same `en.json` the production
-// `src/i18n/request.ts` loads, so a typo'd or missing key still fails the test. 11.1c: `liveClasses`
-// keys are nested (e.g. `liveClasses.window.reminder_24h`), so the lookup walks a dotted path --
-// same behaviour as real next-intl's own flattening of nested JSON within a namespace.
+// `src/i18n/request.ts` loads, so a typo'd or missing key still fails the test. `createTranslator`
+// (re-exported by `next-intl` from `use-intl/core`) is the same formatter the real server API
+// uses underneath -- nested keys (e.g. `liveClasses.window.reminder_24h`) and ICU params (e.g.
+// `unavailableLine`'s plural, task 9.3f Phase C) both work exactly as in production.
 vi.mock('next-intl/server', () => ({
-  getTranslations: async (namespace: keyof typeof messages) => {
-    const bundle = messages[namespace];
-    return (key: string) =>
-      key.split('.').reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], bundle);
-  },
+  getTranslations: async (namespace: keyof typeof messages) =>
+    createTranslator({ locale: 'en', messages, namespace }),
 }));
 
 import { HomeView } from './view';
@@ -126,6 +125,58 @@ describe('HomeView', () => {
         'href',
         '/learn/agt_b/plan',
       );
+    });
+  });
+
+  // Task 9.3f Phase C / B-49: a subscription whose agent is no longer live shows one blame-free
+  // line, no teacher name, placed after the chats/startable/paused block.
+  describe('unavailable (task 9.3f Phase C / B-49)', () => {
+    it('absent when unavailable is empty or omitted', async () => {
+      render(await HomeView({ chats: ['agt_a'] }));
+      expect(
+        screen.queryByText(/isn't available right now|aren't available right now/i),
+      ).toBeNull();
+      render(await HomeView({ chats: ['agt_a'], unavailable: [] }));
+      expect(
+        screen.queryAllByText(/isn't available right now|aren't available right now/i),
+      ).toHaveLength(0);
+    });
+
+    it('shows the singular line for exactly one unavailable agent', async () => {
+      render(await HomeView({ chats: ['agt_a'], unavailable: ['agt_s'] }));
+      expect(
+        screen.getByText("One of your teachers' agents isn't available right now."),
+      ).toBeInTheDocument();
+    });
+
+    it('shows the plural line for two or more unavailable agents', async () => {
+      render(await HomeView({ chats: ['agt_a'], unavailable: ['agt_s', 'agt_t'] }));
+      expect(
+        screen.getByText("2 of your teachers' agents aren't available right now."),
+      ).toBeInTheDocument();
+    });
+
+    it('shows alongside an active chat, naming no teacher detail', async () => {
+      const { container } = render(
+        await HomeView({ chats: ['agt_a'], unavailable: ['agt_s'] }),
+      );
+      expect(screen.getByRole('link', { name: "Chat with your teacher's agent" })).toHaveAttribute(
+        'href',
+        '/learn/agt_a',
+      );
+      expect(
+        screen.getByText("One of your teachers' agents isn't available right now."),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/agt_s/)).toBeNull();
+      expect(await axe(container)).toHaveNoViolations();
+    });
+
+    it('shows alongside the empty-state placeholder when there is nothing else', async () => {
+      render(await HomeView({ chats: [], startable: [], paused: [], unavailable: ['agt_s'] }));
+      expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
+      expect(
+        screen.getByText("One of your teachers' agents isn't available right now."),
+      ).toBeInTheDocument();
     });
   });
 

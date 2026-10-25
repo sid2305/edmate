@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { responseError } from '../../src/chat/sse';
 
 const ENDPOINT = '/api/staff/verifications';
+const LOOKUP_ENDPOINT = '/api/staff/verifications/lookup';
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -19,6 +20,12 @@ export const QueueItemSchema = z.object({
 });
 export const QueueSchema = z.array(QueueItemSchema);
 export type QueueItem = z.infer<typeof QueueItemSchema>;
+
+/** Task 9.3f: a lookup result also names the teacher's current status. */
+export const LookupItemSchema = QueueItemSchema.extend({
+  verificationStatus: z.enum(['pending', 'verified', 'rejected']),
+});
+export type LookupItem = z.infer<typeof LookupItemSchema>;
 
 export type Decision = 'verified' | 'rejected';
 
@@ -59,6 +66,26 @@ export async function loadQueue(
   if (!res.ok) return { ok: false, code: (await responseError(res)).code };
   const body = await readBody(res, QueueReply);
   return body === null ? FAILED : { ok: true, teachers: body.teachers };
+}
+
+const LookupReply = z.object({ teacher: LookupItemSchema.nullable() });
+
+/** Task 9.3f: GET a teacher by slug, any verification status, or `null` if the slug is unknown. */
+export async function findTeacherBySlug(
+  slug: string,
+  fetchImpl?: FetchLike,
+): Promise<{ ok: true; teacher: LookupItem | null } | Failure> {
+  const url = `${LOOKUP_ENDPOINT}?slug=${encodeURIComponent(slug)}`;
+  let res: Response | null;
+  try {
+    res = await (fetchImpl ?? ((u, i) => fetch(u, i)))(url, { method: 'GET', cache: 'no-store' });
+  } catch {
+    res = null;
+  }
+  if (res === null) return FAILED;
+  if (!res.ok) return { ok: false, code: (await responseError(res)).code };
+  const body = await readBody(res, LookupReply);
+  return body === null ? FAILED : { ok: true, teacher: body.teacher };
 }
 
 export interface DecideInput {

@@ -633,6 +633,106 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
   });
 
+  // Task 9.3f: staff reach a teacher by slug regardless of verification status, so a verified (or
+  // already-rejected) teacher can be named to setVerification -- the console gap, not a
+  // repository one (setVerification itself has worked from any starting status since 9.3e).
+  describe('findBySlugForStaff (staff only, no status filter)', () => {
+    it.each([
+      ['the teacher themself', () => teacherId('A')],
+      ['a user who is no longer staff', () => FORMER_STAFF],
+      ['an id that is no user', () => 'stf_ghost'],
+    ])('refuses %s as scope', async (_label, by) => {
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      expect(await failure(repos.teacherProfiles.findBySlugForStaff(by(), 'ms-alpha'))).toEqual({
+        kind: 'scope',
+        method: 'teacherProfiles.findBySlugForStaff',
+      });
+    });
+
+    it('finds a pending, a verified and a rejected teacher by slug; an unknown slug is null', async () => {
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Science' });
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ('tch_rejected', 'Rejected Teacher', 'en', 'test', 'teacher')`,
+      );
+      await repos.teacherProfiles.create({ teacherId: 'tch_rejected' }, {
+        slug: 'ms-gamma',
+        displayName: 'Ms Gamma',
+        subject: 'History',
+      });
+
+      const pending = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'mr-beta');
+      expect(pending).toMatchObject({ teacherId: teacherId('B'), verificationStatus: 'pending' });
+
+      await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
+      const verified = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-alpha');
+      expect(verified).toMatchObject({ teacherId: teacherId('A'), verificationStatus: 'verified' });
+
+      await repos.teacherProfiles.setVerification({ teacherId: 'tch_rejected' }, {
+        status: 'rejected',
+        by: STAFF,
+      });
+      const rejected = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-gamma');
+      expect(rejected).toMatchObject({ teacherId: 'tch_rejected', verificationStatus: 'rejected' });
+
+      expect(await repos.teacherProfiles.findBySlugForStaff(STAFF, 'no-such-teacher')).toBeNull();
+    });
+
+    // The acceptance case: a verified teacher with live subscribers, found by slug, then
+    // safety-rejected exactly as 9.3e's own pending-fixture case -- proving the repository never
+    // needed a change, only a way to reach the row.
+    it('finds a verified teacher with a live agent and a subscribed student by slug, then safety-rejects them', async () => {
+      const tid = 'tch_sr_verified';
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, 'Verified Teacher', 'en', 'test', 'teacher')`,
+        [tid],
+      );
+      await repos.teacherProfiles.create({ teacherId: tid }, {
+        slug: 'ms-verified',
+        displayName: 'Ms Verified',
+        subject: 'Maths',
+      });
+      await repos.teacherProfiles.setVerification({ teacherId: tid }, {
+        status: 'verified',
+        by: STAFF,
+      });
+      const agentId = 'agt_sr_verified';
+      await raw.query(`insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`, [
+        agentId,
+        tid,
+      ]);
+
+      const found = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-verified');
+      expect(found).toMatchObject({ teacherId: tid, verificationStatus: 'verified' });
+
+      const row = await repos.teacherProfiles.setVerification(
+        { teacherId: found!.teacherId },
+        { status: 'rejected', by: STAFF, reason: 'unsafe advice to students', safety: true },
+      );
+      expect(row.verificationStatus).toBe('rejected');
+      expect(await statusOf(tid)).toBe('rejected');
+      const agentStatus = await raw.query<{ s: string }>(
+        'select status as s from agents where id = $1',
+        [agentId],
+      );
+      expect(agentStatus.rows[0]?.s).toBe('suspended');
+      const tds = await raw.query('select id from takedowns where target = $1', [`agent:${agentId}`]);
+      expect(tds.rows).toHaveLength(1);
+    });
+
+    it.each([
+      ['undefined', undefined],
+      ['null', null],
+      ['an empty string', ''],
+      ['a 129-char id', 'a'.repeat(129)],
+    ])('rejects by %s as invalid before any SQL', async (_label, by) => {
+      expect(await failure(repos.teacherProfiles.findBySlugForStaff(by as never, 'ms-alpha'))).toEqual({
+        kind: 'invalid',
+        method: 'teacherProfiles.findBySlugForStaff',
+      });
+    });
+  });
+
   describe('assertVerifiedForPublish: an unverified teacher cannot publish', () => {
     const publish = (s: { teacherId: string }) => repos.teacherProfiles.assertVerifiedForPublish(s);
     const SCOPE = { kind: 'scope', method: 'teacherProfiles.assertVerifiedForPublish' };

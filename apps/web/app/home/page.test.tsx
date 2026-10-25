@@ -40,17 +40,20 @@ vi.mock('./view', () => ({
       startable,
       paused,
       liveClasses,
+      unavailable,
     }: {
       chats: string[];
       startable: string[];
       paused: string[];
       liveClasses: { id: string }[];
+      unavailable: string[];
     }) => (
       <div>
         <span data-testid="chats">{chats.join(',')}</span>
         <span data-testid="startable">{startable.join(',')}</span>
         <span data-testid="paused">{paused.join(',')}</span>
         <span data-testid="liveClasses">{liveClasses.map((lc) => lc.id).join(',')}</span>
+        <span data-testid="unavailable">{unavailable.join(',')}</span>
       </div>
     ),
   ),
@@ -70,6 +73,7 @@ beforeEach(() => {
     startable: ['agt_b'],
     paused: [],
     teacherIds: ['tch_a', 'tch_b'],
+    unavailable: [],
   });
   state.listUpcomingForStudent.mockResolvedValue([]);
 });
@@ -95,9 +99,23 @@ describe('/home page', () => {
       startable: [],
       paused: ['agt_c'],
       teacherIds: [],
+      unavailable: [],
     });
     render(await HomePage());
     expect(screen.getByTestId('paused')).toHaveTextContent('agt_c');
+  });
+
+  // Task 9.3f Phase C / B-49: the unavailable list comes from the same shared scan.
+  it('passes the unavailable links from the same shared scan to HomeView', async () => {
+    state.homeLinks.mockResolvedValue({
+      chats: [],
+      startable: [],
+      paused: [],
+      teacherIds: [],
+      unavailable: ['agt_s'],
+    });
+    render(await HomePage());
+    expect(screen.getByTestId('unavailable')).toHaveTextContent('agt_s');
   });
 
   // Task 11.1c Phase C: upcoming live classes, by the shared scan's own teacher ids.
@@ -122,7 +140,13 @@ describe('/home page', () => {
 
   it('with no live subscriptions (and so no teacher ids), live classes are never queried', async () => {
     state.chatAgentCandidates.mockReturnValue([]);
-    state.homeLinks.mockResolvedValue({ chats: [], startable: [], paused: [], teacherIds: [] });
+    state.homeLinks.mockResolvedValue({
+      chats: [],
+      startable: [],
+      paused: [],
+      teacherIds: [],
+      unavailable: [],
+    });
     render(await HomePage());
     expect(state.listUpcomingForStudent).not.toHaveBeenCalled();
     expect(screen.getByTestId('liveClasses')).toHaveTextContent('');

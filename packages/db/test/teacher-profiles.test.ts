@@ -217,4 +217,37 @@ describe('teacherProfiles input checks', () => {
       method: 'teacherProfiles.listPendingForStaff',
     });
   });
+
+  // Task 9.3f: findBySlugForStaff parses both arguments before any SQL, so a malformed `by` or
+  // `slug` never reaches the database even though the method also makes a role-check read.
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['an empty string', ''],
+    ['SQL in the id', "x' or 1=1"],
+    ['a 129-char id', 'a'.repeat(129)],
+    ['a scope object, not a bare id', { teacherId: 'stf_1' }],
+    ['an array', ['stf_1']],
+  ])('findBySlugForStaff rejects by %s as invalid before any SQL', async (_label, by) => {
+    expect(await failure(repo.findBySlugForStaff(by as never, 'ms-alpha'))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.findBySlugForStaff',
+    });
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['an empty string', ''],
+    ['too short', 'ab'],
+    ['an upper-case slug', 'Ms-Alpha'],
+    ['a slug with a space', 'a bc'],
+    ['a leading hyphen', '-abc'],
+    ['SQL in the slug', "x' or 1=1"],
+  ])('findBySlugForStaff rejects slug %s as invalid before any SQL', async (_label, slug) => {
+    expect(await failure(repo.findBySlugForStaff('stf_1', slug as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.findBySlugForStaff',
+    });
+  });
 });
