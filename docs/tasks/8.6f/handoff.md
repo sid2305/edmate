@@ -148,4 +148,4 @@
 ## Budget
 
 Tool calls used: 64
-Phase B tool calls used: 24
+Phase B tool calls used: 49
