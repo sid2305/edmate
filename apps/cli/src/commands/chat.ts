@@ -69,7 +69,7 @@ export function chatTurnInput(
       state: { mode: 'roleplay', persona },
     };
   }
-  if (line === '/leave') {
+  if (command === '/leave') {
     return state.mode === 'roleplay'
       ? { state: { mode: 'normal' }, notice: 'left the role-play; back to normal chat' }
       : { state, notice: 'not in a role-play' };
@@ -190,8 +190,9 @@ export async function runChatCommand(
     `edmate chat -- ${setup.content.course.title} (package: ${packageId}, source: ${source})\n` +
       `Type a message and press Enter. Ctrl+D or "exit" ends the session.\n` +
       `"/roleplay <persona-id>" starts a role-play (/pause, stop inside it); "/leave" ends it.\n` +
+      `Prompt pack: ${setup.promptPackSource === 'fixture' ? 'fixture fallback' : 'signed set'}\n` +
       (setup.personasSource === 'none'
-        ? 'Role-play is unavailable: the persona templates did not load.\n'
+        ? `Role-play is unavailable: the persona templates did not load (${setup.personasReason ?? 'did not load'}).\n`
         : '') +
       `\n> `,
   );
