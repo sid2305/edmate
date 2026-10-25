@@ -1,29 +1,26 @@
-# Plan: 0.20 — two CI flakes
+# Task 0.20 plan: harness tests that time out under CI load
 
-Status: READY (lead-written, 25 Oct 2026)
+Board: `python3 .claude/skills/board/board.py show 0.20`. Lead-written plan (small task).
 
-## Flakes
-1. `apps/web/src/auth/index.test.ts` › "imports and serves public routes with no AUTH_* or DATABASE_URL set" timed out at its `AUTH_IMPORT_TIMEOUT_MS` (20 s) on PR #276's node job. It also timed out once in a 9.3k builder run under full-monorepo load. The test's own cost is the cold dynamic import (`load()`) of the auth module graph.
-2. `packages/harness/src/pedagogy/modelRequest.test.ts:364` › "runs in linear time on long hostile input" failed on PR #277's node job after 9982 ms. The test timeout is 60 s, so the failure was probably the `expectLinear` ratio check rather than the timeout. 3.11g and 3.11h already loosened it once.
+## Problem
+`turbo run build typecheck lint test` runs every package's tests at once on the CI runner. Under that load, harness tests with tight timeouts fail with no code change:
+- PR #118 attempt 1: `src/pipeline/steps/route.accuracy.test.ts` hit "Test timed out in 5000ms" (the vitest default).
+- PR #118 attempt 2: `src/pipeline/runner.block.test.ts` hit "Test timed out in 3000ms" (`const T = 3_000`).
 
-## Approach
-- **First, find the cause.** For (1), measure what `load()` imports, for example with `vi.resetModules` plus a cold import timed locally. Then remove the repeated cold imports, or warm the module once in a `beforeAll` with its own generous timeout, so the assertion doesn't race module loading. For (2), read `expectLinear` and the CI failure line (`gh run view 40222193502 --log-failed | grep -B5 -A20 "linear time"`) to see which check failed, then make it robust: take the median of repeated runs, use a larger n gap, or compare against a quadratic baseline. It must still fail on real quadratic behaviour, so keep or add a self-test showing that a deliberately quadratic function fails `expectLinear`.
-- Don't raise a timeout as the only fix unless the cause is shown to be pure cold-start cost. If that's the case, say so in a decision.
+Earlier, `apps/web` `src/turn/routes.test.ts` (SSE) also flaked; that one stays in 9.4a and is not part of this task.
 
-## Files
-- `apps/web/src/auth/index.test.ts`
-- `packages/harness/src/pedagogy/modelRequest.test.ts`, and the `expectLinear` helper wherever it lives (test-only code)
-- `docs/tasks/0.20/handoff.md`
+## Scope (packages/harness only)
+1. Find every harness test with a timeout below 10 s, whether set explicitly (`const T = ...`, a timeout argument) or by the default. Find which ones do real CPU work: the route accuracy over the classifier set, the property tests with 2,000 cases, and the pipeline runs.
+2. Set `testTimeout` in `packages/harness/vitest.config.ts` to 20 s. Raise the explicit per-test timeouts below 10 s to use the shared value, or remove them so the config applies. The timeouts are there to catch hangs, not to measure speed.
+3. If a test asserts on time (a latency bound), leave it alone and list it in the handoff. Those are 9.4a or 8.2a material.
+4. Do not change test logic, harness source, `.github/**` or turbo concurrency. Changing those would be a risky path or an over-reach.
 
-No production code changes. Not a risk path: `packages/harness/src/pedagogy/**` is a risk path only for non-test files. If the helper sits under a risk-path glob, list it in the handoff and the lead adds the reviewer.
-
-## Gate
-- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness --filter=@edmate/web`
-- Run each fixed test file three times in a row, with `--force` for turbo or vitest directly. All six runs must pass.
-- `python3 .githooks/secret-scan.py --all`
-
-## Reviewers
-code-reviewer and typescript-reviewer.
+## How it will be shown
+- The full `@edmate/harness` test run passes locally.
+- A grep shows no explicit harness timeout below 10 s that remains, except the latency assertions listed in the handoff.
 
 ## Budget
-30 tool calls; stop at 38.
+Budget: 25 tool calls (1 phase, packages/harness)
+
+## Risky paths
+None: `packages/harness/vitest.config.ts` and `*.test.ts` files only, with no guardrails source.
