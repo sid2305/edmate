@@ -18,7 +18,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "load-test:50": "node scripts/loadTest50.ts"
   },
   "dependencies": {
     "@edmate/contracts": "workspace:*",
