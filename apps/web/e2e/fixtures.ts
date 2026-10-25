@@ -6,8 +6,44 @@ import { randomBytes } from 'node:crypto';
 import type { TurnEvent } from '@edmate/contracts';
 import { openDatabase, type IdentityUser } from '@edmate/db';
 import { formatSseEvent } from '@edmate/harness';
-import type { BrowserContext, Page, Route } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Request, type Route } from '@playwright/test';
 import { TEST_DATABASE_URL } from './global-setup';
+
+/** Next.js compiles each route on its first visit; on a loaded CI/dev box that first compile can
+ * outlast a plain click/fill, which would otherwise race hydration (the server-rendered control
+ * is visible, and actionable, before React attaches its listeners, so an early click is a no-op).
+ * `postOnce` retries only until the action's own request has left the browser, never after: a
+ * mocked turns route hands out single-use fixtures in a fixed order, so a second POST would
+ * desync the flow (full-flow.spec.ts's file header). */
+export const STEP_TIMEOUT = 30_000;
+
+/** A send's first POST: `/api/sessions` (opening the session, first message only) or the turn. */
+export const SEND_PATH = /^\/api\/sessions(\/[^/]+\/turns)?$/;
+
+/** Runs `act` (a fill and/or click) until a request (POST unless `method` says otherwise) whose path matches `path` is sent, then stops: an
+ * attempt before hydration sends nothing (or natively reloads the form, clearing any fill) and is
+ * retried whole; once the request is out, `act` is never run again (see the doc comment above). */
+export async function postOnce(
+  page: Page,
+  path: RegExp,
+  act: () => Promise<void>,
+  method: 'POST' | 'PATCH' = 'POST',
+): Promise<void> {
+  let sent = false;
+  const onRequest = (request: Request): void => {
+    if (request.method() === method && path.test(new URL(request.url()).pathname)) sent = true;
+  };
+  page.on('request', onRequest);
+  try {
+    await expect(async () => {
+      if (sent) return;
+      await act();
+      await expect.poll(() => sent, { timeout: 2_000 }).toBe(true);
+    }).toPass({ timeout: STEP_TIMEOUT });
+  } finally {
+    page.off('request', onRequest);
+  }
+}
 
 /** A free, active demo student (seed.ts): 'clear' status, a live package with `demo-agent`. */
 export const DEMO_STUDENT = 'demo-student-01';

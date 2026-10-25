@@ -5,10 +5,39 @@
 // is the real route (the plan: "a page.route fixture for the turns route is enough once a session
 // exists").
 import type { TurnEvent } from '@edmate/contracts';
-import { expect, test } from '@playwright/test';
-import { DEMO_AGENT, mockTurns, signInAsParentNeeded, signInAsStudent, sseBody } from './fixtures';
+import { expect, test, type Page } from '@playwright/test';
+import {
+  DEMO_AGENT,
+  mockTurns,
+  postOnce,
+  SEND_PATH,
+  signInAsParentNeeded,
+  signInAsStudent,
+  sseBody,
+} from './fixtures';
 
 const DONE = (messageId: string): TurnEvent => ({ type: 'done', messageId, usage: [] });
+
+/** Sends one chat message exactly once (one POST to `/api/sessions` or the turns route, one
+ * fixture consumed): the same `postOnce` hydration retry full-flow.spec.ts uses, since `next
+ * dev`'s first compile of a route can outlast a plain fill/press under load (fixtures.ts). A
+ * fill clears the box first: a pre-hydration fill leaves the DOM value equal to the text, and
+ * React ignores an input event that doesn't change the value, so a same-value refill would leave
+ * its state empty. */
+async function sendMessage(page: Page, text: string): Promise<void> {
+  await postOnce(page, SEND_PATH, async () => {
+    const box = page.getByLabel('Your message');
+    await box.fill('');
+    await box.fill(text);
+    await box.press('Enter');
+  });
+}
+
+/** Clicks the hint button exactly once (one POST to the turns route, one fixture consumed): the
+ * same hydration retry as `sendMessage`, since the hint button also starts a real turn. */
+async function getHint(page: Page): Promise<void> {
+  await postOnce(page, SEND_PATH, () => page.getByRole('button', { name: 'Get a hint' }).click());
+}
 
 test.describe('student chat', () => {
   test('normal: a message gets a streamed, then final, reply', async ({ page, context, baseURL }) => {
@@ -17,8 +46,7 @@ test.describe('student chat', () => {
       sseBody([{ type: 'token', text: 'Hello ' }, { type: 'token', text: 'there!' }, DONE('msg-normal')]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Hi tutor');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Hi tutor');
 
     const thread = page.locator('ol[aria-live="polite"]');
     await expect(thread).toContainText('Hello there!');
@@ -40,8 +68,7 @@ test.describe('student chat', () => {
       ]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Question');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Question');
 
     const thread = page.locator('ol[aria-live="polite"]');
     await expect(thread).toContainText('Retried reply');
@@ -58,8 +85,7 @@ test.describe('student chat', () => {
       ]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Question');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Question');
 
     const thread = page.locator('ol[aria-live="polite"]');
     await expect(thread).toContainText('Corrected reply');
@@ -81,8 +107,7 @@ test.describe('student chat', () => {
       sseBody([{ type: 'token', text: 'Fixed reply' }, DONE('msg-fixed')]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Question');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Question');
 
     // Next.js's own `#__next-route-announcer__` is also `role="alert"` (always present, empty),
     // so the chat's error banner is found by its class, not role alone.
@@ -103,8 +128,7 @@ test.describe('student chat', () => {
     await signInAsStudent(context, baseURL!);
     await mockTurns(page, [sseBody([{ type: 'token', text: 'Oops' }])]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Question');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Question');
 
     await expect(page.locator('.chat-error')).toContainText('Something went wrong');
     await expect(page.locator('ol[aria-live="polite"]')).not.toContainText('Oops');
@@ -120,8 +144,7 @@ test.describe('student chat', () => {
       ]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Question');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Question');
 
     await expect(page.getByText('This is part of Advanced Package.')).toBeVisible();
   });
@@ -136,8 +159,7 @@ test.describe('student chat', () => {
       ]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('A hard question');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'A hard question');
 
     await expect(page.getByText("Sent to your teacher. They'll answer in a live class or here.")).toBeVisible();
   });
@@ -152,7 +174,7 @@ test.describe('student chat', () => {
       ]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByRole('button', { name: 'Get a hint' }).click();
+    await getHint(page);
 
     await expect(page.getByText('Last help: Worked example')).toBeVisible();
   });
@@ -173,8 +195,7 @@ test.describe('student chat', () => {
       ]),
     ]);
     await page.goto(`/learn/${DEMO_AGENT}`);
-    await page.getByLabel('Your message').fill('Show me some markup');
-    await page.getByLabel('Your message').press('Enter');
+    await sendMessage(page, 'Show me some markup');
 
     const thread = page.locator('ol[aria-live="polite"]');
     await expect(thread).toContainText('<script>alert(1)</script>');
