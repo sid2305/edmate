@@ -4,7 +4,7 @@
 import type { EventEmitter } from 'node:events';
 import type { AgePolicy } from '@edmate/db';
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MemoryIdentity } from '../../test/memory-identity';
 import { REDIS_READY_TIMEOUT_MS } from './redis-ready';
 
@@ -135,6 +135,16 @@ async function requestLink(auth: Awaited<ReturnType<typeof load>>) {
 }
 
 describe('src/auth wiring', () => {
+  // Every test's `load()` cold-imports this module's whole dependency graph (next-auth included)
+  // via `vi.resetModules()`. Vitest's transform cache (unlike the module registry) survives
+  // `resetModules`, so only the *first* import of the run pays for transpiling that graph; later
+  // `load()` calls just re-execute already-transformed code. Warming that cache once here, with
+  // its own generous timeout, keeps the transform cost out of the first real test's budget --
+  // on a loaded shared CI runner that cost alone was enough to blow past a 20 s test timeout.
+  beforeAll(async () => {
+    await load();
+  }, 60_000);
+
   beforeEach(() => {
     vi.stubEnv('DATABASE_URL', undefined);
     fakes.redis.length = 0;

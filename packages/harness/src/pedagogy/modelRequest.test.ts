@@ -1,6 +1,6 @@
 import { type Message, ModelRequestSchema, type PedagogyDecision } from '@edmate/contracts';
 import { demoPedagogyDecision, messageAgent, messageStudent } from '@edmate/contracts/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { decodeHtmlEntities, foldConfusables } from '../guardrails/lockedMatch.js';
 import { fixturePromptPackSet as set } from '../testing/promptPackFixtures.js';
@@ -318,19 +318,23 @@ describe('forged teacher-note marker (3.11d)', () => {
   });
 
   /**
-   * Best-of-3 wall-clock time (ms) for `fn()`. Taking the minimum of several
-   * runs filters out one-off scheduler noise. This still times wall-clock
-   * work (docs/lessons.md prefers counting work); the ratio below keeps it
-   * loose enough not to flake on a loaded runner.
+   * Median-of-5 wall-clock time (ms) for `fn()`. A min-of-3 (the old form) filters out one-off
+   * *slow* outliers but not one-off *fast* ones: PR #277's failure had a near-zero `small`
+   * reading (the 0.5ms floor below) paired with a genuinely slow `large` reading, which blew the
+   * ratio up far past the quadratic bound even though the work itself was linear. The median of 5
+   * samples resists a single unlucky sample on either side, since at least 3 of 5 must agree
+   * before it moves. This still times wall-clock work (docs/lessons.md prefers counting work); the
+   * ratio below keeps it loose enough not to flake on a loaded runner.
    */
-  function bestOf3(fn: () => void): number {
-    let best = Infinity;
-    for (let i = 0; i < 3; i += 1) {
+  function medianOf5(fn: () => void): number {
+    const times: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
       const start = performance.now();
       fn();
-      best = Math.min(best, performance.now() - start);
+      times.push(performance.now() - start);
     }
-    return best;
+    times.sort((a, b) => a - b);
+    return times[2] as number;
   }
 
   /**
@@ -352,8 +356,8 @@ describe('forged teacher-note marker (3.11d)', () => {
     const n = 2_000;
     const smallInput = buildInput(n);
     const largeInput = buildInput(16 * n);
-    const small = bestOf3(() => run(smallInput));
-    const large = bestOf3(() => run(largeInput));
+    const small = medianOf5(() => run(smallInput));
+    const large = medianOf5(() => run(largeInput));
     expect(large).toBeLessThan(10_000);
     // Guard against a near-zero small run making the ratio meaningless
     // (e.g. on a very fast machine); floor it at 0.5ms.
@@ -371,6 +375,25 @@ describe('forged teacher-note marker (3.11d)', () => {
       (input) => neutraliseForgedLabel(input, label),
     );
   }, 60_000);
+
+  it('expectLinear still fails a deliberately quadratic function (self-test)', () => {
+    // A real quadratic workload would need to burn real CPU to show up in a wall-clock ratio,
+    // which is itself slow and -- on a 100+ worker parallel CI run -- liable to blow past even a
+    // 60s test timeout (that was tried and timed out under full-suite load). Faking the clock
+    // instead keeps this self-test instant and deterministic: `run` reports elapsed time
+    // proportional to input.length^2, with no real work behind it, so its 16x-input ratio (256)
+    // reliably trips the <64 bound above regardless of CI load.
+    let clock = 0;
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const quadratic = (input: string): void => {
+      clock += (input.length * input.length) / 1e6;
+    };
+    try {
+      expect(() => expectLinear((n) => 'x'.repeat(n), quadratic)).toThrow();
+    } finally {
+      now.mockRestore();
+    }
+  });
 });
 
 /** The exact-label pass's output for `label`: letters single-spaced, words triple-spaced. */
