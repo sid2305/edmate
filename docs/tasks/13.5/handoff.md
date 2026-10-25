@@ -1,7 +1,6 @@
-# 13.5 handoff — Phase A (packages/db: cost dashboard aggregate reads)
+# 13.5 handoff — Cost dashboard: AI cost per turn and per active student per package against price
 
-Status: PARTIAL (Phase A done; Phase B — apps/web staff cost page and API route — left to another
-builder, per the brief: another builder is working in `apps/web` right now).
+Status: DONE (Phase A and Phase B both complete).
 
 ## What changed
 - `packages/db/src/repositories/usage-ledger.ts`: added `costByPackageSince(scope: { since,
@@ -70,20 +69,97 @@ no rollback risk. Flagged for the human/architect to revisit once real usage vol
   `EXPLAIN` result — the human/architect should revisit before this read runs at a much larger
   scale than pilot.
 
-## Left to do (Phase B, another builder)
-- `apps/web/app/api/staff/cost/route.ts`, `apps/web/app/staff/cost/{page,view,client}.tsx` — see
-  `docs/tasks/13.5/plan.md`'s Phase B for the full spec (joins `usageLedger.costByPackageSince` and
-  `subscriptions.activeCountByPackage` by `(teacherId, packageId)` in the route, reads each
-  package's name and live-version price, renders a plain `<table>`).
+## Phase B
+
+### What changed
+- `apps/web/app/api/staff/cost/handlers.ts` (new) — `createStaffCostHandlers`, a GET-only handler
+  factory following the `staff/alerts` pattern (simpler than `staff/reports`: no scope check
+  needed, since `costByPackageSince`/`activeCountByPackage` are unscoped reads and `withRole`
+  is the only access gate). `loadCostRows(repos, { since, until })` and `defaultWindow(nowMs)` are
+  exported so the server page can reuse the exact same join logic instead of duplicating it.
+  `loadCostRows` joins `usageLedger.costByPackageSince` and `subscriptions.activeCountByPackage`
+  by `(teacherId, packageId)` (a union of both result sets — a package with active students but
+  no usage yet, or usage but zero currently-active students, still gets a row), then for each
+  distinct teacherId calls `packages.listForTeacher({ teacherId })` once (not once per package) to
+  get each package's name and `liveVersion`; when a live version exists, `packageVersions.get`
+  reads that specific version's name and `pricePerMonth` (overriding the newest-draft name/price
+  `listForTeacher` returns — see Decisions, Open question 3). Every derived field
+  (`costPerTurnMicroUsd`, `costPerActiveStudentMicroUsd`, `costAsPctOfPrice`) is `null` on a
+  zero/missing denominator, never `NaN`/`Infinity`.
+- `apps/web/app/api/staff/cost/route.ts` (new) — `GET = withRole(['staff'], handlers.list)`,
+  no `policy.ts` edit needed (the existing `/api/staff/**` row already covers it).
+- `apps/web/app/staff/cost/page.tsx` (new) — `requireRole(['staff'])` first, then
+  `loadCostRows(serverDatabase().repos, defaultWindow(Date.now()))` for the default 30-day window;
+  a failed read logs only the error's name and passes `initialRows: null` (the view's fallback).
+- `apps/web/app/staff/cost/view.tsx` (new) — `safeParse`s `initialRows` against a web-local zod
+  row schema (`client.ts`'s `CostRowListSchema`; not a `packages/contracts` export, per plan Open
+  question 2 — nothing else needs this shape yet). Renders a plain `<table>`: teacher, package,
+  active students, cost (USD), cost/turn, cost/active student, price/month, cost as % of price —
+  any row `>= 25%` (PRD's cost north-star) gets a visible text marker (`(Over 25% of price)`), not
+  colour-only. A period picker (two `<input type="date">` plus Apply) and a manual Reload button;
+  **no polling** (builder's call, per the plan: cost figures change slowly, and the plan explicitly
+  leaves this choice to the builder). Busy flag (`'reload' | 'apply' | null`) resets in `finally`
+  on every path — success, a repo-mapped error reply, or a thrown call; a failed Apply keeps the
+  user's typed dates and the last good rows (never clears the form or the table on failure).
+- `apps/web/app/staff/cost/client.ts` (new) — `loadCost({ since?, until? })`, same
+  never-rejects/fixed-error-code shape as `staff/reports/client.ts`.
+- `apps/web/messages/en.json` — added a `staffCost` namespace (only locale file in the repo;
+  English-only pilot, no completeness check to satisfy for other locales).
+- Tests first: `apps/web/app/api/staff/cost/route.test.ts` (fake repos: the join, live-version
+  name/price overriding the newest draft, a package with no live version yet, a package with
+  active students but no usage, a zero price making `costAsPctOfPrice` null rather than dividing
+  by zero, the default-window calculation, a malformed query, a repo throw, an unexpected throw
+  logging only the error name), `apps/web/app/staff/cost/{page,view,client}.test.ts` (fake
+  backends only, per rule 4 — no real model or payment calls; a malformed `initialRows` is the
+  fallback view; Reload/Apply success, repo-error and thrown-call paths each reset the busy flag).
+
+### Decisions
+
+### 25 Oct 2026 · 13.5 the join is a union of cost rows and active-count rows, not cost-rows-only · decided by builder · risk: low
+- Decided: `loadCostRows` returns one row for every `(teacherId, packageId)` that appears in
+  *either* `costByPackageSince` or `activeCountByPackage`'s results, not only the ones with usage
+  in the chosen window.
+- Why: a package can have active subscribers with no usage yet in a short window (e.g. a brand-new
+  package), or usage from students who have since churned (ended their subscription) — both are
+  real states a staff member should see (cost = 0 in the first case, active = 0 in the second),
+  not a silently dropped row. The plan's Phase B spec says "joins the results ... in the route" but
+  does not say cost-rows-only vs. a union; this is the builder's call it leaves open.
+
+### 25 Oct 2026 · 13.5 the live version's own name/price override the newest draft's · decided by builder · risk: medium
+- Decided: `packageName` and `pricePerMonth` on each row come from the package's **live** version
+  (`packageVersions.get` at `liveVersion`) when one exists, not from `packages.listForTeacher`'s
+  newest-draft config — `listForTeacher` is used only to discover each package's name/liveVersion
+  cheaply (one call per teacher) and as the fallback when there is no live version yet.
+- Why: the plan's Open question 3 recommends "the package's current live-version price only" —
+  the live version is what students are actually paying, so cost-as-% is compared against the
+  real price, not a draft that might differ. `risk: medium` (not `low`) because this adds one
+  extra `packageVersions.get` call per package-with-a-live-version in the response (bounded by the
+  number of distinct packages in the result, not students or usage rows — fine at pilot scale, but
+  worth a reviewer's eye since it's an N+1-shaped read inside a staff-only, infrequent-traffic
+  route).
+
+### 25 Oct 2026 · 13.5 no polling on `/staff/cost` · decided by builder · risk: low
+- Decided: the view has a manual Reload and a period-change Apply, no automatic poll interval.
+- Why: the plan explicitly leaves this to the builder ("this page can use a longer interval or
+  none -- cost numbers change slowly"); automatic polling would add staleness-race complexity
+  (generation refs, pause-while-busy, as `staff/reports`'s view needs) for a dashboard whose
+  underlying numbers (usage totals, active counts) change on the order of minutes to hours, not
+  seconds — a staff member reloading manually is the simpler, equally correct choice for MVP.
 
 ## Gate
-- `corepack pnpm turbo run build typecheck lint test --filter=...@edmate/db`: green except one
-  unrelated, pre-existing flaky test (`test/retrieval-leak.int.test.ts`'s SLO timing assertion,
-  `p95 <= 50ms` on a warm cache) that failed once under load from a concurrent full-suite run and
-  passed cleanly (25/25) when re-run alone and when the targeted files
+- Phase A: `corepack pnpm turbo run build typecheck lint test --filter=...@edmate/db`: green
+  except one unrelated, pre-existing flaky test (`test/retrieval-leak.int.test.ts`'s SLO timing
+  assertion, `p95 <= 50ms` on a warm cache) that failed once under load from a concurrent
+  full-suite run and passed cleanly (25/25) when re-run alone and when the targeted files
   (`usage-ledger.int.test.ts`, `cost-alarm.int.test.ts`, `scope.test.ts`) were run together
   (188/188 passed). Not touched by this task's files.
-- `python3 .githooks/secret-scan.py --all`: clean.
+- Phase B: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web`: green —
+  159 test files passed (4 skipped), 2566 tests passed (30 skipped), typecheck and lint both clean.
+- `python3 .githooks/secret-scan.py --all`: clean (both phases).
+
+## Left to do
+None.
 
 ## Budget
-Tool calls used: 46
+Tool calls used (Phase A): 46
+Phase B tool calls used: 34

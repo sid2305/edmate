@@ -885,6 +885,35 @@
       "loadFailed": "Could not load the reports console. Try again."
     }
   },
+  "staffCost": {
+    "nav": "Cost",
+    "title": "AI cost dashboard",
+    "intro": "AI cost per turn and per active student, by package, against its price. Figures are in USD; the pilot is US-only.",
+    "sinceLabel": "From",
+    "untilLabel": "To",
+    "apply": "Apply",
+    "applying": "Applying…",
+    "reload": "Reload",
+    "reloading": "Reloading…",
+    "empty": "No usage in this period.",
+    "tableLabel": "Cost by package",
+    "columnTeacher": "Teacher",
+    "columnPackage": "Package",
+    "columnActiveStudents": "Active students",
+    "columnCost": "Cost (USD)",
+    "columnCostPerTurn": "Cost / turn (USD)",
+    "columnCostPerStudent": "Cost / active student (USD)",
+    "columnPrice": "Price / month",
+    "columnPctOfPrice": "Cost as % of price",
+    "noPrice": "—",
+    "overThreshold": "Over 25% of price",
+    "errors": {
+      "forbidden": "You can't see the cost dashboard: your staff access may have changed.",
+      "validation": "Check the dates and try again.",
+      "generic": "Something went wrong. Try again.",
+      "loadFailed": "Could not load the cost dashboard. Try again."
+    }
+  },
   "legal": {
     "title": "Rights and takedowns",
     "footerLink": "Rights and takedowns",
