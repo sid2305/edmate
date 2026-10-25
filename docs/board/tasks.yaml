@@ -6474,7 +6474,7 @@ tasks:
   deps:
   - 12.5a
   risk: low
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 12.4a
