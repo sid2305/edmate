@@ -200,7 +200,20 @@ const RULES: readonly Rule<ModerationCode>[] = [
     `(?:hathiyar|hathyar|chaku|chaaku|chaakoo|knife|gun|pistol|katta|bandook)${gap(4)} ` +
       '(?:chhupa|chupa|chhupake|chupake|le ja|le jaane|le jane|le jau)',
   ),
-  decisive('weapons', '(?:हथियार|चाकू|बंदूक|बम)' + `${gap(4)} (?:छुपा|छिपा|ले जा)`),
+  decisive(
+    'weapons',
+    '(?:हथियार|चाकू|बंदूक|बम)' +
+      `${gap(4)} (?:छुपा|छिपा|ले जा|छुपाया|छुपाई|छिपाया|छिपाई|ले गया|ले गई)`,
+  ),
+  // 7.2k: infinitives (new verb लाना, plus छुपाना/छिपाना/ले जाना) need an adjacent intent/need
+  // marker, directly after the infinitive, or an essay-style "X karna illegal hai" question would
+  // match too (same reasoning as the vapes rule below).
+  decisive(
+    'weapons',
+    '(?:हथियार|चाकू|बंदूक|बम)' +
+      `${gap(4)} (?:लाना|छुपाना|छिपाना|ले जाना) ` +
+      '(?:है|हूँ|हूं|चाहता|चाहती|चाहिए|पड़ेगा|पड़ेगी)',
+  ),
 
   // ---- Threats --------------------------------------------------------------------------------------
   decisive(
@@ -291,7 +304,20 @@ const RULES: readonly Rule<ModerationCode>[] = [
       `mang\\S*|supply)${gap(3)} (?:school|class|college|campus)(?: (?:mein|me|main|pe|par))?`,
   ),
   // Devanagari variant, same style as the weapons Devanagari rule: no school word required.
-  decisive('other_unsafe', '(?:वेप|वेप्स|वेपिंग)' + `${gap(4)} (?:बेच|बिक|खरीद)`),
+  decisive(
+    'other_unsafe',
+    '(?:वेप|वेप्स|वेपिंग)' +
+      `${gap(4)} (?:बेच|बिक|खरीद|बेचा|बेची|खरीदा|खरीदी|बिकता|बिकती)`,
+  ),
+  // 7.2k: infinitives need an adjacent intent/need marker, directly after the infinitive, so an
+  // essay-style question such as "वेप बेचना गैरकानूनी क्यों है" (an infinitive followed by an
+  // adjective, not an intent marker) stays clean while "स्कूल में वेप बेचना है" still blocks.
+  decisive(
+    'other_unsafe',
+    '(?:वेप|वेप्स|वेपिंग)' +
+      `${gap(4)} (?:बेचना|बेचूँ|बेचूंगा|बेचूंगी|खरीदना|खरीदूँगा|खरीदूंगी|बिकना) ` +
+      '(?:है|हूँ|हूं|चाहता|चाहती|चाहिए|पड़ेगा|पड़ेगी)',
+  ),
   ambiguous('other_unsafe', `(?:buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`),
   ambiguous(
     'other_unsafe',
