@@ -95,6 +95,8 @@ describe('decide.run', () => {
       reason: p.reason,
       promptPack: composed.promptPack,
       sources: composed.sources,
+      skill: p.skill,
+      ...(p.rolePlay === undefined ? {} : { rolePlay: p.rolePlay }),
     });
     expect(r.sources).toEqual([demoChunkScored.source]);
   });

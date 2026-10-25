@@ -24,6 +24,7 @@ import type {
   SafetyEventCode,
   SafetyEventSink,
   SessionStateStore,
+  Skill,
   SourceRef,
   StyleCard,
   TeacherQuestionStore,
@@ -41,6 +42,7 @@ import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
 import type { PolicyReason } from '../pedagogy/policy.js';
 import type { PersonaLibrary } from '../pedagogy/personas.js';
 import type { PromptPackLibrary, PromptPackRef } from '../pedagogy/promptPacks.js';
+import type { RolePlay } from '../pedagogy/roleplay.js';
 import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { PriceUsage } from './generate/costCeiling.js';
 import type { StreamGateFactory } from './generate/streamGate.js';
@@ -316,6 +318,18 @@ export interface DecideResult {
   promptPack: PromptPackRef;
   /** In the order of the `[n]` numbers in the system prompt (for generate's `sources` event). */
   sources: SourceRef[];
+  /**
+   * The policy's skill for this turn (13.skillpresent): drives generate's harness-computed
+   * `skill` progress event; never put in `decision` (byte-identical PedagogyDecision, 3.6).
+   * Absent or null on closed moves (redirect, locked, ask_teacher) and the fallback.
+   */
+  skill?: Skill | null;
+  /**
+   * This turn's role-play (5.8, ADR-0013 §1), from `PolicyResult.rolePlay`, present only on a
+   * `mock_interview` turn with a persona. 13.skillpresent reads this to emit the mock-interview
+   * progress `skill` event from state the harness already computed, never from a model tool call.
+   */
+  rolePlay?: RolePlay;
 }
 
 export interface EscalateResult {
@@ -461,6 +475,10 @@ export interface Steps {
       /** decide's numbered sources, for the `sources` event. */
       sources: SourceRef[];
       attempt: 'primary' | 'fallback';
+      /** DecideResult.skill (13.skillpresent): drives the feedback confirmation `skill` event. */
+      skill?: Skill | null;
+      /** DecideResult.rolePlay (13.skillpresent): drives the mock-interview `skill` event. */
+      rolePlay?: RolePlay;
       /**
        * Session-wide stop (ADR-0007 §8, 4.6b): the session's saved help state already had a
        * locked hit or failed check. When true, generate holds the whole reply until the attempt
