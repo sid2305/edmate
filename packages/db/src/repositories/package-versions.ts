@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
-import { and, asc, desc, eq, exists, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { agents, modules, packages, packageVersions, teacherProfiles } from '../schema/index.js';
+import { agents, packages, packageVersions, teacherProfiles } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { toPackageConfig } from './map.js';
+import { checkModules, lockPackageRow } from './package-write.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
 const Ref = z.strictObject({ packageId: IdSchema, version: z.int().min(0) });
@@ -221,15 +222,11 @@ export function packageVersionsRepo(db: Db) {
 
       await translateWrite(method, () =>
         db.transaction(async (tx) => {
-          if (moduleIds.length > 0) {
-            // KEY SHARE: the modules can't be deleted (or re-keyed) before the insert commits.
-            const owned = await tx
-              .select({ id: modules.id })
-              .from(modules)
-              .where(and(eq(modules.teacherId, teacherId), inArray(modules.id, moduleIds)))
-              .for('key share');
-            if (owned.length !== moduleIds.length) throw new RepositoryError('scope', method);
-          }
+          // Shared lock order with `packages.saveVersion` (package-write.ts, docs/lessons.md): the
+          // package row first, then the module rows. Taking them in the other order can deadlock
+          // against a concurrent `saveVersion` on the same package.
+          await lockPackageRow(tx, teacherId, { packageId: c.id, agentId: c.agentId }, method);
+          await checkModules(tx, teacherId, moduleIds, method);
           const result = await tx.execute(
             insertSelect(
               packageVersions,
@@ -247,6 +244,9 @@ export function packageVersionsRepo(db: Db) {
               )}`,
             ),
           );
+          // lockPackageRow above already proved the package exists with this teacher and agent,
+          // in this same transaction, so the insert's where-clause always matches exactly one row.
+          /* v8 ignore next -- defence in depth; lockPackageRow makes this branch unreachable */
           if (written(result) !== 1) throw new RepositoryError('not_found', method);
         }),
       );

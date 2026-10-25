@@ -8,17 +8,26 @@ import type { ErrorCode } from '@edmate/contracts';
  *   a caller can't probe for other people's rows.
  * - `invalid`: a non-scope argument is malformed (for example a `limit` out of range), or the
  *   write conflicts with an existing immutable row of the same scope.
+ * - `limit`: a write would exceed a fixed per-scope cap (for example a teacher's package count);
+ *   distinct from `invalid` so a caller can tell "you're at the limit" from any other bad write.
  * - `integrity`: a stored row fails its contract or disagrees with its own columns; it is never
  *   returned.
  * - `failed`: the database failed (connection, timeout, an unexpected error). The cause is
  *   scrubbed: only the driver's error code and constraint name survive.
  */
-export type RepositoryErrorKind = 'scope' | 'not_found' | 'invalid' | 'integrity' | 'failed';
+export type RepositoryErrorKind =
+  | 'scope'
+  | 'not_found'
+  | 'invalid'
+  | 'limit'
+  | 'integrity'
+  | 'failed';
 
 const CODES: Record<RepositoryErrorKind, ErrorCode> = {
   scope: 'forbidden',
   not_found: 'not_found',
   invalid: 'validation',
+  limit: 'limit_reached',
   integrity: 'validation',
   // The contracts have no database-specific code; provider_error is the "upstream failed" one.
   failed: 'provider_error',

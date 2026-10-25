@@ -131,8 +131,11 @@ function fromError(log: ServerLog, error: unknown): Response {
         return apiError('forbidden', MSG.forbidden, 403);
       case 'not_found':
         return notFound();
+      // `teacherQuestions` has no cap, so this repo call never raises `'limit'`; grouped with
+      // `'invalid'` only so the exhaustive switch compiles.
       case 'invalid':
       case 'integrity':
+      case 'limit':
         return validation();
       case 'failed':
         log.error('questions.failed', { error: errorName(error) });
