@@ -49,4 +49,4 @@ New/updated tests in `apps/worker/src/alerts/processors.test.ts`:
   student-safety path.
 
 ## Budget
-Tool calls used: 21
+Tool calls used: 43 (harness count; the agent reported 21)
