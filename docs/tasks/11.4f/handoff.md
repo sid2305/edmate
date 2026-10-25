@@ -24,6 +24,14 @@ Status: DONE
 ## Decisions
 None.
 
+### 25 Oct 2026 · 11.4f merge: the 413 message follows a splittable flag · decided by lead · risk: low
+- Decided: merge 11.4f. `UploadType` in apps/web/src/studio/files.ts carries `splittable`, `media()` takes `{ splittable }`, and `newFile` in apps/web/src/studio/routes.ts picks the media wording from `transcribe && !splittable`. code-reviewer and typescript-reviewer approved with no findings.
+- Why: no behaviour change for any current type, and a new test fails if the message is chosen by size again.
+
+### 25 Oct 2026 · 11.4f budget 41 vs 25 · decided by lead · risk: low
+- Decided: accept 41 builder tool calls against the plan's 25 (harness count; the builder reported 23), recorded in docs/tasks/11.4f/handoff.md.
+- Why: install, the web build of dependencies and the full web test run took the extra calls; the diff stayed inside the plan's four files.
+
 ## Left to do
 None.
 
@@ -34,4 +42,4 @@ None.
 - `python3 .githooks/secret-scan.py --all`: clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 19
+Tool calls used: 41 (harness count; the builder reported 23)
