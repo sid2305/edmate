@@ -166,10 +166,22 @@ New/changed test names for Phase B's builder to build on:
   per the plan's Open questions note; `apps/cli` already depends on `@edmate/content` directly,
   so this adds no new package to the dependency graph, only a new edge within it.
 
+### 25 Oct 2026 · 7.4a merge: quality gate fails closed on hung cases and agent errors · decided by lead · risk: low
+- Decided: merge 7.4a (both phases) on code-reviewer, typescript-reviewer and silent-failure-hunter approval, no CRITICAL or HIGH findings. The two silent-failure-hunter LOWs in packages/evals/src/qualityGate.ts (the per-case timeout uses a real setTimeout while time left comes from the injected now(); a timed-out case keeps running uncancelled) are deferred to board task 7.4d with the AbortSignal work. The typescript-reviewer LOW in packages/evals/src/scorecard.ts (SCORECARD_CATEGORY_KEYS is a literal that the compiler does not check for completeness) is wontfix: scorecard.test.ts already fails if the list and SCORECARD_GROUPS drift.
+- Why: the gate now marks a hung case not run and fails, resolves every package's agent before any worker starts, and counts not-run cases structurally; the remaining items are timing hygiene with no wrong verdict today.
+
+### 25 Oct 2026 · 7.4a phases built back to back and reviewed once · decided by lead · risk: low
+- Decided: Phase B was built on the same branch straight after Phase A, and both phases went through one review round and one PR, instead of the plan's "Phase B starts after A merges".
+- Why: Phase B only adds to Phase A's files in packages/evals and apps/cli, so one review covers both and saves a round of reviewers and CI.
+
+### 25 Oct 2026 · 7.4a budget: 107 tool calls against a plan of 90 · decided by lead · risk: low
+- Decided: accept the overrun (Phase A 47 and Phase B 60 by the harness count; the builders reported 26 and 28).
+- Why: each phase stayed near its 45-call budget plus setup; the output passed all three reviewers with no blocking findings.
+
 ## Left to do
 
 None. Both phases are done; every item (1–12) from the plan's numbered scope list landed.
 
 ## Budget
 
-Tool calls used: Phase A 26; Phase B 28
+Tool calls used: Phase A 47, Phase B 60 (harness count; the builders reported 26 and 28)
