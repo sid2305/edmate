@@ -426,8 +426,9 @@ function validMcq(
   const labelled = (o: string, k: number) =>
     o.startsWith(`${String.fromCharCode(0x41 + k)}) `) && optionText(o) !== '';
   if (!options.every(labelled)) return false;
+  if (answerKey.length !== 1) return false;
   const key = answerKey[0] as string;
-  if (answerKey.length !== 1 || !/^[A-Z]$/u.test(key)) return false;
+  if (!/^[A-Z]$/u.test(key)) return false;
   const index = key.charCodeAt(0) - 0x41;
   if (index >= options.length) return false;
   const listing: ItemContext = { prompt: '', options, answerKey: [] };
