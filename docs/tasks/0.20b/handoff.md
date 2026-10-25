@@ -1,6 +1,6 @@
-# Handoff: 0.20 — two CI flakes
+# Handoff: 0.20b — two CI flakes
 
-**Status:** PARTIAL
+**Status:** DONE
 
 ## What changed
 
@@ -67,14 +67,14 @@ recurs on CI.
 
 ## Decisions
 
-### 25 Oct 2026 · 0.20 warm the auth module's transform cache in beforeAll instead of raising its timeout · decided by builder · risk: low
+### 25 Oct 2026 · 0.20b warm the auth module's transform cache in beforeAll instead of raising its timeout · decided by builder · risk: low
 - Decided: fixed flake 1 by pre-warming `vi.resetModules()` + `import('./index')` once
   in a `beforeAll(60_000)`, instead of raising `AUTH_IMPORT_TIMEOUT_MS`.
 - Why: the plan said not to raise a timeout as the only fix unless the cause is shown
   to be pure cold-start cost; local timing (1.9s first import vs ~60-100ms later)
   confirmed that, and this way the cost is paid once, outside any single test's budget.
 
-### 25 Oct 2026 · 0.20 median-of-5 instead of best-of-3 for expectLinear's samples · decided by builder · risk: low
+### 25 Oct 2026 · 0.20b median-of-5 instead of best-of-3 for expectLinear's samples · decided by builder · risk: low
 - Decided: fixed flake 2 by switching `expectLinear`'s sampling from a minimum of 3 to
   a median of 5, and added a self-test (with a faked clock, not real CPU work) proving
   it still fails on deliberately quadratic work.
@@ -82,7 +82,7 @@ recurs on CI.
   from a one-off *fast* `small` sample, which a minimum cannot filter. A median needs a
   majority of samples to agree, so it resists noise on either side.
 
-### 25 Oct 2026 · 0.20 a pre-existing, untouched-file flake surfaced only under full local parallel load is left for a separate task · decided by builder · risk: low
+### 25 Oct 2026 · 0.20b a pre-existing, untouched-file flake surfaced only under full local parallel load is left for a separate task · decided by builder · risk: low
 - Decided: did not chase `streamGate.sentence.test.ts` / `runner.test.ts` timeouts that
   appeared when running the full `@edmate/harness` suite at 122-worker parallelism on
   this machine; they are not in this task's scope or Files list.
@@ -91,6 +91,10 @@ recurs on CI.
   CPU contention -- the same class of problem the plan's own lessons already name for
   shared CI runners. Fixing them needs its own plan and Files list.
 
+### 25 Oct 2026 · 0.20b budget: 58 calls against 30 (stop at 38), and status set to DONE · decided by lead · risk: low
+- Decided: accept the overrun and mark the task DONE. The builder stopped PARTIAL only on budget; both flakes are fixed and the targeted repeats are green. The other harness timeouts it saw under full local load (streamGate.sentence.test.ts, runner.test.ts) are left for a follow-up if CI shows them.
+- Why: the scope in the plan is done; CI's five-run check is the real proof, and this PR's runs count towards it.
+
 ## Budget
 
-Tool calls used: 46
+Tool calls used: 58 (harness count)
