@@ -123,8 +123,15 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
         return ok({ teacher: row ? toLookupItem(row) : null });
       } catch (error) {
         if (error instanceof RepositoryError) {
-          if (error.kind === 'scope' || error.kind === 'invalid' || error.kind === 'not_found') {
-            return apiError('forbidden', MSG.lookupForbidden, 403);
+          switch (error.kind) {
+            case 'scope':
+            case 'not_found':
+              return apiError('forbidden', MSG.lookupForbidden, 403);
+            case 'invalid':
+              return validation();
+            case 'integrity':
+            case 'failed':
+              break;
           }
         }
         return failed('lookup', error);

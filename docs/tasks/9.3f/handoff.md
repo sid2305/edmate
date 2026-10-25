@@ -144,6 +144,40 @@ change — it finished by running the gates and writing this section.
 
 `python3 .githooks/secret-scan.py --all`: clean (no output).
 
+## Fix round
+
+Reviewers (typescript-reviewer, code-reviewer) agreed on one HIGH: in `lookup`, a non-blank but
+malformed slug ("Bad Slug", a space, a pasted URL, too short) made
+`teacherProfiles.findBySlugForStaff` throw `RepositoryError('invalid', ...)`, which `lookup`'s
+catch mapped to 403 `forbidden` ("Only staff can look up a teacher") — wrong error for a
+malformed-input case, and inconsistent with `decide` in the same file, which already splits
+`invalid`/`integrity` (400 validation) from `scope` (403).
+
+- `apps/web/app/api/staff/verifications/handlers.ts` (`lookup`): the catch now switches on
+  `error.kind` like `decide` does: `scope` and `not_found` stay 403 `forbidden` (per the plan,
+  `not_found` here can only mean a session-id problem, same as `list`); `invalid` is now 400
+  `validation`; `integrity`/`failed` fall through to the generic 500 `provider_error` path
+  (`integrity` can't actually occur on a read, but is included for symmetry with `decide`).
+- `apps/web/app/api/staff/verifications/route.test.ts`: the `findBySlugForStaff` memory mock now
+  also throws `invalid` for a slug that fails the real repository's format (`Slug` in
+  `packages/db`: 3–60 chars, lower-case alphanumeric segments joined by single hyphens), checked
+  before the staff-role check (same ordering `setVerification`'s mock already uses for
+  `reason`-then-`scope`). New `it.each` case: a malformed non-blank slug ("ab" too short,
+  "Bad Slug" upper-case/space, "asha math" a space, a pasted URL) is 400 `validation`. The existing
+  "a non-staff session is 403" case (valid slug `asha-math`) is unchanged and still passes, proving
+  `scope` still maps to 403.
+- No change to `apps/web/staff/**` UI: `MSG.lookupForbidden` already only shows on 403; a 400
+  `validation` surfaces through the search form's existing generic error path (no new string
+  needed).
+
+### Gate
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force`:
+- typecheck: pass. lint: pass.
+- test: **157 test files passed (157), 2482 tests passed (2482), 0 skipped, 0 failed.**
+
+`python3 .githooks/secret-scan.py --all`: clean (no output).
+
 ## Decisions
 
 1. "`setVerification({safety:true})` already worked from any starting `verificationStatus`

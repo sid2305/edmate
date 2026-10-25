@@ -91,6 +91,9 @@ function memory() {
         if (typeof slug !== 'string' || slug === '') {
           throw new RepositoryError('invalid', 'teacherProfiles.findBySlugForStaff');
         }
+        if (slug.length < 3 || slug.length > 60 || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+          throw new RepositoryError('invalid', 'teacherProfiles.findBySlugForStaff');
+        }
         if (roles.get(by) !== 'staff') {
           throw new RepositoryError('scope', 'teacherProfiles.findBySlugForStaff');
         }
@@ -282,6 +285,18 @@ describe('GET lookup: find one teacher by slug, any status', () => {
     expect(res.status).toBe(400);
     expect(await codeOf(res)).toBe('validation');
     expect(m.teacherProfiles.findBySlugForStaff).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['too short', 'ab'],
+    ['upper-case', 'Bad Slug'],
+    ['a space', 'asha math'],
+    ['a pasted URL', 'https://edmate.test/t/asha-math'],
+  ])('a malformed non-blank slug (%s) is 400 validation, not 403', async (_label, slug) => {
+    const m = memory();
+    const res = await m.h.lookup(getLookup(slug), ctx());
+    expect(res.status).toBe(400);
+    expect(await codeOf(res)).toBe('validation');
   });
 
   it('a non-staff session is 403', async () => {
