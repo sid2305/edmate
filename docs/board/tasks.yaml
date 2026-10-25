@@ -3190,6 +3190,14 @@ tasks:
   status: running
   branch: m13/0.20b-ci-flakes
   model: plan:lead build:sonnet
+- id: 0.20c
+  milestone: M13
+  title: 'Harness tests that time out under heavy parallel load (seen in the 0.20b build, 25 Oct 2026): packages/harness/src/pipeline/generate/streamGate.sentence.test.ts and packages/harness/src/pipeline/runner.test.ts hit tight per-test ms timeouts at full local parallelism. Only act if CI shows them; then find the slow step like 0.20b did.'
+  accept: Both files pass five full CI node runs in a row with no timeout raised to hide a slow step.
+  deps:
+  - 0.20b
+  risk: low
+  status: todo
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
