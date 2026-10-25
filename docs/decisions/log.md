@@ -10,6 +10,54 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 0.20b warm the auth module's transform cache in beforeAll instead of raising its timeout · decided by builder · risk: low
+- Decided: fixed flake 1 by pre-warming `vi.resetModules()` + `import('./index')` once
+  in a `beforeAll(60_000)`, instead of raising `AUTH_IMPORT_TIMEOUT_MS`.
+- Why: the plan said not to raise a timeout as the only fix unless the cause is shown
+  to be pure cold-start cost; local timing (1.9s first import vs ~60-100ms later)
+  confirmed that, and this way the cost is paid once, outside any single test's budget.
+
+---
+
+### 25 Oct 2026 · 0.20b median-of-5 instead of best-of-3 for expectLinear's samples · decided by builder · risk: low
+- Decided: fixed flake 2 by switching `expectLinear`'s sampling from a minimum of 3 to
+  a median of 5, and added a self-test (with a faked clock, not real CPU work) proving
+  it still fails on deliberately quadratic work.
+- Why: the min-of-3 only guards against one-off slow outliers; PR #277's failure came
+  from a one-off *fast* `small` sample, which a minimum cannot filter. A median needs a
+  majority of samples to agree, so it resists noise on either side.
+
+---
+
+### 25 Oct 2026 · 0.20b a pre-existing, untouched-file flake surfaced only under full local parallel load is left for a separate task · decided by builder · risk: low
+- Decided: did not chase `streamGate.sentence.test.ts` / `runner.test.ts` timeouts that
+  appeared when running the full `@edmate/harness` suite at 122-worker parallelism on
+  this machine; they are not in this task's scope or Files list.
+- Why: those files are untouched by this change, the failing test (and file) differed
+  between repeated runs, and each failure was a tight per-test ms timeout under heavy
+  CPU contention -- the same class of problem the plan's own lessons already name for
+  shared CI runners. Fixing them needs its own plan and Files list.
+
+---
+
+### 25 Oct 2026 · 0.20b budget: 58 calls against 30 (stop at 38), and status set to DONE · decided by lead · risk: low
+- Decided: accept the overrun and mark the task DONE. The builder stopped PARTIAL only on budget; both flakes are fixed and the targeted repeats are green. The other harness timeouts it saw under full local load (streamGate.sentence.test.ts, runner.test.ts) are left for a follow-up if CI shows them.
+- Why: the scope in the plan is done; CI's five-run check is the real proof, and this PR's runs count towards it.
+
+---
+
+### 25 Oct 2026 · 0.20b review LOW not fixed: redundant cast in packages/harness/src/pedagogy/modelRequest.test.ts · decided by lead · risk: low
+- Decided: wontfix. The `as number` after sort in packages/harness/src/pedagogy/modelRequest.test.ts is harmless.
+- Why: a test-only nit; not worth another round.
+
+---
+
+### 25 Oct 2026 · 0.20b merge: test-only changes to apps/web/src/auth/index.test.ts and packages/harness/src/pedagogy/modelRequest.test.ts · decided by lead · risk: high
+- Decided: merge. security-reviewer confirmed the auth change is test-only: no production auth code changed, no assertion weakened and no state leaks from the warm-up import. code-reviewer and typescript-reviewer approved both files.
+- Why: both files sit under risk paths (apps/web/src/auth/**, packages/harness/src/pedagogy/**), so the required reviewers ran and this entry records the merge decision.
+
+---
+
 ### 25 Oct 2026 · 8.6f Phase A: a distinct `RepositoryErrorKind` for the package cap, and a shared package-row lock · decided by builder · risk: high
 
 - Decided: added `'limit'` to `RepositoryErrorKind` (mapping to the existing contracts

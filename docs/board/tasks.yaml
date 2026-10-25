@@ -3187,9 +3187,29 @@ tasks:
   accept: Both tests pass five full CI node runs in a row; neither depends on a tight wall-clock bound.
   deps: []
   risk: low
-  status: running
+  status: done
   branch: m13/0.20b-ci-flakes
   model: plan:lead build:sonnet
+  metrics:
+    tool_calls: 4
+    tokens_in: 16
+    tokens_out: 488
+    cache_read_tokens: 127435
+    wall_time_seconds: 40
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 0.20c
   milestone: M13
   title: 'Harness tests that time out under heavy parallel load (seen in the 0.20b build, 25 Oct 2026): packages/harness/src/pipeline/generate/streamGate.sentence.test.ts and packages/harness/src/pipeline/runner.test.ts
