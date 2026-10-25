@@ -3955,9 +3955,9 @@ tasks:
   deps:
   - 8.6a
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.6e-model-mix-readonly
+  model: plan:lead build:sonnet
 - id: 8.9a
   milestone: M8
   title: 'teacherQuestions.dismiss (8.9 Phase A, packages/db): close one open question, teacher-scoped'
