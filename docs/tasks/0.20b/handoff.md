@@ -99,6 +99,10 @@ recurs on CI.
 - Decided: wontfix. The `as number` after sort in packages/harness/src/pedagogy/modelRequest.test.ts is harmless.
 - Why: a test-only nit; not worth another round.
 
+### 25 Oct 2026 · 0.20b merge: test-only changes to apps/web/src/auth/index.test.ts and packages/harness/src/pedagogy/modelRequest.test.ts · decided by lead · risk: high
+- Decided: merge. security-reviewer confirmed the auth change is test-only: no production auth code changed, no assertion weakened and no state leaks from the warm-up import. code-reviewer and typescript-reviewer approved both files.
+- Why: both files sit under risk paths (apps/web/src/auth/**, packages/harness/src/pedagogy/**), so the required reviewers ran and this entry records the merge decision.
+
 ## Budget
 
 Tool calls used: 58 (harness count)

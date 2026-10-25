@@ -1,8 +1,8 @@
 # 0.20b review — APPROVE
 
-Reviewers: code-reviewer, typescript-reviewer
+Reviewers: code-reviewer, typescript-reviewer, security-reviewer
 
-Both approve. Each fix removes the cause of its flake rather than raising a timeout:
+All three approve; security-reviewer confirmed the auth change is test-only, weakens no assertion and leaks no state. Each fix removes the cause of its flake rather than raising a timeout:
 - **Auth test:** a `beforeAll` warms the transform cache, so the first test takes about 60 ms instead of about 1.9 s, and the 20 s bound stays as it was.
 - **expectLinear:** it now takes the median of 5 samples instead of the best of 3. A new self-test, run on a faked clock, proves the check still fails on quadratic code.
 
