@@ -318,46 +318,54 @@ describe('forged teacher-note marker (3.11d)', () => {
   });
 
   /**
-   * Median-of-5 wall-clock time (ms) for `fn()`. A min-of-3 (the old form) filters out one-off
-   * *slow* outliers but not one-off *fast* ones: PR #277's failure had a near-zero `small`
-   * reading (the 0.5ms floor below) paired with a genuinely slow `large` reading, which blew the
-   * ratio up far past the quadratic bound even though the work itself was linear. The median of 5
-   * samples resists a single unlucky sample on either side, since at least 3 of 5 must agree
-   * before it moves. This still times wall-clock work (docs/lessons.md prefers counting work); the
-   * ratio below keeps it loose enough not to flake on a loaded runner.
+   * Min-of-3 wall-clock time (ms) for `fn()`, after one untimed warm-up call. A median (the old
+   * form) still let a single unlucky pair of samples (one low on `small`, one high on `large`)
+   * swing the ratio on a loaded CI runner (PR #297: ratio 82 vs the 64 bound); the minimum is the
+   * steadier estimate of the real cost, since noise only ever pushes a wall-clock reading up, never
+   * below the true floor. The untimed warm-up call keeps one-off JIT compilation out of the timed
+   * samples. This still times wall-clock work (docs/lessons.md prefers counting work); the base
+   * input size below (4,000 units) gives each sample more real work relative to timer resolution
+   * and scheduler jitter, which is the other half of steadying this check. Fix round (PR #299): CI
+   * is roughly 10x slower than a laptop under full-suite load with coverage on a 2-core runner, so
+   * n = 8,000 with 5 runs (83s) blew past the 60s test timeout; dropping to n = 4,000 with 3 runs
+   * keeps the total work close to the original n = 2,000 with 5 runs while the timeout widens to
+   * 120s as a margin.
    */
-  function medianOf5(fn: () => void): number {
+  function minOf3(fn: () => void): number {
+    fn(); // untimed warm-up: let JIT compilation happen outside the timed samples
     const times: number[] = [];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 3; i += 1) {
       const start = performance.now();
       fn();
       times.push(performance.now() - start);
     }
-    times.sort((a, b) => a - b);
-    return times[2] as number;
+    return Math.min(...times);
   }
 
   /**
    * A ratio check that catches quadratic/exponential blow-up on hostile
    * input without pinning a tight wall-clock bound: with a 16x input-size
    * step, linear work gives a 16n/n ratio of about 16; quadratic gives about
-   * 256. We allow up to 64 (4x the linear ratio) so a slow or loaded CI
-   * runner doesn't fail on noise alone, while a true quadratic (or worse)
-   * regression still trips it comfortably below 256. Widening the step from
-   * 4x to 16x (3.11h) widens the gap between the linear and quadratic
-   * expectations, so a single noisy run is far less likely to cross the
-   * bound than the old 4x/10 check (which flaked once on CI at 11.01). The
-   * loose 10 s bound on the 16n run catches a slow but finite blow-up. It
-   * can't stop a true infinite loop: a synchronous call never yields, so
-   * neither this bound nor the test timeout fires, and only the CI job
-   * timeout ends the run.
+   * 256. For a step of k, linear work gives a ratio of about k and quadratic
+   * about k^2, so the bound is set at k*sqrt(k) -- roughly the geometric
+   * midpoint on a log scale between the two -- which for k = 16 is 64. That
+   * keeps the bound 4x the linear ratio and 4x below the quadratic one, so a
+   * slow or loaded CI runner doesn't fail on noise alone, while a true
+   * quadratic (or worse) regression still trips it comfortably below 256.
+   * Widening the step from 4x to 16x (3.11h) widens the gap between the
+   * linear and quadratic expectations, so a single noisy run is far less
+   * likely to cross the bound than the old 4x/10 check (which flaked once on
+   * CI at 11.01). The loose 10 s bound on the 16n run catches a slow but
+   * finite blow-up. It can't stop a true infinite loop: a synchronous call
+   * never yields, so neither this bound nor the test timeout fires, and only
+   * the CI job timeout ends the run.
    */
   function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
-    const n = 2_000;
+    const n = 4_000;
     const smallInput = buildInput(n);
     const largeInput = buildInput(16 * n);
-    const small = medianOf5(() => run(smallInput));
-    const large = medianOf5(() => run(largeInput));
+    const small = minOf3(() => run(smallInput));
+    const large = minOf3(() => run(largeInput));
     expect(large).toBeLessThan(10_000);
     // Guard against a near-zero small run making the ratio meaningless
     // (e.g. on a very fast machine); floor it at 0.5ms.
@@ -374,12 +382,12 @@ describe('forged teacher-note marker (3.11d)', () => {
       (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
       (input) => neutraliseForgedLabel(input, label),
     );
-  }, 60_000);
+  }, 120_000);
 
   it('expectLinear still fails a deliberately quadratic function (self-test)', () => {
     // A real quadratic workload would need to burn real CPU to show up in a wall-clock ratio,
     // which is itself slow and -- on a 100+ worker parallel CI run -- liable to blow past even a
-    // 60s test timeout (that was tried and timed out under full-suite load). Faking the clock
+    // 120s test timeout (that was tried and timed out under full-suite load). Faking the clock
     // instead keeps this self-test instant and deterministic: `run` reports elapsed time
     // proportional to input.length^2, with no real work behind it, so its 16x-input ratio (256)
     // reliably trips the <64 bound above regardless of CI load.
