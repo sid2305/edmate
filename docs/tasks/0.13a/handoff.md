@@ -37,9 +37,17 @@ Only the three named files were touched; `.claude/settings.json` and hooks were 
   the one doc path a `node`-job test actually reads at runtime, so a PR editing only that file
   must not skip the job meant to catch spec drift.
 
+### 25 Oct 2026 · 0.13a merge · decided by lead · risk: high
+- Decided: merge the changes to .github/scripts/docs_only.py, .claude/tests/test_workflows.py and .claude/agents/safety-reviewer.md.
+- Why: both are risky paths. security-reviewer raised one MEDIUM: docs/edmate-harness-build-plan.md is read by spec-drift.test.ts. It is fixed with the NODE_JOB_READS exception, and the re-review approved; code-reviewer approved. No hook or settings file changed.
+
+### 25 Oct 2026 · 0.13a budget · decided by lead · risk: low
+- Decided: accept 14 harness tool calls for the build plus 25 for the fix round (builders reported 11 and 10), against a cap of about 15.
+- Why: the fix round had to search packages/ and apps/ for test-time reads under docs/, which the first build was not asked to do.
+
 ## Gate
 - `python3 -m unittest discover -s .claude/tests` → `Ran 367 tests in 134.916s` → `OK`
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0)
 
 ## Budget
-Tool calls used: 11 (0.13a) + 10 (0.13a fix round)
+Tool calls used: 39 (harness count 14 + 25; the builders reported 11 + 10)
