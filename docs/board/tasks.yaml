@@ -3236,7 +3236,8 @@ tasks:
 - id: 0.20c
   milestone: M13
   title: 'Harness tests that time out under heavy parallel load (seen in the 0.20b build, 25 Oct 2026): packages/harness/src/pipeline/generate/streamGate.sentence.test.ts and packages/harness/src/pipeline/runner.test.ts
-    hit tight per-test ms timeouts at full local parallelism. packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" failed in CI on PR #297 (82 vs the 64 bound; 13.4 does not touch the harness) and flaked before. Only act if CI shows them; then find the slow step like 0.20b did.'
+    hit tight per-test ms timeouts at full local parallelism. packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" failed in CI on PR #297 (82 vs the 64 bound;
+    13.4 does not touch the harness) and flaked before. Only act if CI shows them; then find the slow step like 0.20b did.'
   accept: Both files pass five full CI node runs in a row with no timeout raised to hide a slow step.
   deps:
   - 0.20b
@@ -6958,8 +6959,9 @@ tasks:
   deps:
   - 9.1a
   risk: low
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.1c-teacher-a11y
+  model: plan:lead build:sonnet
 - id: 13.4a
   milestone: M13
   title: '13.4 database review: packages/db/migrations/0032_retention_indexes.sql builds its three indexes with plain CREATE INDEX; move them to the concurrentIndex post-migrate pattern in packages/db/src/migrate.ts
