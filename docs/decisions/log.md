@@ -10,6 +10,249 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 11.4f merge: the 413 message follows a splittable flag · decided by lead · risk: low
+- Decided: merge 11.4f. `UploadType` in apps/web/src/studio/files.ts carries `splittable`, `media()` takes `{ splittable }`, and `newFile` in apps/web/src/studio/routes.ts picks the media wording from `transcribe && !splittable`. code-reviewer and typescript-reviewer approved with no findings.
+- Why: no behaviour change for any current type, and a new test fails if the message is chosen by size again.
+
+---
+
+### 25 Oct 2026 · 11.4f budget 41 vs 25 · decided by lead · risk: low
+- Decided: accept 41 builder tool calls against the plan's 25 (harness count; the builder reported 23), recorded in docs/tasks/11.4f/handoff.md.
+- Why: install, the web build of dependencies and the full web test run took the extra calls; the diff stayed inside the plan's four files.
+
+---
+
+### 25 Oct 2026 · 13.4 Phase B: RETENTION_PURGE_LIMIT re-exported from @edmate/db · decided by builder · risk: low
+- Decided: added `RETENTION_PURGE_LIMIT` to `packages/db/src/repositories/index.ts`'s existing
+  `retention.js` re-export line, alongside `retentionRepo`/`RetentionRepo`/`RetentionResult`.
+- Why: the constant existed in `repositories/retention.ts` since Phase A but was never re-exported
+  past that file, so `@edmate/db` (the package Phase B imports) had no way to hand it to a
+  caller — the worker's live-mode loop needs it to recognise "that call may have left more
+  behind" without hardcoding `1000` a second time, which would silently drift from the real limit
+  if `RETENTION_PURGE_LIMIT` ever changed. Additive only (one new named export); no existing
+  export's shape or behaviour changed, so `risk: low` under the fix-brief's "changes what is
+  deleted or kept" test — this changes nothing about what is deleted, only what the constant is
+  reachable from.
+
+---
+
+### 25 Oct 2026 · 13.4 Phase B: live-mode loop stops at "below the limit", not "zero" · decided by builder · risk: low
+- Decided: `purgeTable` (`apps/worker/src/retention/workers.ts`) calls a table's purge method
+  again only while the previous call's count equals (or exceeds) `purgeLimit`; a call reporting
+  fewer rows than `purgeLimit` ends that table's loop for this run, even if some of today's run
+  already purged some other, now-recent-enough-to-not-qualify rows.
+- Why: this matches `@edmate/db`'s own contract exactly — a live call never returns more than
+  `limit` rows by construction, so "count < limit" is the only correct signal that a call cleared
+  everything there was to clear at that moment; checking for "count === 0" instead would do one
+  extra, always-empty call per table per run forever. Capped at `MAX_ITERATIONS_PER_TABLE` (1000)
+  regardless, so even a pathological backend that always returns exactly `limit` can never loop a
+  single run forever — it stops, reports `maxIterationsHit: true`, and is picked up again next
+  run.
+
+---
+
+### 25 Oct 2026 · 13.4 Phase B: retention queue added to apps/worker's own entrypoint, not left to a future task · decided by builder · risk: low
+- Decided: wired `createRetentionWorker`/`scheduleRetention` into `apps/worker/src/index.ts`
+  (queue, worker, startup schedule call, shutdown close) rather than leaving the job built but
+  never started.
+- Why: the plan's own Phase B description ends with "a BullMQ repeatable job" — a job that is
+  never scheduled anywhere isn't one; every other scheduled job in this file (`costAlarm`,
+  `weeklyInsights`) is wired the same way at the same point, so leaving retention unwired would
+  have been an inconsistent, easy-to-miss gap rather than a deliberate deferral.
+
+---
+
+### 25 Oct 2026 · 13.4 an erased student's open questions are dismissed · decided by lead · risk: high
+- Decided: `identity.anonymise` (`packages/db/src/identity/store.ts`) clears `teacher_questions.text`
+  and, in the same statement, also sets `status = 'dismissed'` for any of this student's rows
+  whose status is `'open'`; answered or already-dismissed rows of theirs keep their existing
+  status, and no other student's row is ever touched (the update is scoped by `studentId = id`).
+- Why: the partial unique index `teacher_questions_open_dedup_key`
+  (`packages/db/src/schema/learning.ts`) is on `(teacher_id, student_id, agent_id, md5(text))
+  where status = 'open'`. Clearing two of this student's open questions to the same teacher's
+  agent to `text = ''` without changing status made both rows collide on `md5('')` under that
+  index, throwing a unique violation and rolling back the whole account delete. A deleted student
+  can never receive an answer, so dismissing the row is correct, not just a workaround for the
+  index; checked `teacherQuestionsRepo` (`packages/db/src/repositories/teacher-questions.ts`)
+  first — `open`'s grouping read and `listGroupsForTeacher` both filter by `status = 'open'` per
+  row, never by `group_id` as a whole, and the teacher's own dismiss action already sets exactly
+  `status: 'dismissed'` on a single row — so this matches existing behaviour and a group whose
+  other rows belong to other students still shows them.
+
+---
+
+### 25 Oct 2026 · 13.4 fix round: anonymise also deletes auth_sessions/auth_accounts/auth_verification_tokens · decided by builder · risk: high
+- Decided: `identity.anonymise` (`packages/db/src/identity/store.ts`) now deletes the student's own
+  `auth_sessions` and `auth_accounts` rows, and (by the old email, captured before it is nulled)
+  their `auth_verification_tokens` row, in the same transaction as the rest of the erase —
+  mirroring `recordAgeAnswer`'s under-age branch exactly.
+- Why: code review (fix round) found a signed-in device kept working after `anonymise` because
+  its session row was left behind. The method already locks and re-selects the user row for
+  `role`/`email`; adding `email` to that select (no extra query) is enough to find the token row
+  the same way the under-age branch does.
+
+---
+
+### 25 Oct 2026 · 13.4 fix round: free text cleared beyond messages — sessions.summary, learner_profiles.last_summary, teacher_questions.text · decided by builder · risk: high
+- Decided: `anonymise` also clears, for every row of this student: `sessions.summary` (null),
+  `learner_profiles.last_summary` (null, every teacher pair), `teacher_questions.text` (empty
+  string, matching how `messages.text` is cleared). `teacher_questions.moduleHint` and `.answer`,
+  and `corrections`/`teacher_eval_cases` (no `student_id` column at all — teacher-owned, not
+  student-owned) are left as is.
+- Why: security review (fix round) found `learner_profiles.last_summary` uncleared; grepping
+  every schema file for a column keyed by a `studentId` column (`grep -n "studentId()" schema/*.ts`
+  then reading each table) turned up two more free-text columns besides the one named:
+  `sessions.summary` (the ≤60-word end-of-session recap `sessions.ts`'s own write path upserts
+  onto `learner_profiles.last_summary` — the same "can restate what the student said" risk as the
+  column the review named) and `teacher_questions.text` (the student's own question to the
+  teacher — the review's own "class questions a student asked" example). `moduleHint` is left: it
+  is a module id/title the question was tagged with (`'module 2'`, `'mod_a1'` in its own tests),
+  not student-written prose, and the teacher's own `answer` is the teacher's content, not the
+  student's — clearing it would delete the teacher's answer to a question that no longer shows
+  whose it was, a bigger change than this finding asked for. `evidence_events`, `usage_ledger`,
+  `notifications` and the three `billing.ts` tables with a `studentId` column have no text column
+  at all, so nothing there needed clearing.
+
+---
+
+### 25 Oct 2026 · 13.4 fix round: no "account closed" column added · decided by builder · risk: low
+- Decided: do not add a migration or column marking an account closed. `identity.anonymise`
+  (`packages/db/src/identity/store.ts`) leaves the row itself in place (role `student`, a fixed
+  placeholder name, no email/phone) rather than deleting it or flagging it closed.
+- Why: with the fix above, the old sessions and linked accounts are gone and the email is
+  cleared, so a later sign-in with that same email (or any other) creates a new, empty account —
+  no stale session can ever reach the old row again. No existing column marks an account closed,
+  and the pilot has no requirement yet to block re-signup under the same identity (there is none,
+  since the email is gone); adding one now would be a schema change with no reader. Revisit if a
+  real pilot need for a hard block on re-signup shows up.
+
+---
+
+### 25 Oct 2026 · 13.4 fix round: retention cutoff indexes (migration 0032) · decided by builder · risk: low
+- Decided: added `sessions_created_at_idx` (`sessions.created_at`), `turn_traces_created_at_idx`
+  (`turn_traces.created_at`) and a partial `chunks_transcript_created_at_idx`
+  (`chunks.kind, chunks.created_at` `WHERE kind = 'transcript'`) via migration
+  `0032_retention_indexes.sql`, generated with `drizzle-kit generate` after adding the three
+  indexes to `schema/learning.ts`/`schema/content.ts`, then renamed from the generated
+  `0032_glossy_doctor_doom.sql` (the repo's own renaming convention; the journal tag updated to
+  match).
+- Why: database review (fix round) found none of `retentionRepo`'s three cutoff predicates had a
+  supporting index — each purge would have forced a sequential scan as the tables grow. All three
+  are additive (no data or behaviour change for any existing query). An EXPLAIN int test
+  (`test/retention.int.test.ts`, `purgeOldTraces` describe block) seeds 20,000 rows (1,000 past
+  the test's cutoff, enough for the past-cutoff slice to be selective) and ANALYZEs before
+  asserting the plan names `turn_traces_created_at_idx`, not a sequential scan.
+
+---
+
+### 25 Oct 2026 · 13.4 fix round: purge methods take a bounded, exported limit · decided by builder · risk: low
+- Decided: `purgeOldSessions`, `purgeOldTraces` and `purgeOldTranscriptChunks`
+  (`packages/db/src/repositories/retention.ts`) now take a third argument, `limit`, defaulting to
+  a new exported constant `RETENTION_PURGE_LIMIT = 1000`. A live call selects at most `limit` ids
+  (oldest first, by `created_at` then `id`) and deletes only those; a dry run is unaffected — it
+  still reports the true, unlimited count. `purgeOldSessions`'s in-memory id list (previously every
+  eligible session, with no cap) is now bounded by the same `limit`.
+- Why: database review (fix round) found all three were unbounded — one call could lock and
+  delete (or, for sessions, load into memory) an arbitrarily large set. This does not change what
+  is ultimately deleted or kept (Phase B's scheduled job loops, calling again until a call reports
+  fewer than `limit`), only how much one call does at once, so it is `risk: low` under the
+  "changes what is deleted or kept" test in the fix brief.
+
+---
+
+### 25 Oct 2026 · 13.4 anonymise lives in identity/store.ts, not repositories/users.ts · decided by builder · risk: high
+- Decided: implement the account-delete method as `IdentityStore.anonymise`, not a new
+  `repositories/users.ts` file.
+- Why: `test/scope.test.ts`'s existing "never reads from users" check scans every file in
+  `repositories/` (except `discovery.ts`/`teacher-profiles.ts`) for the word `users` and fails if
+  found. A `repositories/users.ts` naming the `users` table to clear `name`/`email`/`phone` would
+  have failed that test immediately; `identity/store.ts` is the one module the codebase already
+  carves out for exactly this (role-lock.ts's own comment: "no repository source file may name
+  the users table itself").
+
+---
+
+### 25 Oct 2026 · 13.4 personal columns cleared: name, email, phone · decided by builder · risk: high
+- Decided: `anonymise` clears `users.name` (to a fixed placeholder, since it is `NOT NULL`),
+  `users.email` and `users.phone` (to `null`).
+- Why: these are the only personal columns on `users` (checked every schema file for
+  name/email/phone/address-shaped columns); `birthYear` is a year only (never a full date of
+  birth, by 1.7's own design) and is left alone, same as `ageConfirmedAt`/`ageBlockedAt`/`role`.
+
+---
+
+### 25 Oct 2026 · 13.4 message text cleared for every message in the student's own sessions, not just student-authored ones · decided by builder · risk: high
+- Decided: `anonymise` clears `messages.text` for every row in every session that student took
+  part in, regardless of `role` (student, agent or teacher).
+- Why: an agent or teacher reply inside that conversation can restate or quote what the student
+  said; clearing only `role = 'student'` rows would leave that content behind. Nothing outside
+  the student's own sessions (another student's sessions with the same teacher, or any other
+  table) is touched.
+
+---
+
+### 25 Oct 2026 · 13.4 excluded tables (safety_alerts, payments/ledger/payouts, audit_log, platform_audit_log, webhook_events, eval_runs/results) left untouched · decided by builder · risk: high
+- Decided: none of these tables are read, written or purged by `anonymise` or by any
+  `retention.*` method.
+- Why: `safety_alerts` is a safety/legal record (it stores a redacted excerpt only, never a name);
+  `payments`/`ledger_entries`/`payouts`/`invoices` carry their own, longer financial retention
+  law; `audit_log`/`platform_audit_log` are append-only — purging them would destroy the evidence
+  an account-delete's own audit trail, or a dispute, depends on; `webhook_events` and
+  `eval_runs`/`eval_results` are operational/quality records with no personal data and no
+  retention rule asked for them in this task.
+
+---
+
+### 25 Oct 2026 · 13.4 platform_actor_role gets a 'student' value (migration 0030) · decided by builder · risk: high
+- Decided: add `'student'` to the `platform_actor_role` enum rather than reuse `'operator'` or
+  add a `teacherId` surrogate to `audit_log` instead.
+- Why: `audit_log.teacher_id` is `NOT NULL`, and an account-wide delete has no single teacher to
+  name (the same reason `grantRole` already uses `platform_audit_log`, which has no `teacherId`
+  column, for its own role-change audit row). `platform_audit_log.actor_role` was `staff`/
+  `operator` only, which doesn't fit a student acting on their own account; labelling the row
+  `'operator'` while `actor` holds a real student id would have made the audit trail misleading.
+  Extending the enum is additive (an `ALTER TYPE … ADD VALUE`, no data change) and keeps the
+  existing self-explanatory table.
+
+---
+
+### 25 Oct 2026 · 13.4 retentionRepo kept out of createRepositories/the isolation grid · decided by builder · risk: high
+- Decided: `retentionRepo` is exported standalone (like `ports.ts`'s factories), not added to
+  `createRepositories`'s returned object.
+- Why: `test/repositories.int.test.ts`'s `CASES: Record<RepositoryMethod, IsolationCase>` requires
+  every method on `createRepositories(db)` to have a case shaped `scope: 'teacher' | 'student' |
+  'public'`. A scheduled, cross-account purge has none of those three scopes; forcing a fit would
+  have meant extending that shared type (used by every other repository's test) for a
+  `'system'`/`'scheduled'` case kind — a correct fix, but a much bigger one than Phase A's budget,
+  and a decision the architect should make once (see Open question below), not one a single
+  builder should make inside an unrelated phase's PR.
+
+---
+
+### 25 Oct 2026 · 13.4 Phase C split out to 13.4b · decided by lead · risk: low
+- Decided: 13.4 merges with Phases A (packages/db: anonymise, retention purges, migrations 0031 and 0032) and B (apps/worker: the daily retention job, dry run by default). Phase C (apps/web: the account export route and DELETE /api/me, per docs/tasks/13.4/plan.md Phase C) moves to a new board task 13.4b that waits on the human's B-59 answers. Nothing in apps/web calls `identity.anonymise` yet, so no student can trigger a delete before then.
+- Why: Phase C's open questions (what a delete keeps, legal holds, export scope) are the human's to answer, and holding Phases A and B on them would also hold the five packages/db tasks waiting behind 13.4.
+
+---
+
+### 25 Oct 2026 · 13.4 Phase B review follow-ups deferred to 13.4c · decided by lead · risk: low
+- Decided: defer the Phase B review findings, none CRITICAL or HIGH, to a new board task 13.4c: apps/worker/src/retention/workers.ts `purgeTable` logs the rows already deleted when a later loop call fails (silent-failure-hunter MEDIUM); `purgeLimit` is passed into the purge call or dropped as a separate knob so the loop's limit and the database's cannot drift (typescript-reviewer MEDIUM, code-reviewer LOW); apps/worker/src/retention/config.ts `cutoffFor` refuses a retention period of zero or fewer days (security-reviewer LOW); apps/worker/src/retention/schedule.ts warns once when a run is not a dry run (security-reviewer LOW); apps/worker/src/index.ts treats a failed retention schedule registration as more than a log line (silent-failure-hunter LOW).
+- Why: retention runs as a dry run by default with hard-coded periods, so none of these can delete data wrongly in the pilot; they harden the job before the dry-run flag is turned off.
+
+---
+
+### 25 Oct 2026 · 13.4 merge: account delete and data retention (Phases A and B) · decided by lead · risk: high
+- Decided: merge 13.4 Phases A and B. Phase A was reviewed by code-reviewer, typescript-reviewer, security-reviewer and database-reviewer; its HIGHs (left sign-in sessions, uncleared free-text summaries, missing cutoff indexes, unbounded purges, and the fix round's dedup collision on dismissed questions) are fixed and re-verified by the reviewer who raised each. Phase B was reviewed by code-reviewer, typescript-reviewer, silent-failure-hunter and security-reviewer, all approving. The packages/db/src/repositories/** risk group has security-reviewer; migration 0032 only adds indexes, and database-reviewer reviewed it anyway.
+- Why: the delete and retention building blocks are in place and tested against real Postgres; retention ships as a dry run with placeholder periods pending counsel, and the delete has no caller until 13.4b, so nothing changes for students until the human answers B-59.
+
+---
+
+### 25 Oct 2026 · 13.4 budget 382 vs 115 · decided by lead · risk: low
+- Decided: accept 382 tool calls against the plan's 115 for all three phases (harness count: Phase A 131, fix rounds 111 and 48, Phase B 92; the agents reported 196), recorded in docs/tasks/13.4/handoff.md.
+- Why: the account delete had to reach every table holding a student's free text, the first fix round added a migration and bounded purges, and Phase B's int test needed a real-Postgres seed. Phase C (planned at ~45) is not built here. The overrun is noted for planning future data-deletion tasks.
+
+---
+
 ### 25 Oct 2026 · 8.2g ADR-0014 left unedited · decided by builder · risk: low
 - Decided: did not touch `docs/adr/0014-web-link-egress.md` (Open question 1).
 - Why: editing `docs/adr/**` is a risky path needing architect, security-reviewer and
