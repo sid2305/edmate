@@ -47,4 +47,4 @@ Phase A of the 6.1 follow-ups, scoped entirely inside `packages/harness`:
 
 ## Budget
 
-Tool calls used: 21
+Tool calls used: 53 (harness count across both runs: first run 3, restart 50; the builder self-reported 21 for the restart)
