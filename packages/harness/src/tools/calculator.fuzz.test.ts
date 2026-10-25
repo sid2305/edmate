@@ -10,7 +10,7 @@ import {
   ALLOWED_FUNCTIONS,
   CalculatorError,
   CALCULATOR_MAX_EXPRESSION_LENGTH,
-  restrictedMath,
+  getRestrictedMath,
 } from './sandbox.js';
 
 /** Change the seed to explore; a failure prints it so the run can be replayed. */
@@ -92,8 +92,19 @@ const ATTACKS = [
   '(((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))',
   '-'.repeat(199) + '1',
   'gcd(9007199254740991, 9007199254740990)',
+  'gcd(2^1000, 3)',
   'round(1, 15)',
   'max(' + Array.from({ length: 60 }, () => '1').join(',') + ')',
+  // implicit multiplication, not only when glued (5.5a)
+  '1 e 2',
+  '2 pi',
+  'sqrt(4)pi',
+  '(1)(2)',
+  '(1)(2)(3)',
+  'sin(1)(2)',
+  '2 3',
+  '2 (3)',
+  'pi e',
 ];
 
 const OPS = ['+', '-', '*', '/', '^', '%'];
@@ -162,10 +173,10 @@ const WATCHED: [string, object][] = [
 
 describe('calculator fuzz: no access outside the declared scope', () => {
   it('import and createUnit are disabled on the restricted instance', () => {
-    expect(() => restrictedMath.import({ evil: () => 1 }, { override: true })).toThrow(
+    expect(() => getRestrictedMath().import({ evil: () => 1 }, { override: true })).toThrow(
       CalculatorError,
     );
-    expect(() => restrictedMath.createUnit('evil')).toThrow(CalculatorError);
+    expect(() => getRestrictedMath().createUnit('evil')).toThrow(CalculatorError);
   });
 
   it(

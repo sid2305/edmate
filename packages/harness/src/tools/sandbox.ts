@@ -29,7 +29,9 @@ export const CALCULATOR_MAX_EXPRESSION_LENGTH = 200;
  * Functions a numeric check or grounding step plausibly needs, each O(1) on plain numbers.
  * Deliberately left out: anything slow or unbounded on a large argument (`factorial`, `gamma`,
  * `combinations`, `permutations`, `isPrime`, `primeFactors`), anything that builds a matrix, unit,
- * string or function, and anything that parses or evaluates text.
+ * string or function, and anything that parses or evaluates text. `gcd` and `lcm` are only safe
+ * below `Number.MAX_SAFE_INTEGER` (above that they silently return a wrong answer, 5.5a); the
+ * restricted instance refuses any call to either with an argument outside that range.
  */
 export const ALLOWED_FUNCTIONS: ReadonlySet<string> = new Set([
   'abs',
@@ -85,25 +87,64 @@ const disabled = (): never => {
   throw new CalculatorError('disabled');
 };
 
-/** The restricted instance. Exported for its own tests only; the barrel does not re-export it. */
-export const restrictedMath = create(all as FactoryFunctionMap, {
-  number: 'number',
-  predictable: true,
-});
-const limitedEvaluate = restrictedMath.evaluate.bind(restrictedMath);
-restrictedMath.import(
-  {
-    import: disabled,
-    createUnit: disabled,
-    evaluate: disabled,
-    parse: disabled,
-    compile: disabled,
-    simplify: disabled,
-    derivative: disabled,
-    resolve: disabled,
-  },
-  { override: true },
-);
+/** `gcd`/`lcm` give a silently wrong answer above this range (5.5a); refuse instead. */
+function requireSafeIntegers(args: readonly number[]): void {
+  if (!args.every((a) => Number.isSafeInteger(a))) {
+    throw new Error('gcd/lcm argument outside the safe integer range');
+  }
+}
+
+type RestrictedMath = ReturnType<typeof create>;
+
+interface Restricted {
+  readonly math: RestrictedMath;
+  /** `math.evaluate`, captured before `evaluate` is overridden to throw, below. */
+  readonly evaluate: (expression: string) => unknown;
+}
+
+let cached: Restricted | undefined;
+
+function buildRestricted(): Restricted {
+  const math = create(all as FactoryFunctionMap, {
+    number: 'number',
+    predictable: true,
+  });
+  const evaluate = math.evaluate.bind(math) as (expression: string) => unknown;
+  const originalGcd = math.gcd.bind(math) as (...args: number[]) => number;
+  const originalLcm = math.lcm.bind(math) as (...args: number[]) => number;
+  math.import(
+    {
+      import: disabled,
+      createUnit: disabled,
+      evaluate: disabled,
+      parse: disabled,
+      compile: disabled,
+      simplify: disabled,
+      derivative: disabled,
+      resolve: disabled,
+      gcd: (...args: number[]) => {
+        requireSafeIntegers(args);
+        return originalGcd(...args);
+      },
+      lcm: (...args: number[]) => {
+        requireSafeIntegers(args);
+        return originalLcm(...args);
+      },
+    },
+    { override: true },
+  );
+  return { math, evaluate };
+}
+
+/**
+ * Builds the restricted instance on first use, not at module load: an eager `create(all)`
+ * dominates test import time (5.5a). Cached after the first call: one instance, reused.
+ * Exported for its own tests only; the barrel does not re-export it.
+ */
+export function getRestrictedMath(): RestrictedMath {
+  cached ??= buildRestricted();
+  return cached.math;
+}
 
 // Tokens, matched at the current position (sticky). Only ASCII; anything else is rejected.
 const SPACE = /[ \t]+/y;
@@ -123,24 +164,30 @@ function nextNonSpace(s: string, at: number): string {
 
 /**
  * The allow-list: the expression must be numbers, the operators `+ - * / ^ % ( ) ,`, spaces and
- * tabs, and allowed names. A function name must be followed by `(`; a constant must not be. A name
- * may not directly follow a number (`2pi`, `1e5`) and a number may not directly follow a `.`.
+ * tabs, and allowed names. A function name must be followed by `(`; a constant must not be. A
+ * number may not directly follow a `.`.
+ *
+ * Implicit multiplication is refused everywhere, not only when glued: a number, a constant or a
+ * `)` (anything that ends a value) may not be followed — even across spaces — by a number, a
+ * name or a `(` (5.5a). `lastWasValueEnd` tracks whether the most recently completed token ended
+ * a value; whitespace never changes it, so `2 pi`, `(1)(2)` and `sqrt(4)pi` are all refused the
+ * same way as `2pi`.
  */
 function checkExpression(s: string): void {
   let at = 0;
-  let afterNumber = false;
+  let lastWasValueEnd = false;
   while (at < s.length) {
     const space = matchAt(SPACE, s, at);
     if (space !== undefined) {
       at += space.length;
-      afterNumber = false;
       continue;
     }
     const num = matchAt(NUMBER, s, at);
     if (num !== undefined) {
+      if (lastWasValueEnd) throw new CalculatorError('bad_character');
       at += num.length;
       if (s.charAt(at) === '.') throw new CalculatorError('bad_character');
-      afterNumber = true;
+      lastWasValueEnd = true;
       continue;
     }
     const name = matchAt(NAME, s, at);
@@ -149,13 +196,15 @@ function checkExpression(s: string): void {
       if (!isFunction && !ALLOWED_CONSTANTS.has(name)) throw new CalculatorError('unknown_name');
       at += name.length;
       const calls = nextNonSpace(s, at) === '(';
-      if (afterNumber || isFunction !== calls) throw new CalculatorError('bad_name_use');
-      afterNumber = false;
+      if (lastWasValueEnd || isFunction !== calls) throw new CalculatorError('bad_name_use');
+      lastWasValueEnd = !calls;
       continue;
     }
-    if (matchAt(OPERATOR, s, at) === undefined) throw new CalculatorError('bad_character');
+    const op = matchAt(OPERATOR, s, at);
+    if (op === undefined) throw new CalculatorError('bad_character');
+    if (op === '(' && lastWasValueEnd) throw new CalculatorError('bad_character');
     at += 1;
-    afterNumber = false;
+    lastWasValueEnd = op === ')';
   }
 }
 
@@ -171,9 +220,10 @@ export function evaluateExpression(expression: string): string {
   if (expression.length > CALCULATOR_MAX_EXPRESSION_LENGTH) throw new CalculatorError('too_long');
   if (expression.trim() === '') throw new CalculatorError('empty');
   checkExpression(expression);
+  cached ??= buildRestricted();
   let result: unknown;
   try {
-    result = limitedEvaluate(expression);
+    result = cached.evaluate(expression);
   } catch {
     throw new CalculatorError('evaluation_failed');
   }

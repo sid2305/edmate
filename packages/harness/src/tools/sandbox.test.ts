@@ -6,7 +6,7 @@ import {
   CalculatorError,
   evaluateExpression,
   CALCULATOR_MAX_EXPRESSION_LENGTH,
-  restrictedMath,
+  getRestrictedMath,
   toResultString,
 } from './sandbox.js';
 
@@ -22,16 +22,24 @@ const rejectedWith = (expression: string): string | undefined => {
 
 describe('the restricted mathjs instance', () => {
   it.each([
-    ['import', () => restrictedMath.import({ x: 1 }, { override: true })],
-    ['createUnit', () => restrictedMath.createUnit('furlong')],
-    ['evaluate', () => restrictedMath.evaluate('1+1')],
-    ['parse', () => restrictedMath.parse('1+1')],
-    ['compile', () => restrictedMath.compile('1+1')],
-    ['simplify', () => restrictedMath.simplify('x+x')],
-    ['derivative', () => restrictedMath.derivative('x^2', 'x')],
-    ['resolve', () => restrictedMath.resolve('x', {})],
+    ['import', () => getRestrictedMath().import({ x: 1 }, { override: true })],
+    ['createUnit', () => getRestrictedMath().createUnit('furlong')],
+    ['evaluate', () => getRestrictedMath().evaluate('1+1')],
+    ['parse', () => getRestrictedMath().parse('1+1')],
+    ['compile', () => getRestrictedMath().compile('1+1')],
+    ['simplify', () => getRestrictedMath().simplify('x+x')],
+    ['derivative', () => getRestrictedMath().derivative('x^2', 'x')],
+    ['resolve', () => getRestrictedMath().resolve('x', {})],
   ])('%s is disabled and throws a CalculatorError', (_name, call) => {
     expect(call).toThrow(new CalculatorError('disabled'));
+  });
+
+  it('is built once and reused across evaluations', () => {
+    expect(evaluateExpression('1+1')).toBe('2');
+    const first = getRestrictedMath();
+    expect(evaluateExpression('2+2')).toBe('4');
+    const second = getRestrictedMath();
+    expect(second).toBe(first);
   });
 });
 
@@ -75,6 +83,10 @@ describe('evaluateExpression: valid arithmetic', () => {
     ['asin(0) + acos(1) + atan(0)', '0'],
     ['2 * pi / pi', '2'],
     ['(((1)))', '1'],
+    // implicit multiplication is refused, but an explicit operator before `(` is fine (5.5a)
+    ['(1)*(2)', '2'],
+    ['-(2)', '-2'],
+    ['2^(3)', '8'],
     ['  3\t*\t3  ', '9'],
     ['1/0', 'Infinity'],
     ['-1/0', '-Infinity'],
@@ -89,11 +101,12 @@ describe('evaluateExpression: valid arithmetic', () => {
   });
 
   it('every allowed function and constant is a real mathjs name (the lists are not stale)', () => {
+    const math = getRestrictedMath();
     for (const f of ALLOWED_FUNCTIONS) {
-      expect(typeof (restrictedMath as unknown as Record<string, unknown>)[f]).toBe('function');
+      expect(typeof (math as unknown as Record<string, unknown>)[f]).toBe('function');
     }
     for (const c of ALLOWED_CONSTANTS) {
-      expect(typeof (restrictedMath as unknown as Record<string, unknown>)[c]).toBe('number');
+      expect(typeof (math as unknown as Record<string, unknown>)[c]).toBe('number');
     }
   });
 
@@ -143,6 +156,16 @@ describe('evaluateExpression: rejected before mathjs sees it', () => {
     ['1e+5', 'bad_name_use'],
     ['1.5e3', 'unknown_name'],
     ['2.e', 'bad_name_use'],
+    // implicit multiplication across a space or a `)`, not only when glued (5.5a)
+    ['1 e 2', 'bad_name_use'],
+    ['2 pi', 'bad_name_use'],
+    ['sqrt(4)pi', 'bad_name_use'],
+    ['(1)(2)', 'bad_character'],
+    ['(1)(2)(3)', 'bad_character'],
+    ['sin(1)(2)', 'bad_character'],
+    ['2 3', 'bad_character'],
+    ['2 (3)', 'bad_character'],
+    ['pi e', 'bad_name_use'],
     // strings, matrices, objects, assignment, statements, other operators
     ['"1"', 'bad_character'],
     ["'1'", 'bad_character'],
@@ -188,6 +211,9 @@ describe('evaluateExpression: evaluation errors are fixed-text', () => {
     ['1, 2', 'evaluation_failed'],
     ['gcd(1.5, 2)', 'evaluation_failed'],
     ['round(1, 1000)', 'evaluation_failed'],
+    // gcd/lcm silently give a wrong answer above the safe integer range (5.5a); refuse instead
+    ['gcd(2^1000, 3)', 'evaluation_failed'],
+    ['lcm(2^1000, 3)', 'evaluation_failed'],
   ])('%j → %s, with no mathjs message', (expression, reason) => {
     let caught: unknown;
     try {
