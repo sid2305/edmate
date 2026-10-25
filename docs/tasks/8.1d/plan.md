@@ -21,7 +21,7 @@ No non-null assertion on args.email; db typecheck, lint and test green.
 
 ## Files to create/modify
 - packages/db/src/cli.ts
-- packages/db/src/cli.test.ts (or the existing cli test file) — the both/neither usage tests if missing.
+- packages/db/test/grant-role-cli.test.ts and packages/db/test/verify-teacher-cli.test.ts — the both/neither usage tests if missing.
 - docs/tasks/8.1d/handoff.md
 
 ## Files out of bounds
