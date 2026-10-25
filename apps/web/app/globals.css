@@ -101,6 +101,18 @@ a.button {
   padding: 0;
 }
 
+/* Task 9.1c: with many nav links (e.g. /teacher's 9), plain inline text links wrap into a tight
+   grid at 360px and fail Lighthouse's `target-size` audit (each link's box is below the 24px
+   minimum and/or too close to its neighbour). Padding grows each link's own box without changing
+   its text size or the page's layout rhythm elsewhere (/home's single nav link already passed:
+   this only adds margin, it doesn't shrink anything). */
+.app-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+}
+
 .app-main {
   padding: 1rem;
 }
