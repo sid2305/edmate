@@ -2941,7 +2941,7 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: running
+  status: review
   branch: m13/5.8d-eval-pipeline-agent
   model: plan:sonnet build:sonnet
 - id: 0.19a
