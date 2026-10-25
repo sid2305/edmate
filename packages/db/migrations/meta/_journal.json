@@ -211,6 +211,13 @@
       "when": 1792910216271,
       "tag": "0029_turn_traces_created_at_index",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792957555341,
+      "tag": "0030_alert_queue_indexes",
+      "breakpoints": true
     }
   ]
 }
