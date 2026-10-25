@@ -6,6 +6,7 @@ import {
   loadBundledPrices,
   parsePriceTable,
   TURN_TOKEN_ASSUMPTIONS,
+  TurnCostError,
   turnCostMicroUsd,
   UnpricedModelError,
   type TurnTokenAssumptions,
@@ -106,9 +107,7 @@ describe('turnCostMicroUsd', () => {
   it.each(['main', 'small'] as const)('a policy without a %s tier is rejected', (missing) => {
     const tiers = { ...policy('big', 'small').tiers };
     delete tiers[missing];
-    expect(() => turnCostMicroUsd({ tiers }, PRICES, ASSUME)).toThrow(
-      `policy has no ${missing} tier`,
-    );
+    expect(() => turnCostMicroUsd({ tiers }, PRICES, ASSUME)).toThrow(TurnCostError);
   });
 
   it.each([-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
@@ -116,11 +115,12 @@ describe('turnCostMicroUsd', () => {
     (n) => {
       expect(() =>
         turnCostMicroUsd(policy('big', 'small'), PRICES, { ...ASSUME, smallCallsPerTurn: n }),
-      ).toThrow(RangeError);
+      ).toThrow(TurnCostError);
     },
   );
 
   it('rejects negative token counts', () => {
+    // Thrown by cost.ts's own RangeError, not TurnCostError: it never reaches estimate.ts's throws.
     expect(() =>
       turnCostMicroUsd(policy('big', 'small'), PRICES, { ...ASSUME, mainInputTokens: -1 }),
     ).toThrow(RangeError);
@@ -132,9 +132,14 @@ describe('turnCostMicroUsd', () => {
       smallCallsPerTurn: Number.MAX_SAFE_INTEGER,
       smallInputTokensPerCall: 1_000_000,
     };
-    expect(() => turnCostMicroUsd(policy('big', 'small'), PRICES, huge)).toThrow(
-      'turn cost is too large to store exactly',
-    );
+    expect(() => turnCostMicroUsd(policy('big', 'small'), PRICES, huge)).toThrow(TurnCostError);
+  });
+
+  it('TurnCostError is also a RangeError, so existing instanceof RangeError callers still work', () => {
+    const e = caught(() => turnCostMicroUsd({ tiers: {} } as never, PRICES, ASSUME));
+    expect(e).toBeInstanceOf(TurnCostError);
+    expect(e).toBeInstanceOf(RangeError);
+    expect((e as Error).name).toBe('TurnCostError');
   });
 });
 
@@ -165,5 +170,6 @@ describe('package exports', () => {
     expect(gateway.turnCostMicroUsd).toBe(turnCostMicroUsd);
     expect(gateway.TURN_TOKEN_ASSUMPTIONS).toBe(TURN_TOKEN_ASSUMPTIONS);
     expect(gateway.UnpricedModelError).toBe(UnpricedModelError);
+    expect(gateway.TurnCostError).toBe(TurnCostError);
   });
 });
