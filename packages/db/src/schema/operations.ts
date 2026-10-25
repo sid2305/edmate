@@ -115,7 +115,18 @@ export const classQuestions = pgTable(
     order: integer('order').notNull().default(0),
     ...timestamps(),
   },
-  (t) => [index('class_questions_live_class_id_idx').on(t.liveClassId)],
+  (t) => [
+    // Task 11.2c: serves the join from live_classes to class_questions by live_class_id, with
+    // each live class's rows already in (created_at, id) order. It does not remove the Sort in
+    // the teacher queue scan's cross-class ORDER BY (that scan still sorts a bounded set, capped
+    // at QUEUE_SCAN_MAX, across all of the teacher's upcoming classes). This index replaces the
+    // old live_class_id-only index (a strict prefix of this one, so dropping it loses nothing).
+    index('class_questions_live_class_id_created_at_id_idx').on(
+      t.liveClassId,
+      t.createdAt,
+      t.id,
+    ),
+  ],
 );
 
 /** Weekly teacher insights; aggregated and anonymised before they are stored. */
@@ -201,13 +212,25 @@ export const safetyAlerts = pgTable(
     ...timestamps(),
   },
   (t) => [
-    // The inbox's open list.
-    index('safety_alerts_open_created_at_id_idx')
-      .on(t.createdAt, t.id)
+    // The inbox's open list (task 12.5d): matches listForStaff's ORDER BY for the open set
+    // exactly, so Postgres can scan it in order with no Sort node. Replaces the old
+    // safety_alerts_open_created_at_id_idx (created_at, id only), which is not used by any
+    // other query.
+    index('safety_alerts_open_created_at_created_id_idx')
+      .on(
+        sql`(${t.acknowledgedAt} is not null)`,
+        sql`(${t.escalatedAt} is null)`,
+        t.createdAt,
+        t.id,
+      )
       .where(sql`${t.acknowledgedAt} is null`),
     index('safety_alerts_teacher_id_created_at_idx').on(t.teacherId, t.createdAt),
     index('safety_alerts_student_id_teacher_id_idx').on(t.studentId, t.teacherId),
     index('safety_alerts_session_id_idx').on(t.sessionId),
+    // Task 12.5a LOW: acknowledged_by FK lookups (who acknowledged which alerts).
+    index('safety_alerts_acknowledged_by_idx')
+      .on(t.acknowledgedBy)
+      .where(sql`${t.acknowledgedBy} is not null`),
     check('safety_alerts_level_check', sql`${t.level} in ('info', 'alert', 'critical')`),
     check('safety_alerts_kind_check', sql`${t.kind} in ('distress', 'abuse', 'misuse', 'other')`),
     check('safety_alerts_ack_note_length', sql`char_length(${t.ackNote}) <= 500`),

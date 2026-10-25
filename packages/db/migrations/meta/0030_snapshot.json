@@ -1,5 +1,5 @@
 {
-  "id": "e44c4203-c88d-4078-bae7-6431a46c16cd",
+  "id": "5e815fad-2093-4ea9-88ee-b8ddd8a7dd24",
   "prevId": "f5053f65-b01f-4286-8b8b-9255882d0c04",
   "version": "7",
   "dialect": "postgresql",
@@ -1043,11 +1043,23 @@
         }
       },
       "indexes": {
-        "class_questions_live_class_id_idx": {
-          "name": "class_questions_live_class_id_idx",
+        "class_questions_live_class_id_created_at_id_idx": {
+          "name": "class_questions_live_class_id_created_at_id_idx",
           "columns": [
             {
               "expression": "live_class_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4214,9 +4226,21 @@
         }
       },
       "indexes": {
-        "safety_alerts_open_created_at_id_idx": {
-          "name": "safety_alerts_open_created_at_id_idx",
+        "safety_alerts_open_created_at_created_id_idx": {
+          "name": "safety_alerts_open_created_at_created_id_idx",
           "columns": [
+            {
+              "expression": "(\"acknowledged_at\" is not null)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "(\"escalated_at\" is null)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
             {
               "expression": "created_at",
               "isExpression": false,
@@ -4289,6 +4313,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "safety_alerts_acknowledged_by_idx": {
+          "name": "safety_alerts_acknowledged_by_idx",
+          "columns": [
+            {
+              "expression": "acknowledged_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"safety_alerts\".\"acknowledged_by\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -6840,8 +6880,7 @@
       "schema": "public",
       "values": [
         "staff",
-        "operator",
-        "student"
+        "operator"
       ]
     },
     "public.subscription_status": {

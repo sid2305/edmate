@@ -1,4 +1,4 @@
-# 7.2i: vapes rule safety-net variants and article tolerance (7.2h review follow-ups)
+# 7.2j: vapes rule safety-net variants and article tolerance (7.2h review follow-ups)
 
 Deps: 7.2h (done). Board accept (verbatim): "harness guard tests for the Hinglish, Devanagari and
 article forms; safety cases added; harness and evals green."
@@ -41,7 +41,7 @@ Hinglish appear here only as a guard safety net, which the English-only pilot ru
 4. `packages/evals/src/suites.ts`, `suites.test.ts`, `moderationJailbreak.test.ts` — bump the pinned
    floors and seeded counts by exactly the number of new files and entries (7.2h's handoff shows
    the four numbers it bumped; do the same, no stale counts).
-5. `docs/tasks/7.2i/handoff.md` — written by the builder at the end.
+5. `docs/tasks/7.2j/handoff.md` — written by the builder at the end.
 
 ## Files out of bounds
 Everything else: distress tables, other guard files, other suites, locale packs, contracts,
