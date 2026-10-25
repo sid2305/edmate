@@ -15,8 +15,13 @@ describe('cutoffFor', () => {
     expect(cutoffFor(now, 730).toISOString()).toBe('2024-10-25T00:00:00.000Z');
   });
 
-  it('zero days is now', () => {
+  it.each([0, -1, Number.NaN, 1.5])('rejects non-positive-integer days (%s)', (days) => {
     const now = new Date('2026-10-25T00:00:00.000Z');
-    expect(cutoffFor(now, 0).getTime()).toBe(now.getTime());
+    expect(() => cutoffFor(now, days)).toThrow();
+  });
+
+  it.each([1, 730])('accepts positive integer days (%s)', (days) => {
+    const now = new Date('2026-10-25T00:00:00.000Z');
+    expect(() => cutoffFor(now, days)).not.toThrow();
   });
 });
