@@ -4187,9 +4187,30 @@ tasks:
   deps:
   - 8.6b
   risk: high
-  status: running
+  status: done
   branch: m13/8.6f-package-lock-and-cap-kind
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 101
+    tokens_in: 354
+    tokens_out: 38460
+    cache_read_tokens: 7669084
+    wall_time_seconds: 3377
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        CRITICAL: 1
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 8.5d
   milestone: M13
   title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket

@@ -10,6 +10,79 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.6f Phase A: a distinct `RepositoryErrorKind` for the package cap, and a shared package-row lock · decided by builder · risk: high
+
+- Decided: added `'limit'` to `RepositoryErrorKind` (mapping to the existing contracts
+  `ErrorCode` `'limit_reached'`) so `packages.create`'s cap refusal is no longer reported as the
+  same `'invalid'` used for unrelated bad writes; extracted `checkModules` and a new
+  `lockPackageRow` helper into `packages/db/src/repositories/package-write.ts` so
+  `packages.ts`'s `saveVersion` and `package-versions.ts`'s `create` lock the same package row
+  the same way; `packages.ts`'s `package.save` audit `after` now keeps the package id (8.7h
+  already fixed the audit redactor's UUID handling, so the old omission was working around a bug
+  that no longer exists).
+- Why: a real repo `'invalid'` on `packages.create` (for example a stray unique-violation) was
+  previously indistinguishable from "you're at the package limit," which could mislead a caller
+  into showing the wrong error to a teacher; two writers taking the package row lock in
+  inconsistent ways is exactly the deadlock-class risk `docs/lessons.md` already flags from
+  8.7a, so moving both to the shared `package-write.ts` helpers was meant to close that class of
+  bug here. Correction (fix round): extracting the helpers did not by itself make the order
+  shared -- `package-versions.ts`'s `create` still called `checkModules` before `lockPackageRow`,
+  the reverse of `packages.ts`'s `saveVersion`. See "Fix round" below for the actual fix.
+
+---
+
+### 25 Oct 2026 · 8.6f Phase A: apps/web has four more exhaustive `RepositoryErrorKind` switches than the plan listed · decided by builder · risk: low
+
+- Decided: did not edit `apps/web/src/studio/profile.ts`,
+  `apps/web/src/studio/questions/routes.ts`, `apps/web/src/subscriptions/change.ts` or
+  `apps/web/src/subscriptions/start.ts` -- none are in Phase A's file list, and editing them was
+  not authorized by this plan.
+- Why: the plan's exit conditions name exactly this situation ("if it doesn't [compile], stop
+  PARTIAL and name it") rather than asking the builder to silently expand scope into unlisted
+  files; Phase B's builder (or a follow-up) should add the `'limit'` arm to all four switches
+  alongside the plan's named `packages.ts` edit.
+
+---
+
+### 25 Oct 2026 · 8.6f Phase B: four pre-existing `apps/web` switches map the new `'limit'` kind to their closest client-error response · decided by builder · risk: low
+
+- Decided: `apps/web/src/studio/profile.ts` and `apps/web/src/studio/questions/routes.ts` group
+  `'limit'` with `'invalid'`/`'integrity'` (a plain 400 `validation`); `apps/web/src/
+  subscriptions/change.ts` groups it with `'invalid'` (the action-specific 409); `apps/web/src/
+  subscriptions/start.ts` maps it the same as `'integrity'` (a plain 400 `validation`). Each
+  switch keeps a one-line comment saying the repo call behind it (`teacherProfiles`,
+  `teacherQuestions`, subscription plan changes, subscription start) has no cap and so can never
+  actually raise `'limit'` — the case exists only so the exhaustive switch (each file's own
+  `const unreachable: never` / `assertNever` pattern) still compiles. No test was added for any
+  of the four: none of their repo calls can reach `'limit'`, so there is nothing reachable to
+  assert (per the brief: "Add a test only where a mapping is reachable").
+- Why: each of these four files' exhaustive switch is a defence against a *future* repo call
+  starting to raise a kind the switch doesn't expect; today none of the four routes' calls
+  (`teacherProfiles.*`, `teacherQuestions.*`, subscription change/start) go through any capped
+  write, so there's no live path to `'limit'` to test — grouping with the nearest existing
+  client-error response keeps each file compiling without inventing a cap-specific response a
+  caller can't actually trigger.
+
+---
+
+### 25 Oct 2026 · 8.6f budget overruns: Phase A 73 calls (budget 45), Phase B 54 (30), fix round 49 (20) · decided by lead · risk: low
+- Decided: accept the overruns. The work matches the plan, and the fix round closed a real deadlock found in review. The counts above are the harness's tool-call counts, which are higher than the builders reported.
+- Why: re-running a phase would cost more than it saves. The lessons already ask builders to stop at the stop point; the lead watches this on the next db task.
+
+---
+
+### 25 Oct 2026 · 8.6f merge: package cap gets its own `limit` error kind, and every package writer locks the package row before module rows (packages/db/src/repositories/**) · decided by lead · risk: high
+- Decided: merge 8.6f. security-reviewer and database-reviewer verified the lock-order fix (package row FOR UPDATE, then module rows KEY SHARE, in `packages.ts` saveVersion and `package-versions.ts` create); code-reviewer and typescript-reviewer reviewed the whole branch.
+- Why: touches the risky path packages/db/src/repositories/**, so its required reviewers ran and this entry records the lead's merge decision.
+
+---
+
+### 25 Oct 2026 · 8.6f review LOWs not fixed: non-exhaustive `error.kind` switches in apps/web/src/studio/publish.ts and the staff handlers; informational note on packages/db/src/repositories/errors.ts · decided by lead · risk: low
+- Decided: wontfix for now. apps/web/src/studio/publish.ts and the other handlers without a `never` check cannot receive a `limit` error today; packages/db/src/repositories/errors.ts needs no change.
+- Why: MVP first. If another repository starts raising `limit`, that task adds the case where it is raised.
+
+---
+
 ### 25 Oct 2026 · 9.3k drops `lastDecision.reason` from the apps/web staff payload; subject-edit history stays open as 9.3m · decided by builder · risk: low
 - Decided: Built only the two 9.3h review follow-ups (a lookup-row `view.test.tsx` case; dropping
   `lastDecision.reason` from the `apps/web` staff API payload shape). The db-layer
