@@ -8,9 +8,11 @@ import {
   authSessions,
   authVerificationTokens,
   consents,
+  learnerProfiles,
   messages,
   platformAuditLog,
   sessions,
+  teacherQuestions,
   users,
 } from '../schema/index.js';
 import { guarded, RepositoryError, translateWrite } from '../repositories/errors.js';
@@ -146,8 +148,13 @@ export interface IdentityStore {
   /**
    * Task 13.4 (account delete, Phase A): clears `name`, `email` and `phone` on the student's own
    * row (name becomes a fixed placeholder; `email`/`phone` become null) and the text of every
-   * message in every session of theirs, in one transaction. Leaves `safety_alerts`, payments,
-   * ledger and `audit_log` untouched (none of those tables store name/email/phone/message text by
+   * message in every session of theirs, in one transaction. Also deletes the student's own
+   * `auth_sessions`, `auth_accounts` and (by the old email) `auth_verification_tokens` rows — a
+   * signed-in device must not keep working after delete, mirroring the under-age erase branch of
+   * `recordAgeAnswer` above — and clears the free text of theirs that can restate what they said:
+   * `sessions.summary`, `learner_profiles.last_summary` (every pair's) and
+   * `teacher_questions.text` (every question of theirs). Leaves `safety_alerts`, payments, ledger
+   * and `audit_log` untouched (none of those tables store name/email/phone/message text by
    * design — see the task's handoff). Writes one `platform_audit_log` row
    * (`actor: userId`, `actorRole: 'student'`, `action: 'account.delete'`). Idempotent: calling it
    * again on an already-anonymised row changes nothing further (it still writes a new audit row).
@@ -562,7 +569,7 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
       await db.transaction(async (tx) => {
         // Locked, so a concurrent grant/erase can't slip in between the check and the write.
         const [current] = await tx
-          .select({ role: users.role })
+          .select({ role: users.role, email: users.email })
           .from(users)
           .where(eq(users.id, id))
           .for('update');
@@ -572,18 +579,40 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
           .update(users)
           .set({ name: ANONYMISED_NAME, email: null, phone: null })
           .where(eq(users.id, id));
+        // A signed-in device must not keep working after delete: the same rows
+        // `recordAgeAnswer`'s under-age branch erases.
+        await tx.delete(authSessions).where(eq(authSessions.userId, id));
+        await tx.delete(authAccounts).where(eq(authAccounts.userId, id));
+        if (current.email !== null) {
+          await tx
+            .delete(authVerificationTokens)
+            .where(eq(authVerificationTokens.identifier, current.email));
+        }
         // The student's own message text, in every session they took part in (never
         // safety_alerts/payments/ledger/audit_log: none of those store name/email/phone/message
         // text by design).
+        const theirSessions = tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(eq(sessions.studentId, id));
         await tx
           .update(messages)
           .set({ text: '' })
-          .where(
-            inArray(
-              messages.sessionId,
-              tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.studentId, id)),
-            ),
-          );
+          .where(inArray(messages.sessionId, theirSessions));
+        // Free text of theirs that can restate what they said: a session's end-of-session recap,
+        // the pair's rolling recap, and any question they asked a teacher.
+        await tx
+          .update(sessions)
+          .set({ summary: null })
+          .where(eq(sessions.studentId, id));
+        await tx
+          .update(learnerProfiles)
+          .set({ lastSummary: null })
+          .where(eq(learnerProfiles.studentId, id));
+        await tx
+          .update(teacherQuestions)
+          .set({ text: '' })
+          .where(eq(teacherQuestions.studentId, id));
         await tx.insert(platformAuditLog).values({
           actor: id,
           actorRole: 'student',

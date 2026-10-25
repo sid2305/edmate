@@ -15,7 +15,7 @@ const TEST_URL = urlFor(dbName);
 const OLD = new Date('2020-01-01T00:00:00Z');
 const RECENT = new Date('2026-10-01T00:00:00Z');
 const CUTOFF = new Date('2025-01-01T00:00:00Z');
-const FUTURE_CUTOFF = new Date('2000-01-01T00:00:00Z');
+const NOTHING_OLDER_CUTOFF = new Date('2000-01-01T00:00:00Z');
 
 let n = 0;
 const uid = (p: string) => `${p}_${(n += 1)}`;
@@ -73,7 +73,7 @@ describe.skipIf(!up)(`retention jobs on Postgres 16${up ? '' : ` (${SKIP_REASON}
 
     it('a future-dated cutoff changes nothing', async () => {
       const { sessionId } = await seedSession(OLD);
-      const result = await retention.purgeOldSessions(FUTURE_CUTOFF, false);
+      const result = await retention.purgeOldSessions(NOTHING_OLDER_CUTOFF, false);
       expect(result.count).toBe(0);
       const { rows } = await raw.query('select 1 from sessions where id = $1', [sessionId]);
       expect(rows).toHaveLength(1);
@@ -116,6 +116,29 @@ describe.skipIf(!up)(`retention jobs on Postgres 16${up ? '' : ` (${SKIP_REASON}
       const { rows: r2 } = await raw.query('select 1 from sessions where id = $1', [withAlert.sessionId]);
       expect(r2).toHaveLength(1);
     });
+
+    it('with a limit of 2 and 5 old sessions, one call deletes 2 and repeated calls finish the rest', async () => {
+      const seeded = [];
+      for (let i = 0; i < 5; i += 1) seeded.push(await seedSession(OLD));
+
+      const dry = await retention.purgeOldSessions(CUTOFF, true, 2);
+      // The dry run's own count is unlimited: it reports every eligible row, not just `limit`.
+      expect(dry.count).toBeGreaterThanOrEqual(5);
+
+      const first = await retention.purgeOldSessions(CUTOFF, false, 2);
+      expect(first).toEqual({ count: 2, dryRun: false });
+      const second = await retention.purgeOldSessions(CUTOFF, false, 2);
+      expect(second).toEqual({ count: 2, dryRun: false });
+      const third = await retention.purgeOldSessions(CUTOFF, false, 2);
+      expect(third).toEqual({ count: 1, dryRun: false });
+      const fourth = await retention.purgeOldSessions(CUTOFF, false, 2);
+      expect(fourth).toEqual({ count: 0, dryRun: false });
+
+      for (const s of seeded) {
+        const { rows } = await raw.query('select 1 from sessions where id = $1', [s.sessionId]);
+        expect(rows).toHaveLength(0);
+      }
+    });
   });
 
   describe('purgeOldTraces', () => {
@@ -145,6 +168,31 @@ describe.skipIf(!up)(`retention jobs on Postgres 16${up ? '' : ` (${SKIP_REASON}
       expect(rows).toHaveLength(0);
       rows = (await raw.query('select 1 from turn_traces where id = $1', [recentId])).rows;
       expect(rows).toHaveLength(1);
+    });
+
+    it("uses turn_traces_created_at_idx for the cutoff scan, not a sequential scan", async () => {
+      // A bulk insert (one round trip) of enough rows that the planner has a real choice between
+      // a seq scan and the index, mostly after CUTOFF (so the past-cutoff slice is selective
+      // enough for the index to win); ANALYZE so its row-count estimate reflects the seed, not
+      // the table's state when it was last planned.
+      const { sessionId } = await seedSession(RECENT);
+      await raw.query(
+        `insert into turn_traces (id, session_id, steps, model, input_tokens, output_tokens,
+           cost_micro_usd, turn_id, agent_version, package_version, intent, move, guards, usage,
+           created_at, updated_at)
+         select 'tt_explain_' || g, $1, '[]', 'scripted', 0, 0, 0, 'trn_explain_' || g, 1, 1,
+           'other', 'answer', '{}', '{}',
+           case when g < 1000 then $2::timestamptz else $3::timestamptz end,
+           case when g < 1000 then $2::timestamptz else $3::timestamptz end
+         from generate_series(1, 20000) g`,
+        [sessionId, OLD, RECENT],
+      );
+      await raw.query('ANALYZE turn_traces');
+      const { rows } = await raw.query(`explain select id from turn_traces where created_at < $1`, [
+        CUTOFF,
+      ]);
+      const plan = rows.map((r: { 'QUERY PLAN': string }) => r['QUERY PLAN']).join('\n');
+      expect(plan).toContain('turn_traces_created_at_idx');
     });
   });
 

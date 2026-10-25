@@ -7,7 +7,12 @@ import {
   type IdentityStore,
   type IdentityStoreOptions,
 } from './identity/index.js';
-import { createRepositories, retentionRepo, type RetentionRepo, type Repositories } from './repositories/index.js';
+import {
+  createRepositories,
+  retentionRepo,
+  type RetentionRepo,
+  type Repositories,
+} from './repositories/index.js';
 
 export * from './repositories/index.js';
 // Task 8.2o: the one name for the kinds an uploaded file can have (apps/web's upload table reuses it).

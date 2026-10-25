@@ -1059,8 +1059,8 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       );
       await raw.query(`insert into agents (id, teacher_id) values ($1,$2)`, [agentId, tid]);
       await raw.query(
-        `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, ended_at)
-         values ($1,$2,$3,$4,1,now())`,
+        `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, ended_at, summary)
+         values ($1,$2,$3,$4,1,now(),'a recap of what the student told the agent')`,
         [sessionId, student.id, tid, agentId],
       );
       await raw.query(
@@ -1076,13 +1076,48 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
          values ($1,'info','other',$2,$3,$4,'kept excerpt')`,
         [alertId, student.id, tid, sessionId],
       );
-      return { student, tid, teacherPhone, agentId, sessionId, msgStudentId, msgAgentId, alertId };
+      await identity.createSession(token(`sess_${(n += 1)}`), student.id, later());
+      await identity.linkAccount({
+        userId: student.id,
+        type: 'oauth',
+        provider: 'google',
+        providerAccountId: `gacct_${(n += 1)}`,
+      });
+      await identity.createVerificationToken({
+        identifier: student.email as string,
+        token: token(`vtok_${(n += 1)}`),
+        expires: later(),
+      });
+      await raw.query(
+        `insert into learner_profiles (id, student_id, teacher_id, lang, last_summary)
+         values ($1,$2,$3,'en','a recap of what the student struggles with')`,
+        [`lp_erase_${(n += 1)}`, student.id, tid],
+      );
+      const questionId = `tq_erase_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text)
+         values ($1,$2,$3,$4,'a question only the student wrote')`,
+        [questionId, tid, agentId, student.id],
+      );
+      return {
+        student,
+        tid,
+        teacherPhone,
+        agentId,
+        sessionId,
+        msgStudentId,
+        msgAgentId,
+        alertId,
+        questionId,
+      };
     }
 
-    it("clears name/email/phone and the student's own message text, writes one platform_audit_log row, and leaves the session, safety alert and teacher row untouched", async () => {
-      const { student, sessionId, alertId, tid, teacherPhone } = await seedErasable();
+    it("clears name/email/phone, auth rows, session/profile/question free text and the student's own message text, writes one platform_audit_log row, and leaves the session, safety alert and teacher row untouched", async () => {
+      const { student, sessionId, alertId, tid, teacherPhone, questionId } =
+        await seedErasable();
       const studentPhone = `+1555999${String((n += 1)).padStart(4, '0')}`;
       await raw.query(`update users set phone = $2 where id = $1`, [student.id, studentPhone]);
+      const studentEmail = student.email as string;
 
       await identity.anonymise(student.id);
 
@@ -1091,6 +1126,22 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         [student.id],
       );
       expect(userRows[0]).toEqual({ name: ANONYMISED_NAME, email: null, phone: null });
+
+      const { rows: authSessionRows } = await raw.query(
+        'select 1 from auth_sessions where user_id = $1',
+        [student.id],
+      );
+      expect(authSessionRows).toHaveLength(0);
+      const { rows: authAccountRows } = await raw.query(
+        'select 1 from auth_accounts where user_id = $1',
+        [student.id],
+      );
+      expect(authAccountRows).toHaveLength(0);
+      const { rows: tokenRows } = await raw.query(
+        'select 1 from auth_verification_tokens where identifier = $1',
+        [studentEmail],
+      );
+      expect(tokenRows).toHaveLength(0);
 
       const { rows: msgRows } = await raw.query(
         `select role, text from messages where session_id = $1`,
@@ -1103,10 +1154,23 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         { role: 'student', text: '' },
       ]);
 
-      const { rows: sessionRows } = await raw.query('select id from sessions where id = $1', [
-        sessionId,
-      ]);
-      expect(sessionRows).toHaveLength(1);
+      const { rows: sessionRows } = await raw.query(
+        'select id, summary from sessions where id = $1',
+        [sessionId],
+      );
+      expect(sessionRows).toEqual([{ id: sessionId, summary: null }]);
+
+      const { rows: profileRows } = await raw.query(
+        'select last_summary from learner_profiles where student_id = $1',
+        [student.id],
+      );
+      expect(profileRows).toEqual([{ last_summary: null }]);
+
+      const { rows: questionRows } = await raw.query(
+        'select text from teacher_questions where id = $1',
+        [questionId],
+      );
+      expect(questionRows).toEqual([{ text: '' }]);
 
       const { rows: alertRows } = await raw.query(
         'select student_id, excerpt_redacted from safety_alerts where id = $1',
@@ -1128,6 +1192,61 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       expect(auditRows).toEqual([
         { actor: student.id, actor_role: 'student', action: 'account.delete', subject_user_id: student.id },
       ]);
+    });
+
+    it("leaves another student's auth sessions, auth accounts, verification token and learner profile untouched", async () => {
+      const { student: erased } = await seedErasable();
+      const other = await identity.createStudent({
+        email: email('kept'),
+        emailVerifiedAt: new Date('2026-10-01T00:00:00Z'),
+        name: 'Beth Kept',
+      });
+      await identity.createSession(token(`sess_other_${(n += 1)}`), other.id, later());
+      await identity.linkAccount({
+        userId: other.id,
+        type: 'oauth',
+        provider: 'google',
+        providerAccountId: `gacct_other_${(n += 1)}`,
+      });
+      const otherEmail = other.email as string;
+      await identity.createVerificationToken({
+        identifier: otherEmail,
+        token: token(`vtok_other_${(n += 1)}`),
+        expires: later(),
+      });
+      const otherTid = `tch_kept_${(n += 1)}`;
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1,'Teacher Kept','en','US','teacher')`,
+        [otherTid],
+      );
+      await raw.query(
+        `insert into learner_profiles (id, student_id, teacher_id, lang, last_summary)
+         values ($1,$2,$3,'en','kept recap')`,
+        [`lp_kept_${(n += 1)}`, other.id, otherTid],
+      );
+
+      await identity.anonymise(erased.id);
+
+      const { rows: authSessionRows } = await raw.query(
+        'select 1 from auth_sessions where user_id = $1',
+        [other.id],
+      );
+      expect(authSessionRows).toHaveLength(1);
+      const { rows: authAccountRows } = await raw.query(
+        'select 1 from auth_accounts where user_id = $1',
+        [other.id],
+      );
+      expect(authAccountRows).toHaveLength(1);
+      const { rows: tokenRows } = await raw.query(
+        'select 1 from auth_verification_tokens where identifier = $1',
+        [otherEmail],
+      );
+      expect(tokenRows).toHaveLength(1);
+      const { rows: profileRows } = await raw.query(
+        'select last_summary from learner_profiles where student_id = $1',
+        [other.id],
+      );
+      expect(profileRows).toEqual([{ last_summary: 'kept recap' }]);
     });
 
     it('is idempotent: a second call changes nothing further (still writes its own audit row)', async () => {

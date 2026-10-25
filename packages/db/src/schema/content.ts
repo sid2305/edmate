@@ -135,6 +135,11 @@ export const chunks = pgTable(
     index('chunks_search_idx').using('gin', t.search),
     // Cosine distance (`<=>`), the metric OpenAI embeddings are meant for (task 2.7; 5.3 ranks).
     index('chunks_embedding_hnsw_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
+    // Task 13.4: retentionRepo.purgeOldTranscriptChunks' cutoff scan. Partial, since `kind =
+    // 'transcript'` is the only kind that job ever purges (never `material`/`teacher_note`).
+    index('chunks_transcript_created_at_idx')
+      .on(t.kind, t.createdAt)
+      .where(sql`${t.kind} = 'transcript'`),
   ],
 );
 

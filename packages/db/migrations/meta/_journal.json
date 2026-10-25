@@ -225,6 +225,13 @@
       "when": 1792960394955,
       "tag": "0031_platform_actor_role_student",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792961188532,
+      "tag": "0032_retention_indexes",
+      "breakpoints": true
     }
   ]
 }

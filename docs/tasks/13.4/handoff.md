@@ -72,23 +72,111 @@ rulings (B-59 recommendation).
   by kind and date, never searches or reads chunk content, so it carries no leak risk), and
   `test/repositories.int.test.ts` (`openDatabase()`'s key list now includes `retention`).
 
+Fix round (25 Oct 2026) additionally touched:
+- `packages/db/src/identity/store.ts` — `anonymise` deletes `auth_sessions`/`auth_accounts`/the
+  old email's `auth_verification_tokens`, and clears `sessions.summary`,
+  `learner_profiles.last_summary` and `teacher_questions.text`.
+- `packages/db/src/repositories/retention.ts` — each purge method takes a bounded `limit`
+  (exported `RETENTION_PURGE_LIMIT = 1000`).
+- `packages/db/src/schema/learning.ts`, `packages/db/src/schema/content.ts`,
+  `packages/db/migrations/0032_retention_indexes.sql` (new) — `sessions_created_at_idx`,
+  `turn_traces_created_at_idx`, `chunks_transcript_created_at_idx` (partial, transcript only).
+- `packages/db/src/index.ts` — the `repositories/index.js` import line wrapped (prettier style).
+- LOW fixes: `test/retention.int.test.ts`'s `FUTURE_CUTOFF` renamed `NOTHING_OLDER_CUTOFF` (it is
+  a past date); `migrations/0031_platform_actor_role_student.sql` gets a one-line comment that no
+  later migration in the same deploy may use `'student'` before it commits.
+
 ### Evidence
 
 - `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/db`
-  → `Tasks: 8 successful, 8 total` (int tests ran against the dev Postgres, not skipped;
-  `retention.ts` shows 100% statement/branch/function/line coverage in the run's coverage table).
-- New int tests: `packages/db/test/identity.int.test.ts` (`anonymise` describe block, 3 tests —
-  clears name/email/phone and every message's text in the student's own sessions while leaving
-  the session row, the safety alert and the teacher's row untouched; idempotent on a second call;
-  scope/not_found on a non-student/unknown id) and `packages/db/test/retention.int.test.ts` (6
-  tests — each method's dry run reports a count and changes nothing; a future cutoff changes
-  nothing; a live run purges only past-cutoff rows; `purgeOldSessions` skips a session that still
-  has a `turn_traces` or `safety_alerts` row; `purgeOldTranscriptChunks` never touches `material`
-  chunks).
+  → `Tasks: 8 successful, 8 total`, `Test Files 80 passed (80)`, `Tests 1670 passed | 4 skipped
+  (1674)` (int tests ran against the dev Postgres, not skipped; `retention.ts` and
+  `src/identity/store.ts` both show 100% statement/function/line coverage, 100%/98.46% branch, in
+  the run's coverage table — the one uncovered branch, store.ts:500, is `recordAgeAnswer`'s
+  pre-existing under-age-with-no-email case, not touched by this round).
+- `packages/db/test/identity.int.test.ts`'s `anonymise` describe block now has 5 tests: the
+  original 3 (clears name/email/phone and every message's text while leaving the session, safety
+  alert and teacher row untouched; idempotent; scope/not_found) plus the fix round's 2 — one
+  asserting `auth_sessions`/`auth_accounts`/`auth_verification_tokens`,
+  `sessions.summary`, `learner_profiles.last_summary` and `teacher_questions.text` are all
+  cleared, one asserting a second student's own auth rows and learner profile are untouched.
+- `packages/db/test/retention.int.test.ts` now has 8 tests: the original 6 plus the fix round's
+  2 — a `limit`-of-2/5-rows test on `purgeOldSessions` (one call deletes 2, repeated calls finish
+  the rest, the dry run's own count stays unlimited) and an EXPLAIN test on `purgeOldTraces`
+  (20,000 seeded rows, ANALYZEd, asserting the plan names `turn_traces_created_at_idx`).
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0). All test fixtures use
   synthetic ids (`stu_…`, `tch_…`) and placeholder text/phone numbers, no real names or numbers.
 
 ## Decisions
+
+### 25 Oct 2026 · 13.4 fix round: anonymise also deletes auth_sessions/auth_accounts/auth_verification_tokens · decided by builder · risk: high
+- Decided: `identity.anonymise` (`packages/db/src/identity/store.ts`) now deletes the student's own
+  `auth_sessions` and `auth_accounts` rows, and (by the old email, captured before it is nulled)
+  their `auth_verification_tokens` row, in the same transaction as the rest of the erase —
+  mirroring `recordAgeAnswer`'s under-age branch exactly.
+- Why: code review (fix round) found a signed-in device kept working after `anonymise` because
+  its session row was left behind. The method already locks and re-selects the user row for
+  `role`/`email`; adding `email` to that select (no extra query) is enough to find the token row
+  the same way the under-age branch does.
+
+### 25 Oct 2026 · 13.4 fix round: free text cleared beyond messages — sessions.summary, learner_profiles.last_summary, teacher_questions.text · decided by builder · risk: high
+- Decided: `anonymise` also clears, for every row of this student: `sessions.summary` (null),
+  `learner_profiles.last_summary` (null, every teacher pair), `teacher_questions.text` (empty
+  string, matching how `messages.text` is cleared). `teacher_questions.moduleHint` and `.answer`,
+  and `corrections`/`teacher_eval_cases` (no `student_id` column at all — teacher-owned, not
+  student-owned) are left as is.
+- Why: security review (fix round) found `learner_profiles.last_summary` uncleared; grepping
+  every schema file for a column keyed by a `studentId` column (`grep -n "studentId()" schema/*.ts`
+  then reading each table) turned up two more free-text columns besides the one named:
+  `sessions.summary` (the ≤60-word end-of-session recap `sessions.ts`'s own write path upserts
+  onto `learner_profiles.last_summary` — the same "can restate what the student said" risk as the
+  column the review named) and `teacher_questions.text` (the student's own question to the
+  teacher — the review's own "class questions a student asked" example). `moduleHint` is left: it
+  is a module id/title the question was tagged with (`'module 2'`, `'mod_a1'` in its own tests),
+  not student-written prose, and the teacher's own `answer` is the teacher's content, not the
+  student's — clearing it would delete the teacher's answer to a question that no longer shows
+  whose it was, a bigger change than this finding asked for. `evidence_events`, `usage_ledger`,
+  `notifications` and the three `billing.ts` tables with a `studentId` column have no text column
+  at all, so nothing there needed clearing.
+
+### 25 Oct 2026 · 13.4 fix round: no "account closed" column added · decided by builder · risk: low
+- Decided: do not add a migration or column marking an account closed. `identity.anonymise`
+  (`packages/db/src/identity/store.ts`) leaves the row itself in place (role `student`, a fixed
+  placeholder name, no email/phone) rather than deleting it or flagging it closed.
+- Why: with the fix above, the old sessions and linked accounts are gone and the email is
+  cleared, so a later sign-in with that same email (or any other) creates a new, empty account —
+  no stale session can ever reach the old row again. No existing column marks an account closed,
+  and the pilot has no requirement yet to block re-signup under the same identity (there is none,
+  since the email is gone); adding one now would be a schema change with no reader. Revisit if a
+  real pilot need for a hard block on re-signup shows up.
+
+### 25 Oct 2026 · 13.4 fix round: retention cutoff indexes (migration 0032) · decided by builder · risk: low
+- Decided: added `sessions_created_at_idx` (`sessions.created_at`), `turn_traces_created_at_idx`
+  (`turn_traces.created_at`) and a partial `chunks_transcript_created_at_idx`
+  (`chunks.kind, chunks.created_at` `WHERE kind = 'transcript'`) via migration
+  `0032_retention_indexes.sql`, generated with `drizzle-kit generate` after adding the three
+  indexes to `schema/learning.ts`/`schema/content.ts`, then renamed from the generated
+  `0032_glossy_doctor_doom.sql` (the repo's own renaming convention; the journal tag updated to
+  match).
+- Why: database review (fix round) found none of `retentionRepo`'s three cutoff predicates had a
+  supporting index — each purge would have forced a sequential scan as the tables grow. All three
+  are additive (no data or behaviour change for any existing query). An EXPLAIN int test
+  (`test/retention.int.test.ts`, `purgeOldTraces` describe block) seeds 20,000 rows (1,000 past
+  the test's cutoff, enough for the past-cutoff slice to be selective) and ANALYZEs before
+  asserting the plan names `turn_traces_created_at_idx`, not a sequential scan.
+
+### 25 Oct 2026 · 13.4 fix round: purge methods take a bounded, exported limit · decided by builder · risk: low
+- Decided: `purgeOldSessions`, `purgeOldTraces` and `purgeOldTranscriptChunks`
+  (`packages/db/src/repositories/retention.ts`) now take a third argument, `limit`, defaulting to
+  a new exported constant `RETENTION_PURGE_LIMIT = 1000`. A live call selects at most `limit` ids
+  (oldest first, by `created_at` then `id`) and deletes only those; a dry run is unaffected — it
+  still reports the true, unlimited count. `purgeOldSessions`'s in-memory id list (previously every
+  eligible session, with no cap) is now bounded by the same `limit`.
+- Why: database review (fix round) found all three were unbounded — one call could lock and
+  delete (or, for sessions, load into memory) an arbitrarily large set. This does not change what
+  is ultimately deleted or kept (Phase B's scheduled job loops, calling again until a call reports
+  fewer than `limit`), only how much one call does at once, so it is `risk: low` under the
+  "changes what is deleted or kept" test in the fix brief.
 
 ### 25 Oct 2026 · 13.4 anonymise lives in identity/store.ts, not repositories/users.ts · decided by builder · risk: high
 - Decided: implement the account-delete method as `IdentityStore.anonymise`, not a new
@@ -174,3 +262,43 @@ discoveries above needed real investigation before any code could land safely, a
 post-investigation merge conflict (12.5d's 0030 migration landing mid-phase, as the plan warned
 it might) needed a clean renumber-and-regenerate rather than a hand patch; flagging per the
 budget-overrun norm rather than stopping mid-way with a broken gate).
+
+## Fix round (25 Oct 2026)
+1. [HIGH, code-reviewer] `anonymise` leaving `auth_sessions`/`auth_accounts`/the old email's
+   `auth_verification_tokens` — **fixed**. `identity/store.ts`'s `anonymise` now deletes all
+   three in the same transaction, mirroring `recordAgeAnswer`'s under-age branch; new int tests
+   in `test/identity.int.test.ts` assert they're gone for the erased student and untouched for
+   another student.
+2. [HIGH, security-reviewer] `learner_profiles.last_summary` never cleared — **fixed**, plus two
+   more free-text columns the grep turned up: `sessions.summary` and `teacher_questions.text`
+   (see Decisions). `teacher_questions.moduleHint`/`.answer` named and left, with reasons.
+3. [MEDIUM, security-reviewer] no "account closed" flag — **decision only, no migration** (see
+   Decisions): the fix-1 deletes plus the already-cleared email make a stale sign-in impossible;
+   a blocking flag is not needed for the pilot.
+4. [HIGH, database-reviewer] no indexes behind the three cutoff predicates — **fixed**:
+   migration `0032_retention_indexes.sql` adds `sessions_created_at_idx`,
+   `turn_traces_created_at_idx` and a partial `chunks_transcript_created_at_idx`; a new EXPLAIN
+   int test on `purgeOldTraces` (20,000 seeded rows, ANALYZEd) asserts the planner picks the
+   index.
+5. [HIGH, database-reviewer] all three purges unbounded — **fixed**: each now takes a `limit`
+   (default `RETENTION_PURGE_LIMIT = 1000`, exported); a new int test with `limit = 2` and 5 old
+   sessions asserts one call deletes 2 and repeated calls finish the rest, and that a dry run's
+   count stays unlimited.
+6. [LOW] `src/index.ts`'s long import wrapped; `FUTURE_CUTOFF` renamed `NOTHING_OLDER_CUTOFF`;
+   `0031_platform_actor_role_student.sql` gets its one-line "no later migration" comment — all
+   **fixed**.
+7. [Lead addition] Dependent gate: `IdentityStore` grew the `anonymise` method in Phase A, but
+   `apps/web/test/memory-identity.ts`'s `MemoryIdentity` fake (the only `IdentityStore`
+   implementer under `apps/`, confirmed by `grep -rln "IdentityStore" apps/ --include=*.ts`)
+   never implemented it, so `@edmate/web#typecheck` failed with `TS2741`. **Fixed** — added a
+   minimal `anonymise(userId)` to the fake mirroring the real store's scope rule (not found/scope
+   errors) and its auth-row deletes (`accounts`, `sessions`, `links`); the fake keeps no
+   messages/sessions-table rows/learner profiles/teacher questions to clear, so there is nothing
+   else for it to do. Verified standalone with `tsc --noEmit`, then with the full
+   `corepack pnpm turbo run build typecheck lint test --filter=...@edmate/db` dependent gate
+   (`@edmate/db`, `@edmate/web`, `@edmate/worker`) — all typecheck/lint/test green; the one build
+   failure seen (`@edmate/web#build`, SIGKILL/137) was 3-package resource contention in one
+   background run, not a code issue — confirmed by re-running `@edmate/web#build` alone
+   (`8 successful, 8 total`, 26.5s).
+
+Tool calls: 97
