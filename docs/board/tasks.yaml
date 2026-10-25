@@ -6620,9 +6620,28 @@ tasks:
   deps:
   - 9.7b
   risk: low
-  status: review
+  status: done
   branch: m13/9.7d-e2e-steady
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 9.7e
   milestone: M13
   title: '9.7d review follow-up: apps/web/e2e/fixtures.ts postOnce can re-run act() and double-send when a real post-hydration request takes longer than the inner 2s poll to show up, and mockTurns clamps
