@@ -148,6 +148,22 @@ clean (no output, exit 0).
 - Why: they mirror the existing `joinLinkLabel` naming pattern (`<action>Label`) already used in
   the same namespace, so the three per-row accessible-name keys read consistently.
 
+### 25 Oct 2026 · 11.1e budget: Phase A 55 calls, Phase B 40 calls (each budget 30, stop at 38) · decided by lead · risk: low
+- Decided: accept both phases as built (Phase A 55 calls, Phase B 40 calls, harness counts) rather than relaunching.
+- Why: each phase finished its whole item list in scope with a green gate, and every reviewer approved; the overrun is setup plus the db int-test runs, which the 30-call budget under-counted.
+
+### 25 Oct 2026 · 11.1e no database-reviewer · decided by lead · risk: low
+- Decided: Phase A ran security-reviewer (the risk-paths requirement), code-reviewer and typescript-reviewer; database-reviewer, which the plan only recommended, did not run.
+- Why: the change adds no migration, index or schema change; the order/limit change and the audit shape were checked by code-reviewer and security-reviewer, and the lead's plan answer named these three reviewers for Phase A.
+
+### 25 Oct 2026 · 11.1e re-sort tiebreak uses localeCompare · decided by lead · risk: low
+- Decided: keep `a.id.localeCompare(b.id)` as the ascending re-sort tiebreak in packages/db/src/repositories/live-classes.ts (wontfix security-reviewer's LOW).
+- Why: ids are lowercase hex UUIDs, so locale ordering matches byte ordering in practice; it only affects display order of two classes at the same start time at the 500-row boundary.
+
+### 25 Oct 2026 · 11.1e merge: live-class review follow-ups · decided by lead · risk: high
+- Decided: merge 11.1e (packages/db/src/repositories/live-classes.ts: audit before/after carry link and ISO startsAt, a cancelled class's link never reaches a student, listForTeacher capped at the newest 500 and re-sorted ascending, status cast replaced by a parse; apps/web LiveClassesView: a save always updates its row but only closes its own form, per-row aria-labels).
+- Why: the risk-paths group packages/db/src/repositories/** needs security-reviewer, which approved; code-reviewer and typescript-reviewer approved both phases with no CRITICAL, HIGH or MEDIUM findings.
+
 ## Budget
-Phase A tool calls used: 19
-Phase B tool calls used: 15
+Phase A tool calls used: 55 (harness count; builder reported 19)
+Phase B tool calls used: 40 (harness count; builder reported 15)
