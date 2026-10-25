@@ -1,6 +1,6 @@
 // The publish-gate processor (task 8.7 Phase C). One job names one run (`edmate-gate`, attempts 1).
 // It re-reads the run, marks it running, builds the gate input for the run's basis, runs the
-// quality gate inside `gatedPublish`, stores one result per case and then either publishes
+// quality gate, stores one result per case and then either publishes
 // (`publish.goLive`, one transaction, called only on a passing gate) or finishes the run `failed`.
 //
 // Fails closed and never silently: every error after the run is marked running is logged by its
@@ -10,7 +10,6 @@
 import {
   buildScorecard,
   DEADLINE_NOT_RUN,
-  gatedPublish,
   generatePerAgentSuite,
   runQualityGate,
   selectGateCases,
@@ -83,6 +82,18 @@ export class GateResultMismatchError extends Error {
   readonly code = 'result_mismatch';
 }
 
+/** `runGate` resolved without a result: a defensive guard against a misbehaving dependency. */
+export class GateResultMissingError extends Error {
+  override readonly name = 'GateResultMissingError';
+  readonly code = 'gate_result_missing';
+}
+
+/** No changes to gate: never style-only (nothing changed is not "only the style card changed"). */
+export class GateChangesEmptyError extends Error {
+  override readonly name = 'GateChangesEmptyError';
+  readonly code = 'no_changes';
+}
+
 /**
  * One stored result per case. The gate's results are in scope order, so the scope is rebuilt from
  * the same input (`selectGateCases` is pure) to learn each case's origin and group; any mismatch
@@ -90,6 +101,7 @@ export class GateResultMismatchError extends Error {
  * case keeps its question, which is the teacher's own eval case.
  */
 export function caseResults(input: GateInput, gate: GateResult): GateCaseResult[] {
+  if (input.changes.length === 0) throw new GateChangesEmptyError();
   const styleOnly = input.changes.every((c) => c === 'style_card');
   const scope = selectGateCases({
     changes: input.changes,
@@ -156,6 +168,8 @@ export function runSummary(gate: GateResult, usage: GateUsageTotals | undefined)
 export function errorCodeOf(error: unknown): string {
   if (error instanceof GateUnavailableError) return error.code;
   if (error instanceof GateResultMismatchError) return error.code;
+  if (error instanceof GateResultMissingError) return error.code;
+  if (error instanceof GateChangesEmptyError) return error.code;
   if (error instanceof PublishRefusedError) return error.reason;
   if (error instanceof RepositoryError) {
     return error.kind === 'scope' ? 'not_verified' : `repository_${error.kind}`;
@@ -204,40 +218,35 @@ export function gateProcessor(deps: GateProcessorDeps): (job: GateJobLike) => Pr
       log({ level: 'info', event: 'gate.started', ...ids, changes: run.changes });
       const prepared = await deps.prepare(run, basisOf(teacherId, run));
       usage = prepared.usage;
-      let gateResult: GateResult | undefined;
-      const outcome = await gatedPublish(
-        async () => {
-          const g = await runGate(prepared.input);
-          await storeResults(deps.repos, scope, runId, caseResults(prepared.input, g));
-          gateResult = g;
-          return g;
-        },
-        async () => {
-          const g = gateResult as GateResult;
-          return deps.repos.publish.goLive(scope, {
-            runId,
-            passRate: passRateOf(g),
-            summary: runSummary(g, prepared.usage()),
-            scorecard: buildScorecard(g),
-          });
-        },
-      );
-      if (outcome.published) {
-        log({ level: 'info', event: 'gate.published', ...ids, agentVersion: outcome.value.agentVersion });
+      // The gate step's own return value (`g`) flows straight into the publish-or-fail decision
+      // below as a normal, fully-typed local: no mutable closure variable, so no cast is needed to
+      // read it back. `runGate` is an injected dependency; a guard (not a cast) fails closed if it
+      // ever resolves without a result instead of trusting its declared return type at runtime.
+      const g = await runGate(prepared.input);
+      if (g === undefined) throw new GateResultMissingError();
+      await storeResults(deps.repos, scope, runId, caseResults(prepared.input, g));
+      if (g.pass === true) {
+        const value = await deps.repos.publish.goLive(scope, {
+          runId,
+          passRate: passRateOf(g),
+          summary: runSummary(g, prepared.usage()),
+          scorecard: buildScorecard(g),
+        });
+        log({ level: 'info', event: 'gate.published', ...ids, agentVersion: value.agentVersion });
         return 'passed';
       }
       await deps.repos.publish.finishRun(scope, {
         runId,
         status: 'failed',
-        passRate: passRateOf(outcome.gate),
-        summary: runSummary(outcome.gate, prepared.usage()),
-        scorecard: buildScorecard(outcome.gate),
+        passRate: passRateOf(g),
+        summary: runSummary(g, prepared.usage()),
+        scorecard: buildScorecard(g),
       });
       log({
         level: 'info',
         event: 'gate.failed',
         ...ids,
-        failedCases: outcome.gate.failedCaseIds.length,
+        failedCases: g.failedCaseIds.length,
       });
       return 'failed';
     } catch (error) {
