@@ -4,7 +4,7 @@
 // so a teacher can also fix the current card directly with no interview at all. Every string is
 // from messages/en.json.
 import { useTranslations } from 'next-intl';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   draftStyleCardApi,
   saveStyleCard,
@@ -64,6 +64,9 @@ export function StyleCardView({ initialCard }: StyleCardViewProps) {
   const [drafting, setDrafting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ErrorKey | null>(null);
+  // Task 8.4c: a save that lands while a draft is still in flight must win. Bumped on every
+  // successful save; a draft only applies its result if no save landed while it was awaited.
+  const saveCount = useRef(0);
 
   const setAnswer = (key: StyleCardQuestionKey, value: string) =>
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -74,6 +77,7 @@ export function StyleCardView({ initialCard }: StyleCardViewProps) {
     e.preventDefault();
     setDrafting(true);
     setError(null);
+    const countBefore = saveCount.current;
     try {
       const result = await draftStyleCardApi({
         answers,
@@ -81,6 +85,8 @@ export function StyleCardView({ initialCard }: StyleCardViewProps) {
         mistakeCandidates: parseLines(mistakesText),
       });
       if (!result.ok) return setError(errorKey(result));
+      // A save that landed while this draft was in flight must win; discard the stale draft.
+      if (saveCount.current !== countBefore) return;
       setText(result.value.text);
       setTagsText(result.value.mistakeTags.join(', '));
     } catch {
@@ -97,6 +103,7 @@ export function StyleCardView({ initialCard }: StyleCardViewProps) {
     try {
       const result = await saveStyleCard({ text, mistakeTags: parseTags(tagsText) });
       if (!result.ok) return setError(errorKey(result));
+      saveCount.current += 1;
       setCard(result.value);
     } catch {
       setError('provider_error');

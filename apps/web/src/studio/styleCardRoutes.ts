@@ -14,6 +14,7 @@ import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { errorName, type ServerLog } from '../turn/routes';
 import { readJson, TOO_LARGE } from './routes';
+import { stripOverridePhrases } from './styleCardSanitize';
 import { INTERVIEW_LIMITS, QUESTION_TOPICS, STYLE_CARD_QUESTIONS } from './styleCardQuestions';
 
 /** Everything the style card routes need; built once per process (styleCardRuntime.ts). */
@@ -106,11 +107,11 @@ export function createStyleCardHandlers(
       const parsed = InterviewSchema.safeParse(input);
       if (!parsed.success) return validation();
       const answers = STYLE_CARD_QUESTIONS.flatMap((key) => {
-        const answer = parsed.data.answers[key]?.trim() ?? '';
+        const answer = stripOverridePhrases(parsed.data.answers[key]?.trim() ?? '');
         return answer === '' ? [] : [{ question: QUESTION_TOPICS[key], answer }];
       });
       const sampleExplanations = parsed.data.sampleExplanations
-        .map((s) => s.trim())
+        .map((s) => stripOverridePhrases(s.trim()))
         .filter((s) => s !== '');
       if (answers.length === 0 && sampleExplanations.length === 0) return validation();
       let gateway: Pick<ModelGateway, 'generateObject'>;
@@ -137,7 +138,18 @@ export function createStyleCardHandlers(
     save: async (req, ctx) => {
       const input = await body(req);
       if (input instanceof Response) return input;
-      const parsed = SaveSchema.safeParse(input);
+      // Strip override phrases from `text` before validation, so a saved card's stored text is
+      // already clean and no later reader needs to re-check it before a turn prompt.
+      const sanitized =
+        typeof input === 'object' &&
+        input !== null &&
+        typeof (input as Record<string, unknown>).text === 'string'
+          ? {
+              ...(input as Record<string, unknown>),
+              text: stripOverridePhrases((input as Record<string, unknown>).text as string),
+            }
+          : input;
+      const parsed = SaveSchema.safeParse(sanitized);
       if (!parsed.success) return validation();
       try {
         const card = await backend.repos().styleCards.create(scopeOf(ctx), parsed.data);
