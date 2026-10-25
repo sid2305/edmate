@@ -171,6 +171,13 @@ describe('runPostMigrateSteps', () => {
           /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"ended_at" is null/,
         ),
       },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'sessions_open_teacher_student_agent_key',
+        sql: expect.stringMatching(
+          /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"ended_at" is null/,
+        ),
+      },
     ]);
   });
 });

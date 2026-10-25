@@ -11,6 +11,7 @@ import { stringLeaves } from '../../guardrails/lockedMatch.js';
 import type { RegisteredTool } from '../tools.js';
 import { errorName, HarnessError } from '../errors.js';
 import { revealsAnswerKey } from './answerKey.js';
+import { issueCheckContext } from './itemContext.js';
 import { jsonSafe } from './toolMessages.js';
 
 export type SkillDropReason =
@@ -61,7 +62,14 @@ export async function skillEvent(
   if (!ctx.entitlement.skills.includes(p.data.skill)) return drop('not_entitled');
   const json = jsonSafe(p.data.payload);
   if (!json.ok || json.json.length > LIMITS.skillPayloadMaxJsonLength) return drop('too_large');
-  if (revealsAnswerKey(shownText ?? json.value, mustNotReveal)) return drop('answer_key');
+  // An item's shown text is read as one joined text with its spans (5.6b), as in toolLoop.ts.
+  const revealed =
+    shownText === undefined
+      ? revealsAnswerKey(json.value, mustNotReveal)
+      : revealsAnswerKey(shownText.join('\n'), mustNotReveal, {
+          items: [issueCheckContext({ shown: shownText, answerKey: [] })],
+        });
+  if (revealed) return drop('answer_key');
   try {
     if (await lockedCheck(stringLeaves(json.value))) return drop('locked');
   } catch (e) {

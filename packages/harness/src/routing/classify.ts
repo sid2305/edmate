@@ -226,7 +226,37 @@ function sameNumber(student: Num, key: number): boolean {
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 
+/** A label key part ("b", "(b)", "b)"), after normaliseText: its letter. */
+const LABEL_PART = /^\(?([a-z])\)?$/u;
+/** A letter standing as a word, and the word after it (if only spaces sit between them). */
+const LETTER_WORD = /(?<![\p{L}\p{N}'])([a-z])(?![\p{L}\p{N}'])(?=(?: ([\p{L}\p{N}']+))?)/gu;
+/** Words after an "a" that never make it an article: separators and the labels A-F. */
+const NOT_ORDINARY = new Set(['or', 'and', 'nor', 'a', 'b', 'c', 'd', 'e', 'f']);
+
+/**
+ * The distinct labels (A-F) a message names (5.6b, design 5). A lowercase "a" before an ordinary
+ * word is the article, not a label, unless it starts the message ("A because it loops").
+ */
+function labelsNamed(t: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of t.matchAll(LETTER_WORD)) {
+    const letter = m[1] as string;
+    if (letter > 'f') continue;
+    const next = m[2];
+    const article =
+      letter === 'a' && m.index > 0 && next !== undefined && !NOT_ORDINARY.has(next);
+    if (!article) out.add(letter);
+  }
+  return out;
+}
+
 function partMatched(t: string, nums: readonly Num[], part: string): boolean {
+  const label = LABEL_PART.exec(part)?.[1];
+  if (label !== undefined) {
+    // A label answer counts only when it is the one label the message names.
+    const named = labelsNamed(t);
+    return named.size === 1 && named.has(label);
+  }
   const bare = part.replace(/^[a-z] ?= ?/u, '').replace(/[.!]+$/u, '');
   if (FULL_NUMBER.test(dropThousands(bare))) {
     const key = toNum(dropThousands(bare));

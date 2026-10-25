@@ -10,6 +10,191 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 9.5c fixed label id kept · decided by lead · risk: low
+- Decided: won't fix the review LOW in apps/web/src/chat/SkillLauncher.tsx (a fixed id instead of useId() for the group label). SkillLauncher renders once per page, in ChatView.tsx.
+- Why: no collision is possible today; switch to useId() if the component is ever reused.
+
+---
+
+### 23 Oct 2026 · 5.10d: `create()`'s reuse fallback in `packages/db/src/repositories/sessions.ts` · decided by builder · risk: high
+- Decided: added a second, independent ownership `SELECT` before trusting "an open session exists
+  for the triple" as proof of a lost race, because the unique index's conflict target
+  (`teacher_id, student_id, agent_id`) is not version-specific. Without it, a call with a bad
+  `agentVersion`/`packageVersion`/`packageId` on a triple that already has some other, valid,
+  open session would wrongly return that unrelated session instead of `not_found`.
+- Why: the plan's Design 2 described the simpler "check for any open session" fallback; it is
+  incorrect in general for exactly the reason above. This changes write-path logic on the
+  sessions table and needs `database-reviewer` and `security-reviewer` review before merge.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.10d: migration 0028's data `UPDATE` in `packages/db/migrations/0028_sessions_open_unique.sql` · decided by lead (pre-decided) · risk: high
+- Decided: pre-existing duplicate open sessions for one `(teacher_id, student_id, agent_id)`
+  triple are ended (never deleted), keeping the newest row by `(created_at desc, id desc)`.
+- Why: the newest row is most likely to hold the live `help_state`/hint-ladder state
+  (ADR-0005); ending (not deleting) keeps the row and its history for audit/export. Already
+  decided by the lead's "Lead answers" section of the plan; restated here because this file is
+  on the risky-paths list and needs `database-reviewer` and `security-reviewer` review before
+  merge.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.10d: same `201` status/body both ways · decided by lead (pre-decided) · risk: low
+- Decided: `startSession`/`sessions.create` return the identical `{ id }` shape and status
+  whether a session was newly created or an existing open session was reused; no route change
+  needed in `apps/web/src/turn/routes.ts`.
+- Why: already decided by the lead's "Lead answers" section of the plan; restated here for the
+  record since it governs the repository-layer change above.
+- risk: low
+
+---
+
+### 24 Oct 2026 · 5.10d ran over its tool budget · decided by lead · risk: low
+- Decided: accept 195 tool calls against the plan's 60 (cap 72). The first builder used 32 before the weekly usage limit cut it off; the resumed builder used 163 while reporting 24.
+- Why: the interruption meant re-reading and re-running the db suite, and the builder added the ownership re-check the plan missed. The lead's review of builder budgets (0.22) uses harness counts for this reason.
+
+Tool calls used: 195 (harness count: first builder 32, resumed builder 163; the resumed agent reported 24)
+
+---
+
+### 24 Oct 2026 · 5.6b The ruling-out check holds across the whole reply, not just `reach` · decided by builder · risk: high
+- Decided: the stream gate keeps a per-reply, per-item record of which wrong options its released
+  text has already named (updated only when a piece is actually released). A piece whose release
+  would complete the set (every wrong option named, not the correct one, across the whole reply so
+  far) is held back as a leak exactly as a single-piece ruling-out is, even when the two mentions
+  are pushed further apart than `keys.reach`. The check is independent of the matcher's
+  `leaks`/`tailStart` (so the gate's linear-work bound is unaffected) and the whole-draft postGuard
+  check is kept as the backstop.
+- Why: a security finding (CRITICAL) showed the live gate only ever judged a sentence against
+  `reach` units of prior text, so an ordinary long-winded reply that ruled out each wrong option in
+  a separate, far-apart sentence streamed the full ruling-out to the student before postGuard's
+  whole-draft check could replace it with the hint.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b The leak matcher gets an answer-context mode · decided by builder · risk: high
+- Decided: A single-letter (label) key leaks unless it sits in an exempt shape (a separator-only list of two or more of the item's labels, or the item's exact option listing), and an answer word overrides every exemption except a list naming every label of an item. The active item's prompt and exact listing are exempt spans (matches fully inside are ignored, never deleted). The correct option's text is a full-strength key outside those spans, its position counts in an answer context or alone, and naming every wrong option (over the whole text) is a leak. Practice keys never get the own-code exemption. A label answer is graded only when it's the one label in the message. The bank serves mcq and code_output items once Phase C lands. Known limits, also risk: high: an unresolved item and a `practiceCarriedKey` guard only their label (the option text, position and ruling-out checks don't run on that turn); buildContext doesn't drop chunks holding the option text.
+- Why: MCQ bare-label keys and code_output keys that appear in their own prompt tripped the leak gate on every re-show (5.6 architect MEDIUM, 5.6 Phase C open question answered (c)). This closes ADR-0010's Consequences line 43 ("until the matcher has an answer-context-only key mode"); no new ADR (Q7).
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b A span exempts only its own item's keys; labels are exempt in any span · decided by builder · risk: high
+- Decided: inside an item's prompt or listing span, a label mention is ignored for any label key, but a non-label key (number or text) is ignored only if it belongs to that item (its own answer key or correct option text). A key held from another item is still caught inside the span.
+- Why: the plan says "a key match is ignored when it lies fully inside a span" without saying whose key. Exempting every key would let a re-shown prompt hide a carried key from another item (a "3 + 4" prompt hiding a held "7"); labels inside an item's own listing are structure, not an answer.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b Issue-time checks exempt only the new item's listing · decided by builder · risk: high
+- Decided: toolLoop and skillEvent check a newly issued item's joined shown text with `issueCheckContext(issued)`: its option listing is a span, but its prompt is not and its own key is not used. So an MCQ after an MCQ with the same key B is served, while a new prompt saying "The answer is B" or showing "3 + 4" against a held "7" is still refused (today's behaviour). `skillEvent` builds the context from the shown text it already receives, so `steps/generate.ts` needs no change.
+- Why: the plan passes `itemContextOf(issued)`, but that makes the new prompt its own exempt span, so a prompt that states an earlier key would pass the very check meant to catch it.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b revealsAnswerKey reads a plain string once · decided by builder · risk: low
+- Decided: for a string value, `revealsAnswerKey` checks only the string, not also its JSON form.
+- Why: `JSON.stringify` of a string only adds quote marks and escapes (the compact form already drops backslashes), and it turns a joined listing's newlines into literal `\n`, which breaks the listing span.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b Correct-answer confirmation keeps the safe hint · decided by lead (Q5) · risk: low
+- Decided: a correct-answer turn still guards the key ("Yes, B is right!" gets the safe hint); the follow-up that releases it is pilot-blocking.
+- Why: lead decision Q5; carried here from the plan so it reaches the log.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b The demo MCQ record gets real options in Phase B · decided by builder · risk: low
+- Decided: the demo mcq record `demo:algebra:3:a` now has options A) 6 / B) 7 / C) 8 and key B. It is still not served until Phase C adds mcq to `SERVABLE_KINDS`.
+- Why: the test that every demo record passes `validateItem` stays strict under the new mcq rules. Its prompt does not compute to 7, so the full-strength check holds.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b An item id may hold its label key only in a non-answer shape · decided by builder · risk: low
+- Decided: for a one-letter key, the id is checked with the label matcher in decoded mode: an answer context, or the label as the whole id, is refused. A bank id ending ":a" is accepted.
+- Why: a whole-word check would refuse common bank ids. The id is never shown with an answer word.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b PracticeBank.itemFor is required · decided by builder · risk: low
+- Decided: `itemFor(itemId, scope)` is a required member of `PracticeBank`. Only the harness implements banks today.
+- Why: if it were optional, a bank without it would quietly give no re-show exemption. Required makes the compiler flag every bank.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b A label key on a non-mcq item uses the label matcher · decided by builder · risk: low
+- Decided: when a short, numeric or code_output item has a one-letter key, `validateItem` checks its prompt and options with the label matcher, not the whole-word check.
+- Why: the label key is guarded the same way everywhere. A whole-word "a" check would refuse ordinary English prompts.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b The re-show hold-back is bounded and widens the window over a shown span · decided by builder · risk: high
+- Decided: the stream gate holds back text that could still become an active item's prompt or listing, up to `HOLD_MAX` (2048 compact units). It judges a completed span as one piece. When the window in front would start inside a shown span, the window starts at the span's start.
+- Why: the matcher only exempts a whole span. A span split across checks, or cut by the window, read as a leak on every re-show. Holding back delays text but never shows more of it, and the work stays linear, as a test checks.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b Keys added mid-attempt are practice keys · decided by builder · risk: low
+- Decided: in `answerLeakStreamGate`, keys from `addKeys` count as practice keys, so they never get the own-code exemption. Items from `addKeys` join the matcher's item contexts.
+- Why: design 4. A key from an issued item must not slip through because the student typed it.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b: post guards judge with the active items and practice keys in packages/harness/src/guardrails/answerLeak.ts · decided by builder · risk: high
+- Decided: `PostGuardCtx` gains `items` and `practiceKeys`. answerLeak builds one matcher with them (through the new `answerKeyOptions`) and uses it for both the draft and its rewrite. A rewrite that re-shows the item passes; one that shows a derived key (the correct option's text) falls back to the hint.
+- Why: plan Phase C step 5. Without the context every re-show of an mcq or code_output item was a false leak, and the rewrite must be judged exactly as the draft was.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b: grounding judges number fixes and chunks with the answer context in packages/harness/src/guardrails/grounding.ts · decided by builder · risk: high
+- Decided: grounding's number-fix check uses the student's text plus `items` and `practiceKeys`; its chunk filter uses `items` and `practiceKeys` without the student's text (a chunk is not the student's code). A fix or chunk that shows the active item's correct option text is now caught.
+- Why: plan Phase C step 6, so a grounding fix is judged the same way as the reply.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b The loaded item is resolved through the entitled registry; a throwing hook fails closed · decided by builder · risk: high
+- Decided: on every turn that `holdsPracticeKey`, the runner resolves `practiceItemId` with the first entitled tool that has `activeItem`, whatever tools the decision offers. A hook that throws is reported to `background` (task `runner`) and treated as unresolved: no spans, no derived keys, the label still guarded (so a re-show gets the hint).
+- Why: plan Phase C step 2 and Q6. A silent catch would hide a broken bank, and an exception must never widen what is shown.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.6b generate takes a list of active items, not one · decided by builder · risk: low
+- Decided: the generate input gains `items?: readonly ItemContext[]` (the loaded item plus items an earlier attempt of this turn issued) instead of `practice.activeItem`, and `practiceKeys?` sits beside it, not inside `ToolSessionState`.
+- Why: a retry must exempt the earlier attempt's items too, and `ToolSessionState` is what tools read; answer keys and item context stay out of it.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 5.6b The demo mcq gets a concept prompt and a second code_output record · decided by builder · risk: low
+- Decided: `demo:algebra:3:a` asks "Which of these numbers is prime?" (A) 6 / B) 7 / C) 8, key B). `demo:python:1:a` is "What does this code print?" over `x = 4` / `print(x)` (output on line 2). New `demo:python:2:a` sums a loop (key "6"). The demo bank's lowest-mastery test now lists `python-loops` as tracked, since the new level-2 record adds that topic.
+- Why: the full-strength "correct option in the prompt" check stays, and a concept prompt never computes to an option (brief and Phase A note).
+- risk: low
+
+---
+
+### 24 Oct 2026 · 5.6b review findings deferred to 5.6g · decided by lead · risk: low
+- Decided: the security re-check MEDIUM in packages/harness/src/pipeline/generate/streamGate.ts (judge the window plus the piece for ruling-out) and the TypeScript LOWs in packages/harness/src/pipeline/generate/itemContext.ts and packages/harness/src/tools/practiceItems.ts go to board task 5.6g, started right after this merges.
+- Why: one fix round per task; postGuard's whole-draft check still fixes the stored reply for the MEDIUM.
+
+Tool calls used: 310 (harness count: Phase A 61, Phase B 108, Phase C 90, fix round 51; the fixer reported 32)
+
+---
+
 ### 23 Oct 2026 · Sign-in runtime hardening: dev Redis singleton, dynamic ioredis/nodemailer imports, shared ready-wait, Auth.js error type in logs · decided by builder · risk: high
 - Decided: `index.ts` reuses one ioredis client across dev module reloads via a `globalThis`
   cache; the `ioredis`/`nodemailer`/`rate-limit` imports `emailSignIn()` needs moved inside the

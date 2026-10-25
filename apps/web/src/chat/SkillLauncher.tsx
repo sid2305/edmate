@@ -34,13 +34,15 @@ export function SkillLauncher({
         {t('feedback.toggle')}
       </button>
       <div className="chat-mock-interview-launcher">
-        <span>{t('mockInterview.launcher')}</span>
-        <button type="button" disabled={disabled} onClick={() => onStartMockInterview('job-interview')}>
-          {t('mockInterview.personas.job-interview')}
-        </button>
-        <button type="button" disabled={disabled} onClick={() => onStartMockInterview('viva')}>
-          {t('mockInterview.personas.viva')}
-        </button>
+        <span id="mock-interview-launcher-label">{t('mockInterview.launcher')}</span>
+        <div role="group" aria-labelledby="mock-interview-launcher-label">
+          <button type="button" disabled={disabled} onClick={() => onStartMockInterview('job-interview')}>
+            {t('mockInterview.personas.job-interview')}
+          </button>
+          <button type="button" disabled={disabled} onClick={() => onStartMockInterview('viva')}>
+            {t('mockInterview.personas.viva')}
+          </button>
+        </div>
       </div>
     </div>
   );

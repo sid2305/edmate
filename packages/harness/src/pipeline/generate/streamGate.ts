@@ -16,11 +16,24 @@
 //     shown text within reach in front (reach counts no whitespace or invisible units), so work
 //     stays linear; more than LIMITS.modelTextMaxLength pushed trips the gate (fix round 1);
 //   - held text is checked and shown only by `flush()`, which the tool loop calls once, at the end
-//     of the attempt, never between tool rounds.
+//     of the attempt, never between tool rounds;
+//   - the ruling-out check (design 3) holds across the whole reply, not just the reach window
+//     (fix round 1): a per-item record of which wrong options released text has already named is
+//     kept for the attempt; a newly released piece that would complete the set (every wrong
+//     option named, not the correct one) is held back as a leak exactly as a single-piece
+//     ruling-out is, even when the two mentions are pushed more than `reach` apart;
+//   - a possible re-show of an active practice item (5.6b) is held back: text that is a prefix of
+//     an item's prompt or of its option listing (compared in the matcher's compact folded form)
+//     waits until the restatement is complete, then is judged as one piece (sentence ends inside
+//     it are skipped), so the matcher sees the whole span and exempts it; once it stops matching
+//     it is judged as normal. One KMP cursor per item per span, advanced once per pushed unit, so
+//     the work stays linear; the hold is bounded by the item caps (HOLD_MAX).
 // `passThroughGate` shows every piece as it comes (tests that need exact chunks use it).
 import { LIMITS, type PedagogyDecision, type TurnContext } from '@edmate/contracts';
 import { isFormatChar } from '../../guardrails/textFold.js';
-import { type AnswerKeyMatcher, compileAnswerKeys } from './answerKey.js';
+import { type AnswerKeyMatcher, compileAnswerKeys, namedOptionsIn, normaliseForMatch } from './answerKey.js';
+import { correctIndex, type ItemContext } from './itemContext.js';
+import { foldLabels } from './labelKeys.js';
 
 export interface StreamGate {
   /** Text the model streamed; returns the pieces to show now, in order (maybe none). */
@@ -33,8 +46,10 @@ export interface StreamGate {
    * Adds answer keys mid-attempt (5.6, ADR-0010 §4): a practice item's key, the moment the tool
    * that issued it returns. Text still held is judged with them; text already shown is kept as
    * the window in front. Optional: a gate without it leaves the new key to postGuard.
+   * `items` (5.6b): the issued items, taken even when `keys` is empty (a second item with the
+   * same key): their re-shows are held back and exempt, their own keys guarded.
    */
-  addKeys?(keys: readonly string[]): void;
+  addKeys?(keys: readonly string[], items?: readonly ItemContext[]): void;
 }
 
 /** What a gate is built from: the turn, the decision and the student's (scrubbed) message. */
@@ -42,6 +57,10 @@ export interface StreamGateInput {
   ctx: TurnContext;
   decision: PedagogyDecision;
   studentText?: string;
+  /** The active practice items (5.6b): their re-shows are exempt and held back until whole. */
+  items?: readonly ItemContext[];
+  /** Practice keys (5.6b, design 4): never quoted back as the student's own code. */
+  practiceKeys?: readonly string[];
 }
 
 /** One gate per generate attempt, built with what it needs to judge the text. */
@@ -85,19 +104,135 @@ function windowStart(released: string, reach: number): number {
 }
 
 /**
+ * The longest compact span the gate holds back for (5.6b). Items are capped far below it (a
+ * 600-unit prompt, six 160-unit options); a longer target is never held, only judged as normal.
+ */
+export const HOLD_MAX = 2_048;
+
+/** The KMP failure function of `t`. */
+function failure(t: string): number[] {
+  const f = new Array<number>(t.length).fill(0);
+  for (let i = 1, q = 0; i < t.length; i++) {
+    while (q > 0 && t[i] !== t[q]) q = f[q - 1] as number;
+    if (t[i] === t[q]) q++;
+    f[i] = q;
+  }
+  return f;
+}
+
+interface Cursor {
+  readonly target: string;
+  readonly fail: readonly number[];
+  state: number;
+}
+
+/** One item's re-show tracker: a cursor per span (its prompt, its listing). */
+interface ReShow {
+  /** Feeds pushed text that starts at stream offset `offset`. */
+  feed(text: string, offset: number): void;
+  /** The stream offset where the longest unfinished match starts, else Infinity. */
+  pending(): number;
+}
+
+/**
+ * A tracker for `item`. Each unit is folded alone, as the matcher folds text (look-alikes to their
+ * letter, then the compact form), and every compact unit fed records its stream offset. A complete
+ * match is reported to `onSpan` as [start, end) stream offsets. A high surrogate at the end of a
+ * piece waits for its pair.
+ */
+function reShow(item: ItemContext, onSpan: (s: number, e: number) => void): ReShow {
+  const cursors: Cursor[] = [item.prompt, (item.options ?? []).join('\n')]
+    .map((t) => normaliseForMatch(foldLabels(t)))
+    .filter((t) => t !== '' && t.length <= HOLD_MAX)
+    .map((target) => ({ target, fail: failure(target), state: 0 }));
+  const at: number[] = [];
+  let carry = '';
+  const step = (c: Cursor, u: string, end: number) => {
+    let q = c.state;
+    while (q > 0 && c.target[q] !== u) q = c.fail[q - 1] as number;
+    if (c.target[q] === u) q++;
+    if (q === c.target.length) {
+      onSpan(at[at.length - q] as number, end);
+      q = c.fail[q - 1] as number;
+    }
+    c.state = q;
+  };
+  return {
+    feed(text, offset) {
+      let s = carry + text;
+      let o = offset - carry.length;
+      carry = '';
+      const last = s.charCodeAt(s.length - 1);
+      if (last >= 0xd800 && last <= 0xdbff) {
+        carry = s.slice(-1);
+        s = s.slice(0, -1);
+      }
+      for (const ch of s) {
+        for (const u of normaliseForMatch(foldLabels(ch))) {
+          at.push(o);
+          for (const c of cursors) step(c, u, o + ch.length);
+        }
+        o += ch.length;
+      }
+    },
+    pending() {
+      let p = Infinity;
+      for (const c of cursors) if (c.state > 0) p = Math.min(p, at[at.length - c.state] as number);
+      return p;
+    },
+  };
+}
+
+/**
  * The gate over one matcher; with no keys it shows every piece as it comes. `grow` (5.6) rebuilds
- * the matcher with keys added mid-attempt; without it, `addKeys` is absent.
+ * the matcher with keys and items added mid-attempt; without it, `addKeys` is absent. `items`
+ * (5.6b): the active practice items whose re-show is held back until whole.
  */
 export function sentenceGate(
   initial: AnswerKeyMatcher,
   cap: number = SENTENCE_GATE_CAP,
-  grow?: (extra: readonly string[]) => AnswerKeyMatcher,
+  grow?: (extra: readonly string[], items: readonly ItemContext[]) => AnswerKeyMatcher,
+  items: readonly ItemContext[] = [],
 ): StreamGate {
   if (initial.empty && grow === undefined) {
     return { push: (t) => (t === '' ? [] : [t]), flush: () => [], tripped: false };
   }
   let keys = initial;
   const extra: string[] = [];
+  const extraItems: ItemContext[] = [];
+  /** Completed re-shows still held or within the window in front, as [start, end) offsets. */
+  let spans: [number, number][] = [];
+  const onSpan = (s: number, e: number) => {
+    spans.push([s, e]);
+  };
+  const holds = items.map((it) => reShow(it, onSpan));
+  /**
+   * Per-item record of which wrong options have been named by released text so far (fix round 1):
+   * the ruling-out check must hold across the whole reply, not only the reach-bounded window.
+   */
+  const ruledOut = new Map<ItemContext, Set<number>>();
+  const itemsWithKey = (): ItemContext[] =>
+    [...items, ...extraItems].filter((it) => correctIndex(it) !== undefined);
+  /** Whether releasing `piece` now would complete an item's wrong-option set. */
+  const ruleOutCompletes = (piece: string): boolean =>
+    itemsWithKey().some((it) => {
+      const k = correctIndex(it) as number;
+      const options = it.options ?? [];
+      const now = namedOptionsIn(piece, it);
+      const have = ruledOut.get(it);
+      const total = have === undefined ? now : new Set([...have, ...now]);
+      return !total.has(k) && options.every((_, j) => j === k || total.has(j));
+    });
+  /** Records the wrong options `piece` names, once it is actually released. */
+  const commitRuledOut = (piece: string) => {
+    for (const it of itemsWithKey()) {
+      const now = namedOptionsIn(piece, it);
+      if (now.size === 0) continue;
+      const have = ruledOut.get(it);
+      if (have === undefined) ruledOut.set(it, new Set(now));
+      else for (const j of now) have.add(j);
+    }
+  };
   let released = '';
   let buf = '';
   /** Units of `buf` already scanned for sentence ends (never rescanned). */
@@ -142,18 +277,42 @@ export function sentenceGate(
       scanned -= n;
       ends = ends.filter((e) => e > n).map((e) => e - n);
       out.push(piece);
+      commitRuledOut(piece);
+    };
+    /** Where a possible re-show starts in `buf` (held back), else `buf.length`. */
+    const holdAt = (): number => {
+      if (final) return buf.length;
+      let p = Infinity;
+      for (const h of holds) p = Math.min(p, h.pending());
+      return p === Infinity ? buf.length : Math.max(0, p - released.length);
+    };
+    /** The completed re-show that `i` (a cut or a sentence end in `buf`) falls strictly inside. */
+    const spanAround = (i: number): [number, number] | undefined =>
+      spans.find(([s, e]) => s - released.length < i && i < e - released.length);
+    /** The next sentence end, skipping ends inside a completed re-show (judged as one piece). */
+    const nextEnd = (): number | undefined => {
+      while (ends.length > 0 && spanAround(ends[0] as number) !== undefined) ends.shift();
+      return ends[0];
     };
     /**
      * How much of the first `end` units may be shown; -1 when they leak. Checked with the shown
      * text in front, from windowStart: a match can't start earlier than that.
      */
     const safeUpTo = (end: number, atFinalEnd: boolean): number => {
-      const from = windowStart(released, keys.reach);
+      let from = windowStart(released, keys.reach);
+      // A window that starts inside a shown re-show starts at its start instead: a cut-off
+      // listing would read as the bare option text (5.6b). Spans wholly before it are dropped.
+      spans = spans.filter(([, e]) => e > from);
+      for (const [s] of spans) if (s < from) from = s;
       const whole = released.slice(from) + buf.slice(0, end);
       if (keys.leaks(whole)) return -1;
-      if (atFinalEnd) return end;
-      const tail = keys.tailStart(whole);
-      return tail < 0 ? end : Math.max(0, tail - (released.length - from));
+      let ok = end;
+      if (!atFinalEnd) {
+        const tail = keys.tailStart(whole);
+        ok = tail < 0 ? end : Math.max(0, tail - (released.length - from));
+      }
+      if (ok > 0 && ruleOutCompletes(buf.slice(0, ok))) return -1;
+      return ok;
     };
     /** Judges one sentence end: shown, held (its tail may start a key) or a leak. */
     const judge = (end: number): boolean => {
@@ -168,15 +327,21 @@ export function sentenceGate(
 
     scan();
     while (!tripped && buf !== '') {
-      const end = ends[0];
+      const hold = holdAt();
+      const next = nextEnd();
+      const end = next !== undefined && next <= hold ? next : undefined;
       // Sentences within the cap are judged one by one, each with only the held text before it.
       if (end !== undefined && end <= cap) {
         ends.shift();
         if (!judge(end)) break;
         continue;
       }
-      if (buf.length >= cap) {
-        const ok = safeUpTo(capCut(buf, cap), false);
+      if (Math.min(buf.length, hold) >= cap) {
+        // Never cut inside a completed re-show: cut before it instead (or not at all).
+        let cut = capCut(buf, cap);
+        const inside = spanAround(cut);
+        if (inside !== undefined) cut = Math.max(0, inside[0] - released.length);
+        const ok = cut > 0 ? safeUpTo(cut, false) : 0;
         if (ok < 0) {
           trip();
           break;
@@ -217,6 +382,7 @@ export function sentenceGate(
         return [];
       }
       buf += text;
+      for (const h of holds) h.feed(text, released.length + buf.length - text.length);
       return drain(false);
     },
     flush() {
@@ -228,18 +394,40 @@ export function sentenceGate(
     },
   };
   if (grow !== undefined) {
-    gate.addKeys = (more) => {
+    gate.addKeys = (more, newItems = []) => {
       extra.push(...more);
-      keys = grow(extra);
+      extraItems.push(...newItems);
+      keys = grow(extra, extraItems);
+      // Text still held may be the start of a new item's re-show.
+      for (const it of newItems) {
+        const h = reShow(it, onSpan);
+        if (!tripped && buf !== '') h.feed(buf, released.length);
+        holds.push(h);
+      }
     };
   }
   return gate;
 }
 
-/** The default gate: the turn's do-not-say list, with the student's own code allowed back. */
-export const answerLeakStreamGate: StreamGateFactory = ({ decision, studentText }) => {
-  const opts = studentText === undefined ? {} : { studentText };
-  return sentenceGate(compileAnswerKeys(decision.mustNotReveal, opts), SENTENCE_GATE_CAP, (extra) =>
-    compileAnswerKeys([...decision.mustNotReveal, ...extra], opts),
+/**
+ * The default gate: the turn's do-not-say list, with the student's own code allowed back, and
+ * (5.6b) the active items' re-shows exempt. Keys added mid-attempt are practice keys (design 4).
+ */
+export const answerLeakStreamGate: StreamGateFactory = ({
+  decision,
+  studentText,
+  items = [],
+  practiceKeys = [],
+}) => {
+  const opts = (extra: readonly string[], more: readonly ItemContext[]) => ({
+    ...(studentText === undefined ? {} : { studentText }),
+    items: [...items, ...more],
+    practiceKeys: [...practiceKeys, ...extra],
+  });
+  return sentenceGate(
+    compileAnswerKeys(decision.mustNotReveal, opts([], [])),
+    SENTENCE_GATE_CAP,
+    (extra, more) => compileAnswerKeys([...decision.mustNotReveal, ...extra], opts(extra, more)),
+    items,
   );
 };

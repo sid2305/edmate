@@ -45,7 +45,7 @@ import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { PriceUsage } from './generate/costCeiling.js';
 import type { StreamGateFactory } from './generate/streamGate.js';
 import type { TurnLimits } from './limits.js';
-import type { IssuedItem, ToolRegistry, ToolSessionState } from './tools.js';
+import type { IssuedItem, ItemContext, ToolRegistry, ToolSessionState } from './tools.js';
 
 /** Who a turn's model calls are billed to: always from the entitlement, never the input. */
 export type TurnBilling = Parameters<UsageMeter['record']>[1];
@@ -490,6 +490,14 @@ export interface Steps {
        * runner saves its key on every outcome, even when the attempt then fails (5.6).
        */
       onPracticeItem?: (item: IssuedItem) => void;
+      /**
+       * The active practice items (5.6b): the item the loaded help state holds (resolved through
+       * the entitled registry) and the items earlier attempts of this turn issued. The stream gate
+       * exempts their re-shows and guards the keys derived from them. Server-side only.
+       */
+      items?: readonly ItemContext[];
+      /** Practice keys (5.6b, design 4): never quoted back as the student's own code. */
+      practiceKeys?: readonly string[];
     },
     emit: Emit,
   ): Promise<GenerateResult>;
@@ -508,6 +516,10 @@ export interface Steps {
       locked?: 'hit' | 'failed';
       /** decide's numbered sources, for grounding's citation check (4.7). */
       sources?: SourceRef[];
+      /** The loaded active item plus every item issued this turn (5.6b). */
+      items?: readonly ItemContext[];
+      /** Practice keys (5.6b, design 4): never quoted back as the student's own code. */
+      practiceKeys?: readonly string[];
     },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;

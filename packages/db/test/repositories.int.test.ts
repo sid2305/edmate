@@ -4368,17 +4368,27 @@ describe.skipIf(!up)(
         `update teacher_profiles set verification_status = 'verified' where user_id = any($1)`,
         [TEACHERS.map((t) => teacherId(t))],
       );
+      // Task 5.10d: the unique partial index on open sessions is per (teacher, student, agent) —
+      // endable/endable2 need their own agent ids (any valid agents.id works; nothing here checks
+      // that a session's agent owns its package) so these two fixture rows and the pair's own
+      // seeded session (same teacher/student, ids.agent(t)) can all be open at once.
+      for (const t of TEACHERS) {
+        await raw.query(
+          `insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1), ($3, $2, 'live', 1)`,
+          [`${ids.agent(t)}_end`, teacherId(t), `${ids.agent(t)}_end2`],
+        );
+      }
       for (const p of PAIRS) {
         const t = teacherOf(p);
         await raw.query(
           `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
            values ($1, $2, $3, $4, 1, $5, 1)`,
-          [endable(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
+          [endable(p), studentId(studentOf(p)), teacherId(t), `${ids.agent(t)}_end`, ids.pkg(t)],
         );
         await raw.query(
           `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
            values ($1, $2, $3, $4, 1, $5, 1)`,
-          [endable2(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
+          [endable2(p), studentId(studentOf(p)), teacherId(t), `${ids.agent(t)}_end2`, ids.pkg(t)],
         );
       }
       // Task 5.10: fixed fixtures for teacherQuestions.answer / notifications' isolation cases.
@@ -5556,11 +5566,14 @@ describe.skipIf(!up)(
         '2026-10-18T00:02:00Z',
         '2026-10-18T00:03:00Z',
       ];
+      // Task 5.10d: at most one open session per (teacher, student, agent) — this paging test
+      // doesn't care about open vs ended, so every fixture row here is seeded already-ended (it
+      // never needs to coexist with the pair's own seeded open session or each other).
       for (const [i, id] of pageIds.entries()) {
         await raw.query(
           `insert into sessions
-             (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version, created_at)
-           values ($1, $2, $3, $4, 1, $5, 1, $6)`,
+             (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version, created_at, ended_at)
+           values ($1, $2, $3, $4, 1, $5, 1, $6, $6)`,
           [id, sc.studentId, sc.teacherId, ids.agent(t), ids.pkg(t), times[i]],
         );
       }

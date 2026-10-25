@@ -876,6 +876,31 @@ describe('runToolLoop: issued items (5.6, ADR-0010)', () => {
     expect(failures(s.reported)).toEqual([]);
   });
 
+  it('an MCQ issued after an MCQ with the same key B is served (5.6b: one joined listing)', async () => {
+    const shown = ['What is 4 + 5?', 'A) 8', 'B) 9', 'C) 10'];
+    const item = { itemId: 'i', moduleId: 'm', answerKey: ['B'], shown };
+    const s = setup([[call('c1')], [say('Ok.')]], {
+      tools: [withIssued(() => item)],
+      mustNotReveal: ['B'],
+    });
+    const got: unknown[] = [];
+    s.input.onToolOutput = (_r, _o, issued) => void got.push(issued);
+    await s.run();
+    expect(got).toEqual([item]);
+    expect(failures(s.reported)).toEqual([]);
+  });
+
+  it('an MCQ whose shown text says the held label key is refused', async () => {
+    const shown = ['What is 4 + 5? The answer is B.', 'A) 8', 'B) 9', 'C) 10'];
+    const item = { itemId: 'i', moduleId: 'm', answerKey: ['A'], shown };
+    const s = setup([[call('c1')], [say('Ok.')]], {
+      tools: [withIssued(() => item)],
+      mustNotReveal: ['B'],
+    });
+    await s.run();
+    expect(failures(s.reported)).toEqual([['answer_key', undefined]]);
+  });
+
   it('an item whose shown text holds a held key fails closed as `answer_key`', async () => {
     const item = { itemId: 'i', moduleId: 'm', answerKey: ['7'], shown: ['Is it 5/6?'] };
     const s = setup([[call('c1')], [say('Ok.')]], {
