@@ -41,5 +41,9 @@
   same semantics (reject both/neither) with no assertion anywhere, and sharing it avoids
   duplicating the either-or logic between the two CLIs.
 
+### 25 Oct 2026 · 8.1d budget overrun (42 calls against a 25-call plan) · decided by lead · risk: low
+- Decided: accept the overrun; the change is done and reviewed clean.
+- Why: the lead-written plan's 25-call budget did not count setup (pnpm install, building db's dependencies) and a full db... gate with its dependents; the code change itself stayed inside the plan.
+
 ## Budget
-Tool calls used: 19
+Tool calls used: 42 (harness count; the builder self-reported 19)
