@@ -10,6 +10,119 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.2g ADR-0014 left unedited · decided by builder · risk: low
+- Decided: did not touch `docs/adr/0014-web-link-egress.md` (Open question 1).
+- Why: editing `docs/adr/**` is a risky path needing architect, security-reviewer and
+  typescript-reviewer; the new doc links to the ADR one-way instead, per the plan's accepted
+  recommendation.
+
+---
+
+### 25 Oct 2026 · 8.2g example file reuses real image/build lines · decided by builder · risk: low
+- Decided: `docker/compose.production-egress.example.yaml`'s `postgres`/`redis`/`minio`/`worker`
+  services use the exact `image:`/`build:` lines from `docker/compose.yaml` (Open question 2).
+- Why: keeps the example realistic and lets `docker compose config` resolve it end to end, while
+  staying a separate, standalone file (own `name:`) never combined with the dev compose file.
+
+---
+
+### 25 Oct 2026 · 8.2g stack-config.test.ts left unedited · decided by builder · risk: low
+- Decided: did not add a new assertion to `apps/web/src/deploy/stack-config.test.ts` (Open
+  question 3).
+- Why: task scope is docs and compose/network config only, no application code; that file is a
+  `.ts` test under `apps/web/src`.
+
+---
+
+### 25 Oct 2026 · 8.2g doc filename · decided by builder · risk: low
+- Decided: used `docs/setup/web-link-egress-firewall.md` (Open question 4).
+- Why: parallels the existing `sign-in-mail-and-proxy.md` topic-named style in the same
+  directory; low stakes, easily renamed later.
+
+---
+
+### 25 Oct 2026 · 8.2g lead fix round: the doc states what the firewall really blocks · decided by lead · risk: low
+- Decided: the lead fixed the review findings in docs/setup/web-link-egress-firewall.md directly (docs only): the iptables example now drops the private, loopback, CGNAT, link-local and multicast ranges on every port before it allows public 443, and the doc says plainly that a host on a public address answering on 443 is covered only by the app-level check; a new IPv6 section says iptables never matches IPv6, keeps `enable_ipv6` off on the egress network and gives the ip6tables mirror (443 to 2000::/3 only); the security-group paragraph says security groups only allow, so private 443 inside the network needs a network ACL and the metadata service needs the provider's own control; the resolver section now says the c-ares Resolver uses the OS nameservers (no `setServers()`), skips /etc/hosts, and that the all-addresses-public check is what keeps a split-horizon view from widening reach. docker/compose.production-egress.example.yaml's header says "public 443". The MEDIUM and LOW were fixed in the same pass because they are sentences in the same file. The example file's worker env leaves out S3_REGION and S3_BUCKET (code-reviewer, minor): wontfix, the file shows the network shape and is never run.
+- Why: the code-reviewer's HIGH (the doc claimed the firewall blocks internal hosts while allowing 443 to any address) and the security-reviewer's MEDIUM (IPv4 only) would have given a deployer a false guarantee.
+
+---
+
+### 25 Oct 2026 · 8.2g merge: web-link egress firewall deploy notes · decided by lead · risk: low
+- Decided: merge 8.2g after the lead fix round. code-reviewer and security-reviewer reviewed it; no app code changes, and docker/compose.yaml and docker/env.example gain one comment line each.
+- Why: the plan's four recommendations were applied as written, `docker compose config` resolves both compose files, and the findings are fixed.
+
+---
+
+### 25 Oct 2026 · 8.2g budget 28 vs 25 · decided by lead · risk: low
+- Decided: accept 28 builder tool calls against the plan's 25 (harness count; the builder reported 21), recorded in docs/tasks/8.2g/handoff.md.
+- Why: the extra calls were the before-and-after stack-config test runs and the compose validation; the diff stayed inside the plan's files.
+
+---
+
+### 25 Oct 2026 · 7.4d cancel message wording · decided by builder · risk: low
+- Decided: the cancelled-case error message is the literal string
+  `case cancelled: gate deadline passed`, exported as `CASE_CANCELLED` from
+  `packages/evals/src/runner.ts`, and reused by both new tests.
+- Why: the plan gave this exact wording as an example; exporting it keeps the test and any future
+  caller from re-typing (and risking drifting from) the literal string.
+
+---
+
+### 25 Oct 2026 · 7.4d optsFor now takes a required signal · decided by builder · risk: low
+- Decided: `optsFor(packageId, signal)` in `packages/evals/src/qualityGate.ts` takes `signal` as a
+  required second parameter (not optional), since `runQualityGate` always creates a fresh
+  `AbortController` per case before calling it.
+- Why: keeps the one caller and the one callee in lock-step without an unreachable `undefined`
+  branch to test or reason about.
+
+---
+
+### 25 Oct 2026 · 7.4d merge: quality gate cancels timed-out cases · decided by lead · risk: low
+- Decided: merge 7.4d. The quality gate now aborts a timed-out case through a per-case AbortSignal, the runner stops before the next turn or judge call, and the timer follows the injected clock. code-reviewer, typescript-reviewer and silent-failure-hunter approved; typescript-reviewer ran the dependents gate (`--filter=...@edmate/evals`, 19/19 green, apps/worker and apps/cli unchanged). Its one LOW (packages/evals/src/runner.test.ts asserts the literal cancel message instead of importing `CASE_CANCELLED`) is wontfix: the test pinning the exact wording is intended, and a drift fails the test loudly.
+- Why: both 7.4a LOWs are fixed inside packages/evals with no change to implementers, and nothing blocks merge.
+
+---
+
+### 25 Oct 2026 · 7.4d budget 46 vs 35 · decided by lead · risk: low
+- Decided: accept 46 builder tool calls against the plan's 35 (harness count; the builder reported 32), recorded in docs/tasks/7.4d/handoff.md.
+- Why: the extra calls went to tests for the abort race and the injected timer; the diff stayed inside the plan's files.
+
+---
+
+### 25 Oct 2026 · 9.1a Lighthouse and chrome-launcher pinned, no ADR · decided by builder · risk: low
+- Decided: pinned `lighthouse@13.5.0` and `chrome-launcher@1.2.2` (both exact, no `^`/`~`) as
+  `@edmate/web` devDependencies; no ADR.
+- Why: both are devDependency-only, CI-only test tools with no production code path (same
+  precedent as `jest-axe`/`@axe-core/playwright` already in this package) — the tech-stack ADR
+  rule (non-negotiable 2) does not apply. `13.x`/`1.x` are each the latest stable major
+  resolvable at install time and compatible with this repo's pinned Node (`.nvmrc`).
+
+---
+
+### 25 Oct 2026 · 9.1a no .github/** change, logged regardless of outcome · decided by builder · risk: high
+- Decided: no `.github/**` edit was made; `chrome-launcher` found and launched a headless
+  Chrome with zero extra install step in this local run, and per the lead's answer the
+  `node` job's `ubuntu-latest` runner is used as-is unless CI itself proves otherwise.
+- Why: logged as `risk: high` on the `.github/**` risk-path regardless of outcome, per 13.1's own
+  precedent (named in the plan) — so a reviewer isn't surprised by its absence. **Reviewers:
+  security-reviewer**, per the plan's "Risky paths touched" section. If a future CI run shows
+  `chrome-launcher` cannot find a binary on `ubuntu-latest`, the fix is one pinned
+  `browser-actions/setup-chrome` step (by SHA), a small follow-up, not a redesign.
+
+---
+
+### 25 Oct 2026 · 9.1a merge: Lighthouse accessibility test on signed-in pages · decided by lead · risk: low
+- Decided: merge 9.1a. apps/web/test/lighthouse-a11y.test.ts scores /home and /teacher at 360 px on a production build in the build-smoke run and fails below 95; lighthouse and chrome-launcher are exact-pinned devDependencies of apps/web. code-reviewer and typescript-reviewer approved after one fix round (independent afterAll cleanup, captured server stderr).
+- Why: no risky path changed (.github untouched); this PR's own CI run is the check that chrome-launcher finds Chrome on the CI runner (the open point in docs/tasks/9.1a/handoff.md). The --no-sandbox flag in apps/web/test/lighthouse-a11y.test.ts is test-only.
+
+---
+
+### 25 Oct 2026 · 9.1a budget 101 vs 40 · decided by lead · risk: low
+- Decided: accept the overrun recorded in docs/tasks/9.1a/handoff.md: 101 tool calls (harness count: build 71, fix round 30; the agents reported 56 and 17) against the plan's 40.
+- Why: local production builds collided on .next/lock and had to be re-run; the result is complete and approved.
+
+---
+
 ### 25 Oct 2026 · 7.2k two decisive() calls per rule instead of one · decided by builder · risk: low
 - Decided: split each of the vapes and weapons rules into two `decisive()` calls — one for
   bare/past/habitual stems (no marker), one for infinitives (marker required) — in

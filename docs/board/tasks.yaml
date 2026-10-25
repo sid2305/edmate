@@ -2286,9 +2286,31 @@ tasks:
   accept: /home and /teacher score >= 95 at 360 px on a production build; the score runs in CI.
   deps:
   - '9.1'
-  status: running
+  status: done
   branch: m13/9.1a-lighthouse-a11y
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 289
+    tokens_in: 960
+    tokens_out: 78093
+    cache_read_tokens: 24457181
+    wall_time_seconds: 412833
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 4
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 3
+    human_questions: 0
 - id: 9.1b
   milestone: M13
   title: '9.1 review follow-ups: log the error that currentPrincipal swallows before returning null; export HOME_PATH and TEACHER_PATH next to SIGN_IN_PATH; drop the /home self-link'
@@ -3214,7 +3236,7 @@ tasks:
 - id: 0.20c
   milestone: M13
   title: 'Harness tests that time out under heavy parallel load (seen in the 0.20b build, 25 Oct 2026): packages/harness/src/pipeline/generate/streamGate.sentence.test.ts and packages/harness/src/pipeline/runner.test.ts
-    hit tight per-test ms timeouts at full local parallelism. Only act if CI shows them; then find the slow step like 0.20b did.'
+    hit tight per-test ms timeouts at full local parallelism. packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" failed in CI on PR #297 (82 vs the 64 bound; 13.4 does not touch the harness) and flaked before. Only act if CI shows them; then find the slow step like 0.20b did.'
   accept: Both files pass five full CI node runs in a row with no timeout raised to hide a slow step.
   deps:
   - 0.20b
@@ -5980,9 +6002,32 @@ tasks:
   accept: the deploy guide documents the rule, and the production compose or firewall example applies it.
   deps:
   - 8.2f
-  status: running
+  status: done
   branch: m13/8.2g-egress-rule
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet fix:lead
+  metrics:
+    tool_calls: 136
+    tokens_in: 444
+    tokens_out: 54419
+    cache_read_tokens: 12408427
+    wall_time_seconds: 405924
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.6h
   milestone: M9
   title: '9.6c security review follow-ups (packages/db subscriptions.ts, before the pilot): cancel then start can''t get round a cost-alarm pause (start refuses a free package while the teacher''s free
@@ -6872,9 +6917,29 @@ tasks:
   deps:
   - 7.4a
   risk: low
-  status: running
+  status: done
   branch: m13/7.4d-gate-abort-signal
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 52
+    tokens_in: 182
+    tokens_out: 1361
+    cache_read_tokens: 2925028
+    wall_time_seconds: 360
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 7.2l
   milestone: M13
   title: '7.2k review LOWs: in packages/harness/src/guardrails/moderationPatterns.ts the Devanagari past and habitual forms (बिकता, बेचा, छिपाया, ले गया ...) of the vapes and weapons rules block without
@@ -6900,6 +6965,27 @@ tasks:
   title: '13.4 database review: packages/db/migrations/0032_retention_indexes.sql builds its three indexes with plain CREATE INDEX; move them to the concurrentIndex post-migrate pattern in packages/db/src/migrate.ts
     before sessions, turn_traces or chunks grow large'
   accept: the retention indexes are built CONCURRENTLY outside the migration transaction; db tests green.
+  deps:
+  - '13.4'
+  risk: low
+  status: todo
+  branch: null
+- id: 13.4b
+  milestone: M13
+  title: '13.4 Phase C (split out by the lead, 25 Oct 2026): apps/web account-wide export (GET /api/me/export) and account delete (DELETE /api/me calling identity.anonymise for the signed-in student only,
+    then signing them out), per docs/tasks/13.4/plan.md Phase C and the human''s B-59 answers (what a delete keeps, holds on an open alert or dispute, export scope)'
+  accept: per docs/tasks/13.4/plan.md Phase C; web typecheck, lint and test green; security-reviewer approves.
+  deps:
+  - '13.4'
+  risk: high
+  status: todo
+  branch: null
+- id: 13.4c
+  milestone: M13
+  title: '13.4 Phase B review follow-ups (before retention leaves dry run): apps/worker/src/retention/workers.ts purgeTable logs the rows already deleted when a later call fails, and passes purgeLimit into
+    the purge call (or drops the knob); config.ts cutoffFor refuses zero or negative days; schedule.ts warns once on a live (not dry) run; index.ts treats a failed retention schedule registration as more
+    than a log line'
+  accept: per docs/tasks/13.4/review.md deferred 13.4c findings; worker typecheck, lint and test green.
   deps:
   - '13.4'
   risk: low
