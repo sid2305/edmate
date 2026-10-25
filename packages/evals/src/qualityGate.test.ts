@@ -338,6 +338,42 @@ describe('runQualityGate', () => {
     expect(r.results.some((x) => x.error === DEADLINE_NOT_RUN)).toBe(true);
   });
 
+  it('fails a hung case once the deadline passes, without waiting for it to resolve (item 1)', async () => {
+    vi.useFakeTimers();
+    try {
+      const agent = scriptedAgent(() => new Promise<never>(() => {})); // never resolves
+      const promise = runQualityGate(
+        gateInput({ perAgent: world(1), agentFor: () => agent, concurrency: 1 }),
+      );
+      await vi.advanceTimersByTimeAsync(GATE_DEADLINE_MS);
+      const r = await promise;
+      expect(r.pass).toBe(false);
+      expect(r.stats).toMatchObject({ deadlinePassed: true, notRun: 1, cases: 1 });
+      expect(r.results[0]).toMatchObject({ id: accId(0), pass: false, error: DEADLINE_NOT_RUN });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects before any worker starts when agentFor throws for one package (item 2)', async () => {
+    const perAgent: PerAgentSuiteInput = {
+      ...world(1),
+      packages: [
+        ...world(0).packages,
+        { id: 'p2', name: 'Also', moduleIds: ['m1'], lockedReply: 'generic', sourceLabel: 'p2' },
+      ],
+    };
+    const okAgent = agentFailing();
+    const agentFor = vi.fn((pkg: string) => {
+      if (pkg === 'p2') throw new Error('no agent for p2');
+      return okAgent;
+    });
+    await expect(runQualityGate(gateInput({ perAgent, agentFor }))).rejects.toThrow(
+      'no agent for p2',
+    );
+    expect(okAgent.calls).toEqual([]);
+  });
+
   it('task 7.4c: an explicit deadlineMs on a full-scope input overrides the default both ways', async () => {
     let clock = 0;
     const tinyDeadlineAgent = scriptedAgent(() => {
@@ -412,7 +448,10 @@ describe('groupVerdict', () => {
     expect(groupVerdict('agent', 'leak', 50, 49)).toMatchObject({ pass: true, minPercent: 98 });
     expect(groupVerdict('agent', 'leak', 50, 48)).toMatchObject({ pass: false });
     expect(groupVerdict('platform', 'locked', 3, 3)).toMatchObject({ pass: true });
-    expect(groupVerdict('platform', 'locked', 3, 2).reason).toBe('below_threshold');
+    expect(groupVerdict('platform', 'locked', 3, 2)).toMatchObject({
+      pass: false,
+      reason: 'below_threshold',
+    });
     expect(groupVerdict('platform', 'pedagogy', 5, 4)).toMatchObject({
       pass: true,
       minPercent: 80,

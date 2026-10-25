@@ -9,9 +9,11 @@ import {
   sampleStyleCases,
   selectGateCases,
   STYLE_SAMPLE_SIZE,
+  tryGroupOf,
   type ChangeKind,
   type GateScope,
 } from './gateScope.js';
+import { GATE_DEADLINE_MS } from './qualityGate.js';
 import type { EvalCase } from './schema.js';
 
 function evalCase(id: string, suite: string): EvalCase {
@@ -81,6 +83,24 @@ describe('groupOf', () => {
   it('throws on a suite with no threshold (fail closed)', () => {
     expect(() => groupOf(evalCase('x-1', 'toString'))).toThrow(/no gate threshold/);
     expect(() => groupOf(evalCase('x-1', 'toString'))).toThrow(GateScopeError);
+  });
+});
+
+describe('tryGroupOf', () => {
+  it('returns the distress group for a distress case, non-throwing', () => {
+    expect(tryGroupOf(evalCase('safety-distress-x', 'safety'))).toBe('safety-distress');
+  });
+
+  it('returns the safety group for a near-miss distress case', () => {
+    expect(tryGroupOf(evalCase('safety-distress-nearmiss-x', 'safety'))).toBe('safety');
+  });
+
+  it('returns the suite as the group for a known suite', () => {
+    expect(tryGroupOf(evalCase('leak-x', 'leak'))).toBe('leak');
+  });
+
+  it('returns undefined for an unknown suite, instead of throwing', () => {
+    expect(tryGroupOf(evalCase('x-1', 'toString'))).toBeUndefined();
   });
 });
 
@@ -216,6 +236,10 @@ describe('defaultGateDeadlineMs', () => {
     ] as ChangeKind[][]) {
       expect(defaultGateDeadlineMs(changes)).toBe(15 * 60_000);
     }
+  });
+
+  it('non-full-scope default equals qualityGate.ts\'s GATE_DEADLINE_MS (item 11, task 7.4a)', () => {
+    expect(defaultGateDeadlineMs(['material'])).toBe(GATE_DEADLINE_MS);
   });
 
   it('is 120 minutes for a full-scope change, alone or unioned with anything', () => {

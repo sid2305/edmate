@@ -20,6 +20,7 @@ import {
   GATE_THRESHOLDS,
   loadCasesFromDir,
   runQualityGate,
+  tryGroupOf,
   type ChangeKind,
   type EvalCase,
   type GateGroup,
@@ -63,15 +64,12 @@ export interface GateCommandDeps {
    * gate stays offline (lead note 1): this command only ever runs a recorder in replay mode.
    */
   recorder?: Recorder;
-  now?: () => Date;
 }
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-const DISTRESS_PREFIX = 'safety-distress-';
-const DISTRESS_NEARMISS_PREFIX = 'safety-distress-nearmiss-';
 /**
  * Platform groups a full-scope gate does not expect a non-empty case for (task 7.4b, matching
  * `gateScope.ts`'s `selectGateCases`): the per-agent `accuracy` group already covers platform
@@ -96,14 +94,8 @@ function fullScopeGaps(platformCases: readonly EvalCase[]): {
     (Object.keys(GATE_THRESHOLDS) as GateGroup[]).map((g) => [g, 0]),
   );
   for (const c of platformCases) {
-    if (!knownSuites.has(c.suite)) continue;
-    const group = (
-      c.suite === 'safety' && c.id.startsWith(DISTRESS_NEARMISS_PREFIX)
-        ? 'safety'
-        : c.suite === 'safety' && c.id.startsWith(DISTRESS_PREFIX)
-          ? 'safety-distress'
-          : c.suite
-    ) as GateGroup;
+    const group = tryGroupOf(c);
+    if (group === undefined) continue;
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
   const emptyGroups = (Object.keys(GATE_THRESHOLDS) as GateGroup[]).filter(

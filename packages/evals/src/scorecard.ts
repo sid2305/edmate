@@ -22,6 +22,13 @@ export const SCORECARD_GROUPS = {
 } as const satisfies Record<string, GateGroup>;
 export type ScorecardCategoryKey = keyof typeof SCORECARD_GROUPS;
 
+/** `SCORECARD_GROUPS`'s keys, typed -- no `Object.keys(...) as ScorecardCategoryKey[]` cast. */
+const SCORECARD_CATEGORY_KEYS = [
+  'hints_before_answers',
+  'locked_content',
+  'accuracy',
+] as const satisfies readonly ScorecardCategoryKey[];
+
 const GATE_ORIGINS = ['platform', 'agent'] as const satisfies readonly GateOrigin[];
 
 export interface ScorecardCategoryOrigin {
@@ -58,7 +65,7 @@ const ScorecardCategoryOriginSchema = z.object({
 });
 
 const ScorecardCategorySchema = z.object({
-  key: z.enum(Object.keys(SCORECARD_GROUPS) as [ScorecardCategoryKey, ...ScorecardCategoryKey[]]),
+  key: z.enum(SCORECARD_CATEGORY_KEYS),
   measured: z.boolean(),
   total: z.number().int().nonnegative(),
   passed: z.number().int().nonnegative(),
@@ -93,7 +100,7 @@ function combine(key: ScorecardCategoryKey, rows: readonly GateGroupResult[]): S
 
 /** Pure: reads only `gate.groups`, `gate.pass` and `gate.changes`. No clock, no I/O. */
 export function buildScorecard(gate: GateResult): Scorecard {
-  const categories = (Object.keys(SCORECARD_GROUPS) as ScorecardCategoryKey[]).map((key) => {
+  const categories = SCORECARD_CATEGORY_KEYS.map((key) => {
     const group = SCORECARD_GROUPS[key];
     const rows = gate.groups.filter((g) => g.group === group);
     return rows.length === 0 ? unmeasured(key) : combine(key, rows);

@@ -14,7 +14,6 @@ import {
   type ChangeKind,
   type GateGroup,
   type GateOrigin,
-  type ScopedCase,
 } from './gateScope.js';
 import type { JudgeModelConfig } from './judgeModel.js';
 import { generatePerAgentSuite, type PerAgentSuiteInput } from './perAgentSuite.js';
@@ -53,15 +52,17 @@ export interface GateInput {
   now?: () => number;
 }
 
-export interface GateGroupResult {
+interface GateGroupResultBase {
   origin: GateOrigin;
   group: GateGroup;
   total: number;
   passed: number;
   minPercent: number;
-  pass: boolean;
-  reason?: 'empty_group' | 'below_threshold';
 }
+
+export type GateGroupResult =
+  | (GateGroupResultBase & { pass: true })
+  | (GateGroupResultBase & { pass: false; reason: 'empty_group' | 'below_threshold' });
 
 export interface GateStats {
   /** Cases in scope, run or not. */
@@ -162,6 +163,19 @@ function locksSomething(input: PerAgentSuiteInput): boolean {
   return input.packages.some((p) => [...modules].some((m) => !p.moduleIds.includes(m)));
 }
 
+function notRunResult(evalCase: EvalCase): CaseResult {
+  return { id: evalCase.id, suite: evalCase.suite, pass: false, error: DEADLINE_NOT_RUN, turns: [] };
+}
+
+/** Resolves after `ms`; cleared if the race's other side wins first. */
+function afterMs(ms: number): { promise: Promise<'timeout'>; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout>;
+  const promise = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), ms);
+  });
+  return { promise, cancel: () => clearTimeout(timer) };
+}
+
 export async function runQualityGate(input: GateInput): Promise<GateResult> {
   const concurrency = positiveInteger(input.concurrency ?? GATE_CONCURRENCY, 'concurrency');
   const deadlineMs = positiveInteger(
@@ -179,12 +193,19 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
     styleSampleSeed: input.styleSampleSeed,
   });
 
+  // Resolved once, synchronously, before any worker starts: a throw here stops the whole gate
+  // before a single case runs (task 7.4a item 2).
   const agents = new Map<string, EvalAgent>();
+  for (const { evalCase } of scope.cases) {
+    if (!agents.has(evalCase.package)) {
+      agents.set(evalCase.package, input.agentFor(evalCase.package));
+    }
+  }
   const optsFor = (packageId: string): RunOptions => {
-    let agent = agents.get(packageId);
+    const agent = agents.get(packageId);
     if (agent === undefined) {
-      agent = input.agentFor(packageId);
-      agents.set(packageId, agent);
+      // Unreachable: every case's package was pre-resolved above.
+      throw new Error(`no agent resolved for package "${packageId}"`);
     }
     return {
       agent,
@@ -196,6 +217,7 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
 
   const started = now();
   const results: CaseResult[] = new Array<CaseResult>(scope.cases.length);
+  const notRunFlags = new Array<boolean>(scope.cases.length).fill(false);
   const ran: EvalCase[] = [];
   let next = 0;
   let deadlinePassed = false;
@@ -203,20 +225,35 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
     while (next < scope.cases.length) {
       const index = next;
       next += 1;
-      const { evalCase } = scope.cases[index] as ScopedCase;
-      if (deadlinePassed || now() - started >= deadlineMs) {
+      const scoped = scope.cases[index];
+      if (scoped === undefined) throw new Error(`gate scope is missing case ${index}`);
+      const { evalCase } = scoped;
+      const left = deadlineMs - (now() - started);
+      if (deadlinePassed || left <= 0) {
         deadlinePassed = true;
-        results[index] = {
-          id: evalCase.id,
-          suite: evalCase.suite,
-          pass: false,
-          error: DEADLINE_NOT_RUN,
-          turns: [],
-        };
+        notRunFlags[index] = true;
+        results[index] = notRunResult(evalCase);
         continue;
       }
-      ran.push(evalCase);
-      results[index] = await runCaseSafely(evalCase, optsFor(evalCase.package));
+      // Races the case against the time left on the deadline: a case that never resolves still
+      // fails the gate once the deadline passes (task 7.4a item 1). This only stops counting the
+      // case as run; it cannot cancel the in-flight agent/judge call (no AbortSignal yet).
+      const timeout = afterMs(left);
+      const outcome = await Promise.race([
+        runCaseSafely(evalCase, optsFor(evalCase.package)).then(
+          (result) => ({ kind: 'done' as const, result }),
+        ),
+        timeout.promise.then(() => ({ kind: 'timeout' as const })),
+      ]);
+      timeout.cancel();
+      if (outcome.kind === 'timeout') {
+        deadlinePassed = true;
+        notRunFlags[index] = true;
+        results[index] = notRunResult(evalCase);
+      } else {
+        ran.push(evalCase);
+        results[index] = outcome.result;
+      }
     }
   };
   await Promise.all(
@@ -244,11 +281,11 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
     if (results[i]?.pass === true) entry.passed += 1;
   });
   const groups = [...tally.values()].map((t) => groupVerdict(t.origin, t.group, t.total, t.passed));
-  const notRun = results.filter((r) => r.error === DEADLINE_NOT_RUN).length;
+  const notRun = notRunFlags.filter(Boolean).length;
 
   return {
     pass: notRun === 0 && groups.every((g) => g.pass),
-    changes: [...input.changes],
+    changes: [...new Set(input.changes)],
     groups,
     failedCaseIds: results.filter((r) => !r.pass).map((r) => r.id),
     results,

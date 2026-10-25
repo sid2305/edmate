@@ -75,6 +75,7 @@ export {
   answerableFromTeacherEvalCases,
   type TeacherEvalCaseLike,
 } from './gateAdapters.js';
+export { adaptDemoTeacherContent, PACKAGE_IDS, toPackage } from './demoContentAdapter.js';
 export {
   CHANGE_KINDS,
   defaultGateDeadlineMs,
@@ -85,6 +86,7 @@ export {
   sampleStyleCases,
   selectGateCases,
   STYLE_SAMPLE_SIZE,
+  tryGroupOf,
   type ChangeKind,
   type ExpectedGroup,
   type GateGroup,
