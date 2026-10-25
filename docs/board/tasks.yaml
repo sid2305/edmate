@@ -5737,7 +5737,7 @@ tasks:
         deferred: 0
         wontfix: 2
     human_questions: 0
-- id: 8.7m
+- id: 8.7n
   milestone: M13
   title: '8.7l deferred items: packages/db/src/repositories/publish.ts changedSinceLastPublish outline sub-select is NULL when the teacher has no course (coalesce or a comment that no course reads as not
     changed); decide whether publish start() may batch its three reads (courses.ensureDefault would then write before a no_packages or no_style_card failure); merge the duplicate "No published scorecard
@@ -6767,7 +6767,7 @@ tasks:
   risk: high
   status: running
   branch: m13/7.2j-vapes-variants
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'

@@ -10,6 +10,10 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · board ids 7.2j and 8.7n replace two reused ids · decided by lead · risk: low
+- Decided: the 7.2h follow-up (vapes variants) is board task 7.2j, not 7.2i, and the 8.7l follow-up is board task 8.7n, not 8.7m. The ids 7.2i (leak case fixes, PR #208) and 8.7m (8.7h redact-json follow-ups) were already taken. The 7.2h and 8.7l merge decisions below, and docs/tasks/7.2h/review.md and docs/tasks/8.7l/review.md, name the old ids and mean these tasks.
+- Why: the lead filed both follow-ups without checking the ids were free; one id per task keeps the board, task folders and log unambiguous. Before filing a follow-up, the lead now checks the id is unused on the board and under docs/tasks/.
+
 ### 25 Oct 2026 · 8.7l STALE_QUEUE_MS value · decided by builder · risk: low
 - Decided: `STALE_QUEUE_MS = 2 * 60 * 1000` (2 minutes).
 - Why: the plan's own "Open questions" flagged this as a judgement call, not spec'd. The worker
