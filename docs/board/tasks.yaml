@@ -8482,7 +8482,9 @@ tasks:
   accept: a duplicate-part key with one matching number scores partial; both callers use the shared helper; route accuracy stays at or above 90%
   deps:
   - '3.3'
-  status: todo
+  status: running
+  branch: m13/3.3a-route-followups
+  model: plan:sonnet build:sonnet
 - id: 3.4c
   milestone: M13
   title: 'Same-topic turns degrade to locked (3.9 report): retrievalQuery.ts appends the last agent reply, diluting overlap below the 0.5 coverage threshold while probe() counts any locked score > 0 as
