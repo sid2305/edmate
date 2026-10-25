@@ -5199,7 +5199,9 @@ tasks:
   deps:
   - 8.7f
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.7g-cli-eval-error-codes
+  model: plan:lead build:sonnet
 - id: 8.7h
   milestone: M8
   title: 'Audit scrubber corrupts ids (found in the 8.7a fix round): packages/db/src/repositories/redact-json.ts (redactPersonalData, used by audit.ts) redacts any value whose first 8 hex characters are
