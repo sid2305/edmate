@@ -4497,8 +4497,9 @@ tasks:
   deps:
   - 9.5b
   risk: high
-  status: planning
-  model: plan:sonnet
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/13.skillpresent-a-harness-events
 - id: 8.7a
   milestone: M8
   title: Publish repository and eval_runs migration (8.7 Phase A, packages/db)
