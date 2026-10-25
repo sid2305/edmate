@@ -193,9 +193,18 @@ describe('buildLiveEvalAgent', () => {
   }, 20000);
 });
 
+// A role-play turn retrieves no grounding material, so a reply claiming a `[1]` citation (the
+// file's default `scriptedChatGateway` reply) gets rewritten by the grounding guard to a safe
+// fallback (no source backs the citation) — and the runner then counts that as "the student
+// never saw the model's own reply" (`pipeline/runner.ts`'s `withPersonaCount` on a guard
+// replacement), discarding the persona-count increment it had just decided on. A plain reply with
+// no citation marker (same choice as test 5's `scriptedChatGateway(3, 'Here is your next
+// question.')`) avoids tripping the grounding guard on a role-play turn.
+const ROLEPLAY_REPLY = 'Here is your next question.';
+
 describe('persona role-play cases (task 5.8d)', () => {
   it('turn 0 sends a skill_action start carrying only the bare persona id', async () => {
-    const spy = spyGateway(scriptedChatGateway(1));
+    const spy = spyGateway(scriptedChatGateway(1, ROLEPLAY_REPLY));
     const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
     await agent.reply({
       caseId: 'rp-1',
@@ -211,7 +220,7 @@ describe('persona role-play cases (task 5.8d)', () => {
   }, 20000);
 
   it('a later call for the same caseId continues the count (the session is reused)', async () => {
-    const spy = spyGateway(scriptedChatGateway(2));
+    const spy = spyGateway(scriptedChatGateway(2, ROLEPLAY_REPLY));
     const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
     const start = await agent.reply({
       caseId: 'rp-1',
@@ -236,7 +245,7 @@ describe('persona role-play cases (task 5.8d)', () => {
   }, 20000);
 
   it('a different caseId gets its own fresh session', async () => {
-    const spy = spyGateway(scriptedChatGateway(3));
+    const spy = spyGateway(scriptedChatGateway(3, ROLEPLAY_REPLY));
     const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
     const start = await agent.reply({
       caseId: 'rp-1',
@@ -300,7 +309,7 @@ describe('persona role-play cases (task 5.8d)', () => {
         throw new Error('stubJudge.stream should never be called');
       },
       embed: () => Promise.reject(new Error('stubJudge.embed should never be called')),
-      generateObject: () => Promise.resolve({ pass: true, reason: 'stub' }),
+      generateObject: <T>() => Promise.resolve({ pass: true, reason: 'stub' } as T),
     };
 
     const result = await runSuite([evalCase], {
