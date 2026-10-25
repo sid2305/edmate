@@ -10,6 +10,98 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.5 `activeCountByPackage` takes no scope, named without "Since" · decided by builder · risk: high
+- Decided: named the new subscriptions method `activeCountByPackage()` with **no arguments**
+  (system-wide, like `usageLedger.teacherIdsWithUsageSince`), not `activeCountByPackageSince` as
+  the plan's placeholder name suggested — the open question in the plan already settled that this
+  count is "active now," independent of any cost-reporting period, so a `since`/`until` parameter
+  would be misleading (it's never used to filter).
+- Why: the plan itself names this the builder's call and flags it as not blocking. Going with "no
+  args, no misleading name" keeps the method's contract honest; `risk: high` because this is an
+  unscoped, cross-teacher read with no caller-side access check (same class of decision as the
+  non-negotiable 6 risky-path rule for `packages/db/src/repositories/**` — the future staff API
+  route is the only access gate).
+
+---
+
+### 25 Oct 2026 · 13.5 no index-only migration added in Phase A · decided by builder · risk: medium
+- Decided: did not add the `(teacher_id, package_id, created_at)` index the plan floated, reasoning
+  from the existing index list and pilot scale (~500 students) rather than a measured `EXPLAIN`
+  (no `psql` client in this worktree).
+- Why: the plan explicitly allows skipping the migration when existing indexes look sufficient at
+  pilot scale; an index-only migration can be added later with no drop/rollback risk if a load test
+  says otherwise. `risk: medium` (not `low`) because the reasoning is unmeasured, not a verified
+  `EXPLAIN` result — the human/architect should revisit before this read runs at a much larger
+  scale than pilot.
+
+---
+
+### 25 Oct 2026 · 13.5 fix round · decided by builder · risk: low
+- Decided: fixed three review findings. (1) Moved the `exact(value, method)` bigint-to-number
+  guard (`integrity` past 2^53) out of `usage-ledger.ts` into the shared `map.ts` (alongside
+  `checked`/`iso`) and made `subscriptions.activeCountByPackage` import it instead of duplicating
+  the check inline, so the guard's `integrity` branch stays covered by `usage-ledger.int.test.ts`'s
+  existing MAX_SAFE_INTEGER test with no new untested branch in `subscriptions.ts` (100% statement
+  coverage restored for `src/repositories/**`). (2) Added `usageLedger.costByPackageSince` and
+  `subscriptions.activeCountByPackage` to README rule 11's list of unscoped system reads, naming
+  `/api/staff/cost` as the one caller; left the `teacherIdsWithUsageSince` "no route exposes it"
+  note as-is since it's still correct (the staff cost route calls the other two methods, not this
+  one). (3) Added a boundary test to `usage-ledger.int.test.ts`'s `costByPackageSince` describe
+  block: a row exactly at `since` is included, a row exactly at `until` is excluded.
+- Why: the smaller fix for the coverage gap was to reuse the existing, already-tested exact-count
+  pattern rather than add a new test that can't realistically reach a 2^53-row `count(distinct)`
+  overflow through real data.
+
+---
+
+### 25 Oct 2026 · 13.5 merge · decided by lead · risk: high
+- Decided: merge the two new unscoped, cross-teacher aggregate reads in packages/db/src/repositories (usageLedger.costByPackageSince, subscriptions.activeCountByPackage) and the staff-only GET /api/staff/cost route and /staff/cost page.
+- Why: both reads follow the teacherIdsWithUsageSince precedent, are listed in README rule 11 and are reachable only through withRole(['staff']) and requireRole(['staff']). security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved both phases; the one HIGH (a coverage gap) is fixed and re-reviewed.
+
+---
+
+### 25 Oct 2026 · 13.5 budget · decided by lead · risk: low
+- Decided: accept 234 harness tool calls in total: Phase A 96 (the builder reported 46), Phase B 74 (34) and the fix round 64 (about 30). The plan budgeted 75.
+- Why: the work was done in phases with fresh agents as planned; the overrun came from int-test setup against the shared Postgres and a full coverage run. Reviews found one HIGH, fixed in one round.
+
+---
+
+### 25 Oct 2026 · 0.13a agent-system follow-ups wording · decided by builder · risk: low
+- Decided: Worded the docstring addition and the safety-reviewer line exactly as the plan
+  specified, without changing any matching behaviour or reviewer workflow.
+- Why: The plan fixed the exact wording and test cases needed; no new judgment calls were
+  required beyond following it.
+
+---
+
+### 25 Oct 2026 · 0.13a fix round · decided by builder · risk: low
+- Decided: Added an explicit `NODE_JOB_READS` exception list to `.github/scripts/docs_only.py`
+  holding only `docs/edmate-harness-build-plan.md` (read at test time by
+  `packages/contracts/test/spec-drift.test.ts`): a diff touching only that path is no longer
+  docs-only, so the `node` job still runs. Checked `packages/evals/src/rolePlayFixtures.test.ts`
+  and `apps/web/e2e/stack/try-it.spec.ts` too: both only mention `docs/` in comments or read
+  non-`docs/` paths (`content/skills/mock_interview`, `evals/suites/persona`,
+  `docs/try-it/sample-lesson.md` via the `stack/**`-ignored e2e suite the `node` job doesn't run),
+  so neither needed adding to the list. Also removed the docstring's blanket claim that `docs/`
+  holds nothing the `node` job tests.
+- Why: The security-reviewer's MEDIUM finding was correct: `docs/edmate-harness-build-plan.md` is
+  the one doc path a `node`-job test actually reads at runtime, so a PR editing only that file
+  must not skip the job meant to catch spec drift.
+
+---
+
+### 25 Oct 2026 · 0.13a merge · decided by lead · risk: high
+- Decided: merge the changes to .github/scripts/docs_only.py, .claude/tests/test_workflows.py and .claude/agents/safety-reviewer.md.
+- Why: both are risky paths. security-reviewer raised one MEDIUM: docs/edmate-harness-build-plan.md is read by spec-drift.test.ts. It is fixed with the NODE_JOB_READS exception, and the re-review approved; code-reviewer approved. No hook or settings file changed.
+
+---
+
+### 25 Oct 2026 · 0.13a budget · decided by lead · risk: low
+- Decided: accept 14 harness tool calls for the build plus 25 for the fix round (builders reported 11 and 10), against a cap of about 15.
+- Why: the fix round had to search packages/ and apps/ for test-time reads under docs/, which the first build was not asked to do.
+
+---
+
 ### 25 Oct 2026 · 13.2 load script imports its own built dist by relative path · decided by builder · risk: low
 - Decided: `scripts/loadTest50.ts` imports `../dist/...` files, not `@edmate/harness`'s package
   name and not the `src/*.ts` files directly.

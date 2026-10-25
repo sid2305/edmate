@@ -8301,9 +8301,32 @@ tasks:
   - M12
   - M8
   - M9
-  status: running
+  status: done
   branch: m13/13.5-cost-dashboard
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 409
+    tokens_in: 1390
+    tokens_out: 74916
+    cache_read_tokens: 38650795
+    wall_time_seconds: 10041
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 10
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 7
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 6
+        wontfix: 0
+    human_questions: 0
 - id: '13.6'
   milestone: M13
   title: Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist
@@ -8376,9 +8399,30 @@ tasks:
   accept: docs_only.py has a test for a non-.md file under docs/ and the behaviour is stated in its docstring; safety-reviewer.md line 13 reworded; the python harness tests pass
   deps:
   - '0.13'
-  status: running
+  status: done
   branch: m13/0.13a-agent-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 74
+    tokens_in: 236
+    tokens_out: 16310
+    cache_read_tokens: 3787663
+    wall_time_seconds: 393
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.3a
   milestone: M13
   title: 'Retrieval follow-ups (5.3 review MEDIUM/LOW): HNSW-usable vector query (inner ORDER BY distance LIMIT with scope, outer id tie-break) and a guard test that can fail; batch the termStats IDF queries;
