@@ -5676,6 +5676,16 @@ tasks:
   status: todo
 - id: 8.7m
   milestone: M13
+  title: '8.7l deferred items: packages/db/src/repositories/publish.ts changedSinceLastPublish outline sub-select is NULL when the teacher has no course (coalesce or a comment that no course reads as not
+    changed); decide whether publish start() may batch its three reads (courses.ensureDefault would then write before a no_packages or no_style_card failure); merge the duplicate "No published scorecard
+    yet" tests in apps/web/app/teachers/[slug]/page.test.tsx'
+  accept: the NULL case has a test or a comment; the start() batching is decided and logged; one scorecard-null test remains; db and web green.
+  deps:
+  - 8.7l
+  risk: high
+  status: todo
+- id: 8.7m
+  milestone: M13
   title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID
     with a phone number appended, no separator) is never redacted; drop the non-UUID ''runId'' value from the crafted all-digit UUID cases; reword the matchAll comment and remove the rest[0] cast'
   accept: tests for the hex-padded and glued cases (the glued case redacts the phone digits); the crafted-UUID cases are all UUID-shaped; redact-json.ts stays at 100% coverage.
@@ -6474,9 +6484,9 @@ tasks:
   deps:
   - 12.5a
   risk: low
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.5d-alert-indexes
+  model: plan:lead build:sonnet review:sonnet
 - id: 12.4a
   milestone: M12
   title: Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)
@@ -6663,6 +6673,15 @@ tasks:
   status: running
   branch: m13/7.2h-vapes-rule
   model: plan:sonnet build:sonnet review:sonnet
+- id: 7.2i
+  milestone: M13
+  title: '7.2h review follow-ups: the vapes-at-school rule in packages/harness/src/guardrails/moderationPatterns.ts gets a romanised Hindi and Devanagari safety-net variant like the weapons and threat
+    rules (MEDIUM), and tolerates an article before the place noun ("at the school"), for this rule and the precedent weapons rule (LOW); matching safety cases'
+  accept: harness guard tests for the Hinglish, Devanagari and article forms; safety cases added; harness and evals green.
+  deps:
+  - 7.2h
+  risk: high
+  status: todo
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -7813,7 +7832,7 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '13.5'
