@@ -101,5 +101,13 @@ environment gap in that package unrelated to this change — not touched by this
   `types.ts` (a listed file) defines; it does not touch `pedagogy/**`, `content/**` or
   `packages/contracts`.
 
+### 25 Oct 2026 · 13.skillpresent Phase A merge: harness skill-progress events · decided by lead · risk: high
+- Decided: merge Phase A of 13.skillpresent (packages/harness/src/pipeline: decide, generate and runner thread the active skill and role-play state; generate emits harness-computed skill-progress events, with the feedback marker payload `{ given: true }`) after code-reviewer and typescript-reviewer (Sonnet) approved with no CRITICAL, HIGH or MEDIUM findings; Phase B (apps/web) follows on its own branch.
+- Why: the board tags the task risk: high because it changes what the harness emits every turn; the reviewers confirmed the event helpers are pure and fail closed (entitlement and size checks, never throw), the new fields are not dropped by the strict DecideResultSchema, the harness import boundary holds, and the integration test drives start, pause, resume, stop and end through the real pipeline.
+
+### 25 Oct 2026 · 13.skillpresent oversized-note test cast kept · decided by lead · risk: low
+- Decided: keep the `as unknown as RolePlay` cast in packages/harness/src/pipeline/generate/skillProgress.test.ts (wontfix the typescript-reviewer's LOW).
+- Why: the test deliberately builds an impossible oversized value to prove the fail-closed size check; a cast in a test is the only way to reach that branch, and no production code casts.
+
 ## Budget
-Tool calls used: 59
+Tool calls used: 101 (harness count, Phase A)
