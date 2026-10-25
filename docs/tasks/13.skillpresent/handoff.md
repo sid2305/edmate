@@ -101,7 +101,7 @@ environment gap in that package unrelated to this change — not touched by this
   `types.ts` (a listed file) defines; it does not touch `pedagogy/**`, `content/**` or
   `packages/contracts`.
 
-### 25 Oct 2026 · 13.skillpresent Phase A merge: harness skill-progress events · decided by lead · risk: high
+### 25 Oct 2026 · 13.skillpresent merge: Phase A, harness skill-progress events · decided by lead · risk: high
 - Decided: merge Phase A of 13.skillpresent (packages/harness/src/pipeline: decide, generate and runner thread the active skill and role-play state; generate emits harness-computed skill-progress events, with the feedback marker payload `{ given: true }`) after code-reviewer and typescript-reviewer (Sonnet) approved with no CRITICAL, HIGH or MEDIUM findings; Phase B (apps/web) follows on its own branch.
 - Why: the board tags the task risk: high because it changes what the harness emits every turn; the reviewers confirmed the event helpers are pure and fail closed (entitlement and size checks, never throw), the new fields are not dropped by the strict DecideResultSchema, the harness import boundary holds, and the integration test drives start, pause, resume, stop and end through the real pipeline.
 
@@ -153,7 +153,7 @@ environment gap in that package unrelated to this change — not touched by this
 - Decided: accept Phase B at 70 calls (budget 60, stop at 75) and its fix round at 45 (harness counts).
 - Why: Phase B stayed inside its stop point; the fix round folded the MEDIUM (role="status") and LOW (ICU plural) into the HIGH's pass, cheaper than a new task, and re-ran the web suite after an auth test timed out under load; both reviewers verified the fixes.
 
-### 25 Oct 2026 · 13.skillpresent Phase B merge: student skill panel · decided by lead · risk: low
+### 25 Oct 2026 · 13.skillpresent merge: Phase B, student skill panel · decided by lead · risk: low
 - Decided: merge Phase B (apps/web/src/chat, apps/web/messages, the e2e spec; no risk path) after code-reviewer and typescript-reviewer verified the fix round.
 - Why: the HIGH (feedback persisted as the active skill), MEDIUM (status role) and LOW (plural) were all fixed and verified.
 
