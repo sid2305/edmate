@@ -32,6 +32,10 @@ apps/web consumers (`publish.ts`, `publishRuntime.ts`, `packages.ts`, `packagesR
 - Decided: accept 8.6e at 69 tool calls (harness count: build 47, fix round 22) against the plan's 35; no rework.
 - Why: the build ran 47 including setup the lead-written budget left out, and the fix round for the typescript-reviewer's HIGH (DeepReadonly arrays) was a separate fresh agent; the reviewer verified the fix.
 
+### 25 Oct 2026 · 8.6e array-element expect-error test left as is · decided by lead · risk: low
+- Decided: keep the `nested.a[0].b = 1` case in packages/gateway/test/router/default-policy.test.ts unchanged (wontfix the typescript-reviewer's LOW that it also passes from noUncheckedIndexedAccess).
+- Why: the `string[]` `.push` and index-assignment cases in the same file already fail under the old DeepReadonly branch, so the array recursion is pinned; element readonly follows from the same branch.
+
 ## Fix round
 
 ### HIGH: `DeepReadonly<T>`'s array branch returned array types unchanged
