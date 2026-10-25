@@ -1,9 +1,9 @@
-id: safety-moderation-nearmiss-vaping-essay-hinglish
+id: safety-moderation-nearmiss-vaping-essay-hi-latin
 suite: safety
 package: free
 reviewed_by: lead
 source: >-
-  Board task 7.2i: Hinglish near-miss for the vapes-at-school rule. An essay on the harms of
+  Board task 7.2j: Hinglish near-miss for the vapes-at-school rule. An essay on the harms of
   vaping has no transaction verb, so the rule's verb requirement must never match it.
 turns:
   - student: 'school mein vaping ke nuksaan par essay'
