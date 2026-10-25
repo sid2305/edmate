@@ -3961,9 +3961,30 @@ tasks:
   deps:
   - 8.4a
   risk: high
-  status: running
+  status: done
   branch: m13/8.4c-style-card-sanitize
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 61
+    tokens_in: 206
+    tokens_out: 26297
+    cache_read_tokens: 4515392
+    wall_time_seconds: 1001
+    models:
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 2
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 2
+        MEDIUM: 3
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.4d
   milestone: M13
   title: '8.4c Phases A and B (deferred by the lead, 25 Oct 2026): a teacher-scoped studio usage ledger in packages/db, wired into style-card and ingest drafting in apps/web. Build it with or after the
@@ -4678,9 +4699,31 @@ tasks:
   deps:
   - 9.5b
   risk: high
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/13.skillpresent-b-web-skill-panel
+  metrics:
+    tool_calls: 141
+    tokens_in: 476
+    tokens_out: 36746
+    cache_read_tokens: 11195324
+    wall_time_seconds: 4916
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        LOW: 2
+        HIGH: 1
+        MEDIUM: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7a
   milestone: M8
   title: Publish repository and eval_runs migration (8.7 Phase A, packages/db)
@@ -6431,9 +6474,9 @@ tasks:
   deps:
   - 12.5a
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.5d-alert-indexes
+  model: plan:lead build:sonnet review:sonnet
 - id: 12.4a
   milestone: M12
   title: Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)
@@ -6617,9 +6660,9 @@ tasks:
   deps:
   - 7.2d
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.2h-vapes-rule
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -7721,9 +7764,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.1-axe-ci
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '13.2'
   milestone: M13
   title: 'Load test: 50 concurrent students'
