@@ -31,7 +31,11 @@ No production code touched.
 
 None.
 
+### 25 Oct 2026 · 5.6h budget over the plan cap · decided by lead · risk: low
+- Decided: accept 48 tool calls against the plan's 25 (stop at 35); the first builder stalled when the Mac slept, the lead committed its work, and a fresh finisher re-ran the gate, did the hardcode check and wrote the handoff.
+- Why: the overrun came from the restart (repeated setup and gate runs), not rework; both reviewers approve with no findings.
+
 ## Budget
 
-Tool calls used: 11 (this session; the lead adds the first builder's prior calls, which were not
+Tool calls used: 48 (harness count: 27 for the first builder, which stalled after its gate, plus 21 for the finisher; the finisher reported 13)
 recorded in a handoff).
