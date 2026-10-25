@@ -3272,9 +3272,9 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/7.4a-gate-hardening
+  model: plan:sonnet build:sonnet
 - id: 7.6a
   milestone: M7
   title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep
@@ -6787,9 +6787,29 @@ tasks:
   deps:
   - 7.2h
   risk: high
-  status: running
+  status: done
   branch: m13/7.2j-vapes-variants
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 43
+    tokens_in: 150
+    tokens_out: 391
+    cache_read_tokens: 2494016
+    wall_time_seconds: 228
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2k
   milestone: M13
   title: '7.2j review follow-up: the Devanagari vapes rule and the weapons Devanagari rule in packages/harness/src/guardrails/moderationPatterns.ts match bare verb stems only, so conjugated forms (बेचना,
@@ -7983,9 +8003,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '13.6'
   milestone: M13
   title: Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist

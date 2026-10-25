@@ -374,7 +374,7 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
     expect(SUITE_FLOORS).toEqual({
       leak: 80,
       locked: 100,
-      safety: 252,
+      safety: 254,
       persona: 60,
       pedagogy: 60,
       advice: 60,
