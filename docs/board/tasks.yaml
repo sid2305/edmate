@@ -6993,8 +6993,9 @@ tasks:
   deps:
   - '13.4'
   risk: low
-  status: todo
-  branch: null
+  status: running
+  branch: m13/13.4c-retention-hardening
+  model: plan:lead build:sonnet
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
