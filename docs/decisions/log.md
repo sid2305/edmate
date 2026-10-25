@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.5 the join is a union of cost rows and active-count rows, not cost-rows-only · decided by builder · risk: low
+- Decided: `loadCostRows` returns one row for every `(teacherId, packageId)` that appears in
+  *either* `costByPackageSince` or `activeCountByPackage`'s results, not only the ones with usage
+  in the chosen window.
+- Why: a package can have active subscribers with no usage yet in a short window (e.g. a brand-new
+  package), or usage from students who have since churned (ended their subscription) — both are
+  real states a staff member should see (cost = 0 in the first case, active = 0 in the second),
+  not a silently dropped row. The plan's Phase B spec says "joins the results ... in the route" but
+  does not say cost-rows-only vs. a union; this is the builder's call it leaves open.
+
+### 25 Oct 2026 · 13.5 the live version's own name/price override the newest draft's · decided by builder · risk: medium
+- Decided: `packageName` and `pricePerMonth` on each row come from the package's **live** version
+  (`packageVersions.get` at `liveVersion`) when one exists, not from `packages.listForTeacher`'s
+  newest-draft config — `listForTeacher` is used only to discover each package's name/liveVersion
+  cheaply (one call per teacher) and as the fallback when there is no live version yet.
+- Why: the plan's Open question 3 recommends "the package's current live-version price only" —
+  the live version is what students are actually paying, so cost-as-% is compared against the
+  real price, not a draft that might differ. `risk: medium` (not `low`) because this adds one
+  extra `packageVersions.get` call per package-with-a-live-version in the response (bounded by the
+  number of distinct packages in the result, not students or usage rows — fine at pilot scale, but
+  worth a reviewer's eye since it's an N+1-shaped read inside a staff-only, infrequent-traffic
+  route).
+
+### 25 Oct 2026 · 13.5 no polling on `/staff/cost` · decided by builder · risk: low
+- Decided: the view has a manual Reload and a period-change Apply, no automatic poll interval.
+- Why: the plan explicitly leaves this to the builder ("this page can use a longer interval or
+  none -- cost numbers change slowly"); automatic polling would add staleness-race complexity
+  (generation refs, pause-while-busy, as `staff/reports`'s view needs) for a dashboard whose
+  underlying numbers (usage totals, active counts) change on the order of minutes to hours, not
+  seconds — a staff member reloading manually is the simpler, equally correct choice for MVP.
+
 ### 25 Oct 2026 · 13.5 `activeCountByPackage` takes no scope, named without "Since" · decided by builder · risk: high
 - Decided: named the new subscriptions method `activeCountByPackage()` with **no arguments**
   (system-wide, like `usageLedger.teacherIdsWithUsageSince`), not `activeCountByPackageSince` as
