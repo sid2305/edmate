@@ -10,6 +10,55 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 9.3k drops `lastDecision.reason` from the apps/web staff payload; subject-edit history stays open as 9.3m · decided by builder · risk: low
+- Decided: Built only the two 9.3h review follow-ups (a lookup-row `view.test.tsx` case; dropping
+  `lastDecision.reason` from the `apps/web` staff API payload shape). The db-layer
+  `audit.findLastVerifyForStaff` return type keeps `reason` unchanged — only the API-shape
+  (`handlers.ts`'s `LastDecision`, `client.ts`'s `LastDecisionSchema`) and the tests asserting
+  that shape drop it.
+- Why: the board title's subject-edit-history ask cannot be built — `teacherProfiles.update()`
+  writes no audit row for a subject change, so `audit_log` holds nothing to read. The plan's lead
+  answer (25 Oct 2026) split that half off to 9.3m, blocked on Q1 (should `update()` start writing
+  a `teacher.subject` audit row), leaving 9.3k scoped to only the two ready, unblocked items above.
+
+---
+
+### 25 Oct 2026 · 9.3k budget overrun (52 calls against 25) accepted · decided by lead · risk: low
+- Decided: merge 9.3k although the builder used 52 tool calls against a budget of 25 (stop at 32).
+- Why: the diff is small and both reviewers approved; most extra calls went to setup and to re-running a flaky auth test (src/auth/index.test.ts timeout under build contention), which is not caused by this change.
+
+---
+
+### 25 Oct 2026 · 9.3k merge: staff verifications payload drops lastDecision.reason (apps/web/app/api/staff/**) · decided by lead · risk: high
+- Decided: merge the change to apps/web/app/api/staff/verifications/handlers.ts and the staff client schema after security-reviewer and code-reviewer approved with no findings.
+- Why: the change only narrows what the staff API returns (the reason text no longer leaves the server); staff role checks and the decide path are unchanged, and the repository return type is untouched.
+
+---
+
+### 25 Oct 2026 · 0.19c the merge gate accepts task ids with a word after the dot · decided by builder · risk: low
+- Decided: Use one module-level pattern `TASK_BRANCH = re.compile(r"m\d+/(\d+\.[0-9a-z]+)-")` for both `pr_head` and `main`'s branch parsing, keeping the trailing `-` (slug) required.
+- Why: The plan calls for exactly this; a single shared pattern avoids the two call sites drifting again, and keeping the slug required matches the documented `m<milestone>/<task-id>-<slug>` branch shape so a slug-less branch (`m13/13.skillpresent`) still fails with the existing message.
+
+---
+
+### 25 Oct 2026 · 0.19c budget overrun (40 calls against 20) accepted · decided by lead · risk: low
+- Decided: merge 0.19c although the builder used 40 tool calls against a budget of 20 (stop at 26).
+- Why: the change is one pattern with tests, security-reviewer approved it, and it unblocks PR #276; the extra calls went to reading the existing gate tests.
+
+---
+
+### 25 Oct 2026 · 0.19c merge: the merge gate accepts word task ids (.claude/skills/merge-gate/merge_gate.py) · decided by lead · risk: high
+- Decided: merge the shared TASK_BRANCH pattern in .claude/skills/merge-gate/merge_gate.py after security-reviewer approved it.
+- Why: the captured task id holds only ASCII lower-case letters, digits and one dot, so it cannot point outside docs/tasks or at another task's files; the slug stays required; no other gate check changed.
+
+---
+
+### 25 Oct 2026 · 0.19c wontfix: re.ASCII on TASK_BRANCH (.claude/skills/merge-gate/merge_gate.py) · decided by lead · risk: low
+- Decided: leave `\d` without re.ASCII in .claude/skills/merge-gate/merge_gate.py's TASK_BRANCH for now.
+- Why: the behaviour was already there before this change; a Unicode digit could only produce a docs/tasks/<id> path that doesn't exist, so the gate fails closed.
+
+---
+
 ### 25 Oct 2026 · 5.8e persona/prompt-pack helper moves · decided by builder · risk: high
 - Decided: `comparePersonaVersions` (semver precedence) and the three `pending` sign-off checks in
   `promptPacks.ts`, `personaTemplates.ts` and `agePolicy.ts` move to two new shared files

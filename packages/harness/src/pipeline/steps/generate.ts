@@ -1,6 +1,14 @@
 // Step 8, generate (task 3.7): streams the reply through the turn gateway, runs the tool rounds,
 // and sends the turn's events in this order:
-//   hint_rung? → (token | skill)* in stream order → sources? → locked?
+//   hint_rung? → skill (feedback/mock-interview progress)? → (token | skill)* in stream order →
+//   sources? → locked?
+// A harness-computed progress `skill` event (13.skillpresent: mock-interview phase/count, a
+// feedback confirmation marker) is emitted right after `hint_rung`, before any tool runs, since
+// neither skill has a model-callable tool (ADR-0012, ADR-0013); a tool's own `skill` event from
+// `onToolOutput` can still follow it in the (token | skill)* run. Known, accepted limitation
+// (same as every practice-tool skill event): this fires before postGuard/grounding, so a turn
+// grounding later replaces can show a progress event that no longer matches the final text — not
+// a new risk this task introduces.
 // (teacher_question, replace and done are the runner's). The runner picks the model for each
 // attempt through `env.gateway`, times the attempt, retries once, and clears shown text.
 //
@@ -38,6 +46,7 @@ import { buildModelRequest } from '../../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
 import { citedSources } from '../generate/citations.js';
 import { SkillEventDropped, skillEvent } from '../generate/skillEvent.js';
+import { feedbackSkillEvent, rolePlaySkillEvent } from '../generate/skillProgress.js';
 import { revealsAnswerKey } from '../generate/answerKey.js';
 import { itemContextOf } from '../generate/itemContext.js';
 import { answerLeakStreamGate } from '../generate/streamGate.js';
@@ -129,6 +138,8 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       ctx,
       decision,
       sources,
+      skill,
+      rolePlay,
       lockedStopped,
       onLockedTrip,
       fromFallback,
@@ -184,6 +195,10 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     let holdRest = false;
 
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
+    // 13.skillpresent: harness-computed progress, before the first token and before any tool
+    // runs, never from a model tool call (ADR-0012, ADR-0013). At most one of these fires.
+    const progress = rolePlaySkillEvent(rolePlay, ctx) ?? feedbackSkillEvent(skill, decision.move, ctx);
+    if (progress !== undefined) emit(progress);
     const { draft, raw, locked } = await runToolLoop({
       gateway: env.gateway,
       request,

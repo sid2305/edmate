@@ -310,7 +310,7 @@ describe('GET: the pending queue', () => {
     expect(asha?.activeTakedowns).toEqual([
       { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
     ]);
-    expect(asha?.lastDecision).toEqual({ status: 'rejected', reason: 'unsafe', ts: '2026-10-19T00:00:00.000Z' });
+    expect(asha?.lastDecision).toEqual({ status: 'rejected', ts: '2026-10-19T00:00:00.000Z' });
   });
 });
 
@@ -371,7 +371,6 @@ describe('GET lookup: find one teacher by slug, any status', () => {
     ]);
     expect(body.teacher.lastDecision).toEqual({
       status: 'rejected',
-      reason: 'unsafe',
       ts: '2026-10-19T00:00:00.000Z',
     });
   });
