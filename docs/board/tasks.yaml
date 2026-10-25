@@ -8149,9 +8149,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.2-load-test
+  model: plan:sonnet build:sonnet
 - id: 3.11f
   milestone: M13
   title: 'Teacher-label LOWs parked from 3.11d/3.11e: MessageSchema.text and ChunkSchema.text have no max length (contracts, ADR); foldForMatch misses digit swaps (Pl4tform), small caps and a Devanagari
