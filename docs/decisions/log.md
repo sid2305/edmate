@@ -10,6 +10,63 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 7.4a scorecard.ts typed key list · decided by builder · risk: low
+- Decided: did item 10 (`scorecard.ts`'s typed key list, replacing
+  `Object.keys(SCORECARD_GROUPS) as ScorecardCategoryKey[]`) in Phase A even though the plan's
+  Phase A file list doesn't name `scorecard.ts`.
+- Why: the plan's own numbered scope list (item 10) assigns it no phase letter and
+  `scorecard.ts` isn't in Phase B's file list either; it's a same-file, same-kind change as
+  item 11/12 (replacing a cast/duplicate with a typed construct) with zero dependency on Phase
+  B's shared classifier or demo adapter work, so doing it now avoids a second untouched-file
+  surprise for Phase B's builder. No behaviour change; covered by `scorecard.ts`'s existing
+  100%-coverage tests (unchanged, still green).
+
+---
+
+### 25 Oct 2026 · 7.4a deadline race via setTimeout, no AbortSignal · decided by builder · risk: low
+- Decided: implemented the deadline race with a plain `setTimeout`-backed `Promise.race` per
+  case (cancelled via `clearTimeout` on whichever side wins), reading time via the existing
+  `now()` injection point only for the "already past deadline" fast path, not for the race
+  timer itself.
+- Why: the acceptance only requires the *gate* to stop waiting and fail the case once the
+  deadline passes under `vi.useFakeTimers()`; it does not require (and the plan explicitly
+  defers) cancelling the underlying agent/judge call. `setTimeout` composes with
+  `vi.useFakeTimers()` / `vi.advanceTimersByTimeAsync` out of the box, so the hung-case test
+  needs no new clock abstraction. The manual-clock tests (`now: () => clock`) are unaffected
+  because their agents resolve synchronously well before any real timer would fire, so the race
+  always resolves on the "done" side in those tests, same behaviour as before.
+
+---
+
+### 25 Oct 2026 · 7.4a @edmate/content promoted to a real dependency of packages/evals · decided by builder · risk: low
+- Decided: moved `@edmate/content` from `packages/evals/package.json`'s `devDependencies` to
+  `dependencies`, and regenerated `pnpm-lock.yaml` to match.
+- Why: `packages/evals/src/demoContentAdapter.ts` (new, src code, built and shipped) now imports
+  `@edmate/content` directly, where before only test files (`demoSuiteInput.testkit.ts`) did. An
+  internal workspace-dependency edge, not a tech-stack or `packages/contracts` change, so no ADR
+  per the plan's Open questions note; `apps/cli` already depends on `@edmate/content` directly,
+  so this adds no new package to the dependency graph, only a new edge within it.
+
+---
+
+### 25 Oct 2026 · 7.4a merge: quality gate fails closed on hung cases and agent errors · decided by lead · risk: low
+- Decided: merge 7.4a (both phases) on code-reviewer, typescript-reviewer and silent-failure-hunter approval, no CRITICAL or HIGH findings. The two silent-failure-hunter LOWs in packages/evals/src/qualityGate.ts (the per-case timeout uses a real setTimeout while time left comes from the injected now(); a timed-out case keeps running uncancelled) are deferred to board task 7.4d with the AbortSignal work. The typescript-reviewer LOW in packages/evals/src/scorecard.ts (SCORECARD_CATEGORY_KEYS is a literal that the compiler does not check for completeness) is wontfix: scorecard.test.ts already fails if the list and SCORECARD_GROUPS drift.
+- Why: the gate now marks a hung case not run and fails, resolves every package's agent before any worker starts, and counts not-run cases structurally; the remaining items are timing hygiene with no wrong verdict today.
+
+---
+
+### 25 Oct 2026 · 7.4a phases built back to back and reviewed once · decided by lead · risk: low
+- Decided: Phase B was built on the same branch straight after Phase A, and both phases went through one review round and one PR, instead of the plan's "Phase B starts after A merges".
+- Why: Phase B only adds to Phase A's files in packages/evals and apps/cli, so one review covers both and saves a round of reviewers and CI.
+
+---
+
+### 25 Oct 2026 · 7.4a budget: 107 tool calls against a plan of 90 · decided by lead · risk: low
+- Decided: accept the overrun (Phase A 47 and Phase B 60 by the harness count; the builders reported 26 and 28).
+- Why: each phase stayed near its 45-call budget plus setup; the output passed all three reviewers with no blocking findings.
+
+---
+
 ### 25 Oct 2026 · 7.2j Hinglish vapes variant written as two order alternatives · decided by builder · risk: low
 - Decided: the Hinglish rule is `(school-word ... vape-word ... verb) | (vape-word ... verb ...
   school-word)`, i.e. two bounded alternatives rather than a single order, each still bounded with
