@@ -149,6 +149,18 @@ environment gap in that package unrelated to this change — not touched by this
 
 ---
 
+### 25 Oct 2026 · 13.skillpresent Phase B ran 70 calls against a budget of 60 (stop at 75), and its fix round took 45 · decided by lead · risk: low
+Phase B stayed inside its stop point; the overrun came from the e2e spec and the extra ChatView
+tests. The fix round ran long because it folded the MEDIUM (role="status") and LOW (ICU plural)
+into the same pass as the HIGH, which was cheaper than deferring them to a new task, and it re-ran
+the web suite after an auth test timed out under load. code-reviewer and typescript-reviewer both
+verified the fixes. Counts are the harness's, not the agents' own reports.
+
+### 25 Oct 2026 · 13.skillpresent Phase B merge: student skill panel · decided by lead · risk: low
+Phase B touches apps/web/src/chat, apps/web/messages and the e2e spec only; no risk path. Merged
+after code-reviewer and typescript-reviewer verified the fix round (HIGH feedback-not-persisted,
+MEDIUM status role, LOW plural all fixed).
+
 ## Phase B (apps/web)
 
 ### What changed
@@ -214,8 +226,8 @@ the file reads as one running decision list for the task).
 
 ## Budget
 Tool calls used: 101 (harness count, Phase A)
-Phase B tool calls used: 44
-Phase B fix round tool calls used: 18
+Phase B tool calls used: 70 (harness count; builder reported 44)
+Phase B fix round tool calls used: 45 (harness count; fixer reported 18 and 26)
 
 ## Fix round (Phase B)
 Findings fixed from review:
