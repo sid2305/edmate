@@ -7566,9 +7566,9 @@ tasks:
   deps:
   - 11.4b
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4f-splittable-flag
+  model: plan:lead build:sonnet
 - id: 11.4g
   milestone: M11
   title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the
