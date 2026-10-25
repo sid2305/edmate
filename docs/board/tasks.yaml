@@ -7970,6 +7970,15 @@ tasks:
   - 9.3h
   risk: low
   status: todo
+- id: 9.3l
+  milestone: M13
+  title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
+    header comment omits the /home redirect when agentAvailable is false'
+  accept: both header comments match the behaviour; web typecheck, lint and test green.
+  deps:
+  - 9.3i
+  risk: low
+  status: todo
 - id: 5.6h
   milestone: M13
   title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text;
@@ -7978,4 +7987,6 @@ tasks:
   deps:
   - 5.6f
   risk: low
-  status: todo
+  status: running
+  branch: m13/5.6h-real-question-guess-test
+  model: plan:sonnet build:sonnet
