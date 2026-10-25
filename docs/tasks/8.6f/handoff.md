@@ -82,7 +82,10 @@
   previously indistinguishable from "you're at the package limit," which could mislead a caller
   into showing the wrong error to a teacher; two writers taking the package row lock in
   inconsistent ways is exactly the deadlock-class risk `docs/lessons.md` already flags from
-  8.7a, so sharing one lock helper closes that class of bug before it can happen here.
+  8.7a, so moving both to the shared `package-write.ts` helpers was meant to close that class of
+  bug here. Correction (fix round): extracting the helpers did not by itself make the order
+  shared -- `package-versions.ts`'s `create` still called `checkModules` before `lockPackageRow`,
+  the reverse of `packages.ts`'s `saveVersion`. See "Fix round" below for the actual fix.
 
 ### 25 Oct 2026 · 8.6f Phase A: apps/web has four more exhaustive `RepositoryErrorKind` switches than the plan listed · decided by builder · risk: low
 
@@ -95,6 +98,33 @@
   files; Phase B's builder (or a follow-up) should add the `'limit'` arm to all four switches
   alongside the plan's named `packages.ts` edit.
 
+## Fix round
+
+database-reviewer (CRITICAL) and security-reviewer (HIGH) found that `package-versions.ts`'s
+`create` locked the module rows (`checkModules`, `FOR KEY SHARE`) before the package row
+(`lockPackageRow`, `FOR UPDATE`), the reverse of `packages.ts`'s `saveVersion`. A concurrent
+`saveVersion` and `packageVersions.create` on the same package with overlapping modules could
+deadlock (docs/lessons.md: "Two writers that lock the same rows in different orders deadlock").
+
+Fix: in `package-versions.ts`'s `create`, swapped the two calls so `lockPackageRow` runs before
+`checkModules`, matching `saveVersion`. Reworded the comment there to state the shared order (the
+package row first, then the module rows) instead of just naming a sibling. Added a comment to
+`package-write.ts` stating that every writer takes the package row lock before the module locks,
+and corrected the Phase A decision entry above, which had claimed the order was already shared.
+
+Test: added `packages.int.test.ts` > `packages` > "packages.saveVersion and packageVersions.create
+on the same package never deadlock (8.6f fix round)" next to the other concurrent cases --
+`packages.saveVersion` and `packageVersions.create` run via `Promise.all` on the same package with
+an overlapping module (outcome-only, settled with `.then((v) => ({ok:true,v}), (e) => ({ok:false,
+e}))`, no forced two-connection interleaving). Both resolve ok, and `versionCount` confirms both
+versions were written.
+
+Result: `TEST_DATABASE_URL=... corepack pnpm turbo run typecheck lint test --filter=@edmate/db`:
+`Tasks: 8 successful, 8 total` (typecheck, lint, test all green); `packages.int.test.ts` now 18
+tests (was 17), all passing; coverage report shows `package-versions.ts` and `package-write.ts`
+both at 100% statements/branches/functions/lines. `python3 .githooks/secret-scan.py --all`: clean.
+
 ## Budget
 
 Tool calls used: 64
+Fix round tool calls used: 15

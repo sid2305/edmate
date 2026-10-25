@@ -514,6 +514,39 @@ describe.skipIf(!up)(
           1, 1, 2, 3, 4,
         ]);
       });
+
+      it('packages.saveVersion and packageVersions.create on the same package never deadlock (8.6f fix round)', async () => {
+        // Both writers now take the package row lock before the module locks (package-write.ts),
+        // so a concurrent pair on the same package with overlapping modules serialises instead of
+        // deadlocking (docs/lessons.md: "Two writers that lock the same rows in different orders
+        // deadlock").
+        const packageId = created[0]!;
+        const before = await versionCount(FRESH.teacherId);
+        const d = draft([moduleId]);
+        const config: PackageConfig = {
+          ...d,
+          id: packageId,
+          version: 500,
+          teacherId: FRESH.teacherId,
+          agentId,
+        };
+        const [saved, made] = await Promise.all([
+          repos.packages.saveVersion(FRESH, { packageId, agentId, draft: d }).then(
+            (v) => ({ ok: true as const, v }),
+            (e: unknown) => ({ ok: false as const, e }),
+          ),
+          repos.packageVersions.create(FRESH, config).then(
+            () => ({ ok: true as const }),
+            (e: unknown) => ({ ok: false as const, e }),
+          ),
+        ]);
+        // Neither write may fail (a deadlock would surface as a thrown error here, never a
+        // RepositoryError('failed', ...) -- there is no such kind in this repository).
+        expect(saved.ok).toBe(true);
+        expect(made.ok).toBe(true);
+        expect(await repos.packageVersions.get(FRESH, { packageId, version: 500 })).not.toBeNull();
+        expect(await versionCount(FRESH.teacherId)).toBe(before + 2);
+      });
     });
 
     describe('stored rows that break the invariants are integrity errors, never guessed', () => {

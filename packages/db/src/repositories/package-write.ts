@@ -2,6 +2,11 @@
 // the module-ownership check and the package row lock both writers take, so they lock the same
 // row the same way (docs/lessons.md: "Two writers that lock the same rows in different orders
 // deadlock").
+//
+// Shared lock order: every writer calls `lockPackageRow` (the package row, `for('update')`)
+// before `checkModules` (the module rows, `for('key share')`) -- package.ts `saveVersion` and
+// package-versions.ts `create` both follow this order so a concurrent pair on the same package
+// never deadlocks.
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../client.js';
 import { modules, packages } from '../schema/index.js';

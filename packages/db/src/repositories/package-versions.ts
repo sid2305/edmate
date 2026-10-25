@@ -222,10 +222,11 @@ export function packageVersionsRepo(db: Db) {
 
       await translateWrite(method, () =>
         db.transaction(async (tx) => {
-          await checkModules(tx, teacherId, moduleIds, method);
-          // Same row lock `packages.saveVersion` takes: serialises concurrent version writes to
-          // this package (docs/lessons.md: a shared lock order between writers on the same rows).
+          // Shared lock order with `packages.saveVersion` (package-write.ts, docs/lessons.md): the
+          // package row first, then the module rows. Taking them in the other order can deadlock
+          // against a concurrent `saveVersion` on the same package.
           await lockPackageRow(tx, teacherId, { packageId: c.id, agentId: c.agentId }, method);
+          await checkModules(tx, teacherId, moduleIds, method);
           const result = await tx.execute(
             insertSelect(
               packageVersions,
