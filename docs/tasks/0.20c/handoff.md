@@ -45,8 +45,16 @@ Status: DONE
   need to shrink the factor and rescale the bound; keeping 16x/64 also meant less of the test and
   its comments needed to change.
 
+### 25 Oct 2026 · 0.20c warm-up run outside the time cap · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW on packages/harness/src/pedagogy/modelRequest.test.ts: the untimed warm-up run of the large input is not checked against the 10 s cap. The test's 60 s timeout still bounds it, and the timed runs that follow are capped.
+- Why: a quadratic regression would show in the timed runs and fail the ratio check, so a separate cap on the warm-up adds nothing.
+
+### 25 Oct 2026 · 0.20c budget · decided by lead · risk: low
+- Decided: accept 46 tool calls (harness count; the builder reported 19) against the plan's 20.
+- Why: the plan asked for 10 repeated full-suite runs plus standalone runs to prove the fix holds under load; those runs account for most of the overrun.
+
 ## Left to do
 None.
 
 ## Budget
-Tool calls used: 19
+Tool calls used: 46 (harness count; the builder reported 19)
