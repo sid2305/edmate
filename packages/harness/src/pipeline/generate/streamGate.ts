@@ -21,7 +21,9 @@
 //     (fix round 1): a per-item record of which wrong options released text has already named is
 //     kept for the attempt; a newly released piece that would complete the set (every wrong
 //     option named, not the correct one) is held back as a leak exactly as a single-piece
-//     ruling-out is, even when the two mentions are pushed more than `reach` apart;
+//     ruling-out is, even when the two mentions are pushed more than `reach` apart; the check
+//     (and its commit) judges the same window plus piece `keys.leaks` judges, not the bare piece
+//     (5.6g), so a mention split by a cap-forced cut is still caught live;
 //   - a possible re-show of an active practice item (5.6b) is held back: text that is a prefix of
 //     an item's prompt or of its option listing (compared in the matcher's compact folded form)
 //     waits until the restatement is complete, then is judged as one piece (sentence ends inside
@@ -213,20 +215,25 @@ export function sentenceGate(
   const ruledOut = new Map<ItemContext, Set<number>>();
   const itemsWithKey = (): ItemContext[] =>
     [...items, ...extraItems].filter((it) => correctIndex(it) !== undefined);
-  /** Whether releasing `piece` now would complete an item's wrong-option set. */
-  const ruleOutCompletes = (piece: string): boolean =>
+  /**
+   * Whether releasing the window plus `piece` now would complete an item's wrong-option set
+   * (the MEDIUM, 5.6g): the same window `keys.leaks` judges, not the bare piece, so a mention
+   * split across a cap-forced cut (half in the already-released text, half in the new piece) is
+   * still caught here instead of only by postGuard's whole-draft check.
+   */
+  const ruleOutCompletes = (windowPlusPiece: string): boolean =>
     itemsWithKey().some((it) => {
       const k = correctIndex(it) as number;
       const options = it.options ?? [];
-      const now = namedOptionsIn(piece, it);
+      const now = namedOptionsIn(windowPlusPiece, it);
       const have = ruledOut.get(it);
       const total = have === undefined ? now : new Set([...have, ...now]);
       return !total.has(k) && options.every((_, j) => j === k || total.has(j));
     });
-  /** Records the wrong options `piece` names, once it is actually released. */
-  const commitRuledOut = (piece: string) => {
+  /** Records the wrong options the window plus `piece` names, once it is actually released. */
+  const commitRuledOut = (windowPlusPiece: string) => {
     for (const it of itemsWithKey()) {
-      const now = namedOptionsIn(piece, it);
+      const now = namedOptionsIn(windowPlusPiece, it);
       if (now.size === 0) continue;
       const have = ruledOut.get(it);
       if (have === undefined) ruledOut.set(it, new Set(now));
@@ -270,14 +277,28 @@ export function sentenceGate(
 
   const drain = (final: boolean): string[] => {
     const out: string[] = [];
+    /**
+     * `keys.reach` units back from `released` (span-adjusted, same window `keys.leaks` judges):
+     * shared by `safeUpTo` (the matcher check) and `release` (the ruling-out commit), so both
+     * see the same window.
+     */
+    const windowFrom = (): number => {
+      let from = windowStart(released, keys.reach);
+      spans = spans.filter(([, e]) => e > from);
+      for (const [s] of spans) if (s < from) from = s;
+      return from;
+    };
     const release = (n: number) => {
       const piece = buf.slice(0, n);
+      // The window plus the piece about to be released (before `released` grows): a wrong-option
+      // mention split across an earlier cap-forced cut still completes the set here.
+      const from = windowFrom();
+      commitRuledOut(released.slice(from) + piece);
       buf = buf.slice(n);
       released += piece;
       scanned -= n;
       ends = ends.filter((e) => e > n).map((e) => e - n);
       out.push(piece);
-      commitRuledOut(piece);
     };
     /** Where a possible re-show starts in `buf` (held back), else `buf.length`. */
     const holdAt = (): number => {
@@ -299,11 +320,9 @@ export function sentenceGate(
      * text in front, from windowStart: a match can't start earlier than that.
      */
     const safeUpTo = (end: number, atFinalEnd: boolean): number => {
-      let from = windowStart(released, keys.reach);
       // A window that starts inside a shown re-show starts at its start instead: a cut-off
       // listing would read as the bare option text (5.6b). Spans wholly before it are dropped.
-      spans = spans.filter(([, e]) => e > from);
-      for (const [s] of spans) if (s < from) from = s;
+      const from = windowFrom();
       const whole = released.slice(from) + buf.slice(0, end);
       if (keys.leaks(whole)) return -1;
       let ok = end;
@@ -311,7 +330,9 @@ export function sentenceGate(
         const tail = keys.tailStart(whole);
         ok = tail < 0 ? end : Math.max(0, tail - (released.length - from));
       }
-      if (ok > 0 && ruleOutCompletes(buf.slice(0, ok))) return -1;
+      // The ruling-out check (5.6g): the same window plus the piece, not the bare piece, so a
+      // mention split across an earlier cap-forced cut (half already released) is still caught.
+      if (ok > 0 && ruleOutCompletes(released.slice(from) + buf.slice(0, ok))) return -1;
       return ok;
     };
     /** Judges one sentence end: shown, held (its tail may start a key) or a leak. */

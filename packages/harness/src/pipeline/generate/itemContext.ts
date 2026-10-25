@@ -7,9 +7,9 @@ import type { IssuedItem } from '../tools.js';
 import { hasAnswerWord, hasMark, labelOf } from './labelKeys.js';
 
 export interface ItemContext {
-  prompt: string;
-  options?: readonly string[];
-  answerKey: readonly string[];
+  readonly prompt: string;
+  readonly options?: readonly string[];
+  readonly answerKey: readonly string[];
 }
 
 /** The item an issued item shows: `shown` is its prompt, then its options. */

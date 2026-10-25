@@ -5224,7 +5224,9 @@ tasks:
   deps:
   - 8.7c
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.7j-gate-result-guard
+  model: build:sonnet
 - id: 9.6f
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
@@ -6358,7 +6360,7 @@ tasks:
   deps:
   - 12.5f
   risk: high
-  status: running
+  status: review
   branch: m13/12.5g-alert-permanent-error
   model: plan:sonnet build:sonnet
 - id: 8.2j
@@ -6582,6 +6584,15 @@ tasks:
   status: review
   branch: m13/9.7d-e2e-steady
   model: build:sonnet
+- id: 9.7e
+  milestone: M13
+  title: '9.7d review follow-up: apps/web/e2e/fixtures.ts postOnce can re-run act() and double-send when a real post-hydration request takes longer than the inner 2s poll to show up, and mockTurns
+    clamps on overflow so the double-send passes silently (typescript-reviewer MEDIUM); make mockTurns fail on an unexpected extra turn (or count requests per send) so a double-send fails loudly'
+  accept: a test or spec assertion fails when one send produces two turn requests; the full-flow and chat e2e specs stay green.
+  deps:
+  - 9.7d
+  risk: low
+  status: todo
 - id: 12.4f
   milestone: M13
   title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
@@ -7710,3 +7721,27 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 9.3h
+  milestone: M13
+  title: '9.3f plan Q4 (deferred): the staff verification queue and lookup row show the teacher''s active takedowns and the last decision; subject-edit history'
+  accept: a staff view test shows active takedowns and the last decision on a queue row and a lookup row; web typecheck, lint and test green.
+  deps:
+  - 9.3f
+  risk: low
+  status: todo
+- id: 9.3i
+  milestone: M13
+  title: '9.3f plan Q5 (deferred): a student can pause or cancel a subscription whose agent is suspended (today the /home line has no actions and the chat and plan pages 404); land before payments go live'
+  accept: a test pauses and cancels a subscription whose agent is suspended; web typecheck, lint and test green.
+  deps:
+  - 9.3f
+  risk: low
+  status: todo
+- id: 9.3j
+  milestone: M13
+  title: '9.3f review LOW: apps/web/src/chat/liveChats.ts homeLinks starts listUnavailableForStudent alongside listLiveForStudent (Promise.all) instead of after the owner lookups'
+  accept: the two reads start together; web typecheck, lint and test green.
+  deps:
+  - 9.3f
+  risk: low
+  status: todo
