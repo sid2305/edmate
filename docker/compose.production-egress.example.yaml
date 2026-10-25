@@ -9,7 +9,7 @@
 # Shape: postgres, redis and minio sit on an `internal: true` network, which Compose gives no
 # route out of at all. worker is the only service that also joins a second `egress` network,
 # which does have a route out -- that is the only network a host or cloud firewall rule needs to
-# restrict, to 443 plus the three service endpoints (see the doc above for why Compose itself
+# restrict, to public 443 plus the three service endpoints (see the doc above for why Compose itself
 # cannot express that port/destination restriction).
 
 name: edmate-production-egress-example

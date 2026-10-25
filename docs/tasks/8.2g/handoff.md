@@ -50,6 +50,18 @@ Status: DONE
 - Why: parallels the existing `sign-in-mail-and-proxy.md` topic-named style in the same
   directory; low stakes, easily renamed later.
 
+### 25 Oct 2026 · 8.2g lead fix round: the doc states what the firewall really blocks · decided by lead · risk: low
+- Decided: the lead fixed the review findings in docs/setup/web-link-egress-firewall.md directly (docs only): the iptables example now drops the private, loopback, CGNAT, link-local and multicast ranges on every port before it allows public 443, and the doc says plainly that a host on a public address answering on 443 is covered only by the app-level check; a new IPv6 section says iptables never matches IPv6, keeps `enable_ipv6` off on the egress network and gives the ip6tables mirror (443 to 2000::/3 only); the security-group paragraph says security groups only allow, so private 443 inside the network needs a network ACL and the metadata service needs the provider's own control; the resolver section now says the c-ares Resolver uses the OS nameservers (no `setServers()`), skips /etc/hosts, and that the all-addresses-public check is what keeps a split-horizon view from widening reach. docker/compose.production-egress.example.yaml's header says "public 443". The MEDIUM and LOW were fixed in the same pass because they are sentences in the same file. The example file's worker env leaves out S3_REGION and S3_BUCKET (code-reviewer, minor): wontfix, the file shows the network shape and is never run.
+- Why: the code-reviewer's HIGH (the doc claimed the firewall blocks internal hosts while allowing 443 to any address) and the security-reviewer's MEDIUM (IPv4 only) would have given a deployer a false guarantee.
+
+### 25 Oct 2026 · 8.2g merge: web-link egress firewall deploy notes · decided by lead · risk: low
+- Decided: merge 8.2g after the lead fix round. code-reviewer and security-reviewer reviewed it; no app code changes, and docker/compose.yaml and docker/env.example gain one comment line each.
+- Why: the plan's four recommendations were applied as written, `docker compose config` resolves both compose files, and the findings are fixed.
+
+### 25 Oct 2026 · 8.2g budget 28 vs 25 · decided by lead · risk: low
+- Decided: accept 28 builder tool calls against the plan's 25 (harness count; the builder reported 21), recorded in docs/tasks/8.2g/handoff.md.
+- Why: the extra calls were the before-and-after stack-config test runs and the compose validation; the diff stayed inside the plan's files.
+
 ## Left to do
 
 None.
@@ -77,4 +89,4 @@ None.
 
 ## Budget
 
-Tool calls used: 15
+Tool calls used: 28 (harness count; the builder reported 21)
