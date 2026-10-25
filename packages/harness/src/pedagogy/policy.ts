@@ -131,6 +131,7 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
       ...control,
       ...(rp === undefined ? {} : { rolePlayStep: rp }),
     }),
+    { allowPracticeRelease: true },
   );
 }
 
@@ -167,21 +168,34 @@ export function fallbackPolicy(
 function finish(
   i: PolicyInput,
   s: Omit<SkillStep, 'reason'> & { reason: PolicyReason },
+  opts: { allowPracticeRelease?: boolean } = {},
 ): PolicyResult {
   const entitled = i.ctx.entitlement.skills;
   const names =
     s.skill === null || !entitled.includes(s.skill)
       ? []
       : (i.tools ?? []).filter((t) => t.skill === s.skill).map((t) => t.name);
+  // A practice key is released once the attempt grades correct (5.6f), but only on the main
+  // skillStep path: every `closed()` redirect (distress/misuse/off_topic/meta/locked/not_covered/
+  // skill_not_entitled) passes no flag, so it keeps the key guarded even if `ctx.attempt`
+  // happens to read `correct`.
+  const practiceSolved =
+    (opts.allowPracticeRelease ?? false) &&
+    i.ctx.attempt === 'correct' &&
+    holdsPracticeKey(i.help);
   return {
     move: s.move,
     rung: s.rung,
     skill: s.skill,
     // A solution is the one move allowed to state the answer (never reached with finalAnswers
-    // never). A practice item's key is never released, whatever the move (5.6, ADR-0010 §5).
+    // never). A practice item's key is released once the attempt grades correct (5.6f); otherwise
+    // never, whatever the move (5.6, ADR-0010 §5).
     ...keysFor(
       i.help,
-      s.move === 'solution' && i.ctx.pkg.finalAnswers !== 'never' && !holdsPracticeKey(i.help),
+      (s.move === 'solution' &&
+        i.ctx.pkg.finalAnswers !== 'never' &&
+        !holdsPracticeKey(i.help)) ||
+        practiceSolved,
     ),
     tools: [...new Set(names)],
     maxOutputTokens: maxOutputTokensFor(s.move, s.skill),
@@ -193,9 +207,10 @@ function finish(
 
 /**
  * The guarded keys and the prompt's keys (5.6c, ADR-0011), one rule for `finish` and both
- * `fallbackPolicy` branches. `release` drops `answerKey` (a solution move); a carried key is
- * never released. `promptKeys` is empty while a practice key or a carried key is held, so neither
- * ever reaches the model's prompt; otherwise it is `mustNotReveal` (no carried key to remove).
+ * `fallbackPolicy` branches. `release` drops `answerKey` (a solution move, or a practice key once
+ * the attempt grades correct (5.6f)); a carried key is never released. `promptKeys` is empty
+ * while a practice key or a carried key is held, so neither ever reaches the model's prompt;
+ * otherwise it is `mustNotReveal` (no carried key to remove).
  */
 function keysFor(
   help: Readonly<HelpState>,

@@ -10,6 +10,7 @@ import {
 } from '../src/index.js';
 
 const URL_WITH_PASSWORD = 'postgres://edmate:hunter2-secret@127.0.0.1:5432/edmate';
+const TARGET_LINE = 'db:verify-teacher: target postgres://127.0.0.1:5432/edmate';
 const EMAIL = 'fictional.teacher@example.test';
 const USER: IdentityUser = {
   id: 'usr_t1',
@@ -36,6 +37,7 @@ function fakeOpen(
   const close = vi.fn(async () => undefined);
   const identity = {
     getUserByEmail: vi.fn(async () => USER),
+    getUser: vi.fn(async () => USER),
     ...identityOverrides,
   } as unknown as IdentityStore;
   const teacherProfiles = {
@@ -64,7 +66,7 @@ describe('db:verify-teacher', () => {
     const f = fakeOpen();
     const { code, out } = await run(['--', ...GOOD, '--reason', 'documents checked'], f.open);
     expect(code).toBe(0);
-    expect(out).toBe('db:verify-teacher: teacher usr_t1 is now verified');
+    expect(out).toBe(`${TARGET_LINE}\ndb:verify-teacher: teacher usr_t1 is now verified`);
     expect(out).not.toContain(EMAIL);
     expect(f.identity.getUserByEmail).toHaveBeenCalledWith(EMAIL);
     expect(f.teacherProfiles.setVerification).toHaveBeenCalledWith(
@@ -81,7 +83,7 @@ describe('db:verify-teacher', () => {
       f.open,
     );
     expect(code).toBe(0);
-    expect(out).toBe('db:verify-teacher: teacher usr_t1 is now rejected');
+    expect(out).toBe(`${TARGET_LINE}\ndb:verify-teacher: teacher usr_t1 is now rejected`);
     expect(f.teacherProfiles.setVerification).toHaveBeenCalledWith(
       { teacherId: 'usr_t1' },
       { status: 'rejected', by: 'stf_1' },
@@ -127,7 +129,7 @@ describe('db:verify-teacher', () => {
     const f = fakeOpen({ getUserByEmail: vi.fn(async () => null) });
     const { code, out } = await run(GOOD, f.open);
     expect(code).toBe(1);
-    expect(out).toBe('db:verify-teacher: no user has that email');
+    expect(out).toBe(`${TARGET_LINE}\ndb:verify-teacher: no user has that email`);
     expect(f.teacherProfiles.setVerification).not.toHaveBeenCalled();
     expect(f.close).toHaveBeenCalledOnce();
   });
@@ -138,7 +140,9 @@ describe('db:verify-teacher', () => {
     });
     const { code, out } = await run(GOOD, f.open);
     expect(code).toBe(1);
-    expect(out).toBe('db:verify-teacher: failed: teacherProfiles.setVerification: scope');
+    expect(out).toBe(
+      `${TARGET_LINE}\ndb:verify-teacher: failed: teacherProfiles.setVerification: scope`,
+    );
     expect(out).not.toContain(EMAIL);
     expect(f.close).toHaveBeenCalledOnce();
   });
@@ -148,7 +152,7 @@ describe('db:verify-teacher', () => {
       throw new RepositoryError('not_found', 'teacherProfiles.setVerification');
     });
     expect((await run(GOOD, f.open)).out).toBe(
-      'db:verify-teacher: failed: teacherProfiles.setVerification: not_found',
+      `${TARGET_LINE}\ndb:verify-teacher: failed: teacherProfiles.setVerification: not_found`,
     );
   });
 
@@ -160,7 +164,9 @@ describe('db:verify-teacher', () => {
     });
     const { code, out } = await run(GOOD, f.open);
     expect(code).toBe(1);
-    expect(out).toBe('db:verify-teacher: failed: connect failed for postgres://<redacted>');
+    expect(out).toBe(
+      `${TARGET_LINE}\ndb:verify-teacher: failed: connect failed for postgres://<redacted>`,
+    );
     expect(out).not.toContain('hunter2');
     expect(f.close).toHaveBeenCalledOnce();
   });
@@ -171,7 +177,9 @@ describe('db:verify-teacher', () => {
         throw 'plain string';
       }),
     });
-    expect((await run(GOOD, f.open)).out).toBe('db:verify-teacher: failed: plain string');
+    expect((await run(GOOD, f.open)).out).toBe(
+      `${TARGET_LINE}\ndb:verify-teacher: failed: plain string`,
+    );
     const throwingOpen: OpenVerify = () => {
       throw new Error(`bad url ${URL_WITH_PASSWORD}`);
     };
@@ -184,6 +192,51 @@ describe('db:verify-teacher', () => {
     const f = fakeOpen();
     f.close.mockRejectedValueOnce(new Error('already closed'));
     expect((await run(GOOD, f.open)).code).toBe(0);
+  });
+
+  it('resolves --user-id via identity.getUser and skips getUserByEmail', async () => {
+    const f = fakeOpen();
+    const { code, out } = await run(
+      ['--user-id', 'usr_t1', '--status', 'verified', '--by', 'stf_1'],
+      f.open,
+    );
+    expect(code).toBe(0);
+    expect(out).toBe(`${TARGET_LINE}\ndb:verify-teacher: teacher usr_t1 is now verified`);
+    expect(f.identity.getUser).toHaveBeenCalledWith('usr_t1');
+    expect(f.identity.getUserByEmail).not.toHaveBeenCalled();
+  });
+
+  it('rejects --email and --user-id together as a usage error', async () => {
+    const f = fakeOpen();
+    const { code, out } = await run(
+      ['--email', EMAIL, '--user-id', 'usr_t1', '--status', 'verified', '--by', 'stf_1'],
+      f.open,
+    );
+    expect(code).toBe(1);
+    expect(out).toMatch(/^db:verify-teacher: usage: /);
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
+  it('rejects neither --email nor --user-id as a usage error', async () => {
+    const f = fakeOpen();
+    const { code, out } = await run(['--status', 'verified', '--by', 'stf_1'], f.open);
+    expect(code).toBe(1);
+    expect(out).toMatch(/^db:verify-teacher: usage: /);
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
+  it('never prints the password in the target line', async () => {
+    const f = fakeOpen();
+    const { out } = await run(GOOD, f.open);
+    expect(out).not.toContain('hunter2');
+    expect(out).toContain(TARGET_LINE);
+  });
+
+  it('usage mentions --user-id and that --reason holds no personal details', async () => {
+    const f = fakeOpen();
+    const { out } = await run([], f.open);
+    expect(out).toContain('--user-id');
+    expect(out.toLowerCase()).toContain('no personal details');
   });
 
   it('opens a real pool lazily by default (no connection until a query)', async () => {

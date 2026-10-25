@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { createDb } from './client.js';
 import { createIdentityStore, ROLES, type IdentityStore, type Role } from './identity/index.js';
 import { migrateDatabase } from './migrate.js';
-import { redact } from './redact.js';
+import { redact, redactTarget } from './redact.js';
 import {
   createRepositories,
   GROUPS_MAX_LIMIT,
@@ -49,11 +49,14 @@ const openIdentity: OpenIdentity = (url) => {
 };
 
 const USAGE =
-  'usage: db:grant-role -- --email <email> --role <student|teacher|staff> ' +
-  '--by <staff-user-id|operator> [--reason <text>]';
+  'usage: db:grant-role -- --email <email>|--user-id <id> --role <student|teacher|staff> ' +
+  '--by <staff-user-id|operator> [--reason <text>]\n' +
+  '  exactly one of --email or --user-id is required.\n' +
+  '  --reason is stored in audit_log; put no personal details in it.';
 
 interface GrantArgs {
-  email: string;
+  email?: string;
+  userId?: string;
   role: Role;
   by: string;
   reason?: string;
@@ -68,6 +71,7 @@ function parseGrantArgs(argv: string[]): GrantArgs | string {
       args: argv[0] === '--' ? argv.slice(1) : argv,
       options: {
         email: { type: 'string' },
+        'user-id': { type: 'string' },
         role: { type: 'string' },
         by: { type: 'string' },
         reason: { type: 'string' },
@@ -79,14 +83,19 @@ function parseGrantArgs(argv: string[]): GrantArgs | string {
     return USAGE;
   }
   const { email, role, by, reason } = values;
-  if (typeof email !== 'string' || typeof role !== 'string' || typeof by !== 'string') {
+  const userId = values['user-id'];
+  if (typeof role !== 'string' || typeof by !== 'string') {
+    return USAGE;
+  }
+  if (typeof email === 'string' ? typeof userId === 'string' : typeof userId !== 'string') {
     return USAGE;
   }
   if (!(ROLES as readonly string[]).includes(role)) {
     return `--role must be one of ${ROLES.join(', ')}`;
   }
   return {
-    email,
+    ...(typeof email === 'string' ? { email } : {}),
+    ...(typeof userId === 'string' ? { userId } : {}),
     role: role as Role,
     by,
     ...(typeof reason === 'string' ? { reason } : {}),
@@ -94,9 +103,10 @@ function parseGrantArgs(argv: string[]): GrantArgs | string {
 }
 
 /**
- * `pnpm --filter @edmate/db db:grant-role -- --email <e> --role <r> --by <id|operator>`: the
- * operator's way to set a user's role (the first staff account is bootstrapped with it). Writes a
- * `role.grant` audit row. Never prints the email or a connection string. Returns the exit code.
+ * `pnpm --filter @edmate/db db:grant-role -- --email <e>|--user-id <id> --role <r> --by
+ * <id|operator>`: the operator's way to set a user's role (the first staff account is
+ * bootstrapped with it). Writes a `role.grant` audit row. Never prints the email, a user id's
+ * personal context or a connection string's credentials. Returns the exit code.
  */
 export async function runGrantRoleCli(
   argv: string[],
@@ -114,12 +124,20 @@ export async function runGrantRoleCli(
     log('db:grant-role: DATABASE_URL is not set');
     return 1;
   }
+  log(`db:grant-role: target ${redactTarget(url)}`);
   let handle: ReturnType<OpenIdentity> | undefined;
   try {
     handle = open(url);
-    const user = await handle.identity.getUserByEmail(args.email);
+    const user =
+      args.userId !== undefined
+        ? await handle.identity.getUser(args.userId)
+        : await handle.identity.getUserByEmail(args.email!);
     if (!user) {
-      log('db:grant-role: no user has that email (they must sign in once first)');
+      log(
+        args.userId !== undefined
+          ? 'db:grant-role: no user has that id (they must sign in once first)'
+          : 'db:grant-role: no user has that email (they must sign in once first)',
+      );
       return 1;
     }
     const updated = await handle.identity.grantRole({
@@ -140,7 +158,7 @@ export async function runGrantRoleCli(
 
 /** Opens the identity store and the profile repository for the verify CLI (injected in tests). */
 export type OpenVerify = (url: string) => {
-  identity: Pick<IdentityStore, 'getUserByEmail'>;
+  identity: Pick<IdentityStore, 'getUserByEmail' | 'getUser'>;
   teacherProfiles: Pick<Repositories['teacherProfiles'], 'setVerification'>;
   close: () => Promise<void>;
 };
@@ -158,11 +176,14 @@ const VERIFY_STATUSES = ['verified', 'rejected'] as const;
 type VerifyStatus = (typeof VERIFY_STATUSES)[number];
 
 const VERIFY_USAGE =
-  'usage: db:verify-teacher -- --email <email> --status <verified|rejected> ' +
-  '--by <staff-user-id> [--reason <text>]';
+  'usage: db:verify-teacher -- --email <email>|--user-id <id> --status <verified|rejected> ' +
+  '--by <staff-user-id> [--reason <text>]\n' +
+  '  exactly one of --email or --user-id is required.\n' +
+  '  --reason is stored in audit_log; put no personal details in it.';
 
 interface VerifyArgs {
-  email: string;
+  email?: string;
+  userId?: string;
   status: VerifyStatus;
   by: string;
   reason?: string;
@@ -176,6 +197,7 @@ function parseVerifyArgs(argv: string[]): VerifyArgs | string {
       args: argv[0] === '--' ? argv.slice(1) : argv,
       options: {
         email: { type: 'string' },
+        'user-id': { type: 'string' },
         status: { type: 'string' },
         by: { type: 'string' },
         reason: { type: 'string' },
@@ -187,14 +209,19 @@ function parseVerifyArgs(argv: string[]): VerifyArgs | string {
     return VERIFY_USAGE;
   }
   const { email, status, by, reason } = values;
-  if (typeof email !== 'string' || typeof status !== 'string' || typeof by !== 'string') {
+  const userId = values['user-id'];
+  if (typeof status !== 'string' || typeof by !== 'string') {
+    return VERIFY_USAGE;
+  }
+  if (typeof email === 'string' ? typeof userId === 'string' : typeof userId !== 'string') {
     return VERIFY_USAGE;
   }
   if (!(VERIFY_STATUSES as readonly string[]).includes(status)) {
     return `--status must be one of ${VERIFY_STATUSES.join(', ')}`;
   }
   return {
-    email,
+    ...(typeof email === 'string' ? { email } : {}),
+    ...(typeof userId === 'string' ? { userId } : {}),
     status: status as VerifyStatus,
     by,
     ...(typeof reason === 'string' ? { reason } : {}),
@@ -202,10 +229,11 @@ function parseVerifyArgs(argv: string[]): VerifyArgs | string {
 }
 
 /**
- * `pnpm --filter @edmate/db db:verify-teacher -- --email <e> --status <verified|rejected> --by
- * <staff-user-id>` (task 8.1): staff's identity-check tool until the trust console (12.1). Only a
- * user who is staff now can verify; the repository checks that and writes a `teacher.verify` audit
- * row. Never prints the email or a connection string. Returns the exit code.
+ * `pnpm --filter @edmate/db db:verify-teacher -- --email <e>|--user-id <id> --status
+ * <verified|rejected> --by <staff-user-id>` (task 8.1): staff's identity-check tool until the
+ * trust console (12.1). Only a user who is staff now can verify; the repository checks that and
+ * writes a `teacher.verify` audit row. Never prints the email, a user id's personal context or a
+ * connection string's credentials. Returns the exit code.
  */
 export async function runVerifyTeacherCli(
   argv: string[],
@@ -223,12 +251,20 @@ export async function runVerifyTeacherCli(
     log('db:verify-teacher: DATABASE_URL is not set');
     return 1;
   }
+  log(`db:verify-teacher: target ${redactTarget(url)}`);
   let handle: ReturnType<OpenVerify> | undefined;
   try {
     handle = open(url);
-    const user = await handle.identity.getUserByEmail(args.email);
+    const user =
+      args.userId !== undefined
+        ? await handle.identity.getUser(args.userId)
+        : await handle.identity.getUserByEmail(args.email!);
     if (!user) {
-      log('db:verify-teacher: no user has that email');
+      log(
+        args.userId !== undefined
+          ? 'db:verify-teacher: no user has that id'
+          : 'db:verify-teacher: no user has that email',
+      );
       return 1;
     }
     const row = await handle.teacherProfiles.setVerification(

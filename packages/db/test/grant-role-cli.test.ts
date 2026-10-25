@@ -5,6 +5,7 @@ import { runGrantRoleCli, type OpenIdentity } from '../src/cli.js';
 import type { IdentityStore, IdentityUser } from '../src/index.js';
 
 const URL_WITH_PASSWORD = 'postgres://edmate:hunter2-secret@127.0.0.1:5432/edmate';
+const TARGET_LINE = 'db:grant-role: target postgres://127.0.0.1:5432/edmate';
 const EMAIL = 'new.staff@example.test';
 const USER: IdentityUser = {
   id: 'usr_1',
@@ -18,6 +19,7 @@ function fakeOpen(overrides: Partial<IdentityStore> = {}) {
   const close = vi.fn(async () => undefined);
   const identity = {
     getUserByEmail: vi.fn(async () => USER),
+    getUser: vi.fn(async () => USER),
     grantRole: vi.fn(async (g: { role: IdentityUser['role'] }) => ({ ...USER, role: g.role })),
     ...overrides,
   } as unknown as IdentityStore;
@@ -38,7 +40,7 @@ describe('db:grant-role', () => {
     const f = fakeOpen();
     const { code, out } = await run(['--', ...GOOD, '--reason', 'bootstrap'], f.open);
     expect(code).toBe(0);
-    expect(out).toBe('db:grant-role: user usr_1 is now staff');
+    expect(out).toBe(`${TARGET_LINE}\ndb:grant-role: user usr_1 is now staff`);
     expect(out).not.toContain(EMAIL);
     expect(f.identity.getUserByEmail).toHaveBeenCalledWith(EMAIL);
     expect(f.identity.grantRole).toHaveBeenCalledWith({
@@ -106,7 +108,9 @@ describe('db:grant-role', () => {
     });
     const { code, out } = await run(GOOD, f.open);
     expect(code).toBe(1);
-    expect(out).toBe('db:grant-role: failed: connect failed for postgres://<redacted>');
+    expect(out).toBe(
+      `${TARGET_LINE}\ndb:grant-role: failed: connect failed for postgres://<redacted>`,
+    );
     expect(out).not.toContain('hunter2');
     expect(f.close).toHaveBeenCalledOnce();
   });
@@ -117,7 +121,9 @@ describe('db:grant-role', () => {
         throw 'plain string';
       }),
     });
-    expect((await run(GOOD, f.open)).out).toBe('db:grant-role: failed: plain string');
+    expect((await run(GOOD, f.open)).out).toBe(
+      `${TARGET_LINE}\ndb:grant-role: failed: plain string`,
+    );
     const throwingOpen: OpenIdentity = () => {
       throw new Error(`bad url ${URL_WITH_PASSWORD}`);
     };
@@ -130,6 +136,51 @@ describe('db:grant-role', () => {
     const f = fakeOpen();
     f.close.mockRejectedValueOnce(new Error('already closed'));
     expect((await run(GOOD, f.open)).code).toBe(0);
+  });
+
+  it('resolves --user-id via identity.getUser and skips getUserByEmail', async () => {
+    const f = fakeOpen();
+    const { code, out } = await run(
+      ['--user-id', 'usr_1', '--role', 'staff', '--by', 'operator'],
+      f.open,
+    );
+    expect(code).toBe(0);
+    expect(out).toBe(`${TARGET_LINE}\ndb:grant-role: user usr_1 is now staff`);
+    expect(f.identity.getUser).toHaveBeenCalledWith('usr_1');
+    expect(f.identity.getUserByEmail).not.toHaveBeenCalled();
+  });
+
+  it('rejects --email and --user-id together as a usage error', async () => {
+    const f = fakeOpen();
+    const { code, out } = await run(
+      ['--email', EMAIL, '--user-id', 'usr_1', '--role', 'staff', '--by', 'operator'],
+      f.open,
+    );
+    expect(code).toBe(1);
+    expect(out).toMatch(/^db:grant-role: usage: /);
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
+  it('rejects neither --email nor --user-id as a usage error', async () => {
+    const f = fakeOpen();
+    const { code, out } = await run(['--role', 'staff', '--by', 'operator'], f.open);
+    expect(code).toBe(1);
+    expect(out).toMatch(/^db:grant-role: usage: /);
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
+  it('never prints the password in the target line', async () => {
+    const f = fakeOpen();
+    const { out } = await run(GOOD, f.open);
+    expect(out).not.toContain('hunter2');
+    expect(out).toContain(TARGET_LINE);
+  });
+
+  it('usage mentions --user-id and that --reason holds no personal details', async () => {
+    const f = fakeOpen();
+    const { out } = await run([], f.open);
+    expect(out).toContain('--user-id');
+    expect(out.toLowerCase()).toContain('no personal details');
   });
 
   it('opens a real pool lazily by default (no connection until a query)', async () => {
