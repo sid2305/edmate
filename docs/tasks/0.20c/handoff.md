@@ -45,6 +45,10 @@ Status: DONE
   need to shrink the factor and rescale the bound; keeping 16x/64 also meant less of the test and
   its comments needed to change.
 
+### 25 Oct 2026 · 0.20c merge a test-only change under the pedagogy risk path · decided by lead · risk: high
+- Decided: merge 0.20c. It touches packages/harness/src/pedagogy/**, a risky path, but changes only modelRequest.test.ts (how the linear-time check is timed). modelRequest.ts, the prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it; typescript-reviewer re-ran the suite under load.
+- Why: the test failed CI on PR #297 from timing noise. The new measurement keeps the same 64 bound, which a quadratic regression (ratio 256) still fails.
+
 ### 25 Oct 2026 · 0.20c warm-up run outside the time cap · decided by lead · risk: low
 - Decided: wontfix the typescript-reviewer LOW on packages/harness/src/pedagogy/modelRequest.test.ts: the untimed warm-up run of the large input is not checked against the 10 s cap. The test's 60 s timeout still bounds it, and the timed runs that follow are capped.
 - Why: a quadratic regression would show in the timed runs and fail the ratio check, so a separate cap on the warm-up adds nothing.
