@@ -6,6 +6,7 @@
 import {
   RepositoryError,
   type Repositories,
+  type StaffTakedownRow,
   type TeacherProfileRow,
   type TeacherVerificationQueueRow,
 } from '@edmate/db';
@@ -43,6 +44,12 @@ function memory() {
     ['tch_b', 'teacher'],
     ['tch_c', 'teacher'],
   ]);
+  // Task 9.3h: this teacher's active takedowns and last verify/reject decision (default empty).
+  const activeTakedowns = new Map<string, StaffTakedownRow[]>();
+  const lastDecisions = new Map<
+    string,
+    { status: 'verified' | 'rejected'; reason: string | null; ts: string }
+  >();
   const profiles = new Map<string, TeacherProfileRow>();
   const order: string[] = [];
   const add = (teacherId: string, slug: string) => {
@@ -134,6 +141,11 @@ function memory() {
           before: current.verificationStatus,
           after: input.status,
         });
+        lastDecisions.set(scope.teacherId, {
+          status: input.status,
+          reason: input.reason ?? null,
+          ts: new Date().toISOString(),
+        });
         return next;
       },
     ),
@@ -143,13 +155,41 @@ function memory() {
       }
     },
   };
+  const takedowns = {
+    listActiveForStaff: vi.fn(async (by: unknown): Promise<StaffTakedownRow[]> => {
+      if (typeof by !== 'string' || by === '') {
+        throw new RepositoryError('invalid', 'takedowns.listActiveForStaff');
+      }
+      if (roles.get(by) !== 'staff') {
+        throw new RepositoryError('scope', 'takedowns.listActiveForStaff');
+      }
+      return [...activeTakedowns.values()].flat();
+    }),
+  };
+  const audit = {
+    findLastVerifyForStaff: vi.fn(async (by: unknown, teacherId: unknown) => {
+      if (typeof by !== 'string' || by === '') {
+        throw new RepositoryError('invalid', 'audit.findLastVerifyForStaff');
+      }
+      if (typeof teacherId !== 'string' || teacherId === '') {
+        throw new RepositoryError('invalid', 'audit.findLastVerifyForStaff');
+      }
+      if (roles.get(by) !== 'staff') {
+        throw new RepositoryError('scope', 'audit.findLastVerifyForStaff');
+      }
+      return lastDecisions.get(teacherId) ?? null;
+    }),
+  };
   const logs: string[] = [];
-  const repos = { teacherProfiles } as unknown as Pick<Repositories, 'teacherProfiles'>;
+  const repos = { teacherProfiles, takedowns, audit } as unknown as Pick<
+    Repositories,
+    'teacherProfiles' | 'takedowns' | 'audit'
+  >;
   const h = createStaffVerificationHandlers({
     repos: () => repos,
     log: (line) => logs.push(line),
   });
-  return { h, roles, profiles, audits, logs, teacherProfiles };
+  return { h, roles, profiles, audits, logs, teacherProfiles, takedowns, audit, activeTakedowns, lastDecisions };
 }
 
 const ctx = (principal: Principal = STAFF): RoleContext => ({
@@ -183,9 +223,33 @@ describe('GET: the pending queue', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({
       teachers: [
-        { teacherId: 'tch_a', slug: 'asha-math', subject: 'Math', name: 'Name tch_a', email: 'tch_a@example.test' },
-        { teacherId: 'tch_b', slug: 'ben-physics', subject: 'Math', name: 'Name tch_b', email: 'tch_b@example.test' },
-        { teacherId: 'tch_c', slug: 'chen-chem', subject: 'Math', name: 'Name tch_c', email: null },
+        {
+          teacherId: 'tch_a',
+          slug: 'asha-math',
+          subject: 'Math',
+          name: 'Name tch_a',
+          email: 'tch_a@example.test',
+          activeTakedowns: [],
+          lastDecision: null,
+        },
+        {
+          teacherId: 'tch_b',
+          slug: 'ben-physics',
+          subject: 'Math',
+          name: 'Name tch_b',
+          email: 'tch_b@example.test',
+          activeTakedowns: [],
+          lastDecision: null,
+        },
+        {
+          teacherId: 'tch_c',
+          slug: 'chen-chem',
+          subject: 'Math',
+          name: 'Name tch_c',
+          email: null,
+          activeTakedowns: [],
+          lastDecision: null,
+        },
       ],
     });
     expect(m.teacherProfiles.listPendingForStaff).toHaveBeenCalledWith('stf_1');
@@ -233,6 +297,21 @@ describe('GET: the pending queue', () => {
     const res = await m.h.list(get(), ctx());
     expect(res.status).toBe(403);
   });
+
+  it('shows an active takedown and a prior decision (9.3h)', async () => {
+    const m = memory();
+    m.activeTakedowns.set('tch_a', [
+      { id: 'td_1', kind: 'document', targetId: 'doc_1', teacherId: 'tch_a', teacherSlug: 'asha-math', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+    ]);
+    m.lastDecisions.set('tch_a', { status: 'rejected', reason: 'unsafe', ts: '2026-10-19T00:00:00.000Z' });
+    const res = await m.h.list(get(), ctx());
+    const body = (await res.json()) as { teachers: { teacherId: string; activeTakedowns: unknown[]; lastDecision: unknown }[] };
+    const asha = body.teachers.find((t) => t.teacherId === 'tch_a');
+    expect(asha?.activeTakedowns).toEqual([
+      { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+    ]);
+    expect(asha?.lastDecision).toEqual({ status: 'rejected', reason: 'unsafe', ts: '2026-10-19T00:00:00.000Z' });
+  });
 });
 
 describe('GET lookup: find one teacher by slug, any status', () => {
@@ -249,6 +328,8 @@ describe('GET lookup: find one teacher by slug, any status', () => {
         name: 'Name tch_a',
         email: 'tch_a@example.test',
         verificationStatus: 'pending',
+        activeTakedowns: [],
+        lastDecision: null,
       },
     });
     expect(m.teacherProfiles.findBySlugForStaff).toHaveBeenCalledWith('stf_1', 'asha-math');
@@ -273,6 +354,26 @@ describe('GET lookup: find one teacher by slug, any status', () => {
     const res = await m.h.lookup(getLookup('no-such-teacher'), ctx());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ teacher: null });
+  });
+
+  it('shows an active takedown and a prior decision on lookup too (9.3h)', async () => {
+    const m = memory();
+    m.activeTakedowns.set('tch_a', [
+      { id: 'td_1', kind: 'agent', targetId: 'tp_tch_a', teacherId: 'tch_a', teacherSlug: 'asha-math', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+    ]);
+    m.lastDecisions.set('tch_a', { status: 'rejected', reason: 'unsafe', ts: '2026-10-19T00:00:00.000Z' });
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    const body = (await res.json()) as {
+      teacher: { activeTakedowns: unknown[]; lastDecision: unknown };
+    };
+    expect(body.teacher.activeTakedowns).toEqual([
+      { kind: 'agent', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+    ]);
+    expect(body.teacher.lastDecision).toEqual({
+      status: 'rejected',
+      reason: 'unsafe',
+      ts: '2026-10-19T00:00:00.000Z',
+    });
   });
 
   it.each([

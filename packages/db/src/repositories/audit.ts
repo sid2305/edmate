@@ -5,9 +5,10 @@
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
+import { lockRole } from '../role-lock.js';
 import { auditLog } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
-import { toAuditRow, type AuditRow } from './map.js';
+import { iso, toAuditRow, type AuditRow } from './map.js';
 import { redactPersonalData } from './redact-json.js';
 import {
   IdSchema,
@@ -17,6 +18,9 @@ import {
   type StudentScope,
   type TeacherScope,
 } from './scope.js';
+
+/** The decided status stored on a `teacher.verify` audit row's own `after.verificationStatus`. */
+const VerifyAfter = z.object({ verificationStatus: z.enum(['verified', 'rejected']) });
 
 /** Largest page of audit rows. */
 export const AUDIT_MAX_LIMIT = 200;
@@ -211,6 +215,37 @@ export function auditRepo(db: Db) {
         and(eq(auditLog.teacherId, teacherId), eq(auditLog.studentId, studentId)),
         options,
       );
+    },
+
+    /**
+     * Task 9.3h: the newest `teacher.verify` decision on `teacherId`'s row (written by
+     * `teacherProfiles.setVerification`), for `by`, a user who is staff right now (`lockRole`,
+     * same precedent as `takedowns.listActiveForStaff` -- this never writes, but a repository
+     * source file may never name the accounts table itself, so the role check always goes through
+     * `role-lock.ts`). A malformed `by` or `teacherId` is `invalid` before any SQL; a well-formed
+     * `by` who is not staff right now is `scope`; a teacher never decided is `null`. A stored
+     * `after` that fails its own shape is `integrity` (never returned).
+     */
+    async findLastVerifyForStaff(
+      by: unknown,
+      teacherId: unknown,
+    ): Promise<{ status: 'verified' | 'rejected'; reason: string | null; ts: string } | null> {
+      const method = 'audit.findLastVerifyForStaff';
+      const staff = parseArg(IdSchema, by, method);
+      const tid = parseArg(IdSchema, teacherId, method);
+      return db.transaction(async (tx) => {
+        if ((await lockRole(tx, staff)) !== 'staff') throw new RepositoryError('scope', method);
+        const [row] = await tx
+          .select({ after: auditLog.after, reason: auditLog.reason, ts: auditLog.ts })
+          .from(auditLog)
+          .where(and(eq(auditLog.teacherId, tid), eq(auditLog.action, 'teacher.verify')))
+          .orderBy(desc(auditLog.ts), desc(auditLog.id))
+          .limit(1);
+        if (!row) return null;
+        const after = VerifyAfter.safeParse(row.after);
+        if (!after.success) throw new RepositoryError('integrity', method);
+        return { status: after.data.verificationStatus, reason: row.reason, ts: iso(row.ts) };
+      });
     },
   };
 }
