@@ -2137,7 +2137,7 @@ tasks:
   deps:
   - '8.1'
   - '8.7'
-  status: running
+  status: review
   branch: m13/8.1b-verification-followups
   model: plan:sonnet build:sonnet
 - id: '8.2'
@@ -6650,7 +6650,7 @@ tasks:
   deps:
   - 9.7d
   risk: low
-  status: running
+  status: review
   branch: m13/9.7e-e2e-double-send
   model: build:sonnet
 - id: 12.4f
@@ -7752,7 +7752,7 @@ tasks:
   deps:
   - 5.6b
   risk: high
-  status: running
+  status: review
   branch: m13/5.6f-release-correct-key
   model: plan:sonnet build:sonnet
 - id: 1.4e
@@ -7831,7 +7831,9 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.3h-staff-takedowns-last-decision
+  model: plan:sonnet build:sonnet
 - id: 9.3i
   milestone: M13
   title: '9.3f plan Q5 (deferred): a student can pause or cancel a subscription whose agent is suspended (today the /home line has no actions and the chat and plan pages 404); land before payments go live'
@@ -7839,7 +7841,9 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.3i-suspended-pause-cancel
+  model: plan:sonnet build:sonnet
 - id: 9.3j
   milestone: M13
   title: '9.3f review LOW: apps/web/src/chat/liveChats.ts homeLinks starts listUnavailableForStudent alongside listLiveForStudent (Promise.all) instead of after the owner lookups'
@@ -7868,3 +7872,20 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 8.1d
+  milestone: M13
+  title: '8.1b review follow-ups: packages/db/src/cli.ts GrantArgs/VerifyArgs become a discriminated union (email | userId) so runGrantRoleCli/runVerifyTeacherCli need no `args.email!` (cli.ts:134, :261);
+    the either-or check reads `(email === undefined) === (userId === undefined)` in both parse functions (cli.ts:90, :216)'
+  accept: no non-null assertion on args.email; db typecheck, lint and test green.
+  deps:
+  - 8.1b
+  risk: low
+  status: todo
+- id: 9.3k
+  milestone: M13
+  title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'
+  accept: a staff view test shows a teacher's past subject changes on a queue row; web typecheck, lint and test green.
+  deps:
+  - 9.3h
+  risk: low
+  status: todo
