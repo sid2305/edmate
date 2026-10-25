@@ -5980,8 +5980,9 @@ tasks:
   accept: the deploy guide documents the rule, and the production compose or firewall example applies it.
   deps:
   - 8.2f
-  status: todo
-  branch: null
+  status: running
+  branch: m13/8.2g-egress-rule
+  model: plan:sonnet build:sonnet
 - id: 9.6h
   milestone: M9
   title: '9.6c security review follow-ups (packages/db subscriptions.ts, before the pilot): cancel then start can''t get round a cost-alarm pause (start refuses a free package while the teacher''s free
@@ -6849,6 +6850,37 @@ tasks:
   accept: a qualityGate test proves a timed-out case's agent call is aborted; evals typecheck, lint and test green.
   deps:
   - 7.4a
+  risk: low
+  status: running
+  branch: m13/7.4d-gate-abort-signal
+  model: plan:lead build:sonnet
+- id: 7.2l
+  milestone: M13
+  title: '7.2k review LOWs: in packages/harness/src/guardrails/moderationPatterns.ts the Devanagari past and habitual forms (बिकता, बेचा, छिपाया, ले गया ...) of the vapes and weapons rules block without
+    an intent marker, so a factual or news sentence can hard-block; decide (with 13.3) whether they need an intent marker or a near-miss set; order prefix-overlapping alternatives longest-first'
+  accept: near-miss tests for factual past/habitual sentences pass or a logged decision keeps them blocking; harness and evals green.
+  deps:
+  - 7.2k
+  risk: high
+  status: todo
+  branch: null
+- id: 9.1c
+  milestone: M13
+  title: '9.1a review LOW: /teacher scores exactly the 95 Lighthouse accessibility threshold in apps/web/test/lighthouse-a11y.test.ts; find what costs the points and fix it so a one-point drift does not
+    fail CI (act sooner if CI flakes)'
+  accept: /teacher scores at least 98 locally and in CI.
+  deps:
+  - 9.1a
+  risk: low
+  status: todo
+  branch: null
+- id: 13.4a
+  milestone: M13
+  title: '13.4 database review: packages/db/migrations/0032_retention_indexes.sql builds its three indexes with plain CREATE INDEX; move them to the concurrentIndex post-migrate pattern in packages/db/src/migrate.ts
+    before sessions, turn_traces or chunks grow large'
+  accept: the retention indexes are built CONCURRENTLY outside the migration transaction; db tests green.
+  deps:
+  - '13.4'
   risk: low
   status: todo
   branch: null
