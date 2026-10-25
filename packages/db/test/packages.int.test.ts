@@ -438,7 +438,7 @@ describe.skipIf(!up)(
           await repos.packages.create(MANY, { agentId: many, draft: { ...d, name: `p${i}` } });
         }
         expect(await failure(repos.packages.create(MANY, { agentId: many, draft: d }))).toEqual({
-          kind: 'invalid',
+          kind: 'limit',
           method: 'packages.create',
         });
         expect(await packageCount(MANY.teacherId)).toBe(PACKAGES_MAX);
@@ -455,6 +455,31 @@ describe.skipIf(!up)(
             draft: { ...d, name: 'p0', moduleIds: [] },
           }),
         ).toEqual({ packageId: first, version: 2 });
+      });
+
+      it(`PACKAGES_MAX + 1 concurrent creates resolve to exactly ${PACKAGES_MAX} successes and one 'limit' failure`, async () => {
+        const racy = (await ensure(RACE)).agentId;
+        const moduleId = owned[RACE.teacherId]!.moduleId;
+        const d = draft([moduleId]);
+        const results = await Promise.all(
+          Array.from({ length: PACKAGES_MAX + 1 }, (_, i) =>
+            repos.packages
+              .create(RACE, { agentId: racy, draft: { ...d, name: `race${i}` } })
+              .then(
+                (v) => ({ ok: true as const, v }),
+                (e: unknown) => ({ ok: false as const, e }),
+              ),
+          ),
+        );
+        const oks = results.filter((r) => r.ok);
+        const fails = results.filter((r) => !r.ok);
+        expect(oks).toHaveLength(PACKAGES_MAX);
+        expect(fails).toHaveLength(1);
+        for (const f of fails) {
+          expect(f.e).toBeInstanceOf(RepositoryError);
+          expect((f.e as RepositoryError).kind).toBe('limit');
+        }
+        expect(await packageCount(RACE.teacherId)).toBe(PACKAGES_MAX);
       });
 
       it('writes one package.save audit row per write: the package in target, only the version in after', async () => {
@@ -476,8 +501,13 @@ describe.skipIf(!up)(
         for (const r of rows) {
           expect(r.actor).toBe(FRESH.teacherId);
           expect(r.before).toBeNull();
-          expect(Object.keys(r.after as object)).toEqual(['version']);
+          expect(Object.keys(r.after as object).sort()).toEqual(['packageId', 'version']);
           expect(created.map((id) => `package:${id}`)).toContain(r.target);
+          expect(created).toContain((r.after as { packageId: string }).packageId);
+          expect(`package:${(r.after as { packageId: string }).packageId}`).toBe(r.target);
+          // The redactor (task 8.7h) carves UUID spans out of phone-candidate matching, so a
+          // digit-led package id round-trips untouched -- never '[redacted]'.
+          expect((r.after as { packageId: string }).packageId).not.toBe('[redacted]');
         }
         expect(rows.filter((r) => r.target === `package:${created[0]}`)).toHaveLength(4);
         expect(rows.map((r) => (r.after as { version: number }).version).sort()).toEqual([
