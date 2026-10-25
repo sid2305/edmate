@@ -55,12 +55,28 @@ const USAGE =
   '  exactly one of --email or --user-id is required.\n' +
   '  --reason is stored in audit_log; put no personal details in it.';
 
-interface GrantArgs {
-  email?: string;
-  userId?: string;
+type UserTarget =
+  | { kind: 'email'; email: string }
+  | { kind: 'userId'; userId: string };
+
+type GrantArgs = UserTarget & {
   role: Role;
   by: string;
   reason?: string;
+};
+
+/**
+ * Exactly one of `email`/`userId` must be set; returns the tagged target, or `undefined` if both
+ * or neither are set.
+ */
+function buildUserTarget(
+  email: string | undefined,
+  userId: string | undefined,
+): UserTarget | undefined {
+  if ((email === undefined) === (userId === undefined)) return undefined;
+  if (email !== undefined && userId === undefined) return { kind: 'email', email };
+  if (userId !== undefined && email === undefined) return { kind: 'userId', userId };
+  return undefined;
 }
 
 /** The parsed arguments, or a one-line reason they are wrong. */
@@ -88,15 +104,18 @@ function parseGrantArgs(argv: string[]): GrantArgs | string {
   if (typeof role !== 'string' || typeof by !== 'string') {
     return USAGE;
   }
-  if (typeof email === 'string' ? typeof userId === 'string' : typeof userId !== 'string') {
+  const target = buildUserTarget(
+    typeof email === 'string' ? email : undefined,
+    typeof userId === 'string' ? userId : undefined,
+  );
+  if (target === undefined) {
     return USAGE;
   }
   if (!(ROLES as readonly string[]).includes(role)) {
     return `--role must be one of ${ROLES.join(', ')}`;
   }
   return {
-    ...(typeof email === 'string' ? { email } : {}),
-    ...(typeof userId === 'string' ? { userId } : {}),
+    ...target,
     role: role as Role,
     by,
     ...(typeof reason === 'string' ? { reason } : {}),
@@ -130,12 +149,12 @@ export async function runGrantRoleCli(
   try {
     handle = open(url);
     const user =
-      args.userId !== undefined
+      args.kind === 'userId'
         ? await handle.identity.getUser(args.userId)
-        : await handle.identity.getUserByEmail(args.email!);
+        : await handle.identity.getUserByEmail(args.email);
     if (!user) {
       log(
-        args.userId !== undefined
+        args.kind === 'userId'
           ? 'db:grant-role: no user has that id (they must sign in once first)'
           : 'db:grant-role: no user has that email (they must sign in once first)',
       );
@@ -182,13 +201,11 @@ const VERIFY_USAGE =
   '  exactly one of --email or --user-id is required.\n' +
   '  --reason is stored in audit_log; put no personal details in it.';
 
-interface VerifyArgs {
-  email?: string;
-  userId?: string;
+type VerifyArgs = UserTarget & {
   status: VerifyStatus;
   by: string;
   reason?: string;
-}
+};
 
 /** The parsed arguments, or a one-line reason they are wrong. */
 function parseVerifyArgs(argv: string[]): VerifyArgs | string {
@@ -214,15 +231,18 @@ function parseVerifyArgs(argv: string[]): VerifyArgs | string {
   if (typeof status !== 'string' || typeof by !== 'string') {
     return VERIFY_USAGE;
   }
-  if (typeof email === 'string' ? typeof userId === 'string' : typeof userId !== 'string') {
+  const target = buildUserTarget(
+    typeof email === 'string' ? email : undefined,
+    typeof userId === 'string' ? userId : undefined,
+  );
+  if (target === undefined) {
     return VERIFY_USAGE;
   }
   if (!(VERIFY_STATUSES as readonly string[]).includes(status)) {
     return `--status must be one of ${VERIFY_STATUSES.join(', ')}`;
   }
   return {
-    ...(typeof email === 'string' ? { email } : {}),
-    ...(typeof userId === 'string' ? { userId } : {}),
+    ...target,
     status: status as VerifyStatus,
     by,
     ...(typeof reason === 'string' ? { reason } : {}),
@@ -257,12 +277,12 @@ export async function runVerifyTeacherCli(
   try {
     handle = open(url);
     const user =
-      args.userId !== undefined
+      args.kind === 'userId'
         ? await handle.identity.getUser(args.userId)
-        : await handle.identity.getUserByEmail(args.email!);
+        : await handle.identity.getUserByEmail(args.email);
     if (!user) {
       log(
-        args.userId !== undefined
+        args.kind === 'userId'
           ? 'db:verify-teacher: no user has that id'
           : 'db:verify-teacher: no user has that email',
       );
