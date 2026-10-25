@@ -1,6 +1,6 @@
-# 8.6f handoff — Phase A (packages/db)
+# 8.6f handoff — Phase A (packages/db) + Phase B (apps/web)
 
-**Status:** PARTIAL
+**Status:** DONE
 
 ## What changed (Phase A)
 
@@ -66,6 +66,37 @@
   file list by four files. None of the four are in `apps/web/app/api/staff/**` or another
   risk-paths.txt glob, so they do not change Phase B's required-reviewer set, only its scope.
 
+## What changed (Phase B)
+
+- `apps/web/src/studio/packages.ts`: `create`'s catch now checks `error.kind === 'limit'` (was
+  `'invalid'`); `fromError`'s switch gets `case 'limit': return packageLimit();`; `list` runs its
+  three independent reads (`outline.getOutline`, `styleCards.latest`, `packages.listForTeacher`)
+  via one `Promise.all` after the required `courses.ensureDefault` await; a doc comment above the
+  module header explains the `reason`/`link` response extras; `draftOf`'s comment now names its
+  reliance on `PackageDraft` being `PackageConfigSchema.omit(...)`.
+- `apps/web/src/studio/packages.test.ts`: the cap-race mock now throws
+  `RepositoryError('limit', ...)`; a new case proves a plain `RepositoryError('invalid', ...)` on
+  `create` is a bare 400 (`reason` undefined), not `package_limit`.
+- Four pre-existing `apps/web` exhaustive `RepositoryErrorKind` switches, each missing the new
+  `'limit'` case after Phase A (none reachable from these files' repo calls, so each is mapped to
+  its closest client-error response with a one-line comment — see Decisions):
+  `apps/web/src/studio/profile.ts`, `apps/web/src/studio/questions/routes.ts`,
+  `apps/web/src/subscriptions/change.ts`, `apps/web/src/subscriptions/start.ts`.
+- No other `apps/web`, `apps/worker` or `apps/cli` file needed a fix:
+  `corepack pnpm turbo run typecheck --filter=...@edmate/db` (covers every package depending on
+  `@edmate/db`, i.e. `@edmate/db`, `@edmate/web`, `@edmate/worker`) was green with no other
+  changes; `apps/cli` has no `RepositoryErrorKind` switch at all.
+
+## Evidence (Phase B)
+
+- `corepack pnpm turbo run typecheck --filter=...@edmate/db`: `Tasks: 11 successful, 11 total`
+  (covers `@edmate/db`, `@edmate/web`, `@edmate/worker`).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force`: `Tasks: 10
+  successful, 10 total`; `src/studio/packages.test.ts` 60 tests passed; `Test Files 153 passed |
+  4 skipped (157)`; `src/auth/index.test.ts` passed its 27 tests in ~26s (no timeout seen; not
+  re-run).
+- `python3 .githooks/secret-scan.py --all`: clean (no output).
+
 ## Decisions
 
 ### 25 Oct 2026 · 8.6f Phase A: a distinct `RepositoryErrorKind` for the package cap, and a shared package-row lock · decided by builder · risk: high
@@ -95,6 +126,26 @@
   files; Phase B's builder (or a follow-up) should add the `'limit'` arm to all four switches
   alongside the plan's named `packages.ts` edit.
 
+### 25 Oct 2026 · 8.6f Phase B: four pre-existing `apps/web` switches map the new `'limit'` kind to their closest client-error response · decided by builder · risk: low
+
+- Decided: `apps/web/src/studio/profile.ts` and `apps/web/src/studio/questions/routes.ts` group
+  `'limit'` with `'invalid'`/`'integrity'` (a plain 400 `validation`); `apps/web/src/
+  subscriptions/change.ts` groups it with `'invalid'` (the action-specific 409); `apps/web/src/
+  subscriptions/start.ts` maps it the same as `'integrity'` (a plain 400 `validation`). Each
+  switch keeps a one-line comment saying the repo call behind it (`teacherProfiles`,
+  `teacherQuestions`, subscription plan changes, subscription start) has no cap and so can never
+  actually raise `'limit'` — the case exists only so the exhaustive switch (each file's own
+  `const unreachable: never` / `assertNever` pattern) still compiles. No test was added for any
+  of the four: none of their repo calls can reach `'limit'`, so there is nothing reachable to
+  assert (per the brief: "Add a test only where a mapping is reachable").
+- Why: each of these four files' exhaustive switch is a defence against a *future* repo call
+  starting to raise a kind the switch doesn't expect; today none of the four routes' calls
+  (`teacherProfiles.*`, `teacherQuestions.*`, subscription change/start) go through any capped
+  write, so there's no live path to `'limit'` to test — grouping with the nearest existing
+  client-error response keeps each file compiling without inventing a cap-specific response a
+  caller can't actually trigger.
+
 ## Budget
 
 Tool calls used: 64
+Phase B tool calls used: 24

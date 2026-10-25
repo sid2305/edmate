@@ -322,12 +322,24 @@ describe('POST /api/studio/packages', () => {
 
   it('the repo refusing the cap in a race is also 409 package_limit', async () => {
     const { backend } = memoryBackend({
-      fail: { 'packages.create': new RepositoryError('invalid', 'packages.create') },
+      fail: { 'packages.create': new RepositoryError('limit', 'packages.create') },
     });
     const { h } = handlersFor(backend);
     const res = await h.create(req('POST', BODY), ctx);
     expect(res.status).toBe(409);
     expect((await json(res)).reason).toBe('package_limit');
+  });
+
+  it('a plain repo invalid on create is a bare 400, not package_limit', async () => {
+    const { backend } = memoryBackend({
+      fail: { 'packages.create': new RepositoryError('invalid', 'packages.create') },
+    });
+    const { h } = handlersFor(backend);
+    const res = await h.create(req('POST', BODY), ctx);
+    expect(res.status).toBe(400);
+    const body = await json(res);
+    expect(body.reason).toBeUndefined();
+    expect((body.error as { code: string }).code).toBe('validation');
   });
 
   it.each([

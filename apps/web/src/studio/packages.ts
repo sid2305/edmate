@@ -9,7 +9,9 @@
 //
 // Error codes are the contract's `ErrorCode`s (no contracts change); a top-level `reason`
 // (`style_card_required`, `package_limit`, `conflict`, `unavailable`, `internal`) tells the client
-// which case it is. Logs carry fixed codes and error names only, never a message, id or body text.
+// which case it is. `style_card_required` is the only case with a `link` extra (where to send the
+// teacher to fix it); every other `reason` carries no extra fields beyond the error body. Logs
+// carry fixed codes and error names only, never a message, id or body text.
 import type { ErrorCode, ModelPolicy, PackageConfig } from '@edmate/contracts';
 import { SkillSchema } from '@edmate/contracts';
 import {
@@ -135,7 +137,10 @@ function toDraft(s: Settings): PackageDraft {
  * `PackageDraft` is `PackageConfig` minus the four ids the repository owns (`id`, `version`,
  * `teacherId`, `agentId`). Listing the kept fields explicitly, rather than spreading the config
  * and deleting the ids, means a future field added to `PackageConfig` fails to compile here (the
- * object literal below would be missing it) instead of leaking to the client unchecked.
+ * object literal below would be missing it) instead of leaking to the client unchecked. This
+ * relies on `PackageDraft` being exactly `PackageConfigSchema.omit({ id, version, teacherId,
+ * agentId })` (`@edmate/db`'s own type) -- if that omit list ever changes, this function's
+ * literal and `PackageDraft`'s shape diverge and the compiler catches it here.
  */
 function draftOf(config: PackageConfig): PackageDraft {
   const {
@@ -196,9 +201,12 @@ const list: Work = async (b, scope) => {
   // Same bootstrap as the outline page (8.3 lead answer Q1): a teacher always has a course and a
   // module to pick, so the form is never empty.
   await b.repos.courses.ensureDefault(scope);
-  const outline = await b.repos.outline.getOutline(scope);
-  const card = await b.repos.styleCards.latest(scope);
-  const rows = await b.repos.packages.listForTeacher(scope);
+  // These three reads are independent of each other (only `ensureDefault` above must go first).
+  const [outline, card, rows] = await Promise.all([
+    b.repos.outline.getOutline(scope),
+    b.repos.styleCards.latest(scope),
+    b.repos.packages.listForTeacher(scope),
+  ]);
   return ok({
     packages: rows.map((r) => view(b, r)),
     modules: (outline?.modules ?? []).map((m) => ({ id: m.id, title: m.title })),
@@ -234,9 +242,9 @@ const create: Work = async (b, scope, req) => {
   try {
     created = await b.repos.packages.create(scope, { agentId, draft });
   } catch (error) {
-    // The body already passed a stricter schema than the repo's, so `invalid` here is the
-    // per-teacher cap refused inside the repo's lock (a concurrent create won the race).
-    if (error instanceof RepositoryError && error.kind === 'invalid') return packageLimit();
+    // The repo now reports the per-teacher cap as its own `'limit'` kind (a concurrent create won
+    // the race); a genuine `'invalid'` is a real bad write and falls through to `fromError`.
+    if (error instanceof RepositoryError && error.kind === 'limit') return packageLimit();
     throw error;
   }
   const pkg: PackageView = { ...created, liveVersion: null, draft, estimate: estimateFor(b, draft) };
@@ -273,6 +281,8 @@ function fromError(b: PackagesBackend, error: unknown): Response {
         return notFound();
       case 'invalid':
         return validation();
+      case 'limit':
+        return packageLimit();
       case 'integrity':
         return fail('validation', MSG.conflict, 409, { reason: 'conflict' });
       case 'failed':
