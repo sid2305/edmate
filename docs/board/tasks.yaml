@@ -6617,9 +6617,9 @@ tasks:
   deps:
   - 7.2d
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.2h-vapes-rule
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -7721,9 +7721,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.1-axe-ci
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '13.2'
   milestone: M13
   title: 'Load test: 50 concurrent students'
