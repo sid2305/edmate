@@ -75,6 +75,10 @@ New tests in `apps/worker/src/gate/processor.test.ts`:
   failing closed.
 - risk: low
 
+### 24 Oct 2026 · 8.7j tool calls over the brief's cap · decided by lead · risk: low
+- Decided: accept 42 tool calls (harness count) against the brief's cap of 30.
+- Why: the overrun was setup in a fresh worktree (install and build) that the cap did not allow for; the builder finished with a green gate and both reviewers approved with no findings.
+
 ## Budget
 
-Tool calls used: 19
+Tool calls used: 42 (harness count; the agent reported 19)
