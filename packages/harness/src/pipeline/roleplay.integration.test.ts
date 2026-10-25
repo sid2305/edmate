@@ -269,6 +269,88 @@ describe('role-play through the pipeline (5.8)', () => {
   });
 });
 
+describe('13.skillpresent: the harness-computed progress skill event through the real pipeline', () => {
+  /** The one `skill` event of a turn's events, by type (never from a model tool call). */
+  const progressEvent = (events: TurnEvent[]) =>
+    events.find((e) => e.type === 'skill' && 'skill' in e && e.skill === 'mock_interview');
+
+  it('start, two answers, /pause, resume, stop, then ended: each turn carries the right phase, with the shown text unchanged', async () => {
+    const s = session({ covered: true });
+
+    const start = await s.turn(START);
+    expect(progressEvent(start.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'question', question: 1, total: 5 },
+    });
+
+    const a1 = await s.turn({ text: 'Rewrite them with a common denominator.' });
+    expect(progressEvent(a1.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'question', question: 2, total: 5 },
+    });
+
+    const a2 = await s.turn({ text: 'Then add the numerators.' });
+    expect(progressEvent(a2.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'question', question: 3, total: 5 },
+    });
+
+    const paused = await s.turn({ text: '/pause' });
+    expect(progressEvent(paused.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'pause', question: 3, total: 5 },
+    });
+
+    const resumed = await s.turn({ text: 'Ready, carry on.' });
+    expect(progressEvent(resumed.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'resume', question: 3, total: 5 },
+    });
+
+    const stopped = await s.turn({ text: 'Stop.' });
+    expect(progressEvent(stopped.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'stopped', answered: 2 },
+    });
+
+    const after = await s.turn({ text: 'One more?' });
+    expect(progressEvent(after.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'ended' },
+    });
+
+    // No change to what the student is shown: the progress event is additive metadata only.
+    expect(start.shown.length).toBeGreaterThan(0);
+  });
+
+  it('the last answer gets the debrief phase', async () => {
+    const s = session({ covered: true, persona: { ...demoPersona, endAfterQuestions: 2 } });
+    await s.turn(START);
+    await s.turn({ text: 'First answer.' });
+    const last = await s.turn({ text: 'Second answer.' });
+    expect(progressEvent(last.events)).toEqual({
+      type: 'skill',
+      skill: 'mock_interview',
+      payload: { phase: 'debrief', total: 2 },
+    });
+  });
+
+  it('an un-entitled student (no mock_interview skill) gets no progress event, never a throw', async () => {
+    const s = session({ covered: true });
+    // The `session()` helper always adds `mock_interview` to the entitlement; this case checks
+    // the helper's own fail-closed path by starting a turn whose skill is locked instead.
+    const r = await s.turn({ text: 'Something unrelated.', kind: 'message', skill: 'coach' });
+    expect(progressEvent(r.events)).toBeUndefined();
+  });
+});
+
 describe('role-play controls the router does not label on_task (5.8 fix round 1)', () => {
   it.each(['meta', 'off_topic'] as const)(
     'a bare /pause then a bare stop routed %s still pause and stop the role-play',

@@ -3179,7 +3179,7 @@ tasks:
         deferred: 0
         wontfix: 1
     human_questions: 0
-- id: 0.2
+- id: 0.20b
   milestone: M13
   title: 'CI flakes seen 25 Oct 2026: (1) apps/web src/auth/index.test.ts "imports and serves public routes with no AUTH_* or DATABASE_URL set" hit its 20 s timeout on PR #276 (and in a 9.3k builder run
     under load); (2) packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" hit the 10 s test timeout on PR #277 even after 3.11g/3.11h. Find the slow step (cold
@@ -3187,7 +3187,9 @@ tasks:
   accept: Both tests pass five full CI node runs in a row; neither depends on a tight wall-clock bound.
   deps: []
   risk: low
-  status: todo
+  status: running
+  branch: m13/0.20b-ci-flakes
+  model: plan:lead build:sonnet
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -3524,9 +3526,9 @@ tasks:
   deps:
   - '0.1'
   risk: normal
-  status: running
-  branch: m13/0.20-ci-flakes
-  model: plan:lead build:sonnet
+  status: done
+  branch: m7/0.20-harness-test-timeouts
+  model: plan:lead build:sonnet review:sonnet
   metrics:
     tool_calls: 38
     tokens_in: 134
@@ -4628,7 +4630,7 @@ tasks:
   risk: high
   status: running
   model: plan:sonnet build:sonnet
-  branch: m13/13.skillpresent-a-harness-events
+  branch: m13/13.skillpresent-b-web-skill-panel
 - id: 8.7a
   milestone: M8
   title: Publish repository and eval_runs migration (8.7 Phase A, packages/db)

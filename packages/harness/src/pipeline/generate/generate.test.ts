@@ -1,6 +1,7 @@
 import type {
   ModelChunk,
   PedagogyDecision,
+  Skill,
   SourceRef,
   TurnContext,
   TurnEvent,
@@ -18,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
+import type { RolePlay } from '../../pedagogy/roleplay.js';
 import { memoryToolRegistry, testTool } from '../../testing/memoryToolRegistry.js';
 import {
   FIXTURE_PROMPT_PACK_VERSION,
@@ -118,7 +120,7 @@ function setup(
     events,
     reported,
     recorded,
-    run: (extra: { fromFallback?: true } = {}) =>
+    run: (extra: { fromFallback?: true; skill?: Skill | null; rolePlay?: RolePlay } = {}) =>
       clock.drive(
         (o.step ?? generate)(
           env,
@@ -219,6 +221,39 @@ describe('generate: events in order', () => {
       expect(s.events[0]).toEqual({ type: 'hint_rung', rung: 2 });
     },
   );
+
+  it('a mock-interview turn emits the harness-computed progress skill event first, before hint_rung and any tool skill event', async () => {
+    const rolePlay: RolePlay = { phase: 'question', question: 3, total: 6 };
+    const mockInterviewCtx: TurnContext = {
+      ...ctx,
+      entitlement: { ...ctx.entitlement, skills: [...ctx.entitlement.skills, 'mock_interview'] },
+    };
+    const s = setup([[say('Tell me more.'), used]], {
+      decision: { move: 'ask' },
+      ctx: mockInterviewCtx,
+    });
+    await s.run({ rolePlay });
+    expect(s.events).toEqual([
+      { type: 'skill', skill: 'mock_interview', payload: rolePlay },
+      { type: 'token', text: 'Tell me more.' },
+    ]);
+  });
+
+  it('a feedback hint turn emits the confirmation marker, no score and no model text parsing', async () => {
+    const s = setup([[say('Looks solid.'), used]], { decision: { move: 'hint' } });
+    await s.run({ skill: 'feedback' });
+    expect(s.events).toEqual([
+      { type: 'hint_rung', rung: 2 },
+      { type: 'skill', skill: 'feedback', payload: { given: true } },
+      { type: 'token', text: 'Looks solid.' },
+    ]);
+  });
+
+  it('a feedback turn whose move is not hint emits no marker', async () => {
+    const s = setup([[say('x'), used]], { decision: { move: 'ask' } });
+    await s.run({ skill: 'feedback' });
+    expect(types(s.events)).toEqual(['token']);
+  });
 
   it.each(['ask', 'explain', 'check'] as const)('%s sends no hint_rung', async (move) => {
     const s = setup([[say('x'), used]], { decision: { move } });
