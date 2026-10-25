@@ -193,7 +193,7 @@ const RULES: readonly Rule<ModerationCode>[] = [
   decisive(
     'weapons',
     `(?:sneak|smuggle|bring|carry|hide|take)${gap(2)} (?:a |my )?(?:knife|gun|weapon|blade|pistol)` +
-      `${gap(2)} (?:into|to|in|at) (?:school|class|college)`,
+      `${gap(2)} (?:into|to|in|at) (?:the |my |our )?(?:school|class|college)`,
   ),
   decisive(
     'weapons',
@@ -277,8 +277,21 @@ const RULES: readonly Rule<ModerationCode>[] = [
   decisive(
     'other_unsafe',
     `(?:buy|buying|get|getting|sell|selling|resell|reselling|trade|trading)${gap(2)} ` +
-      `(?:vapes?|vaping|juul\\S*)${gap(3)} (?:at|in|into|near|on) (?:school|class|campus|college)`,
+      `(?:vapes?|vaping|juul\\S*)${gap(3)} (?:at|in|into|near|on) (?:the |my |our )?` +
+      '(?:school|class|campus|college)',
   ),
+  // Hinglish variant (7.2i, code-reviewer MEDIUM on 7.2h): a vape word and a school word near a
+  // transaction verb, in either order, bounded (not unbounded) with the existing gap helper.
+  decisive(
+    'other_unsafe',
+    `(?:school|class|college|campus)(?: (?:mein|me|main|pe|par))?${gap(3)} ` +
+      `(?:vapes?|vaping|juul\\S*)${gap(3)} (?:bech\\S*|bik\\S*|khareed\\S*|kharid\\S*|le\\S* aa\\S*|` +
+      'mang\\S*|supply)|' +
+      `(?:vapes?|vaping|juul\\S*)${gap(3)} (?:bech\\S*|bik\\S*|khareed\\S*|kharid\\S*|le\\S* aa\\S*|` +
+      `mang\\S*|supply)${gap(3)} (?:school|class|college|campus)(?: (?:mein|me|main|pe|par))?`,
+  ),
+  // Devanagari variant, same style as the weapons Devanagari rule: no school word required.
+  decisive('other_unsafe', '(?:वेप|वेप्स|वेपिंग)' + `${gap(4)} (?:बेच|बिक|खरीद)`),
   ambiguous('other_unsafe', `(?:buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`),
   ambiguous(
     'other_unsafe',
