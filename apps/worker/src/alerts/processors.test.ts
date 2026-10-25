@@ -5,6 +5,7 @@
 import type { SafetyAlert } from '@edmate/contracts';
 import { demoSafetyAlert } from '@edmate/contracts/fixtures';
 import { ALERT_ESCALATION_MS, alertJobOptions, JOB, type JobQueue } from '@edmate/queue';
+import { RepositoryError } from '@edmate/db';
 import type { JobsOptions } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 import { PermanentJobError } from '../commit/processors.js';
@@ -24,6 +25,8 @@ function world(
     /** When set, `store.record` rejects with exactly this value (12.5f: may be `undefined`). */
     recordRejectsWith?: { value: unknown };
     markFails?: boolean;
+    /** When set, `notifier.notify` rejects with exactly this value once. */
+    notifyRejectsWith?: { value: unknown };
   } = {},
 ) {
   const notified: { id: string; audience: AlertAudience }[] = [];
@@ -32,6 +35,7 @@ function world(
   const marked: { alert: SafetyAlert; round: number }[] = [];
   const lines: LogLine[] = [];
   let failures = o.notifyFails ?? 0;
+  let notifyRejectsWith = o.notifyRejectsWith;
   const queue: JobQueue = {
     add: (name, data, opts) => {
       added.push({ name, data, opts });
@@ -41,6 +45,11 @@ function world(
   const process = alertProcessor({
     notifier: {
       notify(a, audience) {
+        if (notifyRejectsWith !== undefined) {
+          const value = notifyRejectsWith.value;
+          notifyRejectsWith = undefined;
+          return Promise.reject(value);
+        }
         if (failures > 0) {
           failures--;
           return Promise.reject(new Error('mail relay down'));
@@ -129,14 +138,46 @@ describe('alert.raise', () => {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toBe('safety_alert.store_failed: UnknownError');
+    expect((thrown as Error).message).toBe('safety_alert.store_failed: undefined');
     expect((thrown as Error).cause).toBeUndefined();
     expect(w.notified).toEqual([{ id: 'alert_1', audience: 'trust_team' }]);
     expect(w.lines).toEqual([
-      { level: 'error', event: 'safety_alert.store_failed', alertId: 'alert_1', error: 'UnknownError' },
+      { level: 'error', event: 'safety_alert.store_failed', alertId: 'alert_1', error: 'undefined' },
       { level: 'info', event: 'safety_alert.notified', alertId: 'alert_1', audience: 'trust_team' },
     ]);
     expect(JSON.stringify(w.lines)).not.toContain('CANARY');
+  }, 1_000);
+
+  it('a permanent store error (not_found) ends the job after one page', async () => {
+    const w = world({
+      recordRejectsWith: { value: new RepositoryError('not_found', 'safetyAlerts.record') },
+    });
+    await expect(w.process({ name: JOB.alertRaise, data: { alert } })).rejects.toBeInstanceOf(
+      PermanentJobError,
+    );
+    expect(w.notified).toEqual([{ id: 'alert_1', audience: 'trust_team' }]);
+    expect(w.lines).toEqual([
+      {
+        level: 'error',
+        event: 'safety_alert.store_failed',
+        alertId: 'alert_1',
+        error: 'RepositoryError',
+      },
+      { level: 'info', event: 'safety_alert.notified', alertId: 'alert_1', audience: 'trust_team' },
+    ]);
+  }, 1_000);
+
+  it('notify rejecting with a non-Error value fails the job with an Error that keeps it as cause', async () => {
+    const w = world({ notifyRejectsWith: { value: 'ECONNRESET' } });
+    let thrown: unknown;
+    try {
+      await w.process({ name: JOB.alertRaise, data: { alert } });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).cause).toBe('ECONNRESET');
+    expect((thrown as Error).message).not.toContain('ECONNRESET');
   }, 1_000);
 
   it('a store that rejects with a non-Error value fails the job with an Error that keeps it as cause (12.5f)', async () => {
