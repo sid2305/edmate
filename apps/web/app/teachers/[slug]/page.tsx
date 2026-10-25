@@ -8,7 +8,6 @@ import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { currentPrincipal, serverDatabase } from '../../../src/auth';
-import type { Translate } from '../../../src/discovery/format';
 import { publicNav } from '../../../src/discovery/nav';
 import { PackageList } from '../../../src/discovery/PackageList';
 import { ScorecardPanel } from '../../../src/discovery/ScorecardPanel';
@@ -67,7 +66,7 @@ function describe(bio: string): string {
 }
 
 export async function generateMetadata({ params }: TeacherPageProps): Promise<Metadata> {
-  const t = (await getTranslations('teacherPage')) as unknown as Translate;
+  const t = await getTranslations('teacherPage');
   const { slug } = await params;
   const teacher = validSlug(slug) ? await teacherBySlug(slug) : null;
   if (teacher === null) return { title: t('defaultTitle') };
@@ -103,7 +102,7 @@ export default async function TeacherPage({ params }: TeacherPageProps) {
 
   const shell = await getTranslations('shell');
   const discovery = await getTranslations('discovery');
-  const t = (await getTranslations('teacherPage')) as unknown as Translate;
+  const t = await getTranslations('teacherPage');
   const principal = await currentPrincipal();
   const nav = publicNav(principal, { signIn: discovery('signInNav'), home: discovery('homeNav') });
 

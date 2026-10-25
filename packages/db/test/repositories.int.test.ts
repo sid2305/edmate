@@ -3760,8 +3760,12 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         startsAt: LIVE_CLASS_STARTS_AT,
       });
     },
-    verify: async (_r, _actor, res) => {
+    verify: async (r, actor, res) => {
       expect(res).toEqual({ updated: true });
+      const list = await r.liveClasses.listForTeacher(tScope(actor));
+      const row = list.find((c) => c.title === `[${actor}] edited`);
+      expect(row?.title).toBe(`[${actor}] edited`);
+      expect(row?.link).toBe('https://meet.example.com/upd2');
     },
   },
   'liveClasses.cancel': {
@@ -3779,8 +3783,11 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       }
       return r.liveClasses.cancel(scope, liveClassFor[target]!);
     },
-    verify: async (_r, _actor, res) => {
+    verify: async (r, actor, res) => {
       expect(res).toEqual({ cancelled: true });
+      const list = await r.liveClasses.listForTeacher(tScope(actor));
+      const row = list.find((c) => c.title.startsWith(`[${actor}] cancel target`));
+      expect(row?.status).toBe('cancelled');
     },
   },
   'liveClasses.listForTeacher': {

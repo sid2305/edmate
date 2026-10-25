@@ -45,16 +45,18 @@ export function toPublicScorecard(raw: unknown): PublicScorecard | null {
   const r = StoredScorecard.safeParse(raw);
   if (!r.success) return null;
   const byKey = new Map(r.data.categories.map((c) => [c.key, c]));
-  return {
-    categories: SCORECARD_KEYS.map((key) => {
-      // Present: the length and uniqueness checks above guarantee every key once.
-      const c = byKey.get(key) as z.infer<typeof StoredCategory>;
-      return {
-        key,
-        measured: c.measured,
-        percent: c.percent === null ? null : Math.floor(c.percent),
-        pass: c.pass,
-      };
-    }),
-  };
+  const categories: PublicScorecardCategory[] = [];
+  for (const key of SCORECARD_KEYS) {
+    // The length and uniqueness checks above guarantee every key is present, but a real guard
+    // (not a cast) is what actually proves it to the type checker and fails closed if it's wrong.
+    const c = byKey.get(key);
+    if (c === undefined) return null;
+    categories.push({
+      key,
+      measured: c.measured,
+      percent: c.percent === null ? null : Math.floor(c.percent),
+      pass: c.pass,
+    });
+  }
+  return { categories };
 }
