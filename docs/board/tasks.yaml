@@ -7721,3 +7721,27 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 9.3h
+  milestone: M13
+  title: '9.3f plan Q4 (deferred): the staff verification queue and lookup row show the teacher''s active takedowns and the last decision; subject-edit history'
+  accept: a staff view test shows active takedowns and the last decision on a queue row and a lookup row; web typecheck, lint and test green.
+  deps:
+  - 9.3f
+  risk: low
+  status: todo
+- id: 9.3i
+  milestone: M13
+  title: '9.3f plan Q5 (deferred): a student can pause or cancel a subscription whose agent is suspended (today the /home line has no actions and the chat and plan pages 404); land before payments go live'
+  accept: a test pauses and cancels a subscription whose agent is suspended; web typecheck, lint and test green.
+  deps:
+  - 9.3f
+  risk: low
+  status: todo
+- id: 9.3j
+  milestone: M13
+  title: '9.3f review LOW: apps/web/src/chat/liveChats.ts homeLinks starts listUnavailableForStudent alongside listLiveForStudent (Promise.all) instead of after the owner lookups'
+  accept: the two reads start together; web typecheck, lint and test green.
+  deps:
+  - 9.3f
+  risk: low
+  status: todo
