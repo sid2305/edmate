@@ -6360,9 +6360,29 @@ tasks:
   deps:
   - 12.5f
   risk: high
-  status: review
+  status: done
   branch: m13/12.5g-alert-permanent-error
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 91
+    tokens_in: 300
+    tokens_out: 61491
+    cache_read_tokens: 5392420
+    wall_time_seconds: 23956
+    models:
+    - <synthetic>
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
