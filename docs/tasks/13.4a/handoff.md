@@ -54,4 +54,4 @@ didn't, so no BLOCKED and no new decision to log).
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
 ## Budget
-Tool calls used: 32
+Tool calls used: 46
