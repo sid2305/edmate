@@ -59,8 +59,7 @@ eye (or a contrast picker) for:
 
 ## Not in this checklist
 
-- The signed-in Lighthouse performance/accessibility score and its own CI job belong to task
-  9.1a, a separate follow-up with a different tool and a different accept line — not restated
-  here.
+- The signed-in Lighthouse accessibility score (task 9.1a) is automated, not manual: see
+  `apps/web/test/lighthouse-a11y.test.ts`, run by the `build-smoke` CI step.
 - `app/teacher/live-classes/**` has no axe coverage yet (a different builder's in-flight work);
   once it lands, add it to both the automated spec and this manual pass.
