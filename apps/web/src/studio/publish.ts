@@ -51,7 +51,17 @@ export interface PublishBackend {
   /** `enqueueGate` on the gate queue. */
   enqueue(job: GateJob): Promise<void>;
   log: ServerLog;
+  /** The current time (tests pin it; the real backend returns `new Date()`). */
+  now(): Date;
 }
+
+/**
+ * How long a run may sit `queued` or `running` before the studio treats it as stuck and shows
+ * `error`/`stale` instead of a spinner that never resolves (8.7l: enqueue and finishRun can both
+ * fail in a way that leaves a run neither finished nor retried). Not spec'd; the worker should
+ * claim a queued gate run almost at once, so two minutes is generous slack, not a real wait.
+ */
+export const STALE_QUEUE_MS = 2 * 60 * 1000;
 
 /** One failed case as the studio shows it: never a model reply, only the teacher's own question. */
 export type PublishFailedCase = { caseId: string } & GateCaseDetails;
@@ -151,17 +161,25 @@ const start: Work = async (b, scope, req) => {
   return ok({ runId: run.id }, 202);
 };
 
+/** A `queued`/`running` run whose `createdAt` is past the stale deadline, relative to `b.now()`. */
+function stale(b: PublishBackend, run: GateRunRow): boolean {
+  if (run.status !== 'queued' && run.status !== 'running') return false;
+  return b.now().getTime() - Date.parse(run.createdAt) > STALE_QUEUE_MS;
+}
+
 const latest: Work = async (b, scope) => {
   const run = await b.repos.publish.latestRun(scope);
   if (run === null) return ok({ run: null });
+  const isStale = stale(b, run);
+  const status = isStale ? 'error' : run.status;
   const failed = run.status === 'failed' ? await b.repos.publish.failedCases(scope, run.id) : [];
   const changedSincePublish = await b.repos.publish.changedSinceLastPublish(scope);
   const view: PublishRunView = {
     runId: run.id,
-    status: run.status,
+    status,
     changes: run.changes,
     groups: run.summary?.groups ?? [],
-    errorCode: run.summary?.errorCode ?? null,
+    errorCode: isStale ? 'stale' : run.summary?.errorCode ?? null,
     failedCases: failed.map((f) => ({ caseId: f.caseId, ...f.details })),
     scorecard: run.scorecard,
     startedAt: run.createdAt,
