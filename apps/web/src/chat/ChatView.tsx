@@ -16,7 +16,7 @@ import { Composer } from './Composer';
 import { HintButton } from './HintButton';
 import { LockedNotice } from './LockedNotice';
 import { MessageBubble, type MessageRole } from './MessageBubble';
-import { MockInterviewControls } from './MockInterviewControls';
+import { MockInterviewControls, parseRolePlayProgress, type RolePlayProgress } from './MockInterviewControls';
 import { PracticeCard, type PracticeCardData } from './PracticeCard';
 import { ReportButton } from './ReportButton';
 import { sendTurn as realSendTurn, startSession as realStartSession, type TurnHandle } from './sendTurn';
@@ -90,9 +90,40 @@ function TurnExtras({
   disabled: boolean;
   onPracticeAnswer: (text: string) => void;
 }) {
+  const t = useTranslations('chat');
   return (
     <>
       {turn.skills.map((s, i) => {
+        // 13.skillpresent: mock-interview's progress is shown next to the Pause/Stop controls
+        // (`MockInterviewControls`), not as a thread card -- a "Mock interview - Coming soon" card
+        // every turn would be noise once the harness carries real progress. Feedback has no
+        // computed verdict to show (ADR-0012 bans a score); the event is only a confirmation that
+        // this reply is the verdict, so it renders a short marker line instead of the generic
+        // "Coming soon" card.
+        if (s.skill === 'mock_interview') {
+          const progress = parseRolePlayProgress(s.payload);
+          // While the interview is still live (question/pause/resume/debrief), progress shows
+          // next to the Pause/Stop controls instead (so it stays visible as a non-live region
+          // update too). Once the harness decides the turn is terminal (`stopped`/`ended`),
+          // Pause/Stop disappear (see the activeSkill effect below), so the terminal line is the
+          // only trace of this turn's progress left -- rendered here, in the thread, instead.
+          if (progress?.phase === 'stopped') {
+            return (
+              <p key={i} className="chat-mock-interview-progress">
+                {t('mockInterview.progress.stopped', { answered: progress.answered })}
+              </p>
+            );
+          }
+          if (progress?.phase === 'ended') {
+            return (
+              <p key={i} className="chat-mock-interview-progress">
+                {t('mockInterview.progress.ended')}
+              </p>
+            );
+          }
+          return null;
+        }
+        if (s.skill === 'feedback') return <p key={i} className="chat-feedback-given">{t('feedback.given')}</p>;
         const practice = asPracticeCard(s);
         return practice === null ? (
           <SkillCard key={i} skill={s.skill} />
@@ -154,17 +185,30 @@ export function ChatView({
   useEffect(() => {
     if (!active || turn.status !== 'final') return;
     // Practice (and any future skill with a dedicated `skill` event) is derived from the turn's
-    // own skill cards, last one wins, and clears when a turn has none. Mock interview never
-    // tool-wires a `present()` hook (Q2, 9.5 plan) so no turn ever carries a `skill:
-    // 'mock_interview'` event; it is set directly by the start/pause action below and only
-    // cleared by Stop, so a reply with no skill cards never silently drops the student out of it.
-    // A locked reply (student without the package) also has no skill cards, but it is never an
-    // in-progress interview turn -- it always clears, so a locked start never gets stuck tagged
-    // `mock_interview` with Pause/Stop left showing.
-    const named = turn.skills.at(-1)?.skill;
-    setActiveSkill((prev) =>
-      named !== undefined ? named : turn.locked !== null ? null : prev === 'mock_interview' ? prev : null,
-    );
+    // own skill cards, last one wins, and clears when a turn has none. 13.skillpresent Phase B
+    // (plan Q3): a mock-interview turn now always carries a harness-computed `skill:
+    // 'mock_interview'` progress event (Phase A), so `named` is 'mock_interview' for every turn in
+    // the interview including the stop/debrief turn itself -- `named` alone can no longer tell a
+    // live turn from a terminal one. The Stop button (below) stays one explicit reset point
+    // (students must always be able to leave), and this effect *also* clears `activeSkill` once
+    // the latest skill card's own `phase` is `'stopped'` or `'ended'` -- both harness-decided
+    // terminal states -- so typing a bare "stop" (not clicking the button) still leaves the
+    // interview. A locked reply (student without the package) also has no skill cards, but it is
+    // never an in-progress interview turn -- it always clears, so a locked start never gets stuck
+    // tagged `mock_interview` with Pause/Stop left showing.
+    const lastCard = turn.skills.at(-1);
+    const named = lastCard?.skill;
+    const progress = named === 'mock_interview' ? parseRolePlayProgress(lastCard?.payload) : null;
+    const terminal = progress !== null && (progress.phase === 'stopped' || progress.phase === 'ended');
+    setActiveSkill((prev) => {
+      if (terminal) return null;
+      // feedback is a one-shot marker (set by the "Get feedback" toggle above), never a
+      // persisted, ladder-style activeSkill -- a feedback turn must not leave Hint/etc. tagged.
+      if (named === 'feedback') return null;
+      if (named !== undefined) return named;
+      if (turn.locked !== null) return null;
+      return prev === 'mock_interview' ? prev : null;
+    });
   }, [active, turn]);
 
   const streaming = active && turn.status === 'streaming';
@@ -260,6 +304,14 @@ export function ChatView({
     if (feedbackPending) setFeedbackPending(false);
   }
 
+  // The latest validated mock-interview progress for the turn on screen (current or final), for
+  // `MockInterviewControls`; `null` while streaming before any skill card has arrived, or if the
+  // payload did not parse (the UI-state lesson: render a fallback, never guess).
+  const rolePlayProgress: RolePlayProgress | null = (() => {
+    if (!active) return null;
+    const card = [...turn.skills].reverse().find((s) => s.skill === 'mock_interview');
+    return card === undefined ? null : parseRolePlayProgress(card.payload);
+  })();
   const finalTurn = active && turn.status === 'final' ? turn : null;
   const failed = active && turn.status === 'failed' ? turn.error : null;
   // The session a reported message belongs to: the ref once a turn has started, else the page's
@@ -338,7 +390,12 @@ export function ChatView({
         onHint={() => submit({ kind: 'hint_request' }, t('hintAsked'))}
       />
       {activeSkill === 'mock_interview' ? (
-        <MockInterviewControls disabled={streaming} onPause={pauseMockInterview} onStop={stopMockInterview} />
+        <MockInterviewControls
+          disabled={streaming}
+          onPause={pauseMockInterview}
+          onStop={stopMockInterview}
+          progress={rolePlayProgress}
+        />
       ) : null}
       <SkillLauncher
         disabled={streaming}
