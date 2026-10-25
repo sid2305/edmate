@@ -102,7 +102,7 @@ Add it to a repository returned by `createRepositories`, then add its case to `C
 package does not typecheck until the case exists; the test also compares the methods it finds at
 runtime with `CASES`, and `test/scope.test.ts` calls every method with bad scopes. A role or
 staff check inside a transaction uses `role-lock.ts`'s `lockRole`; `teacher-profiles.ts`'s
-`setVerification` and `publish.ts`'s `lockVerified` are the two existing examples.
+`setVerification` is the existing example.
 
 ## Ports
 
