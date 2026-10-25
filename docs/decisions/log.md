@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.7g budget: 31 calls against 15 (stop at 20) · decided by lead · risk: low
+- Decided: accept. The change is small and correct; most of the calls went to setup (install and build).
+- Why: re-running it would cost more. Small lead-written tasks need a setup allowance of about 10 calls in their budget.
+
+---
+
+### 25 Oct 2026 · 8.7g review LOW not fixed: doc comment example in apps/cli/src/commands/eval/liveAgent.ts · decided by lead · risk: low
+- Decided: wontfix. The comment in apps/cli/src/commands/eval/liveAgent.ts names `model_error` as an example code; the contracts call it `provider_error`. The behaviour and tests are right.
+- Why: a one-word comment nit; the next change to that file can fix it.
+
+---
+
 ### 25 Oct 2026 · 0.20b warm the auth module's transform cache in beforeAll instead of raising its timeout · decided by builder · risk: low
 - Decided: fixed flake 1 by pre-warming `vi.resetModules()` + `import('./index')` once
   in a `beforeAll(60_000)`, instead of raising `AUTH_IMPORT_TIMEOUT_MS`.

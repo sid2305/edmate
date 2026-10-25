@@ -3189,7 +3189,7 @@ tasks:
   risk: low
   status: done
   branch: m13/0.20b-ci-flakes
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
   metrics:
     tool_calls: 4
     tokens_in: 16
@@ -5249,9 +5249,29 @@ tasks:
   deps:
   - 8.7f
   risk: low
-  status: running
+  status: done
   branch: m13/8.7g-cli-eval-error-codes
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 25
+    tokens_in: 88
+    tokens_out: 592
+    cache_read_tokens: 934832
+    wall_time_seconds: 80
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7h
   milestone: M8
   title: 'Audit scrubber corrupts ids (found in the 8.7a fix round): packages/db/src/repositories/redact-json.ts (redactPersonalData, used by audit.ts) redacts any value whose first 8 hex characters are
