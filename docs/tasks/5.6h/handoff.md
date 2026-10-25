@@ -38,4 +38,3 @@ None.
 ## Budget
 
 Tool calls used: 48 (harness count: 27 for the first builder, which stalled after its gate, plus 21 for the finisher; the finisher reported 13)
-recorded in a handoff).
