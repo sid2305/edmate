@@ -3136,9 +3136,9 @@ tasks:
   deps:
   - 5.8a
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.8e-persona-cli-followups
+  model: plan:sonnet build:sonnet
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset

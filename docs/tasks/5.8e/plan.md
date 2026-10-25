@@ -194,3 +194,8 @@ Read, Grep, Glob, Edit, Write, Bash (pnpm typecheck/lint/test for `@edmate/cli` 
 - Stop at `Status: PARTIAL` past ~40 calls, or if a helper move turns out to change any existing
   test's expected value (that would mean the three checks were not actually identical — stop and
   name the difference rather than changing behaviour to make tests pass).
+
+## Lead answers (25 Oct 2026)
+- Approved as written, both helper moves included. Behaviour must stay byte-identical, and the existing tests keep their names.
+- Reviewers: code-reviewer and typescript-reviewer. The lead logs a `risk: high` merge decision for promptPacks.ts and personaTemplates.ts.
+- Budget: 40 tool calls; stop at 50.
