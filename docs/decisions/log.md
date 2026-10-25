@@ -10,6 +10,63 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 8.1b leaves 9.3e's design unchanged: only a safety rejection suspends live agents · decided by builder · risk: high
+- Decided: a plain (non-safety) teacher rejection does not suspend the teacher's already-live
+  agents; only a `safety: true` rejection does, as 9.3e set. The 8.1 review's literal wording
+  ("a reject suspends live agents") is read as already satisfied by the TOCTOU fix (no new agent
+  can go live once rejected), not as a product-behaviour change to 9.3e.
+- Why: the task's acceptance line only needs the publish-vs-reject race closed; re-opening 9.3e's
+  decision is out of this cleanup task's scope. (Lead answer to Q1, logged `risk: high` as the
+  first decision per rule 6, since this PR touches `packages/db/src/repositories/**`, a risk
+  path requiring `security-reviewer`.)
+
+---
+
+### 24 Oct 2026 · 8.1b adds --user-id to both verify-teacher and grant-role · decided by builder · risk: low
+- Decided: `--user-id` (as an alternative to `--email`) and the "no personal details in --reason"
+  usage note go on both `db:grant-role` and `db:verify-teacher`, not only the verify CLI the
+  review named.
+- Why: the board task groups "verify/grant-role CLIs" together; `grant-role`'s `--email` has the
+  same shell-history exposure and its `reason` lands in `audit_log` (`role.grant`) the same way
+  as `verify-teacher`'s. (Lead answer to Q2.)
+
+---
+
+### 24 Oct 2026 · 8.1b redacted-target format mirrors packages/gateway's redactUrl · decided by builder · risk: low
+- Decided: `redactTarget` returns `scheme://host/pathname` (host includes port; pathname is the
+  database name) -- no userinfo, query or fragment -- logged once per CLI run before the
+  database handle opens.
+- Why: matches an existing, reviewed shape (`packages/gateway/src/transcriber/source.ts`'s
+  `redactUrl`) instead of inventing a new one; `packages/db` does not depend on
+  `packages/gateway`, so the function is a new, standalone mirror, not a shared import. (Lead
+  answer to Q3.)
+
+---
+
+### 24 Oct 2026 · 8.1b leaves migration 0016's cast style and publish.ts untouched · decided by builder · risk: low
+- Decided: migration 0016's `USING` cast style (omitting the intermediate `::text` 0005 used) is
+  a note only, not edited; `publish.ts` itself is not touched (no behaviour change needed -- the
+  existing lock order already closes the race, proven by the new test).
+- Why: the review calls the cast difference "functionally equivalent"; editing a generated
+  migration plus its snapshot/journal metadata for a cosmetic difference carries more risk than
+  it resolves. Editing `publish.ts` to "make a test pass" without one failing first would be an
+  unflagged behaviour change to a risky path beyond this task's listed files. (Lead answer to
+  Q4; plan's "Exit conditions".)
+
+---
+
+### 24 Oct 2026 · 8.1b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 75 tool calls against the plan's 55.
+- Why: the diff stayed inside the planned packages/db files, the gate is green and all four reviewers approve; the builder under-counted its calls (37 reported).
+
+---
+
+### 24 Oct 2026 · 8.1b review MEDIUM/LOW deferred to 8.1d · decided by lead · risk: low
+- Decided: defer the typescript-reviewer MEDIUM (packages/db/src/cli.ts:134 and :261, `args.email!` relies on the either-or check in another function; use a discriminated union) and the code-reviewer LOW (packages/db/src/cli.ts:90 and :216, the either-or check reads as a disguised XNOR) to board task 8.1d. The database-reviewer MEDIUM (packages/db/src/repositories/README.md cited `publish.ts`'s `lockVerified` as a `lockRole` example) is fixed by the lead in this PR.
+- Why: neither cli.ts point is reachable today (a drift would surface as a caught ZodError and exit 1); MEDIUM and LOW findings wait for a follow-up task under the fix-only-blockers rule.
+
+---
+
 ### 24 Oct 2026 · 5.8d persona-test reply text must carry no spurious citation · decided by builder · risk: low
 - Decided: use a citation-free scripted reply (`'Here is your next question.'`) for the three
   live persona tests (1-3) instead of the file's default reply, which carries a `[1]` citation.
