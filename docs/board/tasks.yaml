@@ -5224,7 +5224,9 @@ tasks:
   deps:
   - 8.7c
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.7j-gate-result-guard
+  model: build:sonnet
 - id: 9.6f
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
@@ -6358,7 +6360,7 @@ tasks:
   deps:
   - 12.5f
   risk: high
-  status: running
+  status: review
   branch: m13/12.5g-alert-permanent-error
   model: plan:sonnet build:sonnet
 - id: 8.2j
@@ -6579,7 +6581,7 @@ tasks:
   deps:
   - 9.7b
   risk: low
-  status: running
+  status: review
   branch: m13/9.7d-e2e-steady
   model: build:sonnet
 - id: 12.4f
