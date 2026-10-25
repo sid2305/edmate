@@ -164,6 +164,41 @@ async function later(rec: DemoPracticeRecord, reply: ScriptedStreamCall['steps']
   });
 }
 
+/**
+ * A later turn `route` grades `attempt: 'correct'` for the held item (5.6f): a narrow local
+ * override of `route.run` (the suite's default always returns `attempt: 'none'`), with `decide`
+ * stubbed to the `mustNotReveal` the real `decidePolicy` would now compute (empty, unless a
+ * carried key from an unrelated item is passed). This exercises the runner's `items`/
+ * `practiceKeys` fix directly; `policy.test.ts` separately proves the policy half.
+ */
+async function laterCorrect(
+  rec: DemoPracticeRecord,
+  reply: ScriptedStreamCall['steps'],
+  o: { carried?: readonly string[] } = {},
+) {
+  const tools = memoryToolRegistry([practiceNextItemTool(demoPracticeBank(RECORDS))]);
+  const t = testDeps({ script: { stream: [main(...reply, used)] }, overrides: { tools }, judge: 'grounded' });
+  const carried = o.carried ?? [];
+  const help = { ...holding(rec), ...(carried.length > 0 ? { practiceCarriedKey: [...carried] } : {}) };
+  const decision: PedagogyDecision = {
+    ...demoPedagogyDecision,
+    move: 'ask',
+    mustNotReveal: [...carried],
+    tools: [],
+  };
+  const steps = testSteps({
+    entitle: fixtureEntitle,
+    route: { run: () => Promise.resolve({ intent: 'on_task', attempt: 'correct', usage: [] }) },
+    decide: { run: () => Promise.resolve(testDecideResult(decision)) },
+    generate: defaultSteps.generate,
+    postGuard: defaultSteps.postGuard,
+    buildContext: () => Promise.resolve(builtWith(help)),
+  });
+  const { events, result } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+  const commit = steps.commits[0];
+  return { events, result, commit, help: commit?.next?.help, t };
+}
+
 const expectDelivered = (r: Awaited<ReturnType<typeof turn>>, text: string) => {
   expect(r.commit?.replyText).toBe(text);
   expect(r.result.trace?.guards).not.toContainEqual(
@@ -312,8 +347,45 @@ describe('5.6b: answered without a false block', () => {
     expectDelivered(r, text);
   });
 
-  it('known limit (Q5): a correct "B" followed by "Yes, B is right!" gets the safe hint', async () => {
-    const r = await later(MCQ, [say('Yes, B is right!')], 'B');
+  it('5.6f: a correct "B" followed by "Yes, B is right!" is delivered', async () => {
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')]);
+    expectDelivered(r, 'Yes, B is right!');
+  });
+});
+
+describe('5.6f: release the practice key on a turn graded correct', () => {
+  it('a correct "B" followed by "Yes, B is right!" is delivered (confirmation names the key)', async () => {
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')]);
+    expectDelivered(r, 'Yes, B is right!');
+  });
+
+  it('a wrong answer ("A") followed by "Yes, B is right!" still gets the safe hint (regression)', async () => {
+    const r = await later(MCQ, [say('Yes, B is right!')], 'A');
+    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+  });
+
+  it('a carried key from an unrelated skipped item stays guarded even on a correct attempt', async () => {
+    const r = await laterCorrect(MCQ, [say('The other one is 4321.')], { carried: ['4321'] });
+    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+  });
+
+  it('a claim with no key content ("I got that right") is not answer-shaped: stays guarded', async () => {
+    const r = await later(MCQ, [say('Yes, B is right!')], 'I got that right');
+    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+  });
+
+  it('a question-phrased guess that matches the key ("so it\'s B?") is delivered, same as a flat "B"', async () => {
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')]);
+    expectDelivered(r, 'Yes, B is right!');
+  });
+
+  it('a question-phrased guess that does not match the key ("is it C?") still gets the hint', async () => {
+    const r = await later(MCQ, [say('Yes, B is right!')], 'is it C?');
+    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+  });
+
+  it('a hedged multi-label answer ("is it A, B or C?") never grades correct: stays guarded', async () => {
+    const r = await later(MCQ, [say('Yes, B is right!')], 'is it A, B or C?');
     expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
   });
 });
