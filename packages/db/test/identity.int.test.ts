@@ -8,6 +8,7 @@ import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
   type AgePolicy,
+  ANONYMISED_NAME,
   createIdentityStore,
   DEFAULT_AGE_POLICY,
   OPERATOR,
@@ -1033,5 +1034,302 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
     } finally {
       await opened.close();
     }
+  });
+
+  describe('anonymise (13.4 account delete, Phase A)', () => {
+    /** A teacher, an agent and one ended session of theirs with the student, with a message, a
+     * safety alert and a turn trace attached — everything `anonymise` must leave alone except the
+     * student's own row and their message text. */
+    async function seedErasable() {
+      const student = await identity.createStudent({
+        email: email('erase'),
+        emailVerifiedAt: new Date('2026-10-01T00:00:00Z'),
+        name: 'Ada Erase',
+      });
+      const tid = `tch_erase_${(n += 1)}`;
+      const agentId = `agt_erase_${(n += 1)}`;
+      const sessionId = `ses_erase_${(n += 1)}`;
+      const msgStudentId = `msg_erase_s_${(n += 1)}`;
+      const msgAgentId = `msg_erase_a_${(n += 1)}`;
+      const alertId = `alr_erase_${(n += 1)}`;
+      const teacherPhone = `+1555000${String((n += 1)).padStart(4, '0')}`;
+      await raw.query(
+        `insert into users (id, name, locale, market, role, phone) values ($1,'Teacher Erase','en','US','teacher',$2)`,
+        [tid, teacherPhone],
+      );
+      await raw.query(`insert into agents (id, teacher_id) values ($1,$2)`, [agentId, tid]);
+      await raw.query(
+        `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, ended_at, summary)
+         values ($1,$2,$3,$4,1,now(),'a recap of what the student told the agent')`,
+        [sessionId, student.id, tid, agentId],
+      );
+      await raw.query(
+        `insert into messages (id, session_id, role, text) values ($1,$2,'student','personal question text')`,
+        [msgStudentId, sessionId],
+      );
+      await raw.query(
+        `insert into messages (id, session_id, role, text) values ($1,$2,'agent','agent reply text')`,
+        [msgAgentId, sessionId],
+      );
+      await raw.query(
+        `insert into safety_alerts (id, level, kind, student_id, teacher_id, session_id, excerpt_redacted)
+         values ($1,'info','other',$2,$3,$4,'kept excerpt')`,
+        [alertId, student.id, tid, sessionId],
+      );
+      await identity.createSession(token(`sess_${(n += 1)}`), student.id, later());
+      await identity.linkAccount({
+        userId: student.id,
+        type: 'oauth',
+        provider: 'google',
+        providerAccountId: `gacct_${(n += 1)}`,
+      });
+      await identity.createVerificationToken({
+        identifier: student.email as string,
+        token: token(`vtok_${(n += 1)}`),
+        expires: later(),
+      });
+      await raw.query(
+        `insert into learner_profiles (id, student_id, teacher_id, lang, last_summary)
+         values ($1,$2,$3,'en','a recap of what the student struggles with')`,
+        [`lp_erase_${(n += 1)}`, student.id, tid],
+      );
+      const questionId = `tq_erase_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text)
+         values ($1,$2,$3,$4,'a question only the student wrote')`,
+        [questionId, tid, agentId, student.id],
+      );
+      return {
+        student,
+        tid,
+        teacherPhone,
+        agentId,
+        sessionId,
+        msgStudentId,
+        msgAgentId,
+        alertId,
+        questionId,
+      };
+    }
+
+    it("clears name/email/phone, auth rows, session/profile/question free text and the student's own message text, writes one platform_audit_log row, and leaves the session, safety alert and teacher row untouched", async () => {
+      const { student, sessionId, alertId, tid, teacherPhone, questionId } =
+        await seedErasable();
+      const studentPhone = `+1555999${String((n += 1)).padStart(4, '0')}`;
+      await raw.query(`update users set phone = $2 where id = $1`, [student.id, studentPhone]);
+      const studentEmail = student.email as string;
+
+      await identity.anonymise(student.id);
+
+      const { rows: userRows } = await raw.query(
+        'select name, email, phone from users where id = $1',
+        [student.id],
+      );
+      expect(userRows[0]).toEqual({ name: ANONYMISED_NAME, email: null, phone: null });
+
+      const { rows: authSessionRows } = await raw.query(
+        'select 1 from auth_sessions where user_id = $1',
+        [student.id],
+      );
+      expect(authSessionRows).toHaveLength(0);
+      const { rows: authAccountRows } = await raw.query(
+        'select 1 from auth_accounts where user_id = $1',
+        [student.id],
+      );
+      expect(authAccountRows).toHaveLength(0);
+      const { rows: tokenRows } = await raw.query(
+        'select 1 from auth_verification_tokens where identifier = $1',
+        [studentEmail],
+      );
+      expect(tokenRows).toHaveLength(0);
+
+      const { rows: msgRows } = await raw.query(
+        `select role, text from messages where session_id = $1`,
+        [sessionId],
+      );
+      // Every message in the student's session is cleared, whoever wrote it.
+      expect(msgRows.map((r: { role: string; text: string }) => r.text)).toEqual(['', '']);
+      expect(msgRows.sort((a: { role: string }, b: { role: string }) => a.role.localeCompare(b.role))).toEqual([
+        { role: 'agent', text: '' },
+        { role: 'student', text: '' },
+      ]);
+
+      const { rows: sessionRows } = await raw.query(
+        'select id, summary from sessions where id = $1',
+        [sessionId],
+      );
+      expect(sessionRows).toEqual([{ id: sessionId, summary: null }]);
+
+      const { rows: profileRows } = await raw.query(
+        'select last_summary from learner_profiles where student_id = $1',
+        [student.id],
+      );
+      expect(profileRows).toEqual([{ last_summary: null }]);
+
+      const { rows: questionRows } = await raw.query(
+        'select text from teacher_questions where id = $1',
+        [questionId],
+      );
+      expect(questionRows).toEqual([{ text: '' }]);
+
+      const { rows: alertRows } = await raw.query(
+        'select student_id, excerpt_redacted from safety_alerts where id = $1',
+        [alertId],
+      );
+      expect(alertRows[0]).toEqual({ student_id: student.id, excerpt_redacted: 'kept excerpt' });
+
+      const { rows: teacherRows } = await raw.query(
+        'select name, phone from users where id = $1',
+        [tid],
+      );
+      expect(teacherRows[0]).toEqual({ name: 'Teacher Erase', phone: teacherPhone });
+
+      const { rows: auditRows } = await raw.query(
+        `select actor, actor_role, action, subject_user_id from platform_audit_log
+         where action = 'account.delete' and subject_user_id = $1`,
+        [student.id],
+      );
+      expect(auditRows).toEqual([
+        { actor: student.id, actor_role: 'student', action: 'account.delete', subject_user_id: student.id },
+      ]);
+    });
+
+    it("leaves another student's auth sessions, auth accounts, verification token and learner profile untouched", async () => {
+      const { student: erased } = await seedErasable();
+      const other = await identity.createStudent({
+        email: email('kept'),
+        emailVerifiedAt: new Date('2026-10-01T00:00:00Z'),
+        name: 'Beth Kept',
+      });
+      await identity.createSession(token(`sess_other_${(n += 1)}`), other.id, later());
+      await identity.linkAccount({
+        userId: other.id,
+        type: 'oauth',
+        provider: 'google',
+        providerAccountId: `gacct_other_${(n += 1)}`,
+      });
+      const otherEmail = other.email as string;
+      await identity.createVerificationToken({
+        identifier: otherEmail,
+        token: token(`vtok_other_${(n += 1)}`),
+        expires: later(),
+      });
+      const otherTid = `tch_kept_${(n += 1)}`;
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1,'Teacher Kept','en','US','teacher')`,
+        [otherTid],
+      );
+      await raw.query(
+        `insert into learner_profiles (id, student_id, teacher_id, lang, last_summary)
+         values ($1,$2,$3,'en','kept recap')`,
+        [`lp_kept_${(n += 1)}`, other.id, otherTid],
+      );
+
+      await identity.anonymise(erased.id);
+
+      const { rows: authSessionRows } = await raw.query(
+        'select 1 from auth_sessions where user_id = $1',
+        [other.id],
+      );
+      expect(authSessionRows).toHaveLength(1);
+      const { rows: authAccountRows } = await raw.query(
+        'select 1 from auth_accounts where user_id = $1',
+        [other.id],
+      );
+      expect(authAccountRows).toHaveLength(1);
+      const { rows: tokenRows } = await raw.query(
+        'select 1 from auth_verification_tokens where identifier = $1',
+        [otherEmail],
+      );
+      expect(tokenRows).toHaveLength(1);
+      const { rows: profileRows } = await raw.query(
+        'select last_summary from learner_profiles where student_id = $1',
+        [other.id],
+      );
+      expect(profileRows).toEqual([{ last_summary: 'kept recap' }]);
+    });
+
+    it('is idempotent: a second call changes nothing further (still writes its own audit row)', async () => {
+      const { student } = await seedErasable();
+      await identity.anonymise(student.id);
+      await identity.anonymise(student.id);
+
+      const { rows: userRows } = await raw.query(
+        'select name, email, phone from users where id = $1',
+        [student.id],
+      );
+      expect(userRows[0]).toEqual({ name: ANONYMISED_NAME, email: null, phone: null });
+
+      const { rows: auditRows } = await raw.query(
+        `select count(*)::int as n from platform_audit_log
+         where action = 'account.delete' and subject_user_id = $1`,
+        [student.id],
+      );
+      expect(auditRows[0].n).toBe(2);
+    });
+
+    it('is scoped to students: a teacher or an unknown id is scope/not_found, and changes nothing', async () => {
+      const { tid } = await seedErasable();
+      expect(await kindOf(() => identity.anonymise(tid))).toBe('scope');
+      const { rows } = await raw.query('select name from users where id = $1', [tid]);
+      expect(rows[0]?.name).toBe('Teacher Erase');
+      expect(await kindOf(() => identity.anonymise('usr_ghost_erase'))).toBe('not_found');
+    });
+
+    it("dismisses the student's own open questions instead of colliding on the open-dedup index (fix round 2), leaves an answered question of theirs answered, and leaves another student's open question on the same agent untouched", async () => {
+      const { student, tid, agentId, questionId } = await seedErasable();
+      // A second open question of the same student's, to the same teacher's agent, with
+      // different text: before the fix, clearing both to '' collided on
+      // teacher_questions_open_dedup_key (unique on (teacher_id, student_id, agent_id,
+      // md5(text)) where status = 'open') and rolled back the whole transaction.
+      const secondOpenId = `tq_erase2_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text)
+         values ($1,$2,$3,$4,'a second open question only the student wrote')`,
+        [secondOpenId, tid, agentId, student.id],
+      );
+      // An already-answered question of the student's: must stay answered, not be dismissed.
+      const answeredId = `tq_erase3_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status, answer, answered_at)
+         values ($1,$2,$3,$4,'an already answered question','answered','the teacher''s answer',now())`,
+        [answeredId, tid, agentId, student.id],
+      );
+      // Another student's open question, same teacher's agent: must stay open and keep its text.
+      const other = await identity.createStudent({
+        email: email('erase-other'),
+        emailVerifiedAt: new Date('2026-10-01T00:00:00Z'),
+        name: 'Cora Kept',
+      });
+      const otherQuestionId = `tq_erase4_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text)
+         values ($1,$2,$3,$4,'a question only the other student wrote')`,
+        [otherQuestionId, tid, agentId, other.id],
+      );
+
+      await identity.anonymise(student.id);
+
+      const { rows: erasedRows } = await raw.query(
+        `select id, text, status from teacher_questions where id in ($1,$2,$3) order by id`,
+        [questionId, secondOpenId, answeredId],
+      );
+      const byId = new Map(erasedRows.map((r: { id: string }) => [r.id, r]));
+      expect(byId.get(questionId)).toEqual({ id: questionId, text: '', status: 'dismissed' });
+      expect(byId.get(secondOpenId)).toEqual({
+        id: secondOpenId,
+        text: '',
+        status: 'dismissed',
+      });
+      expect(byId.get(answeredId)).toEqual({ id: answeredId, text: '', status: 'answered' });
+
+      const { rows: otherRows } = await raw.query(
+        'select text, status from teacher_questions where id = $1',
+        [otherQuestionId],
+      );
+      expect(otherRows).toEqual([
+        { text: 'a question only the other student wrote', status: 'open' },
+      ]);
+    });
   });
 });

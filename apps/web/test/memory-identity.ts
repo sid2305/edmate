@@ -7,6 +7,13 @@
 // lazily, when a method runs, to avoid a cycle through the mock.
 import type { AgePolicy, GrantRoleInput, IdentityStore, IdentityUser } from '@edmate/db';
 
+/** The real store's fixed placeholder name (loaded lazily, like `ageRule`/`repoError` above, to
+ * avoid a cycle through a test's `@edmate/db` mock). */
+async function anonymisedName(): Promise<string> {
+  const { ANONYMISED_NAME } = await import('@edmate/db');
+  return ANONYMISED_NAME;
+}
+
 async function ageRule() {
   const db = await import('@edmate/db');
   return { ageStatus: db.ageStatus, defaultPolicy: db.DEFAULT_AGE_POLICY };
@@ -237,6 +244,20 @@ export function memoryIdentity(
         now: now(),
       });
       return status === 'under_age' ? 'parent_needed' : status;
+    },
+    // Task 13.4 (account delete, Phase A): mirrors the real store's scope rules and its deletes
+    // of this fake's auth-like maps (accounts, sessions, links); this fake keeps no messages,
+    // sessions rows, learner profiles or teacher questions to clear.
+    async anonymise(userId) {
+      const u = users.get(userId);
+      if (!u) throw await repoError('not_found', 'anonymise');
+      if (u.role !== 'student') throw await repoError('scope', 'anonymise');
+      const email = u.email;
+      u.name = await anonymisedName();
+      u.email = null;
+      for (const [k, id] of accounts) if (id === userId) accounts.delete(k);
+      for (const [t, s] of sessions) if (s.userId === userId) sessions.delete(t);
+      if (email) links.delete(email);
     },
   };
   return self;
