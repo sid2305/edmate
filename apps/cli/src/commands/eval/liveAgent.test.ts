@@ -59,6 +59,35 @@ function scriptedChatGateway(turns: number, reply = 'A variable stores a value s
   return adviceJudgeGateway(judged, () => CLEAN_ADVICE_VERDICT);
 }
 
+/** `scriptedChatGateway`, except the main model's stream ends with a `provider_error` instead of
+ * a reply (8.7g: a non-guard `TurnEvent` error code the contracts define). */
+function providerErrorGateway(): ModelGateway {
+  const scripted = new ScriptedGateway(
+    {
+      generateObject: [
+        {
+          match: (req: { system: string }) =>
+            req.system.includes('thoughts of suicide or self-harm'),
+          value: { distress: false },
+        },
+        {
+          match: (req: { system: string }) =>
+            req.system.includes('self_harm (wants to hurt themselves)'),
+          value: { category: 'none' },
+        },
+        {
+          match: (req: { system: string }) => req.system.includes('jailbreak_override'),
+          value: { category: 'none' },
+        },
+      ],
+      stream: [{ steps: [{ type: 'error' as const, code: 'provider_error' as const }] }],
+    },
+    { sleep: () => Promise.resolve() },
+  );
+  const judged = judgeGateway(scripted, () => GROUNDED_VERDICT);
+  return adviceJudgeGateway(judged, () => CLEAN_ADVICE_VERDICT);
+}
+
 /** `scriptedChatGateway`, except every pre-guard classifier call fails as `classify` says
  * (apps/worker/src/gate/agent.test.ts's own `classifierDown`, same pattern). */
 function classifierDown(classify: () => Promise<never>): ModelGateway {
@@ -172,6 +201,22 @@ describe('buildLiveEvalAgent', () => {
         priorTurns: [],
       }),
     ).rejects.toThrow(/live eval turn failed: guard_blocked \(pre-guard failed/);
+  }, 20000);
+
+  it('a non-guard error (provider_error) fails the case, with the code in the message', async () => {
+    const agent = buildLiveEvalAgent({
+      env: {},
+      gateway: providerErrorGateway(),
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
+    await expect(
+      agent.reply({
+        caseId: 'provider-error-1',
+        turnIndex: 0,
+        student: 'What is a variable?',
+        priorTurns: [],
+      }),
+    ).rejects.toThrow(/live eval turn failed: provider_error/);
   }, 20000);
 
   it('seeds a prior turn directly into transcript history (no live replay)', async () => {
