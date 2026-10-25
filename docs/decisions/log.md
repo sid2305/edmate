@@ -10,6 +10,32 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.3 nodemailer type dependency · decided by builder · risk: low
+- Decided: Remove `@types/nodemailer` instead of bumping it.
+- Why: `@types/nodemailer` has no release past 8.0.2 (nodemailer 8); nodemailer 9+ bundles its
+  own `.d.ts` files, so keeping the old `@types` package would ship stale, conflicting types
+  with no security benefit.
+
+---
+
+### 25 Oct 2026 · 13.3 security review outcome · decided by lead · risk: high
+- Decided: accept 13.3 as passing: four read-only security-reviewer phases (A db scope and access filter, B web auth and entitlement, C worker, uploads and ingest, D dependencies, headers, secrets and logging) found no CRITICAL or HIGH. The nodemailer advisories are fixed in this task (8.0.11 to 10.2.1, pnpm audit clean). The missing security headers go to 13.3a and the LOWs to 13.3b.
+- Why: the acceptance is "no high findings open". The findings files in docs/tasks/13.3 record what each phase checked, and the bump was re-reviewed by security-reviewer.
+
+---
+
+### 25 Oct 2026 · 13.3 nodemailer major bump without an ADR · decided by lead · risk: medium
+- Decided: treat the nodemailer 8 to 10 bump as a dependency update inside the existing stack, not a tech-stack change that needs an ADR.
+- Why: the same library sits in the same role. Its only breaking changes (Node 20 or later, TLS checks on remote content) do not touch apps/web/src/auth/mail.ts, and web typecheck, lint and test stay green.
+
+---
+
+### 25 Oct 2026 · 13.3 wontfix LOWs · decided by lead · risk: low
+- Decided: wontfix the LOWs on packages/db/src/repositories/teacher-questions.ts (parameterised raw SQL) and apps/worker/src/webLink/pinnedTransport.ts (documentation drift).
+- Why: neither is a defect. The first is already guarded by scope.test.ts's raw-SQL check, and the second records that the 5.1a DNS-rebinding gap is closed.
+
+---
+
 ### 25 Oct 2026 · 13.5 the join is a union of cost rows and active-count rows, not cost-rows-only · decided by builder · risk: low
 - Decided: `loadCostRows` returns one row for every `(teacherId, packageId)` that appears in
   *either* `costByPackageSince` or `activeCountByPackage`'s results, not only the ones with usage
