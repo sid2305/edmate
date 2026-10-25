@@ -129,6 +129,7 @@ export type { SessionRow } from './sessions.js';
 export { type SafetyEventInput, type SafetyEventRow, safetyEventRowId } from './safety-events.js';
 export { TEACHER_TRACES_MAX_LIMIT, type TurnTraceRow } from './turn-traces.js';
 export {
+  type ActiveCountByPackageRow,
   COST_ALARM_ACTOR,
   COST_ALARM_PAUSE_ACTION,
   STALE_PACKAGE_VERSION_REASON,
@@ -183,12 +184,14 @@ export {
 } from './package-versions.js';
 export type { CorrectionRecordInput, CorrectionRecordResult } from './corrections.js';
 export type {
+  CostByPackageRow,
   UnmeteredEntry,
   UnmeteredReason,
   UsageEntry,
   UsageRow,
   UsageSource,
   UsageSinceScope,
+  UsageSinceUntilScope,
   UsageStatus,
   UsageTotals,
   TeacherUsageTotals,

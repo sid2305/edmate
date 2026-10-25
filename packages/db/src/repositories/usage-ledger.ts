@@ -6,7 +6,7 @@
 // takes or stores request text (system prompt, messages) or anything else a student wrote.
 import { randomUUID } from 'node:crypto';
 import { EntitlementSchema, UsageSchema, type Entitlement, type Usage } from '@edmate/contracts';
-import { and, asc, eq, gte, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, lt, ne, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { packages, usageLedger } from '../schema/index.js';
@@ -105,10 +105,42 @@ const Since = z.iso.datetime({ offset: true });
 const SinceScope = z.strictObject({ since: Since });
 export type UsageSinceScope = z.infer<typeof SinceScope>;
 
+/** The system scope of `costByPackageSince`: a window, `until` exclusive, parsed like a scope. */
+const SinceUntilScope = z.strictObject({ since: Since, until: Since.optional() });
+export type UsageSinceUntilScope = z.infer<typeof SinceUntilScope>;
+
+/**
+ * One teacher x package's totals over a window (task 13.5, the cost dashboard): same split as
+ * `UsageTotals` (unknown/unpriced never folded into `costMicroUsd`), plus `distinctTurns` — the
+ * number of distinct turns the window's rows belong to, for cost-per-turn. `eval` rows are
+ * excluded, same reason as `sumForTeacherSince` (evals are billed to Edmate, not a teacher).
+ */
+export interface CostByPackageRow {
+  teacherId: string;
+  packageId: string;
+  calls: number;
+  recorded: number;
+  unknown: number;
+  unpriced: number;
+  costMicroUsd: number;
+  distinctTurns: number;
+}
+
 const Model = UsageSchema.shape.model.min(1).max(200);
 const Source = EntitlementSchema.shape.source;
 const Tier = UsageSchema.shape.tier;
 const Count = UsageSchema.shape.inputTokens;
+
+const CostByPackageRowSchema = z.strictObject({
+  teacherId: IdSchema,
+  packageId: IdSchema,
+  calls: Count,
+  recorded: Count,
+  unknown: Count,
+  unpriced: Count,
+  costMicroUsd: Count,
+  distinctTurns: Count,
+});
 
 const Entry = z.strictObject({
   id: IdSchema.optional(),
@@ -377,6 +409,54 @@ export function usageLedgerRepo(db: Db) {
         )
         .orderBy(asc(usageLedger.teacherId));
       return rows.map((x) => x.teacherId);
+    },
+
+    /**
+     * Task 13.5 (cost dashboard): every (teacher, package) pair's totals since `since`
+     * (inclusive) and before `until` (exclusive, when given), leaving out `eval` rows — the
+     * same exclusion as `sumForTeacherSince`. A **system read**, like `teacherIdsWithUsageSince`:
+     * no teacher/student scope check here, because the caller (the staff API route) is the
+     * access gate, not this method.
+     */
+    async costByPackageSince(scope: UsageSinceUntilScope): Promise<CostByPackageRow[]> {
+      const method = 'usageLedger.costByPackageSince';
+      const r = SinceUntilScope.safeParse(scope);
+      if (!r.success) throw new RepositoryError('scope', method);
+      const from = new Date(r.data.since);
+      const to = r.data.until ? new Date(r.data.until) : undefined;
+      const where = and(
+        gte(usageLedger.createdAt, from),
+        to ? lt(usageLedger.createdAt, to) : undefined,
+        ne(usageLedger.source, 'eval'),
+      );
+      const rows = await db
+        .select({
+          teacherId: usageLedger.teacherId,
+          packageId: usageLedger.packageId,
+          calls: count(),
+          recorded: count(sql`${usageLedger.status} = 'recorded'`),
+          unknown: count(sql`${usageLedger.status} = 'unknown'`),
+          unpriced: count(sql`${usageLedger.status} = 'unpriced'`),
+          costMicroUsd: sum(sql`${usageLedger.costMicroUsd}`),
+          distinctTurns: asText(sql`count(distinct ${usageLedger.turnId})`),
+        })
+        .from(usageLedger)
+        .where(where)
+        .groupBy(usageLedger.teacherId, usageLedger.packageId)
+        .orderBy(asc(usageLedger.teacherId), asc(usageLedger.packageId));
+      return rows.map((row) => {
+        const parsed = {
+          teacherId: row.teacherId,
+          packageId: row.packageId,
+          calls: exact(row.calls, method),
+          recorded: exact(row.recorded, method),
+          unknown: exact(row.unknown, method),
+          unpriced: exact(row.unpriced, method),
+          costMicroUsd: exact(row.costMicroUsd, method),
+          distinctTurns: exact(row.distinctTurns, method),
+        };
+        return checked(CostByPackageRowSchema, parsed, method);
+      });
     },
   };
 }

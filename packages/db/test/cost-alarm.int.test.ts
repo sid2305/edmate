@@ -382,5 +382,29 @@ describe.skipIf(!up)(
         );
       });
     });
+
+    describe('task 13.5: subscriptions.activeCountByPackage', () => {
+      it('counts distinct students with a not-ended subscription, grouped by (teacher, package), excluding ended ones', async () => {
+        const rows = await repos.subscriptions.activeCountByPackage();
+        const a = rows.find(
+          (r) => r.teacherId === teacherId('A') && r.packageId === ids.pkg('A'),
+        );
+        const b = rows.find(
+          (r) => r.teacherId === teacherId('B') && r.packageId === ids.pkg('B'),
+        );
+        // stu_1, stu_2 (the seeded pairs) plus EXTRA paid/trial/paused on pkg_a; EXTRA ended is
+        // not counted, whatever status the earlier tests above left the others in (pauseFree and
+        // resume only move between trial/active/past_due/paused -- never to ended).
+        expect(a?.activeStudents).toBe(5);
+        expect(b?.activeStudents).toBe(2);
+        const hand = await raw.query<{ n: string }>(
+          `select count(distinct s.student_id)::text as n
+             from subscriptions s join package_versions pv on pv.id = s.package_version_id
+            where s.teacher_id = $1 and pv.package_id = $2 and s.status <> 'ended'`,
+          [teacherId('A'), ids.pkg('A')],
+        );
+        expect(a?.activeStudents).toBe(Number(hand.rows[0]!.n));
+      });
+    });
   },
 );
