@@ -355,6 +355,56 @@ describe('runQualityGate', () => {
     }
   });
 
+  it('aborts the signal passed to a hung case once its timer fires (task 7.4d)', async () => {
+    let onFire: (() => void) | undefined;
+    const setTimer = (_ms: number, fire: () => void): (() => void) => {
+      onFire = fire;
+      return () => {};
+    };
+    let seenSignal: AbortSignal | undefined;
+    const agent = scriptedAgent((input) => {
+      seenSignal = input.signal;
+      // Never resolves on its own; only settles once the gate's signal fires.
+      return new Promise((_resolve, reject) => {
+        input.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    });
+    const promise = runQualityGate(
+      gateInput({ perAgent: world(1), agentFor: () => agent, concurrency: 1, setTimer }),
+    );
+    // Flush the microtask queue (no real or fake timers involved) until the worker has reached
+    // the race and captured the timer's fire callback.
+    for (let i = 0; i < 20 && onFire === undefined; i += 1) await Promise.resolve();
+    expect(onFire).toBeDefined();
+    expect(seenSignal?.aborted).toBe(false);
+    onFire?.();
+    const r = await promise;
+    expect(r.pass).toBe(false);
+    expect(r.stats).toMatchObject({ deadlinePassed: true, notRun: 1, cases: 1 });
+    expect(r.results[0]).toMatchObject({ id: accId(0), pass: false, error: DEADLINE_NOT_RUN });
+    expect(seenSignal?.aborted).toBe(true);
+  });
+
+  it('cancels its timer and never aborts the signal when a case finishes first (task 7.4d)', async () => {
+    let cancelled = false;
+    const setTimer = (_ms: number, _fire: () => void): (() => void) => {
+      return () => {
+        cancelled = true;
+      };
+    };
+    let seenSignal: AbortSignal | undefined;
+    const agent = scriptedAgent((input) => {
+      seenSignal = input.signal;
+      return { text: `right ${OK_MARK}`, ...CITED };
+    });
+    const r = await runQualityGate(
+      gateInput({ perAgent: world(1), agentFor: () => agent, concurrency: 1, setTimer }),
+    );
+    expect(r.pass).toBe(true);
+    expect(cancelled).toBe(true);
+    expect(seenSignal?.aborted).toBe(false);
+  });
+
   it('rejects before any worker starts when agentFor throws for one package (item 2)', async () => {
     const perAgent: PerAgentSuiteInput = {
       ...world(1),

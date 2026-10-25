@@ -35,6 +35,19 @@ export interface RunOptions {
   /** The pinned judge model; required for any live judge call, stored in its fixture. */
   judgeModel?: JudgeModelConfig;
   recorder: Recorder;
+  /**
+   * Set by the quality gate (task 7.4d) when its deadline overruns this case. Checked before
+   * each turn and each judge call; already aborted or fired mid-case, the run stops with a
+   * cancelled-case error instead of making the next call.
+   */
+  signal?: AbortSignal;
+}
+
+/** The error message a cancelled case fails with (task 7.4d). */
+export const CASE_CANCELLED = 'case cancelled: gate deadline passed';
+
+function checkCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) throw new Error(CASE_CANCELLED);
 }
 
 export interface TurnResult {
@@ -98,6 +111,7 @@ function staticChecks(expect: Checks, reply: EvalAgentReply): CheckResult[] {
 async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[]): Promise<void> {
   const priorTurns: PriorTurn[] = [];
   for (const [turnIndex, turn] of evalCase.turns.entries()) {
+    checkCancelled(opts.signal);
     const base = `${evalCase.id}/turn-${turnIndex}`;
     const agentKey = `${base}/agent`;
     const history = priorTurns.map((t) => ({ ...t }));
@@ -113,6 +127,7 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
           ...(turn.teacher === undefined ? {} : { teacher: turn.teacher }),
           ...(turn.skill === undefined ? {} : { skill: turn.skill }),
           ...(evalCase.persona === undefined ? {} : { persona: evalCase.persona }),
+          ...(opts.signal === undefined ? {} : { signal: opts.signal }),
         }),
         'agent reply',
         agentKey,
@@ -122,6 +137,7 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
 
     const checks = turn.expect ? staticChecks(turn.expect, reply) : [];
     for (const [i, rubric] of (turn.expect?.judge ?? []).entries()) {
+      checkCancelled(opts.signal);
       const key = `${base}/judge-${i}`;
       const recorded = await opts.recorder.run(key, async () => {
         const judgeModel = opts.judgeModel;

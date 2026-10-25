@@ -473,6 +473,74 @@ describe('runCase scoring', () => {
   });
 });
 
+describe('cancellation via AbortSignal (task 7.4d)', () => {
+  it('an already-aborted signal makes no agent call and rejects with the cancel message', async () => {
+    const c = oneTurnCase({ max_words: 5 });
+    const agent = scriptedAgent({ 'Hello?': { text: 'ok' } });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      runCase(c, {
+        agent,
+        judgeGateway: throwingGateway,
+        recorder: memoryRecorder('record'),
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('case cancelled: gate deadline passed');
+    expect(agent.calls).toEqual([]);
+  });
+
+  it('a signal aborted after turn 1 of a 2-turn case stops before turn 2s agent call', async () => {
+    const twoTurn: EvalCase = {
+      ...oneTurnCase({ must_contain: ['ok'] }),
+      id: 'two-turn-abort',
+      turns: [
+        { student: 'Hello?', expect: { must_contain: ['ok'] } },
+        { student: 'Again?', expect: { must_contain: ['ok'] } },
+      ],
+    };
+    const controller = new AbortController();
+    const agent: EvalAgent & { calls: EvalTurnInput[] } = {
+      calls: [],
+      reply(input) {
+        agent.calls.push(structuredClone(input));
+        if (input.student === 'Hello?') controller.abort();
+        return Promise.resolve({ text: 'ok' });
+      },
+    };
+    await expect(
+      runCase(twoTurn, {
+        agent,
+        judgeGateway: throwingGateway,
+        recorder: memoryRecorder('record'),
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('case cancelled: gate deadline passed');
+    expect(agent.calls.map((c) => c.student)).toEqual(['Hello?']);
+  });
+
+  it('the signal passed to the agent reflects abort once the gate aborts it', async () => {
+    const c = oneTurnCase({ must_contain: ['ok'] });
+    const controller = new AbortController();
+    let seenSignal: AbortSignal | undefined;
+    const agent: EvalAgent = {
+      reply(input) {
+        seenSignal = input.signal;
+        return Promise.resolve({ text: 'ok' });
+      },
+    };
+    await runCase(c, {
+      agent,
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+      signal: controller.signal,
+    });
+    expect(seenSignal?.aborted).toBe(false);
+    controller.abort();
+    expect(seenSignal?.aborted).toBe(true);
+  });
+});
+
 function oneTurnCase(expect: NonNullable<EvalCase['turns'][number]['expect']>): EvalCase {
   return {
     id: 'test-one-001',

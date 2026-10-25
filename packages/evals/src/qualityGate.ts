@@ -50,6 +50,12 @@ export interface GateInput {
   concurrency?: number;
   deadlineMs?: number;
   now?: () => number;
+  /**
+   * Starts the per-case timeout timer and returns a cancel function. Pass it together with
+   * `now` so the deadline and the timer share one clock (task 7.4d). Default: `setTimeout` /
+   * `clearTimeout`.
+   */
+  setTimer?: (ms: number, onFire: () => void) => () => void;
 }
 
 interface GateGroupResultBase {
@@ -167,13 +173,21 @@ function notRunResult(evalCase: EvalCase): CaseResult {
   return { id: evalCase.id, suite: evalCase.suite, pass: false, error: DEADLINE_NOT_RUN, turns: [] };
 }
 
-/** Resolves after `ms`; cleared if the race's other side wins first. */
-function afterMs(ms: number): { promise: Promise<'timeout'>; cancel: () => void } {
-  let timer: ReturnType<typeof setTimeout>;
+type SetTimer = (ms: number, onFire: () => void) => () => void;
+
+/** The default `setTimer`: a plain `setTimeout` / `clearTimeout` pair. */
+function defaultSetTimer(ms: number, onFire: () => void): () => void {
+  const timer = setTimeout(onFire, ms);
+  return () => clearTimeout(timer);
+}
+
+/** Resolves after `ms` on `setTimer`'s clock; cleared if the race's other side wins first. */
+function afterMs(ms: number, setTimer: SetTimer): { promise: Promise<'timeout'>; cancel: () => void } {
+  let cancel: () => void = () => {};
   const promise = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), ms);
+    cancel = setTimer(ms, () => resolve('timeout'));
   });
-  return { promise, cancel: () => clearTimeout(timer) };
+  return { promise, cancel: () => cancel() };
 }
 
 export async function runQualityGate(input: GateInput): Promise<GateResult> {
@@ -183,6 +197,7 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
     'deadlineMs',
   );
   const now = input.now ?? Date.now;
+  const setTimer = input.setTimer ?? defaultSetTimer;
   const styleOnly = input.changes.every((c) => c === 'style_card');
 
   const scope = selectGateCases({
@@ -201,7 +216,7 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
       agents.set(evalCase.package, input.agentFor(evalCase.package));
     }
   }
-  const optsFor = (packageId: string): RunOptions => {
+  const optsFor = (packageId: string, signal: AbortSignal): RunOptions => {
     const agent = agents.get(packageId);
     if (agent === undefined) {
       // Unreachable: every case's package was pre-resolved above.
@@ -211,6 +226,7 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
       agent,
       judgeGateway: input.judgeGateway,
       recorder: input.recorder,
+      signal,
       ...(input.judgeModel === undefined ? {} : { judgeModel: input.judgeModel }),
     };
   };
@@ -236,17 +252,20 @@ export async function runQualityGate(input: GateInput): Promise<GateResult> {
         continue;
       }
       // Races the case against the time left on the deadline: a case that never resolves still
-      // fails the gate once the deadline passes (task 7.4a item 1). This only stops counting the
-      // case as run; it cannot cancel the in-flight agent/judge call (no AbortSignal yet).
-      const timeout = afterMs(left);
+      // fails the gate once the deadline passes (task 7.4a item 1). The controller's signal is
+      // aborted once the timeout side wins, so the case stops at its next turn or judge call
+      // instead of running unbounded in the background (task 7.4d).
+      const controller = new AbortController();
+      const timeout = afterMs(left, setTimer);
       const outcome = await Promise.race([
-        runCaseSafely(evalCase, optsFor(evalCase.package)).then(
+        runCaseSafely(evalCase, optsFor(evalCase.package, controller.signal)).then(
           (result) => ({ kind: 'done' as const, result }),
         ),
         timeout.promise.then(() => ({ kind: 'timeout' as const })),
       ]);
       timeout.cancel();
       if (outcome.kind === 'timeout') {
+        controller.abort();
         deadlinePassed = true;
         notRunFlags[index] = true;
         results[index] = notRunResult(evalCase);
