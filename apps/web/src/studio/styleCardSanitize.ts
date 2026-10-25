@@ -5,14 +5,22 @@
 // folded) with no span mapped back to raw text to strip, and cover categories out of scope here
 // (authority/package claims, encoded instructions, prompt leaks). This is a small, purpose-built
 // list of literal phrases matched case-insensitively on the raw text (plan Q2; separate on
-// purpose, by lead answer 25 Oct 2026).
+// purpose, by lead answer 25 Oct 2026). The "act as" / "pretend" / "no rules" patterns match a
+// closed list of jailbreak targets only, so ordinary teaching text ("act as a guide", "no rules
+// of thumb", "pretend to be confused so the student explains it back") is left untouched (fix
+// round, 25 Oct 2026).
+const JAILBREAK_TARGET =
+  '(?:dan|a jailbroken (?:ai|model)|an? unfiltered (?:ai|model|assistant)|' +
+  'an? unrestricted (?:ai|model|assistant)|a different ai|an ai with no rules)';
 const OVERRIDE_PHRASES: readonly RegExp[] = [
-  // Role-play / persona override.
+  // Role-play / persona override. The "act as" / "pretend" patterns run before the bare
+  // "you are DAN" pattern so "pretend you are DAN" is removed whole, not left as "pretend ".
+  new RegExp(`\\bact as\\s+(?:if you are\\s+)?${JAILBREAK_TARGET}\\b`, 'gi'),
+  new RegExp(`\\bpretend\\s+(?:you are|to be)\\s+${JAILBREAK_TARGET}\\b`, 'gi'),
   /\byou are\s+dan\b/gi,
-  /\bact as\s+(?:if\s+)?(?:a|an|my)?\s*[\w\s-]{0,40}/gi,
-  /\bpretend\s+(?:you are|to be)\s+[\w\s-]{0,40}/gi,
   /\b(?:developer|god|admin)\s+mode\s*(?:enabled)?\b/gi,
-  /\bno rules\b/gi,
+  /\b(?:you have|there are|with)\s+no rules\b/gi,
+  /\bno rules\b(?!\s*of)(?=\s*[.,!?;:]|\s*$)/gi,
   /\bunrestricted\b/gi,
   /\bunfiltered\b/gi,
   // Rule / instruction override.

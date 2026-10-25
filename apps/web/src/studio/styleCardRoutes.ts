@@ -140,14 +140,13 @@ export function createStyleCardHandlers(
       if (input instanceof Response) return input;
       // Strip override phrases from `text` before validation, so a saved card's stored text is
       // already clean and no later reader needs to re-check it before a turn prompt.
+      const obj =
+        typeof input === 'object' && input !== null
+          ? (input as Record<string, unknown>)
+          : undefined;
       const sanitized =
-        typeof input === 'object' &&
-        input !== null &&
-        typeof (input as Record<string, unknown>).text === 'string'
-          ? {
-              ...(input as Record<string, unknown>),
-              text: stripOverridePhrases((input as Record<string, unknown>).text as string),
-            }
+        obj !== undefined && typeof obj.text === 'string'
+          ? { ...obj, text: stripOverridePhrases(obj.text) }
           : input;
       const parsed = SaveSchema.safeParse(sanitized);
       if (!parsed.success) return validation();

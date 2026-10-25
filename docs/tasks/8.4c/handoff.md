@@ -42,15 +42,22 @@
 ## Decisions
 
 ### 25 Oct 2026 · 8.4c Phase C · the override/role-play phrase list is small and literal · decided by builder · risk: low
-- Decided: `stripOverridePhrases` uses a fixed, purpose-built list of ~10 regexes covering the
+- Decided: `stripOverridePhrases` uses a fixed, purpose-built list of ~11 regexes covering the
   two phrase families named in the plan (role-play, rule-override), matched case-insensitively
   on the raw text, not a reuse of `packages/harness/src/guardrails/jailbreakPatterns.ts`'s
-  `RULES` table.
-- Why: the lead's answer (25 Oct 2026, plan Q2) already settled this — the harness table matches
-  on `normaliseForDistress`'s normalised forms with no span mapped back to raw text to strip, and
-  covers categories out of scope here (authority/package claims, encoded instructions, prompt
-  leaks). A narrow, separate list is the agreed scope; unifying the two lists later is its own
-  task if drift becomes a real problem.
+  `RULES` table. The "act as" and "pretend" patterns match a *closed* list of jailbreak targets
+  (`dan`, `a jailbroken ai/model`, `an/a unfiltered|unrestricted ai/model/assistant`,
+  `a different ai`, `an ai with no rules`) rather than an open `[\w\s-]{0,40}` tail, and "no
+  rules" only fires as `(you have|there are|with) no rules` or as "no rules" at a sentence
+  boundary not followed by "of" — fixed in the 25 Oct 2026 fix round after review found the open
+  tails deleted ordinary teaching text ("act as a guide", "no rules of thumb", "pretend to be
+  confused so the student explains it back").
+- Why: the lead's answer (25 Oct 2026, plan Q2) already settled the separate-list question — the
+  harness table matches on `normaliseForDistress`'s normalised forms with no span mapped back to
+  raw text to strip, and covers categories out of scope here (authority/package claims, encoded
+  instructions, prompt leaks). A narrow, separate list is the agreed scope; unifying the two
+  lists later is its own task if drift becomes a real problem. The closed target list keeps the
+  list narrow without reopening that scope question.
 
 ### 25 Oct 2026 · 8.4c Phase C · save strips the raw input before validation, not the parsed value · decided by builder · risk: low
 - Decided: in `save`, the raw body's `text` field is sanitized before `SaveSchema.safeParse`
@@ -68,5 +75,28 @@
   (`docs/lessons.md` "UI state and server replies: trust neither, reset everything") — no network
   cancellation is needed, since the draft response is just discarded, not stopped mid-flight.
 
+## Fix round
+Findings from code-reviewer and typescript-reviewer, fixed 25 Oct 2026:
+1. [HIGH] `styleCardSanitize.ts:11` (`act as ...` open tail deleted ordinary text) — replaced
+   the open `[\w\s-]{0,40}` tail with a closed `JAILBREAK_TARGET` alternation (`dan`, `a
+   jailbroken ai/model`, `an/a unfiltered|unrestricted ai/model/assistant`, `a different ai`,
+   `an ai with no rules`); ordinary "act as a <role>" text no longer matches.
+2. [MEDIUM] `styleCardSanitize.ts:12-13` (`pretend ...` open tail, same class) — same closed
+   `JAILBREAK_TARGET` list reused for the `pretend (you are|to be) ...` pattern.
+3. [HIGH] `styleCardSanitize.ts:15` (`no rules` matched "no rules of thumb") — split into two
+   patterns: `(you have|there are|with) no rules` (always a jailbreak phrase), and bare "no
+   rules" only when followed by punctuation or end of text and not by "of" (negative lookahead).
+   "no rules of thumb" is now left untouched.
+4. [MEDIUM] `styleCardSanitize.test.ts` — added a false-positive block (the five phrases named in
+   the finding, unchanged) and a positive-case block exercising every closed jailbreak target for
+   both `act as` and `pretend`, plus the three `no rules` phrasings. Also reordered
+   `OVERRIDE_PHRASES` so `act as`/`pretend` run before the bare `you are DAN` pattern — otherwise
+   "pretend you are DAN" lost the word "pretend" (the bare pattern consumed "you are DAN" first,
+   verified by a positive test added for this case).
+5. [MEDIUM] `styleCardRoutes.ts:143-150` — replaced the three repeated
+   `input as Record<string, unknown>` casts with one `const obj = ...` guard variable, so
+   `sanitized`'s type is no longer collapsed to `unknown`.
+
 ## Budget
 Tool calls used: 24
+Fix round tool calls used: 17
