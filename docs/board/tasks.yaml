@@ -8234,10 +8234,10 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '13.4'
   milestone: M13
   title: 'Privacy rights per the locale pack''s `privacyLaw`: per-user export and delete, retention jobs'
