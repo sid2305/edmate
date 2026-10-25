@@ -4067,9 +4067,9 @@ tasks:
   deps:
   - 8.6b
   risk: high
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.6f-package-lock-and-cap-kind
+  model: plan:sonnet build:sonnet
 - id: 8.5d
   milestone: M13
   title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket
