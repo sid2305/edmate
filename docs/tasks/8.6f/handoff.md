@@ -148,6 +148,18 @@
   client-error response keeps each file compiling without inventing a cap-specific response a
   caller can't actually trigger.
 
+### 25 Oct 2026 · 8.6f budget overruns: Phase A 73 calls (budget 45), Phase B 54 (30), fix round 49 (20) · decided by lead · risk: low
+- Decided: accept the overruns. The work matches the plan, and the fix round closed a real deadlock found in review. The counts above are the harness's tool-call counts, which are higher than the builders reported.
+- Why: re-running a phase would cost more than it saves. The lessons already ask builders to stop at the stop point; the lead watches this on the next db task.
+
+### 25 Oct 2026 · 8.6f merge: package cap gets its own `limit` error kind, and every package writer locks the package row before module rows (packages/db/src/repositories/**) · decided by lead · risk: high
+- Decided: merge 8.6f. security-reviewer and database-reviewer verified the lock-order fix (package row FOR UPDATE, then module rows KEY SHARE, in `packages.ts` saveVersion and `package-versions.ts` create); code-reviewer and typescript-reviewer reviewed the whole branch.
+- Why: touches the risky path packages/db/src/repositories/**, so its required reviewers ran and this entry records the lead's merge decision.
+
+### 25 Oct 2026 · 8.6f review LOWs not fixed: non-exhaustive `error.kind` switches in apps/web/src/studio/publish.ts and the staff handlers; informational note on packages/db/src/repositories/errors.ts · decided by lead · risk: low
+- Decided: wontfix for now. apps/web/src/studio/publish.ts and the other handlers without a `never` check cannot receive a `limit` error today; packages/db/src/repositories/errors.ts needs no change.
+- Why: MVP first. If another repository starts raising `limit`, that task adds the case where it is raised.
+
 ## Fix round
 
 database-reviewer (CRITICAL) and security-reviewer (HIGH) found that `package-versions.ts`'s
@@ -176,6 +188,6 @@ both at 100% statements/branches/functions/lines. `python3 .githooks/secret-scan
 
 ## Budget
 
-Tool calls used: 64
-Phase B tool calls used: 49
-Fix round tool calls used: 15
+Tool calls used: 73 (Phase A, harness count)
+Phase B tool calls used: 54 (harness count)
+Fix round tool calls used: 49 (harness count)
