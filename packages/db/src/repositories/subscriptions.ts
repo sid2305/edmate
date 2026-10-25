@@ -14,7 +14,7 @@ import {
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, ScrubbedDbError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
-import { checked, iso } from './map.js';
+import { checked, exact, iso } from './map.js';
 import {
   IdSchema,
   parseArg,
@@ -302,8 +302,7 @@ export function subscriptionsRepo(db: Db) {
         .groupBy(subscriptions.teacherId, packageVersions.packageId)
         .orderBy(asc(subscriptions.teacherId), asc(packageVersions.packageId));
       return rows.map((row) => {
-        const n = Number(row.activeStudents);
-        if (!Number.isSafeInteger(n)) throw new RepositoryError('integrity', method);
+        const n = exact(row.activeStudents, method);
         return checked(ActiveCountByPackageRowSchema, { ...row, activeStudents: n }, method);
       });
     },

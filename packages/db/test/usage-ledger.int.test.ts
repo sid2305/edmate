@@ -647,6 +647,46 @@ describe.skipIf(!up)(
           repos.usageLedger.costByPackageSince({ since: 'not-a-date' } as never),
         ).rejects.toMatchObject({ kind: 'scope' });
       });
+
+      it('a row exactly at `since` is included, a row exactly at `until` is excluded', async () => {
+        // Teacher B / pkg B already has one in-window row from the first test in this describe
+        // (calls 1, recorded 1, cost 50, distinctTurns 1) -- this test adds to that baseline.
+        await insertRow({
+          id: 'cbp_at_since',
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          studentId: studentId('1'),
+          turnId: turn(),
+          source: 'subscription',
+          status: 'recorded',
+          cost: 10,
+          createdAt: since,
+        });
+        await insertRow({
+          id: 'cbp_at_until',
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          studentId: studentId('1'),
+          turnId: turn(),
+          source: 'subscription',
+          status: 'recorded',
+          cost: 999_999,
+          createdAt: until,
+        });
+
+        const rows = await repos.usageLedger.costByPackageSince({ since, until });
+        const b = rows.find((r) => r.teacherId === teacherId('B') && r.packageId === PKG_B);
+        expect(b).toEqual({
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          calls: 2,
+          recorded: 2,
+          unknown: 0,
+          unpriced: 0,
+          costMicroUsd: 60,
+          distinctTurns: 2,
+        });
+      });
     });
   },
 );

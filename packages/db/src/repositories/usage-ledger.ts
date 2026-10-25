@@ -12,7 +12,7 @@ import type { Db } from '../client.js';
 import { packages, usageLedger } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
-import { checked, iso } from './map.js';
+import { checked, exact, iso } from './map.js';
 import {
   IdSchema,
   parseArg,
@@ -219,11 +219,6 @@ function count(filter?: SQL): SQL<string> {
 }
 function sum(expr: SQL): SQL<string> {
   return asText(sql`coalesce(sum(${expr}), 0)`);
-}
-function exact(value: string, method: string): number {
-  const n = Number(value);
-  if (!Number.isSafeInteger(n)) throw new RepositoryError('integrity', method);
-  return n;
 }
 
 /** The columns every write sets, ownership taken from the package row the scope owns. */

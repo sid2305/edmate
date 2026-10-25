@@ -163,3 +163,21 @@ None.
 ## Budget
 Tool calls used (Phase A): 46
 Phase B tool calls used: 34
+
+## Decisions
+
+### 25 Oct 2026 · 13.5 fix round · decided by builder · risk: low
+- Decided: fixed three review findings. (1) Moved the `exact(value, method)` bigint-to-number
+  guard (`integrity` past 2^53) out of `usage-ledger.ts` into the shared `map.ts` (alongside
+  `checked`/`iso`) and made `subscriptions.activeCountByPackage` import it instead of duplicating
+  the check inline, so the guard's `integrity` branch stays covered by `usage-ledger.int.test.ts`'s
+  existing MAX_SAFE_INTEGER test with no new untested branch in `subscriptions.ts` (100% statement
+  coverage restored for `src/repositories/**`). (2) Added `usageLedger.costByPackageSince` and
+  `subscriptions.activeCountByPackage` to README rule 11's list of unscoped system reads, naming
+  `/api/staff/cost` as the one caller; left the `teacherIdsWithUsageSince` "no route exposes it"
+  note as-is since it's still correct (the staff cost route calls the other two methods, not this
+  one). (3) Added a boundary test to `usage-ledger.int.test.ts`'s `costByPackageSince` describe
+  block: a row exactly at `since` is included, a row exactly at `until` is excluded.
+- Why: the smaller fix for the coverage gap was to reuse the existing, already-tested exact-count
+  pattern rather than add a new test that can't realistically reach a 2^53-row `count(distinct)`
+  overflow through real data.
