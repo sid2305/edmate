@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 5.8e persona/prompt-pack helper moves · decided by builder · risk: high
+- Decided: `comparePersonaVersions` (semver precedence) and the three `pending` sign-off checks in
+  `promptPacks.ts`, `personaTemplates.ts` and `agePolicy.ts` move to two new shared files
+  (`semver.ts`, `signOff.ts`) with byte-identical logic — no prompt-pack or persona-template
+  *behaviour* changes (which set or version is picked, which pack counts as signed). Both moves
+  keep every existing exported name (`comparePersonaVersions`, `complianceSigned`), so no caller
+  or test outside this task changes.
+- Why: the plan's Design #3–#5 named this as a small, mechanical extraction of already-isolated
+  pure functions with no behaviour change; the existing `comparePersonaVersions` and
+  `complianceSigned` test suites pass unchanged, confirming no drift.
+
+---
+
+### 25 Oct 2026 · 5.8e `/leave` first-word match · decided by builder · risk: low
+- Decided: `/leave` now matches on the split `command` (first word of the line), the same pattern
+  `chat.ts` already used for `/roleplay`, instead of requiring an exact `line === '/leave'` match.
+- Why: the board acceptance line asks only that `/leave now` leaves the role-play, not that extra
+  arguments after `/leave` are validated or rejected — so no usage-string validation was added
+  (Design #6, plan line 97-98).
+
+---
+
+### 25 Oct 2026 · 5.8e persona-load failure reason · decided by builder · risk: low
+- Decided: `loadChatPersonas`'s `reason` is taken verbatim from `e instanceof Error ? e.message :
+  String(e)`, the same message `readPersonaLibrary` already throws (which lists every bad file by
+  name) — no new error text was invented.
+- Why: Design #1 calls for reusing the existing thrown message rather than writing a new one, and
+  this matches `docs/lessons.md`'s "A check that silently skips looks like a pass" lesson: the fix
+  keeps the detail instead of discarding it.
+
+---
+
+### 25 Oct 2026 · 5.8e budget overrun (56 calls against 40) accepted · decided by lead · risk: low
+- Decided: merge 5.8e although the builder used 56 tool calls against a budget of 40 (stop at 50).
+- Why: both reviewers approved with no blocking findings and the gate is green; the extra calls went to setup and to the full content and cli test runs, not to rework.
+
+---
+
+### 25 Oct 2026 · 5.8e merge: semver and sign-off helpers moved out of the prompt-pack files (packages/content/src/promptPacks.ts, personaTemplates.ts) · decided by lead · risk: high
+- Decided: merge the helper moves in packages/content/src/promptPacks.ts and personaTemplates.ts after code-reviewer and typescript-reviewer approved.
+- Why: code-reviewer diffed the moved bodies line by line and found them identical; the public names (comparePersonaVersions, complianceSigned) and the index.ts barrel are unchanged; prompt-pack selection, sign-off checks and version ordering behave exactly as before, and the 537 content tests pass unchanged.
+
+---
+
 ### 25 Oct 2026 · 0.19b merge: closeout.py checks Decided: lines before it appends (.claude/**) · decided by lead · risk: high
 - Decided: merge 0.19b; closeout.py now refuses (exit 1, log, board and digest untouched) when any handoff decision entry lacks a `Decided:` line, naming each such heading, using the same DECIDED_LINE regex as board.py.
 - Why: today a bad entry was appended first and then the board refused, and a re-run skipped it as a duplicate (seen on 7.3); security-reviewer approved: the check runs before the only write, adds no subprocess or path surface, and prints only the task id and headings.

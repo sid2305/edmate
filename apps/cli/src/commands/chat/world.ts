@@ -123,11 +123,12 @@ export function loadChatPromptPacks(dir: string = CHAT_PROMPT_PACKS_DIR): {
 export function loadChatPersonas(dir: string = CHAT_PERSONAS_DIR): {
   personas: PersonaLibrary | undefined;
   source: 'real' | 'none';
+  reason?: string;
 } {
   try {
     return { personas: readPersonaLibrary(dir), source: 'real' };
-  } catch {
-    return { personas: undefined, source: 'none' };
+  } catch (e) {
+    return { personas: undefined, source: 'none', reason: e instanceof Error ? e.message : String(e) };
   }
 }
 

@@ -10,6 +10,7 @@
 // injects into the identity store; this package does not depend on @edmate/db.
 import type { LocalePack } from '@edmate/contracts';
 import { DEFAULT_LOCALE_MARKET, type LocalePacks } from './localeRules.js';
+import { isSignedOff } from './signOff.js';
 
 /** The youngest age anyone may hold an account at, in any market (same value as @edmate/db's). */
 export const PLATFORM_MIN_AGE = 13;
@@ -29,7 +30,7 @@ export const DEFAULT_AGE_POLICY: Readonly<PackAgePolicy> = Object.freeze({
 
 /** True when a person has signed the pack's compliance block (`reviewedBy` set, not `pending`). */
 export function complianceSigned(pack: LocalePack): boolean {
-  return pack.reviewedBy !== undefined && pack.reviewedBy.trim().toLowerCase() !== 'pending';
+  return isSignedOff(pack.reviewedBy);
 }
 
 function floored(minAge: number): number {
