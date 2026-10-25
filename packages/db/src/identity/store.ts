@@ -1,6 +1,6 @@
 // Identity store (task 1.3): the one path sign-in uses to read and write users, linked accounts
 // and database sessions; since 1.4 also email sign-in links. See README.md for its rules; it is deliberately not a repository.
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -8,7 +8,9 @@ import {
   authSessions,
   authVerificationTokens,
   consents,
+  messages,
   platformAuditLog,
+  sessions,
   users,
 } from '../schema/index.js';
 import { guarded, RepositoryError, translateWrite } from '../repositories/errors.js';
@@ -141,7 +143,22 @@ export interface IdentityStore {
    * user is `scope`.
    */
   learnerStatus(userId: string): Promise<AgeStatus>;
+  /**
+   * Task 13.4 (account delete, Phase A): clears `name`, `email` and `phone` on the student's own
+   * row (name becomes a fixed placeholder; `email`/`phone` become null) and the text of every
+   * message in every session of theirs, in one transaction. Leaves `safety_alerts`, payments,
+   * ledger and `audit_log` untouched (none of those tables store name/email/phone/message text by
+   * design — see the task's handoff). Writes one `platform_audit_log` row
+   * (`actor: userId`, `actorRole: 'student'`, `action: 'account.delete'`). Idempotent: calling it
+   * again on an already-anonymised row changes nothing further (it still writes a new audit row).
+   * A non-student user, or no such user, is `scope`/`not_found` — this is the student's own
+   * rights method, not a general account-closer.
+   */
+  anonymise(userId: string): Promise<void>;
 }
+
+/** The fixed name an anonymised student's row carries; never a real name again. */
+export const ANONYMISED_NAME = '[deleted student]';
 
 export interface IdentityStoreOptions {
   /** Clock for session and sign-in link expiry (tests). */
@@ -537,6 +554,44 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
       });
       // Below a minimum the market raised after the answer: never clear (staff decide, 12.1).
       return status === 'under_age' ? 'parent_needed' : status;
+    },
+
+    async anonymise(userId: unknown): Promise<void> {
+      const method = 'identity.anonymise';
+      const id = parseArg(IdSchema, userId, method);
+      await db.transaction(async (tx) => {
+        // Locked, so a concurrent grant/erase can't slip in between the check and the write.
+        const [current] = await tx
+          .select({ role: users.role })
+          .from(users)
+          .where(eq(users.id, id))
+          .for('update');
+        if (!current) throw new RepositoryError('not_found', method);
+        if (current.role !== 'student') throw new RepositoryError('scope', method);
+        await tx
+          .update(users)
+          .set({ name: ANONYMISED_NAME, email: null, phone: null })
+          .where(eq(users.id, id));
+        // The student's own message text, in every session they took part in (never
+        // safety_alerts/payments/ledger/audit_log: none of those store name/email/phone/message
+        // text by design).
+        await tx
+          .update(messages)
+          .set({ text: '' })
+          .where(
+            inArray(
+              messages.sessionId,
+              tx.select({ id: sessions.id }).from(sessions).where(eq(sessions.studentId, id)),
+            ),
+          );
+        await tx.insert(platformAuditLog).values({
+          actor: id,
+          actorRole: 'student',
+          action: 'account.delete',
+          target: `user:${id}`,
+          subjectUserId: id,
+        });
+      });
     },
   };
 }

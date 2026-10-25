@@ -1,0 +1,1 @@
+ALTER TYPE "public"."platform_actor_role" ADD VALUE 'student';

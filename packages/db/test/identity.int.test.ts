@@ -8,6 +8,7 @@ import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
   type AgePolicy,
+  ANONYMISED_NAME,
   createIdentityStore,
   DEFAULT_AGE_POLICY,
   OPERATOR,
@@ -1033,5 +1034,127 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
     } finally {
       await opened.close();
     }
+  });
+
+  describe('anonymise (13.4 account delete, Phase A)', () => {
+    /** A teacher, an agent and one ended session of theirs with the student, with a message, a
+     * safety alert and a turn trace attached — everything `anonymise` must leave alone except the
+     * student's own row and their message text. */
+    async function seedErasable() {
+      const student = await identity.createStudent({
+        email: email('erase'),
+        emailVerifiedAt: new Date('2026-10-01T00:00:00Z'),
+        name: 'Ada Erase',
+      });
+      const tid = `tch_erase_${(n += 1)}`;
+      const agentId = `agt_erase_${(n += 1)}`;
+      const sessionId = `ses_erase_${(n += 1)}`;
+      const msgStudentId = `msg_erase_s_${(n += 1)}`;
+      const msgAgentId = `msg_erase_a_${(n += 1)}`;
+      const alertId = `alr_erase_${(n += 1)}`;
+      const teacherPhone = `+1555000${String((n += 1)).padStart(4, '0')}`;
+      await raw.query(
+        `insert into users (id, name, locale, market, role, phone) values ($1,'Teacher Erase','en','US','teacher',$2)`,
+        [tid, teacherPhone],
+      );
+      await raw.query(`insert into agents (id, teacher_id) values ($1,$2)`, [agentId, tid]);
+      await raw.query(
+        `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, ended_at)
+         values ($1,$2,$3,$4,1,now())`,
+        [sessionId, student.id, tid, agentId],
+      );
+      await raw.query(
+        `insert into messages (id, session_id, role, text) values ($1,$2,'student','personal question text')`,
+        [msgStudentId, sessionId],
+      );
+      await raw.query(
+        `insert into messages (id, session_id, role, text) values ($1,$2,'agent','agent reply text')`,
+        [msgAgentId, sessionId],
+      );
+      await raw.query(
+        `insert into safety_alerts (id, level, kind, student_id, teacher_id, session_id, excerpt_redacted)
+         values ($1,'info','other',$2,$3,$4,'kept excerpt')`,
+        [alertId, student.id, tid, sessionId],
+      );
+      return { student, tid, teacherPhone, agentId, sessionId, msgStudentId, msgAgentId, alertId };
+    }
+
+    it("clears name/email/phone and the student's own message text, writes one platform_audit_log row, and leaves the session, safety alert and teacher row untouched", async () => {
+      const { student, sessionId, alertId, tid, teacherPhone } = await seedErasable();
+      const studentPhone = `+1555999${String((n += 1)).padStart(4, '0')}`;
+      await raw.query(`update users set phone = $2 where id = $1`, [student.id, studentPhone]);
+
+      await identity.anonymise(student.id);
+
+      const { rows: userRows } = await raw.query(
+        'select name, email, phone from users where id = $1',
+        [student.id],
+      );
+      expect(userRows[0]).toEqual({ name: ANONYMISED_NAME, email: null, phone: null });
+
+      const { rows: msgRows } = await raw.query(
+        `select role, text from messages where session_id = $1`,
+        [sessionId],
+      );
+      // Every message in the student's session is cleared, whoever wrote it.
+      expect(msgRows.map((r: { role: string; text: string }) => r.text)).toEqual(['', '']);
+      expect(msgRows.sort((a: { role: string }, b: { role: string }) => a.role.localeCompare(b.role))).toEqual([
+        { role: 'agent', text: '' },
+        { role: 'student', text: '' },
+      ]);
+
+      const { rows: sessionRows } = await raw.query('select id from sessions where id = $1', [
+        sessionId,
+      ]);
+      expect(sessionRows).toHaveLength(1);
+
+      const { rows: alertRows } = await raw.query(
+        'select student_id, excerpt_redacted from safety_alerts where id = $1',
+        [alertId],
+      );
+      expect(alertRows[0]).toEqual({ student_id: student.id, excerpt_redacted: 'kept excerpt' });
+
+      const { rows: teacherRows } = await raw.query(
+        'select name, phone from users where id = $1',
+        [tid],
+      );
+      expect(teacherRows[0]).toEqual({ name: 'Teacher Erase', phone: teacherPhone });
+
+      const { rows: auditRows } = await raw.query(
+        `select actor, actor_role, action, subject_user_id from platform_audit_log
+         where action = 'account.delete' and subject_user_id = $1`,
+        [student.id],
+      );
+      expect(auditRows).toEqual([
+        { actor: student.id, actor_role: 'student', action: 'account.delete', subject_user_id: student.id },
+      ]);
+    });
+
+    it('is idempotent: a second call changes nothing further (still writes its own audit row)', async () => {
+      const { student } = await seedErasable();
+      await identity.anonymise(student.id);
+      await identity.anonymise(student.id);
+
+      const { rows: userRows } = await raw.query(
+        'select name, email, phone from users where id = $1',
+        [student.id],
+      );
+      expect(userRows[0]).toEqual({ name: ANONYMISED_NAME, email: null, phone: null });
+
+      const { rows: auditRows } = await raw.query(
+        `select count(*)::int as n from platform_audit_log
+         where action = 'account.delete' and subject_user_id = $1`,
+        [student.id],
+      );
+      expect(auditRows[0].n).toBe(2);
+    });
+
+    it('is scoped to students: a teacher or an unknown id is scope/not_found, and changes nothing', async () => {
+      const { tid } = await seedErasable();
+      expect(await kindOf(() => identity.anonymise(tid))).toBe('scope');
+      const { rows } = await raw.query('select name from users where id = $1', [tid]);
+      expect(rows[0]?.name).toBe('Teacher Erase');
+      expect(await kindOf(() => identity.anonymise('usr_ghost_erase'))).toBe('not_found');
+    });
   });
 });
