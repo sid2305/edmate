@@ -112,7 +112,14 @@ lives in packages/db / entitlement-store int tests").
   for one int-test case; the non-empty path is already proven over real Postgres in
   `packages/db` and at the unit level in `route.test.ts`.
 
+### 25 Oct 2026 · 9.3h budget overrun (303 calls against 60) · decided by lead · risk: low
+- Decided: accept 9.3h at 303 tool calls (harness count over three runs: 130, 50 and 123) against the plan's 60; no rework.
+- Why: two runs stalled when the Mac slept on battery (B-57) and each restart re-read the plan and re-ran setup; all four reviewers approved the result, so the overrun is setup and recovery cost, not scope creep.
+
+### 25 Oct 2026 · 9.3h merge: staff takedowns and last decision (audit.ts, staff API) · decided by lead · risk: high
+- Decided: merge 9.3h, which touches the risky paths packages/db/src/repositories/audit.ts (new findLastVerifyForStaff) and apps/web/app/api/staff/verifications/handlers.ts, after security-reviewer, database-reviewer, code-reviewer and typescript-reviewer (all Sonnet) approved with no CRITICAL or HIGH findings.
+- Why: the new read is staff-only twice over (withRole on the route, lockRole in the repository), parameterised, bounded to one row, validates the stored shape, and route.int.test.ts proves own-rows-only isolation; the MEDIUM (no lookup-row view test) and LOW (reason returned but never rendered) are deferred to 9.3k.
+
 ## Budget
 
-Tool calls used: 56 (this finishing session; two prior runs' calls are tracked separately by the
-lead)
+Tool calls used: 303 (harness count: 130 + 50 + 123 over three runs; two runs stalled when the Mac slept on battery)
