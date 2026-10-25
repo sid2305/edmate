@@ -3865,9 +3865,9 @@ tasks:
   deps:
   - 8.3b
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.3d-outline-schema-reuse
+  model: plan:sonnet build:sonnet
 - id: 8.4b
   milestone: M8
   title: 'Teacher style-card studio page (8.4 Phase B): interview, draft, edit and save the style card'
@@ -8006,6 +8006,6 @@ tasks:
   deps:
   - 5.6f
   risk: low
-  status: running
+  status: review
   branch: m13/5.6h-real-question-guess-test
   model: plan:sonnet build:sonnet
