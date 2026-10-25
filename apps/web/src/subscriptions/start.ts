@@ -81,6 +81,10 @@ function fromError(error: unknown, log: ServerLog): Response {
       }
       case 'integrity':
         return validation();
+      // Starting a subscription has no cap, so this repo call never raises `'limit'`; mapped
+      // the same as `'integrity'` only so the exhaustive switch compiles.
+      case 'limit':
+        return validation();
       case 'failed':
         return apiError('provider_error', MSG.failed, 500);
       default:
