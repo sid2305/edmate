@@ -23,9 +23,23 @@ Only the three named files were touched; `.claude/settings.json` and hooks were 
 - Why: The plan fixed the exact wording and test cases needed; no new judgment calls were
   required beyond following it.
 
+### 25 Oct 2026 · 0.13a fix round · decided by builder · risk: low
+- Decided: Added an explicit `NODE_JOB_READS` exception list to `.github/scripts/docs_only.py`
+  holding only `docs/edmate-harness-build-plan.md` (read at test time by
+  `packages/contracts/test/spec-drift.test.ts`): a diff touching only that path is no longer
+  docs-only, so the `node` job still runs. Checked `packages/evals/src/rolePlayFixtures.test.ts`
+  and `apps/web/e2e/stack/try-it.spec.ts` too: both only mention `docs/` in comments or read
+  non-`docs/` paths (`content/skills/mock_interview`, `evals/suites/persona`,
+  `docs/try-it/sample-lesson.md` via the `stack/**`-ignored e2e suite the `node` job doesn't run),
+  so neither needed adding to the list. Also removed the docstring's blanket claim that `docs/`
+  holds nothing the `node` job tests.
+- Why: The security-reviewer's MEDIUM finding was correct: `docs/edmate-harness-build-plan.md` is
+  the one doc path a `node`-job test actually reads at runtime, so a PR editing only that file
+  must not skip the job meant to catch spec drift.
+
 ## Gate
-- `python3 -m unittest discover -s .claude/tests` → `Ran 366 tests in 65.658s` → `OK`
+- `python3 -m unittest discover -s .claude/tests` → `Ran 367 tests in 134.916s` → `OK`
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0)
 
 ## Budget
-Tool calls used: 11
+Tool calls used: 11 (0.13a) + 10 (0.13a fix round)
