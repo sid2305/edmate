@@ -8,6 +8,7 @@ import { demoChunk, demoPedagogyDecision, demoTurnInput, usageMain } from '@edma
 import { describe, expect, it } from 'vitest';
 import { ANSWER_LEAK_SAFE_HINT } from '../guardrails/answerLeak.js';
 import type { HelpState } from '../pedagogy/helpState.js';
+import { classifyAttempt } from '../routing/classify.js';
 import { driveTurn } from '../testing/driveTurn.js';
 import { memoryToolRegistry } from '../testing/memoryToolRegistry.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
@@ -171,30 +172,45 @@ async function later(rec: DemoPracticeRecord, reply: ScriptedStreamCall['steps']
  * carried key from an unrelated item is passed). This exercises the runner's `items`/
  * `practiceKeys` fix directly; `policy.test.ts` separately proves the policy half.
  */
+/** A schema-valid raw stored help blob (pedagogy/helpState.ts's SessionHelpSchema) holding `keys`. */
+const storedHelp = (keys: readonly string[]) => ({
+  v: 1,
+  rung: 0,
+  stuckTurns: 0,
+  attemptLogged: false,
+  pendingCheck: false,
+  answerKey: [...keys],
+});
+
 async function laterCorrect(
   rec: DemoPracticeRecord,
   reply: ScriptedStreamCall['steps'],
+  input: string,
   o: { carried?: readonly string[] } = {},
 ) {
   const tools = memoryToolRegistry([practiceNextItemTool(demoPracticeBank(RECORDS))]);
   const t = testDeps({ script: { stream: [main(...reply, used)] }, overrides: { tools }, judge: 'grounded' });
   const carried = o.carried ?? [];
   const help = { ...holding(rec), ...(carried.length > 0 ? { practiceCarriedKey: [...carried] } : {}) };
+  const attempt = classifyAttempt({ text: input, kind: 'message' }, storedHelp(rec.answerKey));
   const decision: PedagogyDecision = {
     ...demoPedagogyDecision,
     move: 'ask',
-    mustNotReveal: [...carried],
+    mustNotReveal: attempt === 'correct' ? [...carried] : [...rec.answerKey, ...carried],
     tools: [],
   };
   const steps = testSteps({
     entitle: fixtureEntitle,
-    route: { run: () => Promise.resolve({ intent: 'on_task', attempt: 'correct', usage: [] }) },
+    route: { run: () => Promise.resolve({ intent: 'on_task', attempt, usage: [] }) },
     decide: { run: () => Promise.resolve(testDecideResult(decision)) },
     generate: defaultSteps.generate,
     postGuard: defaultSteps.postGuard,
     buildContext: () => Promise.resolve(builtWith(help)),
   });
-  const { events, result } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+  const { events, result } = await driveTurn(
+    runTurn({ ...demoTurnInput, text: input }, { deps: t.deps, steps }),
+    t.clock,
+  );
   const commit = steps.commits[0];
   return { events, result, commit, help: commit?.next?.help, t };
 }
@@ -348,14 +364,14 @@ describe('5.6b: answered without a false block', () => {
   });
 
   it('5.6f: a correct "B" followed by "Yes, B is right!" is delivered', async () => {
-    const r = await laterCorrect(MCQ, [say('Yes, B is right!')]);
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')], 'B');
     expectDelivered(r, 'Yes, B is right!');
   });
 });
 
 describe('5.6f: release the practice key on a turn graded correct', () => {
   it('a correct "B" followed by "Yes, B is right!" is delivered (confirmation names the key)', async () => {
-    const r = await laterCorrect(MCQ, [say('Yes, B is right!')]);
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')], 'B');
     expectDelivered(r, 'Yes, B is right!');
   });
 
@@ -365,7 +381,7 @@ describe('5.6f: release the practice key on a turn graded correct', () => {
   });
 
   it('a carried key from an unrelated skipped item stays guarded even on a correct attempt', async () => {
-    const r = await laterCorrect(MCQ, [say('The other one is 4321.')], { carried: ['4321'] });
+    const r = await laterCorrect(MCQ, [say('The other one is 4321.')], 'B', { carried: ['4321'] });
     expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
   });
 
@@ -375,8 +391,13 @@ describe('5.6f: release the practice key on a turn graded correct', () => {
   });
 
   it('a question-phrased guess that matches the key ("so it\'s B?") is delivered, same as a flat "B"', async () => {
-    const r = await laterCorrect(MCQ, [say('Yes, B is right!')]);
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')], "so it's B?");
     expectDelivered(r, 'Yes, B is right!');
+  });
+
+  it('a question-phrased guess that does not match the key ("is it C?"), graded for real, still gets the safe hint', async () => {
+    const r = await laterCorrect(MCQ, [say('Yes, B is right!')], 'is it C?');
+    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
   });
 
   it('a question-phrased guess that does not match the key ("is it C?") still gets the hint', async () => {
