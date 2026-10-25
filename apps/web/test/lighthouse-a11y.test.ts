@@ -128,6 +128,7 @@ describe.skipIf(!up)(`lighthouse accessibility: /home and /teacher${up ? '' : ` 
   let chrome: chromeLauncher.LaunchedChrome | undefined;
   let studentCookie: string;
   let teacherCookie: string;
+  const stderrChunks: string[] = [];
 
   beforeAll(async () => {
     if (!existsSync(BUILD_SERVER_JS)) {
@@ -197,12 +198,13 @@ describe.skipIf(!up)(`lighthouse accessibility: /home and /teacher${up ? '' : ` 
     child.on('error', (err) => {
       spawnError = err;
     });
-    child.stderr.on('data', () => undefined);
+    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString('utf8')));
     child.stdout.on('data', () => undefined);
     try {
       await waitForHealth(origin, 20_000);
     } catch (error) {
-      throw spawnError ?? error;
+      const tail = stderrChunks.join('').slice(-2_000);
+      throw spawnError ?? new Error(`${String(error)}\nserver stderr (tail):\n${tail}`);
     }
     if (spawnError) throw spawnError;
 
@@ -212,12 +214,33 @@ describe.skipIf(!up)(`lighthouse accessibility: /home and /teacher${up ? '' : ` 
   });
 
   afterAll(async () => {
-    if (chrome) await chrome.kill();
-    if (child && !child.killed) {
-      child.kill();
-      await new Promise((resolve) => child?.once('exit', resolve));
+    // Each cleanup step runs independently (Promise.allSettled): a thrown chrome.kill() must not
+    // skip killing the server process or closing the DB pool, which would leak both. Any failure
+    // is still surfaced afterwards, not swallowed.
+    const results = await Promise.allSettled([
+      (async () => {
+        if (chrome) await chrome.kill();
+      })(),
+      (async () => {
+        if (child && !child.killed) {
+          child.kill();
+          await new Promise((resolve) => child?.once('exit', resolve));
+        }
+      })(),
+      (async () => {
+        if (dbClose) await dbClose();
+      })(),
+    ]);
+    const failures = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    if (failures.length === 1) throw failures[0]!.reason;
+    if (failures.length > 1) {
+      throw new AggregateError(
+        failures.map((f) => f.reason),
+        'afterAll cleanup: multiple steps failed',
+      );
     }
-    if (dbClose) await dbClose();
   });
 
   it(`/home scores >= ${MIN_ACCESSIBILITY_SCORE} (accessibility, 360x640, production build)`, async () => {

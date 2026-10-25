@@ -101,6 +101,27 @@ Cached:    7 cached, 11 total
 None — status DONE. (If CI's `ubuntu-latest` run shows headless Chrome genuinely unavailable,
 that is the one follow-up noted in the risk-high decision above.)
 
+## Fix round
+
+typescript-reviewer findings fixed, both in `apps/web/test/lighthouse-a11y.test.ts`:
+
+- [HIGH] `afterAll` previously awaited `chrome.kill()` unguarded, before killing the server
+  child process and closing the DB pool: if `chrome.kill()` threw, both would leak. Each
+  cleanup step (`chrome.kill()`, killing `child`, `dbClose()`) now runs independently via
+  `Promise.allSettled`, so a failure in one does not skip the others. Any step that failed is
+  still surfaced afterwards: a single failure rethrows its original error, multiple failures
+  throw an `AggregateError` wrapping all of them.
+- [LOW] `child.stderr.on('data', ...)` previously threw the server's stderr away. It is now
+  captured into `stderrChunks` (same pattern as `build-smoke.test.ts`) and its tail (last
+  2000 chars) is appended to the error thrown when `waitForHealth` times out.
+
+Gate: `turbo run typecheck lint --filter=@edmate/web` passed (0 errors; 2 pre-existing
+`no-console` eslint-disable warnings, unrelated to this change). `turbo run build-smoke
+--filter=@edmate/web` passed: `/home` scored 100, `/teacher` scored 95 (both >= 95). Secret
+scan clean.
+
+Tool calls: 17
+
 ## Budget
 
 Tool calls used: 56
