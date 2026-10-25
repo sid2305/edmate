@@ -140,6 +140,8 @@ export const turnTraces = pgTable(
   (t) => [
     index('turn_traces_session_id_idx').on(t.sessionId),
     uniqueIndex('turn_traces_turn_id_key').on(t.turnId),
+    // Task 7.7a: serves listForTeacherSince's created_at-ordered, session-joined read.
+    index('turn_traces_session_id_created_at_idx').on(t.sessionId, t.createdAt),
   ],
 );
 
