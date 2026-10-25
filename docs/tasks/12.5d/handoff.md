@@ -76,9 +76,9 @@
 - Decided: wontfix the typescript-reviewer LOWs: sequential inserts in the seed loops of packages/db/test/alert-queue-indexes.int.test.ts, and no trailing newline in packages/db/migrations/0030_alert_queue_indexes.sql and packages/db/migrations/meta/_journal.json (drizzle-kit output).
 - Why: harmless at this seed size, and generated files are not hand-edited.
 
-### 25 Oct 2026 · 12.5d merge: alert and class-question indexes, closes 11.2c · decided by lead · risk: low
+### 25 Oct 2026 · 12.5d merge: alert and class-question indexes, closes 11.2c · decided by lead · risk: high
 - Decided: merge 12.5d with database-reviewer, code-reviewer and typescript-reviewer approval (the database-reviewer HIGH and both MEDIUMs fixed and verified), and close 11.2c with it, since its composite class_questions index ships here.
-- Why: no repository query changes; one review cycle covers both tasks.
+- Why: no repository query changes; one review cycle covers both tasks. Risk is high only because packages/db/migrations/0030_alert_queue_indexes.sql drops two indexes (the old safety_alerts open-list index and class_questions_live_class_id_idx), each replaced by a wider index in the same migration; no table data is dropped, and database-reviewer checked it.
 
 ## Evidence
 `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/db`:
