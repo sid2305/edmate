@@ -271,6 +271,14 @@ const RULES: readonly Rule<ModerationCode>[] = [
 
   // ---- Other unsafe -----------------------------------------------------------------------------------
   decisive('other_unsafe', `(?:make|cook|synthesi[sz]e)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd)`),
+  // Buying or selling vapes at school: the transaction verb requirement (not an `unless`
+  // exemption) keeps a vape-detector science project or a health-class essay on vaping risks
+  // from ever matching (7.2h).
+  decisive(
+    'other_unsafe',
+    `(?:buy|buying|get|getting|sell|selling|resell|reselling|trade|trading)${gap(2)} ` +
+      `(?:vapes?|vaping|juul\\S*)${gap(3)} (?:at|in|into|near|on) (?:school|class|campus|college)`,
+  ),
   ambiguous('other_unsafe', `(?:buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`),
   ambiguous(
     'other_unsafe',
