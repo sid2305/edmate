@@ -83,6 +83,18 @@ $ python3 .githooks/secret-scan.py --all
   against the plan's risky-paths section isn't surprised by its absence — the plan anticipated a
   touch; the measurement showed one wasn't needed.
 
+### 25 Oct 2026 · 13.1 budget accepted · decided by lead · risk: low
+- Decided: accept 41 builder tool calls against the plan's 40 and 17 for the fix round (harness counts).
+- Why: one call over plan; the fix round was a single MEDIUM.
+
+### 25 Oct 2026 · 13.1 URL check matches the whole URL · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW in apps/web/e2e/a11y.spec.ts: the toHaveURL patterns match the whole URL, so a redirect to /sign-in?callbackUrl=/home would still pass. Today requireRole redirects to a plain /sign-in with no callback parameter, so the check fails as intended on a real redirect.
+- Why: the original MEDIUM (a silent redirect passing) is closed for the app's real behaviour; one fix round per policy.
+
+### 25 Oct 2026 · 13.1 merge: axe accessibility spec in the e2e job · decided by lead · risk: low
+- Decided: merge 13.1 with code-reviewer and typescript-reviewer approval. ci.yml was not changed (the e2e job already runs every spec under apps/web/e2e), so no .github reviewers are needed; the builder's risk: high entry records a touch that was considered and not made.
+- Why: the diff touches no risk path; the manual WCAG 2.2 AA pass is handed to a human in docs/a11y/manual-pass.md.
+
 ## Follow-ups
 
 - Human manual WCAG 2.2 AA pass: `docs/a11y/manual-pass.md` (keyboard nav/focus order,
@@ -98,8 +110,8 @@ $ python3 .githooks/secret-scan.py --all
 
 ## Budget
 
-Tool calls used: 21
+Tool calls used: 41 (harness count; the builder reported 21)
 
 ## Fix round
 - [MEDIUM] fixed apps/web/e2e/a11y.spec.ts — signed-in cases now assert the URL after goto.
-Tool calls: 8
+Tool calls: 17 (harness count; the fixer reported 8)
