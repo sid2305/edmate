@@ -7841,7 +7841,9 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: planning
+  status: running
+  branch: m13/9.3i-suspended-pause-cancel
+  model: plan:sonnet build:sonnet
 - id: 9.3j
   milestone: M13
   title: '9.3f review LOW: apps/web/src/chat/liveChats.ts homeLinks starts listUnavailableForStudent alongside listLiveForStudent (Promise.all) instead of after the owner lookups'
