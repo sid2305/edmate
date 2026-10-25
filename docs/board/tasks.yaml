@@ -5676,6 +5676,16 @@ tasks:
   status: todo
 - id: 8.7m
   milestone: M13
+  title: '8.7l deferred items: packages/db/src/repositories/publish.ts changedSinceLastPublish outline sub-select is NULL when the teacher has no course (coalesce or a comment that no course reads as not
+    changed); decide whether publish start() may batch its three reads (courses.ensureDefault would then write before a no_packages or no_style_card failure); merge the duplicate "No published scorecard
+    yet" tests in apps/web/app/teachers/[slug]/page.test.tsx'
+  accept: the NULL case has a test or a comment; the start() batching is decided and logged; one scorecard-null test remains; db and web green.
+  deps:
+  - 8.7l
+  risk: high
+  status: todo
+- id: 8.7m
+  milestone: M13
   title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID
     with a phone number appended, no separator) is never redacted; drop the non-UUID ''runId'' value from the crafted all-digit UUID cases; reword the matchAll comment and remove the rest[0] cast'
   accept: tests for the hex-padded and glued cases (the glued case redacts the phone digits); the crafted-UUID cases are all UUID-shaped; redact-json.ts stays at 100% coverage.
