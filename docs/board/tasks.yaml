@@ -7831,7 +7831,9 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: planning
+  status: running
+  branch: m13/9.3h-staff-takedowns-last-decision
+  model: plan:sonnet build:sonnet
 - id: 9.3i
   milestone: M13
   title: '9.3f plan Q5 (deferred): a student can pause or cancel a subscription whose agent is suspended (today the /home line has no actions and the chat and plan pages 404); land before payments go live'
@@ -7875,5 +7877,13 @@ tasks:
   accept: no non-null assertion on args.email; db typecheck, lint and test green.
   deps:
   - 8.1b
+  risk: low
+  status: todo
+- id: 9.3k
+  milestone: M13
+  title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'
+  accept: a staff view test shows a teacher's past subject changes on a queue row; web typecheck, lint and test green.
+  deps:
+  - 9.3h
   risk: low
   status: todo
