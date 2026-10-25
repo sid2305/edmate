@@ -7752,7 +7752,7 @@ tasks:
   deps:
   - 5.6b
   risk: high
-  status: running
+  status: review
   branch: m13/5.6f-release-correct-key
   model: plan:sonnet build:sonnet
 - id: 1.4e
@@ -7870,7 +7870,8 @@ tasks:
     human_questions: 0
 - id: 8.1d
   milestone: M13
-  title: '8.1b review follow-ups: packages/db/src/cli.ts GrantArgs/VerifyArgs become a discriminated union (email | userId) so runGrantRoleCli/runVerifyTeacherCli need no `args.email!` (cli.ts:134, :261); the either-or check reads `(email === undefined) === (userId === undefined)` in both parse functions (cli.ts:90, :216)'
+  title: '8.1b review follow-ups: packages/db/src/cli.ts GrantArgs/VerifyArgs become a discriminated union (email | userId) so runGrantRoleCli/runVerifyTeacherCli need no `args.email!` (cli.ts:134, :261);
+    the either-or check reads `(email === undefined) === (userId === undefined)` in both parse functions (cli.ts:90, :216)'
   accept: no non-null assertion on args.email; db typecheck, lint and test green.
   deps:
   - 8.1b
