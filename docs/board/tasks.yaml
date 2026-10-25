@@ -3158,10 +3158,12 @@ tasks:
   status: review
   branch: m13/0.19c-gate-word-ids
   model: plan:lead build:sonnet
-- id: 0.20
+- id: 0.2
   milestone: M13
-  title: 'CI flakes seen 25 Oct 2026: (1) apps/web src/auth/index.test.ts "imports and serves public routes with no AUTH_* or DATABASE_URL set" hit its 20 s timeout on PR #276 (and in a 9.3k builder run under load); (2) packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" hit the 10 s test timeout on PR #277 even after 3.11g/3.11h. Find the slow step (cold import, input size) and make both robust under CI load without hiding a real regression.'
-  accept: 'Both tests pass five full CI node runs in a row; neither depends on a tight wall-clock bound.'
+  title: 'CI flakes seen 25 Oct 2026: (1) apps/web src/auth/index.test.ts "imports and serves public routes with no AUTH_* or DATABASE_URL set" hit its 20 s timeout on PR #276 (and in a 9.3k builder run
+    under load); (2) packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" hit the 10 s test timeout on PR #277 even after 3.11g/3.11h. Find the slow step (cold
+    import, input size) and make both robust under CI load without hiding a real regression.'
+  accept: Both tests pass five full CI node runs in a row; neither depends on a tight wall-clock bound.
   deps: []
   risk: low
   status: todo
@@ -3501,9 +3503,9 @@ tasks:
   deps:
   - '0.1'
   risk: normal
-  status: done
-  branch: m7/0.20-harness-test-timeouts
-  model: plan:lead build:sonnet review:sonnet
+  status: running
+  branch: m13/0.20-ci-flakes
+  model: plan:lead build:sonnet
   metrics:
     tool_calls: 38
     tokens_in: 134
