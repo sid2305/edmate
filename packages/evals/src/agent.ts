@@ -23,6 +23,11 @@ export interface EvalTurnInput {
   skill?: EvalSkill;
   /** The case's persona template ref (task 3.11e). Absent: no persona. */
   persona?: string;
+  /**
+   * Fires when the gate stops counting this case (task 7.4d), e.g. a deadline overrun. An agent
+   * should stop work when it fires; ignoring it is allowed, the gate still stops counting the case.
+   */
+  signal?: AbortSignal;
 }
 
 export const EvalAgentReplySchema = z.strictObject({
