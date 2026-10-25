@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 9.3f a verified teacher is found by slug and safety-rejected through the unchanged decide call · decided by builder · risk: high
+- Decided: a new staff-only, status-independent `findBySlugForStaff` read in `packages/db` and a read-only `lookup` route (`apps/web/app/api/staff/verifications/{handlers.ts,lookup/route.ts}`), a `findTeacherBySlug` client call and a search box in `apps/web/app/staff/view.tsx` that reuses `VerificationRow` and `decide` unchanged; `decide` and `list` are byte-for-byte unchanged.
+- Why: `setVerification({safety:true})` already worked from any starting `verificationStatus` (9.3e), so the security review's MEDIUM was a console gap, not a repository one; proved over Postgres in `teacher-profiles.int.test.ts` and `route.int.test.ts` (find an already verified teacher by slug, safety-reject, 200, audit `after.safety === true`). `packages/db/src/repositories/**` and `apps/web/app/api/staff/**` are required-reviewer groups.
+
+---
+
+### 24 Oct 2026 · 9.3f a subscription whose agent is no longer live shows one blame-free line on /home · decided by builder · risk: low
+- Decided: a read-only `listUnavailableForStudent` (separate from `listLiveForStudent`, which also feeds the live-classes question route) feeds one aggregate line in `homeLinks`, `HomeView` and `en.json`, with no teacher name and no link, deduped by agent id and placed after the chats, startable and paused block under the existing single catch.
+- Why: B-49: such a subscription used to vanish from `/home` with no trace. Pause or cancel while suspended and the chat and plan pages' 404 stay unchanged (plan Q5, deferred to 9.3i: no payment is live, so nobody is billed for an agent they cannot reach).
+
+---
+
+### 24 Oct 2026 · 9.3f a malformed lookup slug is 400, not 403 · decided by builder · risk: high
+- Decided: `lookup`'s catch in `apps/web/app/api/staff/verifications/handlers.ts` switches on `error.kind` like `decide`: `invalid` is 400 validation, `scope` and `not_found` stay 403 forbidden, and `integrity` and `failed` fall through to the generic 500.
+- Why: the review's HIGH: a typo or pasted URL told staff they were not allowed, which is the wrong error and inconsistent with `decide` in the same file.
+
+---
+
+### 24 Oct 2026 · 9.3f tool calls over the plan's budget · decided by lead · risk: low
+- Decided: accept 316 tool calls (harness count over phase A, phase B, the stalled and finishing phase C builders and the fixer) against the plan's 230.
+- Why: phase C stalled when the Mac slept and its work was preserved and finished by a second builder, and one fix round ran; every phase finished with a green gate.
+
+---
+
 ### 24 Oct 2026 · 12.5g alert worker: permanent store error ends the job after one page · decided by builder · risk: high
 - Decided: `apps/worker/src/alerts/processors.ts`'s `alert.raise` branch now reuses
   `commit/processors.ts`'s `classify` to end the job (`PermanentJobError`) on a permanent
