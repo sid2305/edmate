@@ -10,6 +10,67 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 12.5d old safety_alerts open-list index dropped · decided by builder · risk: low
+- Decided: drop `safety_alerts_open_created_at_id_idx` in the same migration that adds its
+  replacement, rather than keeping both.
+- Why: grepped `packages/db/src` for any other query filtering/ordering on the open-alert set by
+  created_at/id alone; only `listForStaff` does, and the new expression index serves that same
+  partial scan (plus the full ORDER BY), so the old index has no remaining user.
+
+---
+
+### 25 Oct 2026 · 12.5d DROP INDEX allowed via a reviewed allow-list in schema.test.ts · decided by builder · risk: low
+- Decided: added a `REVIEWED_INDEX_DROPS` map (and a matching assertion test) to
+  `packages/db/test/schema.test.ts`, modelled on the file's existing `REVIEWED_UPDATES` pattern,
+  naming the two index names `0030_alert_queue_indexes.sql` may drop.
+- Why: the file's "migrations are create-only" test treats any `DROP INDEX` as destructive SQL
+  (same regex as the merge gate's `DESTRUCTIVE_SQL`); an index drop touches no row data, and the
+  file already had a precedent (reviewed `UPDATE SET` statements) for naming an exception per
+  migration file rather than loosening the regex itself. Not in the plan's `Files` list, but the
+  plan's own existing-index/migration-test instruction covers it; this is the file that already
+  asserted on the old index name, so it had to change either way.
+
+---
+
+### 25 Oct 2026 · 12.5d class_questions index serves the join, not the cross-class order · decided by builder · risk: low
+- Decided: corrected the `class_questions_live_class_id_created_at_id_idx` comment in
+  `packages/db/src/schema/operations.ts` and the header comment in
+  `packages/db/test/alert-queue-indexes.int.test.ts`: the index serves the join from
+  `live_classes` to `class_questions` by `live_class_id`, with each live class's own rows already
+  in `(created_at, id)` order; it does not remove the `Sort` in `listQueueForTeacher`'s
+  cross-class `ORDER BY`, which still sorts a bounded set (capped at `QUEUE_SCAN_MAX`) across all
+  of a teacher's upcoming classes. Also added an `EXPLAIN` test in
+  `alert-queue-indexes.int.test.ts` for a query shaped exactly like `listQueueForTeacher` (same
+  join, teacher filter, `starts_at > now()`, order, limit), seeded with 100 teachers, 400 live
+  classes and 150000 class questions plus `ANALYZE`, asserting the plan accesses
+  `class_questions` through the new index — without forcing it via `enable_seqscan`.
+- Why: the original wording claimed the index "matches the teacher queue scan's ORDER BY", which
+  is only true within one live class, not across the teacher's whole upcoming set; a reviewer
+  reading the comment alone could wrongly conclude the cross-class scan never sorts. The seeded
+  `EXPLAIN` test needed enough rows (150000, well beyond the first two smaller seeds tried) before
+  Postgres' planner naturally preferred the index-backed nested loop over a sequential scan of
+  `class_questions`, so the assertion holds without disabling `enable_seqscan`.
+
+---
+
+### 25 Oct 2026 · 12.5d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 63 builder tool calls against the plan's 30 and 51 for the fix round against 25 (harness counts; the agents reported 32 and 17).
+- Why: the lead-written plan under-budgeted a migration with EXPLAIN tests, and the fix round's seeded EXPLAIN proof needed several planner runs; both stayed inside the plan's files.
+
+---
+
+### 25 Oct 2026 · 12.5d minor test and migration style left as they are · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOWs: sequential inserts in the seed loops of packages/db/test/alert-queue-indexes.int.test.ts, and no trailing newline in packages/db/migrations/0030_alert_queue_indexes.sql and packages/db/migrations/meta/_journal.json (drizzle-kit output).
+- Why: harmless at this seed size, and generated files are not hand-edited.
+
+---
+
+### 25 Oct 2026 · 12.5d merge: alert and class-question indexes, closes 11.2c · decided by lead · risk: high
+- Decided: merge 12.5d with database-reviewer, code-reviewer and typescript-reviewer approval (the database-reviewer HIGH and both MEDIUMs fixed and verified), and close 11.2c with it, since its composite class_questions index ships here.
+- Why: no repository query changes; one review cycle covers both tasks. Risk is high only because packages/db/migrations/0030_alert_queue_indexes.sql drops two indexes (the old safety_alerts open-list index and class_questions_live_class_id_idx), each replaced by a wider index in the same migration; no table data is dropped, and database-reviewer checked it.
+
+---
+
 ### 25 Oct 2026 · board ids 7.2j and 8.7n replace two reused ids · decided by lead · risk: low
 - Decided: the 7.2h follow-up (vapes variants) is board task 7.2j, not 7.2i, and the 8.7l follow-up is board task 8.7n, not 8.7m. The ids 7.2i (leak case fixes, PR #208) and 8.7m (8.7h redact-json follow-ups) were already taken. The 7.2h and 8.7l merge decisions below, and docs/tasks/7.2h/review.md and docs/tasks/8.7l/review.md, name the old ids and mean these tasks.
 - Why: the lead filed both follow-ups without checking the ids were free; one id per task keeps the board, task folders and log unambiguous. Before filing a follow-up, the lead now checks the id is unused on the board and under docs/tasks/.

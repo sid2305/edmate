@@ -3272,9 +3272,9 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 7.6a
   milestone: M7
   title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep
@@ -6547,9 +6547,31 @@ tasks:
   deps:
   - 12.5a
   risk: low
-  status: running
+  status: done
   branch: m13/12.5d-alert-indexes
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 23
+    tokens_in: 90
+    tokens_out: 604
+    cache_read_tokens: 987373
+    wall_time_seconds: 89
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 12.4a
   milestone: M12
   title: Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)
@@ -6722,9 +6744,9 @@ tasks:
   deps:
   - 11.2a
   risk: high
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: folded into 12.5d
 - id: 7.2h
   milestone: M13
   title: '7.2d follow-up: packages/harness moderationPatterns.ts has no rule for "vapes" (and bare "drugs" is only ambiguous); add a decisive rule for buying or selling vapes at school, with a near-miss
@@ -6768,6 +6790,16 @@ tasks:
   status: running
   branch: m13/7.2j-vapes-variants
   model: plan:lead build:sonnet review:sonnet
+- id: 7.2k
+  milestone: M13
+  title: '7.2j review follow-up: the Devanagari vapes rule and the weapons Devanagari rule in packages/harness/src/guardrails/moderationPatterns.ts match bare verb stems only, so conjugated forms (बेचना,
+    बेचूँ, खरीदना, लाना) do not match; widen both to common conjugations while essay-style questions such as "वेप बेचना गैरकानूनी क्यों है" stay clean'
+  accept: harness guard tests for conjugated true positives and essay-style near misses; safety cases added; harness and evals green.
+  deps:
+  - 7.2j
+  risk: high
+  status: todo
+  branch: null
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
