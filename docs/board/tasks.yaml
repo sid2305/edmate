@@ -7889,3 +7889,11 @@ tasks:
   - 9.3h
   risk: low
   status: todo
+- id: 5.6h
+  milestone: M13
+  title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text; drive the real route step (or pass the text through) so the runner test proves a question-phrased correct guess releases and a wrong one does not, or remove it'
+  accept: the runner test fails if question-phrased grading changes; harness typecheck, lint and test green.
+  deps:
+  - 5.6f
+  risk: low
+  status: todo
