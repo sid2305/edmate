@@ -4095,7 +4095,20 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       );
       const reVerified = await r.audit.findLastVerifyForStaff(ISO_STAFF, t);
       expect(reVerified).toMatchObject({ status: 'verified', reason: verifyReason });
-      return 6;
+      const tBad = 'tch_93h_bad';
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93h bad teacher', 'en', 'test', 'teacher')`,
+        [tBad],
+      );
+      await raw.query(
+        `insert into audit_log (actor, actor_role, action, target, teacher_id, after)
+         values ($1, 'staff', 'teacher.verify', $2, $3, '{"bogus": true}'::jsonb)`,
+        [ISO_STAFF, `teacher:${tBad}`, tBad],
+      );
+      await expect(r.audit.findLastVerifyForStaff(ISO_STAFF, tBad)).rejects.toMatchObject({
+        kind: 'integrity',
+      });
+      return 7;
     },
   },
   // Task 12.3b: a teacher's copyright takedown count is that teacher's alone. Lifted at the end,
