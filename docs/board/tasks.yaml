@@ -3242,7 +3242,9 @@ tasks:
   deps:
   - 0.20b
   risk: low
-  status: todo
+  status: running
+  branch: m13/0.20c-linear-time-test
+  model: plan:lead build:sonnet
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
