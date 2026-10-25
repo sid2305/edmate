@@ -30,6 +30,7 @@ import {
   scheduleWeeklyInsights,
   WEEKLY_INSIGHTS_QUEUE,
 } from './insights/index.js';
+import { createRetentionWorker, RETENTION_QUEUE, scheduleRetention } from './retention/index.js';
 import { createWorkerWebFetcher, WebLinkConfigError } from './webLink/index.js';
 import type { WebFetcher } from '@edmate/ingest';
 import { describeError, jsonLog } from './log.js';
@@ -45,6 +46,7 @@ const db = openDatabase();
 const deadLetter = new Queue(DEAD_LETTER_QUEUE, { connection });
 const costAlarmQueue = new Queue(COST_ALARM_QUEUE, { connection });
 const weeklyInsightsQueue = new Queue(WEEKLY_INSIGHTS_QUEUE, { connection });
+const retentionQueue = new Queue(RETENTION_QUEUE, { connection });
 const alertQueue = new Queue(ALERT_QUEUE, { connection });
 
 const noop = createNoopWorker(connection, { autorun: true });
@@ -71,6 +73,16 @@ const weeklyInsights = createWeeklyInsightsWorker({
   deps: {
     teacherIds: (scope) => db.repos.usageLedger.teacherIdsWithUsageSince(scope),
     insights: db.repos.insights,
+    now: () => new Date(),
+    log,
+  },
+});
+const retention = createRetentionWorker({
+  connection,
+  deadLetter,
+  autorun: true,
+  deps: {
+    retention: db.retention,
     now: () => new Date(),
     log,
   },
@@ -153,6 +165,7 @@ const workers = [
   turn.commit,
   costAlarm,
   weeklyInsights,
+  retention,
   alert,
   safetyEvent,
   gate,
@@ -179,6 +192,11 @@ try {
   process.exitCode = 1;
 }
 
+scheduleRetention(retentionQueue).catch((error: unknown) => {
+  log({ level: 'error', event: 'retention.schedule_failed', error: describeError(error) });
+  process.exitCode = 1;
+});
+
 // Dead-letter entries expire after 7 days (FAILED_JOB_TTL_SECONDS): prune at start, then hourly.
 const PRUNE_EVERY_MS = 60 * 60 * 1_000;
 void pruneDeadLetters(deadLetter, log);
@@ -194,6 +212,7 @@ async function shutdown(signal: string): Promise<void> {
     deadLetter.close(),
     costAlarmQueue.close(),
     weeklyInsightsQueue.close(),
+    retentionQueue.close(),
     alertQueue.close(),
   ]);
   await db.close();

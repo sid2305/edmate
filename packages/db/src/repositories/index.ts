@@ -336,4 +336,9 @@ export type { RegulatedAgentRow } from './map.js';
  * `test/repositories.int.test.ts`. A caller builds one with its own `Db` the same way `openDatabase`
  * builds `repos` and `identity`.
  */
-export { retentionRepo, type RetentionRepo, type RetentionResult } from './retention.js';
+export {
+  retentionRepo,
+  RETENTION_PURGE_LIMIT,
+  type RetentionRepo,
+  type RetentionResult,
+} from './retention.js';

@@ -109,6 +109,40 @@ Fix round (25 Oct 2026) additionally touched:
 
 ## Decisions
 
+### 25 Oct 2026 · 13.4 Phase B: RETENTION_PURGE_LIMIT re-exported from @edmate/db · decided by builder · risk: low
+- Decided: added `RETENTION_PURGE_LIMIT` to `packages/db/src/repositories/index.ts`'s existing
+  `retention.js` re-export line, alongside `retentionRepo`/`RetentionRepo`/`RetentionResult`.
+- Why: the constant existed in `repositories/retention.ts` since Phase A but was never re-exported
+  past that file, so `@edmate/db` (the package Phase B imports) had no way to hand it to a
+  caller — the worker's live-mode loop needs it to recognise "that call may have left more
+  behind" without hardcoding `1000` a second time, which would silently drift from the real limit
+  if `RETENTION_PURGE_LIMIT` ever changed. Additive only (one new named export); no existing
+  export's shape or behaviour changed, so `risk: low` under the fix-brief's "changes what is
+  deleted or kept" test — this changes nothing about what is deleted, only what the constant is
+  reachable from.
+
+### 25 Oct 2026 · 13.4 Phase B: live-mode loop stops at "below the limit", not "zero" · decided by builder · risk: low
+- Decided: `purgeTable` (`apps/worker/src/retention/workers.ts`) calls a table's purge method
+  again only while the previous call's count equals (or exceeds) `purgeLimit`; a call reporting
+  fewer rows than `purgeLimit` ends that table's loop for this run, even if some of today's run
+  already purged some other, now-recent-enough-to-not-qualify rows.
+- Why: this matches `@edmate/db`'s own contract exactly — a live call never returns more than
+  `limit` rows by construction, so "count < limit" is the only correct signal that a call cleared
+  everything there was to clear at that moment; checking for "count === 0" instead would do one
+  extra, always-empty call per table per run forever. Capped at `MAX_ITERATIONS_PER_TABLE` (1000)
+  regardless, so even a pathological backend that always returns exactly `limit` can never loop a
+  single run forever — it stops, reports `maxIterationsHit: true`, and is picked up again next
+  run.
+
+### 25 Oct 2026 · 13.4 Phase B: retention queue added to apps/worker's own entrypoint, not left to a future task · decided by builder · risk: low
+- Decided: wired `createRetentionWorker`/`scheduleRetention` into `apps/worker/src/index.ts`
+  (queue, worker, startup schedule call, shutdown close) rather than leaving the job built but
+  never started.
+- Why: the plan's own Phase B description ends with "a BullMQ repeatable job" — a job that is
+  never scheduled anywhere isn't one; every other scheduled job in this file (`costAlarm`,
+  `weeklyInsights`) is wired the same way at the same point, so leaving retention unwired would
+  have been an inconsistent, easy-to-miss gap rather than a deliberate deferral.
+
 ### 25 Oct 2026 · 13.4 an erased student's open questions are dismissed · decided by lead · risk: high
 - Decided: `identity.anonymise` (`packages/db/src/identity/store.ts`) clears `teacher_questions.text`
   and, in the same statement, also sets `status = 'dismissed'` for any of this student's rows
@@ -252,6 +286,83 @@ Fix round (25 Oct 2026) additionally touched:
   and a decision the architect should make once (see Open question below), not one a single
   builder should make inside an unrelated phase's PR.
 
+## Phase B
+
+### What changed
+
+The worker-side scheduled retention job (`apps/worker/src/retention/`), following
+`src/insights/` as the shape (`config.ts` has no `insights/` counterpart; `workers.ts` plays the
+role `weeklyInsights.ts` plays there — the pure core — and `schedule.ts`/`logSink.ts`/`index.ts`
+mirror theirs directly):
+
+- **`config.ts`** — `RETENTION_DAYS` (`sessions: 730`, `turnTraces: 90`, `transcriptChunks: 730`),
+  each value commented `placeholder pending counsel sign-off (13.4 open question 1)`;
+  `defaultRetentionConfig` (`{ days: RETENTION_DAYS, dryRun: true }`) is the job's default — dry
+  run everywhere until a human flips it, the same fail-closed pattern 3.10 used for unverified
+  helplines. `cutoffFor(now, days)` is the one date-math helper, unit tested directly.
+- **`workers.ts`** (pure core) — `purgeTable(table, purge, cutoff, dryRun, purgeLimit)`: a dry run
+  makes exactly one call (the count it reports is already unlimited, and dry runs never write, so
+  looping would never change anything); a live run calls again while a call reports a count equal
+  to `purgeLimit` (meaning that call may have left more behind), summing counts, until a call
+  reports fewer than `purgeLimit` or the run hits `MAX_ITERATIONS_PER_TABLE` (1000) — a sane upper
+  bound so one run can never loop forever; hitting it is reported back on the result
+  (`maxIterationsHit: true`), not thrown, so the other tables still run and the job still
+  succeeds (that table is picked up again next run).
+- **`schedule.ts`** — `RETENTION_QUEUE`/`RETENTION_JOB`/`RETENTION_SCHEDULER_ID`, a daily
+  `RETENTION_PATTERN` (`'0 4 * * *'` UTC — provisional, no locale timezone involved since this is
+  a system-wide purge, not a per-teacher one), `scheduleRetention` (idempotent upsert, mirrors
+  `scheduleWeeklyInsights`), `retentionJob(deps)` (the processor: purges `sessions`, `turnTraces`,
+  `transcriptChunks` in turn, each via `purgeTable` against its own cutoff from `config.days`,
+  logging each table then the run summary) and `createRetentionWorker` (mirrors
+  `createWeeklyInsightsWorker` exactly: failed → dead letter, error → logged).
+- **`logSink.ts`** — `logRetentionTable`/`logRetentionRun`: counts only (table name, count,
+  dryRun, call count) — never a row id, never message or transcript text. `warn` when a table (or
+  the run) hit the iteration cap, else `info`, same shape as `logWeeklyInsightsRun`.
+- **`index.ts`** — barrel export.
+- **`apps/worker/src/index.ts`** — wired the same way `weeklyInsights` is: a `retentionQueue`,
+  `createRetentionWorker({ deps: { retention: db.retention, now, log } })` (Phase A's
+  `openDatabase().retention`, used directly — no adapter needed; its methods' extra, unused
+  `limit` parameter is structurally compatible with `RetentionBackend`'s two-argument shape),
+  added to the `workers` array and `scheduleRetention(retentionQueue)` called at startup (error →
+  logged, `process.exitCode = 1`, same as every other scheduled job here); `retentionQueue.close()`
+  added to `shutdown`.
+- **`packages/db/src/repositories/index.ts`** — one added export, `RETENTION_PURGE_LIMIT` (it was
+  defined and used inside `retention.ts` but never re-exported past that file, so `@edmate/db`
+  itself had no way to hand the constant to a caller despite Phase A's own handoff describing it
+  as "exported from @edmate/db"). Needed so the worker job's live-mode loop can recognise "that
+  call may have left more behind" without hardcoding the number a second time. Additive only — no
+  behaviour or signature change to any existing export.
+- Tests first, following `insights/`'s own test files: `config.test.ts`, `workers.test.ts`
+  (`purgeTable` directly: one dry-run call; live mode summing across several full-limit calls then
+  stopping below it; a live call that finds nothing), `logSink.test.ts`, `schedule.test.ts`
+  (`scheduleRetention`'s upsert call; `retentionJob` dry run — exactly one call per table, nothing
+  written; live mode looping; a table whose every call reports the limit runs the real
+  `MAX_ITERATIONS_PER_TABLE` = 1000 iterations and is reported `maxIterationsHit: true`, `warn`
+  logged, job still succeeds; `createRetentionWorker` built without connecting, `failed`/`error`
+  events logged, same fake-Redis pattern as `insights/schedule.test.ts`) and
+  `apps/worker/test/retention.int.test.ts` (dev Postgres, `TEST_DATABASE_URL` — no disposable
+  container started, stopped or composed; follows `test/commit.int.test.ts`'s own throwaway-database
+  pattern: creates and migrates a fresh database per run, drops it in `afterAll`). The int test
+  seeds one old and one recent `turn_traces` row (with the session/teacher/student/agent rows its
+  foreign key needs) and proves: a dry run reports a count and deletes nothing; live mode (with
+  `turnTraces: 90` days and every other table's cutoff pushed far enough into the past that it
+  purges nothing in this seed) deletes only the past-cutoff row, leaving the recent one and the
+  session untouched.
+
+### Evidence
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run build typecheck lint test --filter=@edmate/worker...`
+  → `Tasks: 39 successful, 39 total` (int tests ran against the dev Postgres, not skipped;
+  `apps/worker/src/retention` shows 96.55% statement / 81.48% branch / 87.5% function coverage —
+  all comfortably above the 80% bar; the one uncovered branch in `schedule.ts` is
+  `createRetentionWorker`'s default `now`/`prefix` fallback, the same shape `insights/schedule.ts`
+  leaves uncovered). One unrelated, pre-existing flake seen along the way:
+  `@edmate/harness`'s `forged teacher-note marker (3.11d) > runs in linear time on long hostile
+  input` failed once under heavy concurrent-run resource contention and passed cleanly alone and
+  on every other full-gate run — not touched by this phase.
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0). The int test's fixtures use
+  synthetic ids (`tch_…`, `stu_…`, `agt_…`, `ses_…`, `tt_…`) only.
+
 ## Open question for the architect/lead (does not block Phase A; flag before Phase B)
 The isolation grid in `test/repositories.int.test.ts` (`IsolationCase`, `CASES`) has no shape for
 a scheduled/system job with no teacher or student scope. `retention.ts`'s three methods are the
@@ -262,10 +373,6 @@ shape (`scope: 'system'`) rather than each one being exported standalone — a o
 not blocking this phase.
 
 ## Left to do
-- **Phase B** (`apps/worker`): `src/retention/config.ts` (per-table `RETENTION_DAYS` placeholders,
-  `DRY_RUN` default `true`), `schedule.ts`/`workers.ts`/`index.ts` (BullMQ daily job calling
-  `retention.purge*`), unit tests (fake clock/queue) and `test/retention.int.test.ts` (disposable
-  container).
 - **Phase C** (`apps/web`): `src/export/accountExport.ts`, `app/api/me/export/route.ts`,
   `src/account/delete.ts`, `app/api/me/route.ts` (DELETE), plus their tests — root account export
   and `DELETE /api/me` calling `identity.anonymise` for the signed-in student's own id only.
@@ -274,11 +381,17 @@ not blocking this phase.
   against the plan's recommendation regardless, per the brief's lead rulings.
 
 ## Budget
-Tool calls used: 90 (over the brief's 45/55 cap — the file-location and isolation-grid
-discoveries above needed real investigation before any code could land safely, and a
-post-investigation merge conflict (12.5d's 0030 migration landing mid-phase, as the plan warned
-it might) needed a clean renumber-and-regenerate rather than a hand patch; flagging per the
-budget-overrun norm rather than stopping mid-way with a broken gate).
+Tool calls used: 196 (Phase B: 82) — Phase A + its two fix rounds used 114 (97, then +17 for round
+2; see the per-phase notes below); Phase B's own 82 is also over its brief's 50/60 cap. Most of
+Phase B's overrun was reading context to follow the shape faithfully (`insights/`'s five files,
+`commit.int.test.ts`'s throwaway-database pattern, the `sessions_open_has_package` constraint
+that broke the int test's first seed) plus three rounds of chasing turbo/vitest resource
+contention from other concurrent sessions on this machine (a flaky `@edmate/harness` timing test
+and a coverage-directory lock collision, both unrelated to this phase's own files, confirmed by
+rerunning clean) before the gate was reliably green; flagging per the budget-overrun norm rather
+than stopping mid-way with a broken or unverified gate.
+
+Phase A: 90 (initial) → 97 (after fix round 1) → 114 (after fix round 2, see below).
 
 ## Fix round (25 Oct 2026)
 1. [HIGH, code-reviewer] `anonymise` leaving `auth_sessions`/`auth_accounts`/the old email's
