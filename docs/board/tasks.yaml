@@ -2137,9 +2137,30 @@ tasks:
   deps:
   - '8.1'
   - '8.7'
-  status: review
+  status: done
   branch: m13/8.1b-verification-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 120
+    tokens_in: 384
+    tokens_out: 75439
+    cache_read_tokens: 13796912
+    wall_time_seconds: 314144
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: '8.2'
   milestone: M8
   title: Upload centre with live processing status, delete and replace
@@ -2651,8 +2672,37 @@ tasks:
   accept: tests cover each item; harness tests pass
   deps:
   - '6.1'
+  status: done
+  branch: m13/6.1a-topic-map-strict
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 80
+    tokens_out: 1005
+    cache_read_tokens: 967194
+    wall_time_seconds: 75
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 4
+- id: 6.1b
+  milestone: M13
+  title: '6.1a Phase B (deferred by the lead, 25 Oct 2026): courseOutlineInputFromDraft in packages/harness/src/memory/fromOutlineDraft.ts, duck-typing ingest''s OutlineDraft (no new dependency), so studio-drafted
+    outlines can feed buildTopicMap; design in docs/tasks/6.1a/plan.md Phase B. Build when a task wires studio outlines into buildTopicMap.'
+  accept: a converted draft builds a topic map, and unknown-module and duplicate ids are rejected, in tests; harness typecheck, lint and test green.
+  deps:
+  - 6.1a
+  risk: low
   status: todo
-  branch: null
 - id: 5.8a
   milestone: M5
   title: 'Role-play wiring: personas in CLI chat/eval and web runtime, newest set'
@@ -2692,8 +2742,29 @@ tasks:
   accept: the report shows p50/p95 latency (incl. first token), error and guard rates for one teacher over a window; the index lands in a migration; invalid limit/since tests fail closed
   deps:
   - '7.7'
-  status: todo
-  branch: null
+  status: done
+  branch: m13/7.7a-health-report
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 112
+    tokens_in: 358
+    tokens_out: 31710
+    cache_read_tokens: 8240006
+    wall_time_seconds: 439
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 5.11b
   milestone: M7
   title: 'Flaky ingest test (CI on PR #98): draftOutline ''drafts independent modules in parallel, keeping output order equal to input order'' got ''values-variables'' instead of ''conditions''; the scripted
@@ -2941,9 +3012,30 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: review
+  status: done
   branch: m13/5.8d-eval-pipeline-agent
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 279
+    tokens_in: 946
+    tokens_out: 105992
+    cache_read_tokens: 27383823
+    wall_time_seconds: 277532
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.19a
   milestone: M13
   title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest
@@ -2952,9 +3044,9 @@ tasks:
   deps:
   - '0.19'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/0.19a-closeout-digest
+  model: plan:lead build:sonnet
 - id: 6.5a
   milestone: M13
   title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold
@@ -3822,9 +3914,9 @@ tasks:
   deps:
   - 8.3b
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.3d-outline-schema-reuse
+  model: plan:sonnet build:sonnet
 - id: 8.4b
   milestone: M8
   title: 'Teacher style-card studio page (8.4 Phase B): interview, draft, edit and save the style card'
@@ -3863,9 +3955,9 @@ tasks:
   deps:
   - 8.6a
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.6e-model-mix-readonly
+  model: plan:lead build:sonnet
 - id: 8.9a
   milestone: M8
   title: 'teacherQuestions.dismiss (8.9 Phase A, packages/db): close one open question, teacher-scoped'
@@ -6650,9 +6742,27 @@ tasks:
   deps:
   - 9.7d
   risk: low
-  status: review
+  status: done
   branch: m13/9.7e-e2e-double-send
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.4f
   milestone: M13
   title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
@@ -7752,9 +7862,29 @@ tasks:
   deps:
   - 5.6b
   risk: high
-  status: review
+  status: done
   branch: m13/5.6f-release-correct-key
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 72
+    tokens_in: 244
+    tokens_out: 80321
+    cache_read_tokens: 9218044
+    wall_time_seconds: 8758
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 1.4e
   milestone: M13
   title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs
@@ -7841,7 +7971,28 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: planning
+  status: done
+  branch: m13/9.3i-suspended-pause-cancel
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.3j
   milestone: M13
   title: '9.3f review LOW: apps/web/src/chat/liveChats.ts homeLinks starts listUnavailableForStudent alongside listLiveForStudent (Promise.all) instead of after the owner lookups'
@@ -7878,7 +8029,9 @@ tasks:
   deps:
   - 8.1b
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.1d-cli-arg-union
+  model: plan:lead build:sonnet
 - id: 9.3k
   milestone: M13
   title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'
@@ -7887,3 +8040,43 @@ tasks:
   - 9.3h
   risk: low
   status: todo
+- id: 9.3l
+  milestone: M13
+  title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
+    header comment omits the /home redirect when agentAvailable is false'
+  accept: both header comments match the behaviour; web typecheck, lint and test green.
+  deps:
+  - 9.3i
+  risk: low
+  status: running
+  branch: m13/9.3l-plan-page-comments
+  model: plan:lead build:sonnet
+- id: 5.6h
+  milestone: M13
+  title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text;
+    drive the real route step (or pass the text through) so the runner test proves a question-phrased correct guess releases and a wrong one does not, or remove it'
+  accept: the runner test fails if question-phrased grading changes; harness typecheck, lint and test green.
+  deps:
+  - 5.6f
+  risk: low
+  status: done
+  branch: m13/5.6h-real-question-guess-test
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1

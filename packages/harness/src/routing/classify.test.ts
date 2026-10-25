@@ -260,6 +260,17 @@ describe('classifyAttempt', () => {
       expect(classifyAttempt(msg(text, kind), stored(['(B)']))).toBe(expected);
     });
 
+    it.each([
+      // [text, expected] (5.6f: a question-phrased guess, message kind)
+      ["so it's b?", 'correct'],
+      ['is it b?', 'correct'],
+      ['is it c?', 'wrong'],
+      ['is it a, b or c?', 'wrong'],
+      ['a or b?', 'none'],
+    ] as const)('%j (message, question-phrased) against key B → %s (5.6f)', (text, expected) => {
+      expect(classifyAttempt(msg(text, 'message'), stored(['B']))).toBe(expected);
+    });
+
     it('the article "a" is never a label, but a message-initial "a" is', () => {
       expect(classifyAttempt(msg('A because it loops', 'check_answer'), stored(['A']))).toBe(
         'correct',

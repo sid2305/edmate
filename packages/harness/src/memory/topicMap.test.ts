@@ -166,4 +166,66 @@ describe('buildTopicMap', () => {
     expect(result.reason).toBe('invalid');
     expect(result.id).toBe('');
   });
+
+  it('rejects an unknown top-level key (strict schema)', () => {
+    const input = { ...base(), extraField: 'nope' };
+    const result = buildTopicMap(input);
+    expect(result).toEqual({ ok: false, reason: 'invalid', id: '' });
+  });
+
+  it('rejects an unknown key inside a topic entry (strict schema)', () => {
+    const input = base();
+    const bad = {
+      ...input,
+      topics: [...input.topics, { topicId: 'topic-4', moduleId: 'mod-2', title: 'T4', order: 1, extraKey: 'nope' }],
+    };
+    const result = buildTopicMap(bad);
+    expect(result).toEqual({ ok: false, reason: 'invalid', id: '' });
+  });
+
+  it('orders a wider outline correctly when several topics reach in-degree 0 in the same round', () => {
+    // 2 modules, 12 topics. Several topics have no prerequisites (reach in-degree 0 immediately);
+    // insertion order (declaration order below) is deliberately not the final tie-broken order,
+    // to exercise the heap's push/pop ordering rather than relying on array insertion order.
+    const input: CourseOutlineInput = {
+      courseId: 'c',
+      teacherId: 't',
+      modules: [
+        { moduleId: 'mod-b', title: 'Module B', order: 1 },
+        { moduleId: 'mod-a', title: 'Module A', order: 0 },
+      ],
+      topics: [
+        { topicId: 'b-topic-5', moduleId: 'mod-b', title: 'B5', order: 5 },
+        { topicId: 'a-topic-3', moduleId: 'mod-a', title: 'A3', order: 3 },
+        { topicId: 'b-topic-1', moduleId: 'mod-b', title: 'B1', order: 1 },
+        { topicId: 'a-topic-5', moduleId: 'mod-a', title: 'A5', order: 5 },
+        { topicId: 'b-topic-3', moduleId: 'mod-b', title: 'B3', order: 3 },
+        { topicId: 'a-topic-1', moduleId: 'mod-a', title: 'A1', order: 1 },
+        { topicId: 'b-topic-4', moduleId: 'mod-b', title: 'B4', order: 4, prerequisiteTopicIds: ['b-topic-1'] },
+        { topicId: 'a-topic-4', moduleId: 'mod-a', title: 'A4', order: 4, prerequisiteTopicIds: ['a-topic-1'] },
+        { topicId: 'b-topic-2', moduleId: 'mod-b', title: 'B2', order: 2 },
+        { topicId: 'a-topic-2', moduleId: 'mod-a', title: 'A2', order: 2 },
+        { topicId: 'b-topic-0', moduleId: 'mod-b', title: 'B0', order: 0 },
+        { topicId: 'a-topic-0', moduleId: 'mod-a', title: 'A0', order: 0 },
+      ],
+    };
+    const result = buildTopicMap(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // mod-a (order 0) before mod-b (order 1); within a module, topic order, then topicId.
+    expect(result.value.topicOrder).toEqual([
+      'a-topic-0',
+      'a-topic-1',
+      'a-topic-2',
+      'a-topic-3',
+      'a-topic-4',
+      'a-topic-5',
+      'b-topic-0',
+      'b-topic-1',
+      'b-topic-2',
+      'b-topic-3',
+      'b-topic-4',
+      'b-topic-5',
+    ]);
+  });
 });

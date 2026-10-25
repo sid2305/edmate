@@ -6,6 +6,7 @@
 // served since 5.6b Phase C: the leak matcher exempts a re-show of the active item. The mcq uses a
 // concept prompt, so its correct option's text never shows in the prompt; each code_output item's
 // output is computed from its own code (on line 2 of a multi-line prompt for `python:1:a`).
+import { buildTopicMap, type TopicMap } from '../memory/topicMap.js';
 import type {
   LearnerPracticeProfile,
   PracticeBank,
@@ -133,6 +134,51 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
     answerKey: ['6'],
   },
 ] as const;
+
+/**
+ * Builds a `TopicMap` (6.1a Q1) from a list of practice records: one module per distinct
+ * `item.moduleId`, one topic per distinct `(item.moduleId, item.topicId)` pair, both in
+ * first-seen order, so the result can never drift from the records it describes. Exported (rather
+ * than kept as an inline IIFE) so its fail-closed throw on a malformed record list is itself
+ * testable.
+ */
+export function buildDemoTopicMap(records: readonly DemoPracticeRecord[]): TopicMap {
+  const moduleOrder: string[] = [];
+  const topicOrder: Array<{ topicId: string; moduleId: string }> = [];
+  const seenTopics = new Set<string>();
+  for (const record of records) {
+    const { moduleId, topicId } = record.item;
+    if (!moduleOrder.includes(moduleId)) moduleOrder.push(moduleId);
+    const topicKey = `${moduleId}\u0000${topicId}`;
+    if (!seenTopics.has(topicKey)) {
+      seenTopics.add(topicKey);
+      topicOrder.push({ topicId, moduleId });
+    }
+  }
+  const result = buildTopicMap({
+    courseId: 'demo-course',
+    teacherId: DEMO_PRACTICE_TEACHER_ID,
+    modules: moduleOrder.map((moduleId, index) => ({ moduleId, title: moduleId, order: index })),
+    topics: topicOrder.map(({ topicId, moduleId }, index) => ({
+      topicId,
+      moduleId,
+      title: topicId,
+      order: index,
+    })),
+  });
+  if (!result.ok) {
+    throw new Error(`buildDemoTopicMap: records do not build a valid topic map (${result.reason})`);
+  }
+  return result.value;
+}
+
+/**
+ * `buildTopicMap` on `DEMO_PRACTICE_RECORDS` is always `ok: true` by construction (no
+ * prerequisites, no duplicates): if a future edit to `DEMO_PRACTICE_RECORDS` ever makes it
+ * `ok: false`, `buildDemoTopicMap` throwing at module load is the correct fail-closed behaviour
+ * for a fixture, not a swallowed error.
+ */
+export const DEMO_TOPIC_MAP: TopicMap = buildDemoTopicMap(DEMO_PRACTICE_RECORDS);
 
 /** Lowest-mastery-first if `profile` names a tracked mastery, else `topics`' own (outline) order. */
 // Only called with a non-empty `topics` (pick() checks `candidates.length > 0` first).

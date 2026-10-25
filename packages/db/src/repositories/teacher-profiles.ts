@@ -207,25 +207,27 @@ export function teacherProfilesRepo(db: Db) {
       const method = 'teacherProfiles.update';
       const { teacherId } = teacherScope(scope, method);
       const p = parseArg(UpdateInput, patch, method);
-      const [row] = await db
-        .update(teacherProfiles)
-        .set({
-          ...(p.displayName === undefined ? {} : { displayName: p.displayName }),
-          ...(p.subject === undefined
-            ? {}
-            : {
-                subject: p.subject,
-                verificationStatus: sql`case when ${teacherProfiles.subject} <> ${p.subject}
-                  then 'pending'::teacher_verification_status
-                  else ${teacherProfiles.verificationStatus} end`,
-              }),
-          ...(p.bio === undefined ? {} : { bio: p.bio }),
-          ...(p.languages === undefined ? {} : { languages: p.languages }),
-        })
-        .where(eq(teacherProfiles.userId, teacherId))
-        .returning(columns);
-      if (!row) throw new RepositoryError('not_found', method);
-      return toTeacherProfile(row, method);
+      return translateWrite(method, async () => {
+        const [row] = await db
+          .update(teacherProfiles)
+          .set({
+            ...(p.displayName === undefined ? {} : { displayName: p.displayName }),
+            ...(p.subject === undefined
+              ? {}
+              : {
+                  subject: p.subject,
+                  verificationStatus: sql`case when ${teacherProfiles.subject} <> ${p.subject}
+                    then 'pending'::teacher_verification_status
+                    else ${teacherProfiles.verificationStatus} end`,
+                }),
+            ...(p.bio === undefined ? {} : { bio: p.bio }),
+            ...(p.languages === undefined ? {} : { languages: p.languages }),
+          })
+          .where(eq(teacherProfiles.userId, teacherId))
+          .returning(columns);
+        if (!row) throw new RepositoryError('not_found', method);
+        return toTeacherProfile(row, method);
+      });
     },
 
     /**

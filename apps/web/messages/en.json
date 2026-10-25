@@ -189,6 +189,7 @@
     "title": "Your plan",
     "navLink": "Plan",
     "noPaymentNotice": "While Edmate is free to try, changes take effect right away.",
+    "agentUnavailable": "This teacher's agent isn't available right now. You can still pause or cancel below.",
     "currentTitle": "Your current package",
     "periodEnd": "Renews or ends {date}",
     "status": {

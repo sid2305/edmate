@@ -208,3 +208,12 @@ git add/commit/push on the task branch only).
   information for the fallback, or if `PlanBackend`'s narrowed `Pick` type needs a wider import
   than expected), or when the existing "non-live agent gives notFound" page test cannot be kept
   green alongside the new fallback without a shape this plan didn't anticipate.
+
+## Lead answers (24 Oct 2026)
+
+Approved with two changes:
+- **Q1: pause and cancel only.** `resume` (and `change`) stay as today, 404 for an unavailable agent. Resuming a plan for an agent the student cannot use makes no sense, and once payments go live it would start billing for nothing. Add a test that `resume` on a suspended agent still 404s. In `PlanView`, when `agentAvailable` is false, hide the Resume button (and any change-plan control) and keep Pause and Cancel.
+- **Q2: keep it short**, as recommended.
+- **Q3: fix it in this task.** When `agentAvailable` is false, a successful pause or cancel goes to `/home`, not `/learn/<agentId>` (which 404s). Add one PlanView test for that.
+- New `apps/web/messages/en.json` keys go only in the plan/subscriptions section (9.3h adds keys in the staff section at the same time).
+- Reviewers on the PR: security-reviewer (the fallback widens which subscriptions the change route resolves; it must stay the student's own rows only), code-reviewer, typescript-reviewer. Log the access change as a `decided by builder · risk: high` decision. The budget of 60 stands.
