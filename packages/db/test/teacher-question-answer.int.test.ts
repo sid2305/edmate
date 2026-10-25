@@ -470,6 +470,43 @@ describe.skipIf(!up)(
         );
         expect(await statusOf(qDismissed.id)).toBe('dismissed');
       });
+
+      it('a concurrent dismiss and answer on the same question: exactly one wins, never both', async () => {
+        const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+        const q = await store1.open({
+          teacherId: tA,
+          agentId: agentA,
+          studentId: stu1,
+          text: `DISMISS-RACE-${uid('q')}: why does a shadow shrink at noon?`,
+          similarIds: [],
+        });
+        const [dismissResult, answerResult] = await Promise.all([
+          repos.teacherQuestions.dismiss({ teacherId: tA }, q.id).then(
+            () => ({ ok: true as const }),
+            (e: unknown) => ({ ok: false as const, e }),
+          ),
+          repos.teacherQuestions
+            .answer(
+              { teacherId: tA },
+              { questionId: q.id, moduleId: moduleA, answer: 'The sun is directly overhead.' },
+            )
+            .then(
+              () => ({ ok: true as const }),
+              (e: unknown) => ({ ok: false as const, e }),
+            ),
+        ]);
+        const outcomes = [dismissResult, answerResult];
+        const winners = outcomes.filter((o) => o.ok);
+        const losers = outcomes.filter((o) => !o.ok);
+        expect(winners).toHaveLength(1);
+        expect(losers).toHaveLength(1);
+        for (const l of losers) {
+          expect(l.e).toBeInstanceOf(RepositoryError);
+          expect((l.e as RepositoryError).kind).toBe('not_found');
+        }
+        const status = await statusOf(q.id);
+        expect(['dismissed', 'answered']).toContain(status);
+      });
     });
 
     describe('listGroupsForTeacher', () => {

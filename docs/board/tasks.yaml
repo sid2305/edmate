@@ -3192,7 +3192,8 @@ tasks:
   model: plan:lead build:sonnet
 - id: 0.20c
   milestone: M13
-  title: 'Harness tests that time out under heavy parallel load (seen in the 0.20b build, 25 Oct 2026): packages/harness/src/pipeline/generate/streamGate.sentence.test.ts and packages/harness/src/pipeline/runner.test.ts hit tight per-test ms timeouts at full local parallelism. Only act if CI shows them; then find the slow step like 0.20b did.'
+  title: 'Harness tests that time out under heavy parallel load (seen in the 0.20b build, 25 Oct 2026): packages/harness/src/pipeline/generate/streamGate.sentence.test.ts and packages/harness/src/pipeline/runner.test.ts
+    hit tight per-test ms timeouts at full local parallelism. Only act if CI shows them; then find the slow step like 0.20b did.'
   accept: Both files pass five full CI node runs in a row with no timeout raised to hide a slow step.
   deps:
   - 0.20b
@@ -5379,7 +5380,9 @@ tasks:
   deps:
   - 11.1d
   risk: high
-  status: todo
+  status: running
+  branch: m13/11.1e-live-class-followups
+  model: plan:sonnet build:sonnet
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -5397,7 +5400,9 @@ tasks:
   deps:
   - 9.2c
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.2f-discovery-type-cleanups
+  model: plan:lead build:sonnet
 - id: 9.3d
   milestone: M13
   title: '9.3c review follow-ups: a concurrent int test where a second client holds setVerification''s FOR UPDATE on the profile while subscriptions.start runs, then commits a rejection, and start writes

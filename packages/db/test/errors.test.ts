@@ -17,6 +17,7 @@ describe('RepositoryError', () => {
     ['scope', 'forbidden'],
     ['not_found', 'not_found'],
     ['invalid', 'validation'],
+    ['limit', 'limit_reached'],
     ['integrity', 'validation'],
     ['failed', 'provider_error'],
   ] as const)('%s maps to the contracts error code %s', (kind, code) => {

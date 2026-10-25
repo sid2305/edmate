@@ -8,15 +8,14 @@ import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { agents, modules, packages, packageVersions } from '../schema/index.js';
+import { agents, packages, packageVersions } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { toPackageConfig } from './map.js';
+import { checkModules, lockPackageRow, type Tx } from './package-write.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
-
-/** Most packages one teacher may have (task 8.6, Q6); `create` refuses more (`invalid`). */
+/** Most packages one teacher may have (task 8.6, Q6); `create` refuses more (`limit`). */
 export const PACKAGES_MAX = 20;
 
 /**
@@ -54,27 +53,6 @@ export interface TeacherPackageRow {
  */
 const PACKAGE_LOCK_NAMESPACE = 8602;
 
-/**
- * Every module the draft unlocks is the teacher's, key-share locked so none is deleted before the
- * insert commits; otherwise `scope` (a package can never unlock another teacher's material).
- * Same check as `packageVersions.create` (follow-up: share it once 8.5a merges).
- */
-async function checkModules(
-  tx: Tx,
-  teacherId: string,
-  moduleIds: readonly string[],
-  method: string,
-) {
-  const unique = [...new Set(moduleIds)];
-  if (unique.length === 0) return;
-  const mine = await tx
-    .select({ id: modules.id })
-    .from(modules)
-    .where(and(eq(modules.teacherId, teacherId), inArray(modules.id, unique)))
-    .for('key share');
-  if (mine.length !== unique.length) throw new RepositoryError('scope', method);
-}
-
 /** Builds the full config from the scope and rows, inserts the version and its audit row. */
 async function writeVersion(
   tx: Tx,
@@ -94,14 +72,15 @@ async function writeVersion(
     version: ids.version,
     config,
   });
-  // The package id (in `target`) and the version only: no price, no names. The id is not put in
-  // `after`: the audit redactor reads a UUID that starts with digits as a phone number.
+  // The package id and the version only: no price, no names. Task 8.7h already fixed the audit
+  // redactor to carve UUID spans out of phone-candidate matching, so the id is safe in `after`
+  // too (it no longer needs to be omitted to work around the old digit-led-UUID bug).
   await insertAuditEntry(tx, method, teacherId, null, {
     actor: teacherId,
     actorRole: 'teacher',
     action: 'package.save',
     target: `package:${ids.packageId}`,
-    after: { version: ids.version },
+    after: { packageId: ids.packageId, version: ids.version },
   });
 }
 
@@ -110,7 +89,7 @@ export function packagesRepo(db: Db) {
     /**
      * Creates one of the scope's teacher's packages for one of that teacher's agents, and its
      * version 1, in one transaction. A foreign or unknown agent is `not_found`, a foreign or
-     * unknown module `scope`, a teacher already at `PACKAGES_MAX` `invalid`; nothing is written.
+     * unknown module `scope`, a teacher already at `PACKAGES_MAX` `limit`; nothing is written.
      */
     async create(
       scope: TeacherScope,
@@ -136,7 +115,7 @@ export function packagesRepo(db: Db) {
             .select({ n: count() })
             .from(packages)
             .where(eq(packages.teacherId, teacherId));
-          if (n!.n >= PACKAGES_MAX) throw new RepositoryError('invalid', method);
+          if (n!.n >= PACKAGES_MAX) throw new RepositoryError('limit', method);
           await tx.insert(packages).values({ id: packageId, teacherId, agentId, name: draft.name });
           await writeVersion(tx, method, teacherId, { packageId, agentId, version: 1 }, draft);
           return { packageId, version: 1 };
@@ -160,18 +139,7 @@ export function packagesRepo(db: Db) {
       const { packageId, agentId, draft } = parseArg(SaveInput, input, method);
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
-          const [pkg] = await tx
-            .select({ id: packages.id })
-            .from(packages)
-            .where(
-              and(
-                eq(packages.id, packageId),
-                eq(packages.teacherId, teacherId),
-                eq(packages.agentId, agentId),
-              ),
-            )
-            .for('update');
-          if (!pkg) throw new RepositoryError('not_found', method);
+          await lockPackageRow(tx, teacherId, { packageId, agentId }, method);
           await checkModules(tx, teacherId, draft.moduleIds, method);
           const [newest] = await tx
             .select({ max: sql<number>`coalesce(max(${packageVersions.version}), 0)::int` })
