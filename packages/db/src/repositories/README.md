@@ -40,7 +40,8 @@ Isolation between teachers and between students is enforced here, not by Postgre
    find teacher accounts -- task 9.2d moved the public display name to
    `teacher_profiles.display_name`, so `discovery.ts` no longer reads `users.name`, § 11 below)
    and `teacherProfiles.listPendingForStaff` (task 12.1a, § 11 below): staff-only, name and
-   email, never phone. `teacherQuestions.listForTeacher` never selects `student_id`.
+   email, never phone. `teacherQuestions.listForTeacher` never selects `student_id`. Any new
+   staff/role check inside a transaction uses `role-lock.ts`'s `lockRole`, never a fresh select.
 
 10. **Driver errors are scrubbed.** `createRepositories` wraps every method in `guarded()`: any
     error that is not a `RepositoryError` becomes `RepositoryError('failed')` whose cause keeps
@@ -99,7 +100,9 @@ does not allow; 12.1 adds and reviews its own read path. Nothing here reads acro
 Add it to a repository returned by `createRepositories`, then add its case to `CASES` in
 `test/repositories.int.test.ts`. `CASES` is a `Record<RepositoryMethod, IsolationCase>`, so the
 package does not typecheck until the case exists; the test also compares the methods it finds at
-runtime with `CASES`, and `test/scope.test.ts` calls every method with bad scopes.
+runtime with `CASES`, and `test/scope.test.ts` calls every method with bad scopes. A role or
+staff check inside a transaction uses `role-lock.ts`'s `lockRole`; `teacher-profiles.ts`'s
+`setVerification` is the existing example.
 
 ## Ports
 

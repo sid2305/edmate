@@ -808,6 +808,43 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       }
     });
 
+    it('a reject racing a publish never leaves the agent live (8.1 review)', async () => {
+      // Forces the TOCTOU window the 8.1 review flagged: goLive's lockVerified takes FOR SHARE on
+      // the profile (publish.ts:390-397), the same row setVerification's reject path takes FOR
+      // UPDATE on. A raw transaction stands in for that reject path's lock: it takes FOR UPDATE
+      // first, so goLive's FOR SHARE blocks until the raw transaction's write and commit land.
+      const t = await makeTeacher();
+      const run = await repos.publish.startRun(scope(t), pins(t));
+      await repos.publish.markRunning(scope(t), run.id);
+      await raw.query('begin');
+      await raw.query('select 1 from teacher_profiles where user_id = $1 for update', [
+        t.teacherId,
+      ]);
+      const live = repos.publish
+        .goLive(scope(t), {
+          runId: run.id,
+          passRate: 1,
+          summary: summary(),
+          scorecard: scorecard(['accuracy']),
+        })
+        .then(
+          (r) => r,
+          (e: unknown) => e,
+        );
+      await lockWaiters(1);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'rejected' where user_id = $1`,
+        [t.teacherId],
+      );
+      await raw.query('commit');
+      const liveResult = await live;
+      expect(liveResult).toBeInstanceOf(RepositoryError);
+      expect((liveResult as RepositoryError).kind).toBe('scope');
+      // The lock order closed the window: the agent never reached `live`.
+      expect(await agentRow(t)).toEqual({ status: 'draft', live_version: null });
+      expect((await repos.publish.getRun(scope(t), run.id))?.status).toBe('running');
+    });
+
     it('publishes the agent version and every package version in one transaction, with audit rows', async () => {
       const t = await makeTeacher();
       await raw.query(
