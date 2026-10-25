@@ -38,7 +38,10 @@
   → clean (no output)
 
 ## Decisions
-None.
+
+### 25 Oct 2026 · 0.19b merge: closeout.py checks Decided: lines before it appends (.claude/**) · decided by lead · risk: high
+- Decided: merge 0.19b; closeout.py now refuses (exit 1, log, board and digest untouched) when any handoff decision entry lacks a `Decided:` line, naming each such heading, using the same DECIDED_LINE regex as board.py.
+- Why: today a bad entry was appended first and then the board refused, and a re-run skipped it as a duplicate (seen on 7.3); security-reviewer approved: the check runs before the only write, adds no subprocess or path surface, and prints only the task id and headings.
 
 ## Budget
-Tool calls used: 15
+Tool calls used: 24 (harness count)
