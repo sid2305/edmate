@@ -29,6 +29,7 @@ describe('package exports', () => {
         // Task 8.6a: the model mix and the per-turn cost estimate.
         'MODEL_MIX',
         'TURN_TOKEN_ASSUMPTIONS',
+        'TurnCostError',
         'turnCostMicroUsd',
         'UnpricedModelError',
         // Task 2.7: transcription and the platform embedding model.

@@ -3,6 +3,18 @@ import { ModelPolicySchema } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MODEL_POLICY, MODEL_MIX } from '../../src/router/index.js';
 
+// Type-only: never called. Proves MODEL_MIX is read-only at every nesting level, so a nested
+// assignment fails typecheck (`tsc --noEmit`) if the mix ever becomes writable again.
+function typeOnlyNestedAssignmentsAreRejected(): void {
+  // @ts-expect-error MODEL_MIX is DeepReadonly: the tiers object is read-only too.
+  MODEL_MIX.paid.tiers = MODEL_MIX.free.tiers;
+  // @ts-expect-error one level deeper: a route inside tiers is read-only too.
+  MODEL_MIX.paid.tiers.main = MODEL_MIX.free.tiers.main;
+  // @ts-expect-error deeper still: a single field on a route is read-only too.
+  MODEL_MIX.paid.tiers.main.model = 'claude-haiku-4-5';
+}
+void typeOnlyNestedAssignmentsAreRejected;
+
 describe('MODEL_MIX (B-42)', () => {
   it.each(['free', 'paid'] as const)('%s: Haiku 4.5 on the small tier, Sonnet 5 on main', (t) => {
     expect(MODEL_MIX[t]).toEqual({
