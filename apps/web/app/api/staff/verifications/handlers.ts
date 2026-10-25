@@ -47,10 +47,13 @@ export interface TakedownSummary {
   createdAt: string;
 }
 
-/** Task 9.3h: the most recent verify/reject decision on record for this teacher, if any. */
+/**
+ * Task 9.3h: the most recent verify/reject decision on record for this teacher, if any. Task 9.3k
+ * (9.3h review follow-up): the staff API payload drops `reason` -- `verification-row.tsx` never
+ * reads it; the db-layer `audit.findLastVerifyForStaff` return type keeps it unchanged.
+ */
 export interface LastDecision {
   status: 'verified' | 'rejected';
-  reason: string | null;
   ts: string;
 }
 
@@ -117,11 +120,14 @@ export async function enrichQueueRows(
     byTeacher.set(t.teacherId, list);
   }
   return Promise.all(
-    rows.map(async (row) => ({
-      ...row,
-      activeTakedowns: byTeacher.get(row.teacherId) ?? [],
-      lastDecision: await repos.audit.findLastVerifyForStaff(by, row.teacherId),
-    })),
+    rows.map(async (row) => {
+      const decision = await repos.audit.findLastVerifyForStaff(by, row.teacherId);
+      return {
+        ...row,
+        activeTakedowns: byTeacher.get(row.teacherId) ?? [],
+        lastDecision: decision === null ? null : { status: decision.status, ts: decision.ts },
+      };
+    }),
   );
 }
 

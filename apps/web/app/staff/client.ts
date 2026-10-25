@@ -18,11 +18,13 @@ const TakedownSummarySchema = z.object({
   createdAt: z.string(),
 });
 
-/** Task 9.3h: the teacher's last verify/reject decision, or null before any decision. */
+/**
+ * Task 9.3h: the teacher's last verify/reject decision, or null before any decision. Task 9.3k
+ * (9.3h review follow-up): the payload drops `reason` -- nothing in this console reads it.
+ */
 const LastDecisionSchema = z
   .object({
     status: z.enum(['verified', 'rejected']),
-    reason: z.string().nullable(),
     ts: z.string(),
   })
   .nullable();

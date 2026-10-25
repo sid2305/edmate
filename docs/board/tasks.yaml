@@ -3155,9 +3155,30 @@ tasks:
   accept: 'Tests: m13/13.skillpresent-a-harness-events gives task 13.skillpresent; m3/3.11d-foo still gives 3.11d; a branch with no slug is rejected.'
   deps: []
   risk: risky
-  status: review
+  status: done
   branch: m13/0.19c-gate-word-ids
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 168
+    tokens_in: 532
+    tokens_out: 82906
+    cache_read_tokens: 17182511
+    wall_time_seconds: 329028
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.2
   milestone: M13
   title: 'CI flakes seen 25 Oct 2026: (1) apps/web src/auth/index.test.ts "imports and serves public routes with no AUTH_* or DATABASE_URL set" hit its 20 s timeout on PR #276 (and in a 9.3k builder run
@@ -8210,9 +8231,28 @@ tasks:
   deps:
   - 9.3h
   risk: high
-  status: review
+  status: done
   branch: m13/9.3k-staff-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 55
+    tokens_in: 190
+    tokens_out: 19252
+    cache_read_tokens: 3144496
+    wall_time_seconds: 1058
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 9.3m
   milestone: M13
   title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write

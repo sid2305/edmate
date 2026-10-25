@@ -250,7 +250,7 @@ describe('StaffQueueView', () => {
       activeTakedowns: [
         { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
       ],
-      lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00.000Z' },
+      lastDecision: { status: 'rejected', ts: '2026-10-19T00:00:00.000Z' },
     };
     renderIntl(<StaffQueueView initial={[withHistory]} />);
     const row = rowOf('asha-math');
@@ -276,7 +276,7 @@ describe('StaffQueueView', () => {
       activeTakedowns: [
         { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
       ],
-      lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00.000Z' },
+      lastDecision: { status: 'rejected', ts: '2026-10-19T00:00:00.000Z' },
     };
     const { container } = renderIntl(<StaffQueueView initial={[withHistory]} />);
     expect(await axe(container)).toHaveNoViolations();
@@ -300,6 +300,26 @@ describe('StaffQueueView: find a teacher by slug (9.3f)', () => {
     expect(within(row).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'Reject' })).toBeInTheDocument();
     expect(within(row).getByRole('checkbox', { name: SAFETY_LABEL })).toBeInTheDocument();
+  });
+
+  it('shows a found teacher\'s active takedowns and last decision (9.3h review follow-up, 9.3k)', async () => {
+    const withHistory = {
+      ...VERIFIED,
+      activeTakedowns: [
+        { kind: 'document' as const, category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+      ],
+      lastDecision: { status: 'rejected' as const, ts: '2026-10-19T00:00:00.000Z' },
+    };
+    const findTeacherBySlug = vi.fn(async () => ({ ok: true as const, teacher: withHistory }));
+    renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
+    fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
+      target: { value: 'asha-math' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }));
+    await waitFor(() => expect(rowOf('asha-math')).toBeInTheDocument());
+    const row = rowOf('asha-math');
+    expect(within(row).getByText('1 active takedown')).toBeInTheDocument();
+    expect(within(row).getByText('Rejected on Oct 19, 2026')).toBeInTheDocument();
   });
 
   it('safety concern + Reject on the found row sends safety: true, clears it, shows rejectedSafety', async () => {

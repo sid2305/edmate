@@ -47,7 +47,7 @@ describe('loadQueue', () => {
     const withHistory = {
       ...ITEM,
       activeTakedowns: [{ kind: 'agent', category: 'other', createdAt: '2026-10-20T00:00:00Z' }],
-      lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00Z' },
+      lastDecision: { status: 'rejected', ts: '2026-10-19T00:00:00Z' },
     };
     const f = vi.fn(async () => json({ teachers: [withHistory] }));
     expect(await loadQueue(f)).toEqual({ ok: true, teachers: [withHistory] });

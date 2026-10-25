@@ -146,7 +146,7 @@ describe('/staff', () => {
             name: 'Asha',
             email: 'asha@example.test',
             activeTakedowns: [{ kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' }],
-            lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00.000Z' },
+            lastDecision: { status: 'rejected', ts: '2026-10-19T00:00:00.000Z' },
           },
         ],
       },
