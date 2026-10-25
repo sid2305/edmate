@@ -23,14 +23,17 @@
 // with Playwright's expect timeout -- the action is never repeated.
 import type { TurnEvent } from '@edmate/contracts';
 import { openDatabase } from '@edmate/db';
-import { expect, test, type Page, type Request } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   DEMO_AGENT,
   DEMO_TEACHER,
   mockTurns,
+  postOnce,
+  SEND_PATH,
   signInAsFreshStudent,
   signInAsTeacher,
   sseBody,
+  STEP_TIMEOUT,
 } from './fixtures';
 import { TEST_DATABASE_URL } from './global-setup';
 
@@ -49,35 +52,6 @@ const TEACHER_ANSWER_TEXT = 'Indentation is how Python knows which lines belong 
 
 const UNLOCKED_REPLY_TEXT = 'Here is the advanced topic, step by step.';
 
-const STEP_TIMEOUT = 30_000;
-
-/** Runs `act` (a fill and/or click) until a request (POST unless `method` says otherwise) whose path matches `path` is sent, then stops: an
- * attempt before hydration sends nothing (or natively reloads the form, clearing any fill) and is
- * retried whole; once the POST is out, `act` is never run again (file header). A fill clears the
- * box first: a pre-hydration fill leaves the DOM value equal to the text, and React ignores an
- * input event that doesn't change the value, so a same-value refill would leave its state empty. */
-async function postOnce(
-  page: Page,
-  path: RegExp,
-  act: () => Promise<void>,
-  method: 'POST' | 'PATCH' = 'POST',
-): Promise<void> {
-  let sent = false;
-  const onRequest = (request: Request): void => {
-    if (request.method() === method && path.test(new URL(request.url()).pathname)) sent = true;
-  };
-  page.on('request', onRequest);
-  try {
-    await expect(async () => {
-      if (sent) return;
-      await act();
-      await expect.poll(() => sent, { timeout: 2_000 }).toBe(true);
-    }).toPass({ timeout: STEP_TIMEOUT });
-  } finally {
-    page.off('request', onRequest);
-  }
-}
-
 /** Runs `act` (a GET search or a link click) until the page is at `url`. Only for idempotent
  * navigations: a dev-server reload between a fill and its submit (next dev recompiling, file
  * header) can send an empty search or drop a click, and repeating a GET or a link is harmless. */
@@ -87,9 +61,6 @@ async function navigateUntil(page: Page, url: RegExp, act: () => Promise<void>):
     await expect(page).toHaveURL(url, { timeout: 5_000 });
   }).toPass({ timeout: STEP_TIMEOUT });
 }
-
-/** A send's first POST: `/api/sessions` (opening the session, first message only) or the turn. */
-const SEND_PATH = /^\/api\/sessions(\/[^/]+\/turns)?$/;
 
 /** Sends one chat message exactly once (one POST to the turns route, one fixture consumed). */
 async function sendMessage(page: Page, text: string): Promise<void> {
@@ -221,7 +192,9 @@ test('full flow: discover -> subscribe (free) -> learn -> locked -> upgrade -> u
       const thread = studentPage.locator('ol[aria-live="polite"]');
       await sendMessage(studentPage, 'Now can you teach me the advanced topic?');
       await expect(thread).toContainText(UNLOCKED_REPLY_TEXT, { timeout: STEP_TIMEOUT });
-      await expect(studentPage.getByText(`This is part of ${PAID_PACKAGE_NAME}.`)).toHaveCount(0);
+      await expect(studentPage.getByText(`This is part of ${PAID_PACKAGE_NAME}.`)).toHaveCount(0, {
+        timeout: STEP_TIMEOUT,
+      });
     });
 
     await test.step('an uncovered question is sent to the teacher', async () => {
