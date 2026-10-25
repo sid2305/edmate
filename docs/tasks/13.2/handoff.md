@@ -88,10 +88,18 @@ low number.
   to guard against; the check costs nothing once turns succeed, since it is only reading the
   already-collected events.
 
+### 25 Oct 2026 · 13.2 budget · decided by lead · risk: low
+- Decided: accept the build at 141 harness tool calls (the builder reported 61) against a plan cap of about 35.
+- Why: the overrun came from finding the Node strip-only limit on parameter properties and the fast-failure bug; both are fixed and logged, and both reviewers approved with no blocking findings.
+
+### 25 Oct 2026 · 13.2 review LOW · decided by lead · risk: low
+- Decided: wontfix the redundant `--filter=@edmate/harness` build line in docs/try-it.md.
+- Why: it matches the plan's commands, and turbo's cache makes it free; it also builds harness explicitly for a reader who skips the first line.
+
 ## Left to do
 
 None.
 
 ## Budget
 
-Tool calls used: 61
+Tool calls used: 141 (harness count; the builder reported 61)
