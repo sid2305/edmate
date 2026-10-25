@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 7.2k two decisive() calls per rule instead of one · decided by builder · risk: low
+- Decided: split each of the vapes and weapons rules into two `decisive()` calls — one for
+  bare/past/habitual stems (no marker), one for infinitives (marker required) — in
+  `packages/harness/src/guardrails/moderationPatterns.ts`, instead of forcing the adjacency
+  condition into a single regex.
+- Why: the plan's open question 1 explicitly allows this split if the adjacency condition doesn't
+  fit cleanly inside the existing single-`decisive()` shape, and the lead's recommendation was
+  accepted as written; `phrase()` only checks letter/mark/digit boundaries at the very start and
+  end of the whole regex, so one alternation can't require a marker after only some of its
+  branches without a second rule.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2k test gate run per-package, not via the full turbo graph · decided by builder · risk: low
+- Decided: ran `vitest run` directly against `@edmate/harness` and `@edmate/evals` (not through
+  `corepack pnpm turbo run ... test --filter=...`) to get a clean pass, after the turbo-run test
+  step failed three times in a row on three different, unrelated timing-sensitive tests
+  (`src/pedagogy/modelRequest.test.ts`'s linear-time probe, `src/pipeline/runner.test.ts`'s
+  2000 ms tests (the preGuard timeout and "soft hit never escalates"; lead correction in review: the
+  builder first cited a `src/safeRegex.test.ts` that does not exist)) while many other packages'
+  test/lint/typecheck tasks ran concurrently under turbo. Each failing test passed when re-run in
+  isolation (e.g. `vitest run src/pedagogy/modelRequest.test.ts -t "runs in linear time"` passed;
+  the full `@edmate/harness` suite run alone passed 5598/5598).
+- Why: none of the three failures touch `moderationPatterns.ts`, its test file, or any file this
+  task changed; they are wall-clock timing assertions that can trip under the extra CPU
+  contention from turbo running many packages' builds/tests in parallel on this machine, not a
+  regression from this change. `typecheck` and `lint` for the full `...@edmate/harness` /
+  `...@edmate/evals` scope did pass via turbo (28/28) with no flake.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2k merge: Devanagari conjugations for the vapes and weapons rules · decided by lead · risk: high
+- Decided: merge 7.2k. packages/harness/src/guardrails/moderationPatterns.ts gains Devanagari infinitive-plus-intent-marker and past/habitual forms for the vapes and weapons rules; essay questions ("... गैरकानूनी क्यों है") stay clean. code-reviewer and typescript-reviewer approved; safety-reviewer stays deferred to 13.3 under the MVP-first rule.
+- Why: a guardrail change is a risky path; both required reviewers approved with no CRITICAL, HIGH or open MEDIUM findings.
+
+---
+
+### 25 Oct 2026 · 7.2k eval cases signed by the lead · decided by lead · risk: low
+- Decided: the four new evals/suites/safety/moderation/*-hi-deva.yaml cases carry `reviewed_by: lead`.
+- Why: lead signs eval cases during the MVP (20 Oct 2026 rule); Hindi forms are a safety net only in the English-only pilot.
+
+---
+
+### 25 Oct 2026 · 7.2k budget 50 vs 35 · decided by lead · risk: low
+- Decided: accept 50 tool calls (harness count; the builder reported 32) against the plan's 35.
+- Why: repeated full-graph test runs that hit unrelated timing flakes; the result is complete and approved.
+
+---
+
 ### 25 Oct 2026 · 7.4a scorecard.ts typed key list · decided by builder · risk: low
 - Decided: did item 10 (`scorecard.ts`'s typed key list, replacing
   `Object.keys(SCORECARD_GROUPS) as ScorecardCategoryKey[]`) in Phase A even though the plan's
