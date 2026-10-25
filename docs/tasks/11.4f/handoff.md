@@ -22,8 +22,6 @@ Status: DONE
   comparison) and passes after.
 
 ## Decisions
-None.
-
 ### 25 Oct 2026 · 11.4f merge: the 413 message follows a splittable flag · decided by lead · risk: low
 - Decided: merge 11.4f. `UploadType` in apps/web/src/studio/files.ts carries `splittable`, `media()` takes `{ splittable }`, and `newFile` in apps/web/src/studio/routes.ts picks the media wording from `transcribe && !splittable`. code-reviewer and typescript-reviewer approved with no findings.
 - Why: no behaviour change for any current type, and a new test fails if the message is chosen by size again.
