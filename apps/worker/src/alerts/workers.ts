@@ -1,8 +1,9 @@
 // The safety-alert worker (task 4.3). Jobs carry @edmate/queue's alert options: a practically
 // unlimited number of attempts on the custom `alert-capped` backoff, which this worker defines
 // (doubling from 1 s, capped at 30 s). A stalled job (the worker died mid-job) is picked up again
-// instead of failing after one stall. A malformed payload is the only failure that ends the job
-// (dead-lettered with ids only); every failure is logged without the payload.
+// instead of failing after one stall. A malformed payload or a permanent store error
+// (not_found/invalid/scope/integrity, 12.5g) ends the job (dead-lettered with ids only); every
+// other failure is logged without the payload.
 import {
   ALERT_BACKOFF_MAX_MS,
   ALERT_BACKOFF_START_MS,

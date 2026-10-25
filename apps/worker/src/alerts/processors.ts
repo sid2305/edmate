@@ -12,7 +12,9 @@
 //   the 30 s backoff and could page far more often than once per interval), then page on-call.
 //
 // Every failure but a malformed payload is retried with no practical attempt limit (the job
-// options in @edmate/queue), so an alert is retried until delivered. A retried step may notify
+// options in @edmate/queue), so an alert is retried until delivered. A permanent store error
+// (not_found/invalid/scope/integrity) ends the job after the one page that already ran, same as
+// a malformed payload (12.5g; a `failed` DB-down error still retries). A retried step may notify
 // twice: an extra notification is safer than a missed one. Round ids (`<alertId>.escalate.<n>`)
 // keep at most one pending check per alert. Log lines carry ids only, never the excerpt.
 import {
@@ -23,24 +25,22 @@ import {
   type JobQueue,
   jobId,
 } from '@edmate/queue';
-import { PermanentJobError } from '../commit/processors.js';
-import type { Log } from '../log.js';
+import { classify, PermanentJobError } from '../commit/processors.js';
+import { describeError, type Log } from '../log.js';
 import type { AckStore, AlertAudience, AlertNotifier, AlertStore } from './types.js';
 
 /** The name of a thrown value, when it is an Error (never the message: it may carry driver detail). */
 function errorName(e: unknown): string {
-  return e instanceof Error ? e.name : 'UnknownError';
+  return describeError(e).name;
 }
 
 /**
- * The value to throw for a failed store write: an Error is rethrown as is; anything else
+ * The value to throw for a failed store or notify call: an Error is rethrown as is; anything else
  * (`undefined`, a string, ...) is wrapped in an Error that keeps it as `cause`, so BullMQ
  * always gets a real failure reason. The message carries the error name only.
  */
-function asStoreError(thrown: unknown): Error {
-  return thrown instanceof Error
-    ? thrown
-    : new Error(`safety_alert.store_failed: ${errorName(thrown)}`, { cause: thrown });
+function asJobError(prefix: string, thrown: unknown): Error {
+  return thrown instanceof Error ? thrown : new Error(`${prefix}: ${errorName(thrown)}`, { cause: thrown });
 }
 
 /** A notifier call that takes longer fails (and is retried): a hung vendor must not stall it. */
@@ -121,14 +121,24 @@ export function alertProcessor(d: AlertProcessorDeps) {
             error: errorName(error),
           });
         }
-        await notify(alert, 'trust_team');
+        try {
+          await notify(alert, 'trust_team');
+        } catch (error) {
+          throw asJobError('safety_alert.notify_failed', error);
+        }
         d.log({
           level: 'info',
           event: 'safety_alert.notified',
           alertId: alert.id,
           audience: 'trust_team',
         });
-        if (storeFailed) throw asStoreError(storeError);
+        if (storeFailed) {
+          try {
+            classify('alert.raise', storeError);
+          } catch (error) {
+            throw asJobError('safety_alert.store_failed', error);
+          }
+        }
         return 'notified';
       }
       case JOB.alertEscalateCheck: {

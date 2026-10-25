@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 12.5g alert worker: permanent store error ends the job after one page · decided by builder · risk: high
+- Decided: `apps/worker/src/alerts/processors.ts`'s `alert.raise` branch now reuses
+  `commit/processors.ts`'s `classify` to end the job (`PermanentJobError`) on a permanent
+  `RepositoryError` from `store.record` (not_found/invalid/scope/integrity), after exactly one
+  `notify`; `notify` failures and store failures that aren't an `Error` are wrapped by a shared
+  `asJobError` helper so BullMQ always sees a real `Error`, and `errorName` now delegates to
+  `log.ts`'s `describeError` for a non-`Error` rejection's name.
+- Why: this follows the plan at `docs/tasks/12.5g/plan.md` exactly (reusing the same classifier
+  `alerts/safetyEvents.ts` already uses, and the worker-wide `describeError` convention), closing
+  the three LOWs deferred from `docs/tasks/12.5f/review.md` without inventing new logic on a
+  student-safety path.
+
+---
+
+### 24 Oct 2026 · 5.6g · tool calls over the brief's cap · decided by lead · risk: low
+- Decided: accept 60 tool calls against the brief's 35 (harness counts: first builder 19 before it stalled when the Mac slept, a retry 0, the finishing builder 41; that builder reported 21).
+- Why: the extra calls were restarts after machine sleep, not scope growth; the diff stays inside the three briefed items and all three reviewers approved.
+
+---
+
 ### 24 Oct 2026 · 9.5c fixed label id kept · decided by lead · risk: low
 - Decided: won't fix the review LOW in apps/web/src/chat/SkillLauncher.tsx (a fixed id instead of useId() for the group label). SkillLauncher renders once per page, in ChatView.tsx.
 - Why: no collision is possible today; switch to useId() if the component is ever reused.
