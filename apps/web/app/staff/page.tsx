@@ -14,7 +14,7 @@ import { requireRole, serverDatabase } from '../../src/auth';
 import { describeError } from '../../src/auth/describe-error';
 import { AppShell } from '../../src/ui/AppShell';
 import { toAlertView } from '../api/staff/alerts/handlers';
-import { toQueueItem, type QueueItem } from '../api/staff/verifications/handlers';
+import { enrichQueueRows, toQueueItem, type QueueItem } from '../api/staff/verifications/handlers';
 import { signOutAndRedirect } from '../home/actions';
 import { StaffQueueView } from './view';
 
@@ -24,8 +24,10 @@ export default async function StaffPage() {
   const principal = await requireRole(['staff']);
   let initial: QueueItem[] | null = null;
   try {
-    const rows = await serverDatabase().repos.teacherProfiles.listPendingForStaff(principal.userId);
-    initial = rows.map(toQueueItem);
+    const repos = serverDatabase().repos;
+    const rows = await repos.teacherProfiles.listPendingForStaff(principal.userId);
+    const enriched = await enrichQueueRows(repos, principal.userId, rows);
+    initial = enriched.map((r) => toQueueItem(r, r.activeTakedowns, r.lastDecision));
   } catch (error) {
     console.error(`[staff] page queue read failed: ${describeError(error)}`);
   }

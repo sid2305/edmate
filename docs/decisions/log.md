@@ -10,6 +10,76 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 9.3h staff console shows active takedowns and the last decision · decided by builder · risk: high
+- Decided: a new staff-only, read-only `audit.findLastVerifyForStaff` (own role check, no lock)
+  and the existing `takedowns.listActiveForStaff` feed a new `enrichQueueRows` helper in
+  `apps/web`'s staff verification handlers, so the pending queue and the slug lookup both show a
+  teacher's active takedowns and last verify/reject decision — closing 9.3f's Q4 gap (a
+  safety-rejected teacher who edits their subject back to `pending` no longer reappears in the
+  queue with no history). `teacher-profiles.ts`, `cli.ts` and `redact-json.ts` (8.1b, in review in
+  parallel) and `subscriptions.ts`/`agents.ts`/`apps/web/app/{home,learn}/**` (9.3i, planned in
+  parallel) are untouched.
+- Why: the acceptance line needs this history surfaced without a new write or a change to the
+  existing queue/lookup row shape; reusing the two existing/new reads keeps the change inside
+  `apps/web` and one new `packages/db` read, with no migration.
+
+---
+
+### 25 Oct 2026 · 9.3k opened for subject-edit history · decided by lead · risk: low
+- Decided: the board title's "subject-edit history" is not part of this acceptance line; it moves
+  to new board task 9.3k.
+- Why: the acceptance line (verbatim, from the board) only asks for active takedowns and the last
+  verify/reject decision, not a full subject-edit history.
+
+---
+
+### 25 Oct 2026 · route.int.test.ts's new case proves lastDecision end-to-end and activeTakedowns's own-rows-only isolation, not a non-empty real takedown row · decided by builder · risk: low
+- Decided: see "Deviation from the plan" above.
+- Why: a non-empty `activeTakedowns` row needs a live agent (course + style card), disproportionate
+  for one int-test case; the non-empty path is already proven over real Postgres in
+  `packages/db` and at the unit level in `route.test.ts`.
+
+---
+
+### 25 Oct 2026 · 9.3h budget overrun (303 calls against 60) · decided by lead · risk: low
+- Decided: accept 9.3h at 303 tool calls (harness count over three runs: 130, 50 and 123) against the plan's 60; no rework.
+- Why: two runs stalled when the Mac slept on battery (B-57) and each restart re-read the plan and re-ran setup; all four reviewers approved the result, so the overrun is setup and recovery cost, not scope creep.
+
+---
+
+### 25 Oct 2026 · 9.3h merge: staff takedowns and last decision (audit.ts, staff API) · decided by lead · risk: high
+- Decided: merge 9.3h, which touches the risky paths packages/db/src/repositories/audit.ts (new findLastVerifyForStaff) and apps/web/app/api/staff/verifications/handlers.ts, after security-reviewer, database-reviewer, code-reviewer and typescript-reviewer (all Sonnet) approved with no CRITICAL or HIGH findings.
+- Why: the new read is staff-only twice over (withRole on the route, lockRole in the repository), parameterised, bounded to one row, validates the stored shape, and route.int.test.ts proves own-rows-only isolation; the MEDIUM (no lookup-row view test) and LOW (reason returned but never rendered) are deferred to 9.3k.
+
+---
+
+### 25 Oct 2026 · 8.5c closed without code · decided by lead · risk: low
+- Decided: close the three 8.5a LOWs (composite packages index, AGENT_PACKAGES_MAX truncation, double teacherNoteParts) with no code change; if PACKAGES_MAX is ever raised above AGENT_PACKAGES_MAX, listForAgent must refuse (invalid) instead of truncating, like MODULE_CHUNKS_MAX.
+- Why: no bulk path reads listForAgent; the per-teacher PACKAGES_MAX cap of 20 means the limit of 100 can never cut a list; and insertTeacherNote's own check is the shared helper's guard for its other callers, costing two string trims.
+
+---
+
+### 25 Oct 2026 · 0.19a closeout.py regenerates the decisions digest (.claude/**) · decided by lead · risk: high
+- Decided: merge 0.19a; closeout.py now runs `board.py digest` right after `board.py set <id> done`, prints the reason and exits 1 if the digest fails (the board change stays and cleanup still runs), so the lead no longer runs the digest by hand after each closeout.
+- Why: a stale digest failed the RealRepo freshness test in CI for every later PR; security-reviewer approved with no findings (argument-list subprocess call with no task-id input, no hook or settings change).
+
+---
+
+### 25 Oct 2026 · 9.3l stale header comments · decided by builder · risk: low
+- Decided: treated the one failing test (`src/turn/routes.test.ts`, a timing/dot-count assertion
+  unrelated to the two comment-only files touched here) as a pre-existing flake rather than
+  blocking on it, per the lessons.md entry on wall-clock bounds on shared runners.
+- Why: the budget (15 calls, stop at 22) does not allow repeated full-suite reruns to chase a
+  flaky, unrelated test, and the diff cannot affect that test's behaviour.
+
+---
+
+### 25 Oct 2026 · 9.3l budget overrun (22 calls against a 15-call plan) · decided by lead · risk: low
+- Decided: accept the overrun.
+- Why: the lead-written 15-call budget did not count setup (pnpm install, building web's dependencies) and the full web gate; the change stayed comment-only in the two planned files.
+
+---
+
 ### 25 Oct 2026 · 8.3d outline schema reuse (packages/db/src/repositories) · decided by builder · risk: high
 - Decided: `packages/db/src/repositories/outline.ts` and `index.ts` are touched only to add/re-export `OutlineInputSchema` (export-visibility change, no logic or shape change); reviewed per plan as `security-reviewer`, `code-reviewer`, `typescript-reviewer`.
 - Why: the plan's risky-paths check matches `packages/db/src/repositories/**` by glob regardless of diff size, and CLAUDE.md non-negotiable 6 requires a logged `risk: high` decision whenever that group is touched.

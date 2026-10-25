@@ -4057,6 +4057,60 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return 4;
     },
   },
+  // Task 9.3h: the newest teacher.verify decision on record, staff-only. A fixture of its own
+  // (not A/B, whose verification status churns across the grid above), same precedent as the
+  // 9.3c liveForAgent fixture below.
+  'audit.findLastVerifyForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      for (const by of [teacherId('A'), studentId('2'), 'stf_ghost']) {
+        await expect(r.audit.findLastVerifyForStaff(by, teacherId('A'))).rejects.toMatchObject({
+          kind: 'scope',
+        });
+      }
+      const t = 'tch_93h';
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93h teacher', 'en', 'test', 'teacher')`,
+        [t],
+      );
+      await raw.query(
+        `insert into teacher_profiles (id, user_id, slug, subject, verification_status)
+         values ('tp_93h', $1, 'teacher-93h', '93h subject', 'pending')`,
+        [t],
+      );
+      expect(await r.audit.findLastVerifyForStaff(ISO_STAFF, t)).toBeNull();
+      const rejectReason = `[93h] rejected ${++counter}`;
+      await r.teacherProfiles.setVerification(
+        { teacherId: t },
+        { status: 'rejected', by: ISO_STAFF, reason: rejectReason },
+      );
+      const rejected = await r.audit.findLastVerifyForStaff(ISO_STAFF, t);
+      expect(rejected).toMatchObject({ status: 'rejected', reason: rejectReason });
+      expect(typeof rejected?.ts).toBe('string');
+      const verifyReason = `[93h] reopened ${++counter}`;
+      await r.teacherProfiles.setVerification(
+        { teacherId: t },
+        { status: 'verified', by: ISO_STAFF, reason: verifyReason },
+      );
+      const reVerified = await r.audit.findLastVerifyForStaff(ISO_STAFF, t);
+      expect(reVerified).toMatchObject({ status: 'verified', reason: verifyReason });
+      const tBad = 'tch_93h_bad';
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93h bad teacher', 'en', 'test', 'teacher')`,
+        [tBad],
+      );
+      await raw.query(
+        `insert into audit_log (id, actor, actor_role, action, target, teacher_id, after)
+         values ('al_93h_bad', $1, 'staff', 'teacher.verify', $2, $3, '{"bogus": true}'::jsonb)`,
+        [ISO_STAFF, `teacher:${tBad}`, tBad],
+      );
+      await expect(r.audit.findLastVerifyForStaff(ISO_STAFF, tBad)).rejects.toMatchObject({
+        kind: 'integrity',
+      });
+      return 7;
+    },
+  },
   // Task 12.3b: a teacher's copyright takedown count is that teacher's alone. Lifted at the end,
   // so the seed's document is back for every other case.
   'takedowns.countUpheld': {
@@ -6070,6 +6124,7 @@ describe.skipIf(!up)(
       expect(Object.keys(repos.audit).sort()).toEqual([
         'appendForStudent',
         'appendForTeacher',
+        'findLastVerifyForStaff',
         'listForStudent',
         'listForTeacher',
       ]);

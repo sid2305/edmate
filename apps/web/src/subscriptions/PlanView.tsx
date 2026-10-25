@@ -4,7 +4,9 @@
 // a busy flag, a non-2xx or unreadable body shows a fixed `role="alert"` text, and on success
 // after change, resume or cancel it navigates to `/learn/<agentId>` (no `?s=`) so the next
 // message starts a fresh session on the new package (3.16 already ends the old one). After
-// pause it re-renders in place (`router.refresh()`).
+// pause it re-renders in place (`router.refresh()`). Task 9.3i: when `agentAvailable` is false, a
+// successful pause or cancel redirects to `/home` instead (`/learn/<agentId>` would 404 for a
+// non-live agent), and resume plus the change-plan controls are hidden.
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';

@@ -36,6 +36,7 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
   let staffId = '';
   let teacherA = '';
   let teacherB = '';
+  let teacherC = ''; // task 9.3h: a third, still-pending teacher proving own-rows-only
 
   async function user(name: string, role: 'staff' | 'teacher'): Promise<string> {
     const created = await db.identity.createStudent({
@@ -68,7 +69,7 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
   afterAll(async () => {
     if (!db) return;
     // Leave nothing pending or verified behind (the database may be shared with the e2e run).
-    for (const teacherId of [teacherA, teacherB]) {
+    for (const teacherId of [teacherA, teacherB, teacherC]) {
       if (!teacherId) continue;
       await db.repos.teacherProfiles
         .setVerification({ teacherId }, { status: 'rejected', by: staffId, reason: 'int test cleanup' })
@@ -225,6 +226,33 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
     expect(rows.find((r) => r.reason === 'safety concern found via lookup')).toMatchObject({
       actor: staffId,
       after: { verificationStatus: 'rejected', safety: true },
+    });
+  });
+
+  it('9.3h: a safety-rejected teacher shows their own last decision; a different, still-pending teacher stays clean', async () => {
+    // Teacher A was safety-rejected by the previous test. A fresh, still-pending teacher C must
+    // never see A's history (own-rows-only) -- the agent-takedown proof itself lives in
+    // packages/db int tests (teacher-profiles.int.test.ts, repositories.int.test.ts), same as the
+    // safety-rejection comment above: this file has no live agent to take down.
+    teacherC = await user('chen', 'teacher');
+    await db.repos.teacherProfiles.create(
+      { teacherId: teacherC },
+      { slug: `chen-${tag}`, displayName: 'Chen', subject: 'Chemistry' },
+    );
+    const list = await routes().GET(call('GET', 'staff'));
+    const { teachers } = (await list.json()) as {
+      teachers: { teacherId: string; activeTakedowns: unknown[]; lastDecision: unknown }[];
+    };
+    const chen = teachers.find((t) => t.teacherId === teacherC);
+    expect(chen).toMatchObject({ activeTakedowns: [], lastDecision: null });
+
+    const found = await routes().LOOKUP(lookup('staff', `asha-${tag}`));
+    expect(await found.json()).toMatchObject({
+      teacher: {
+        teacherId: teacherA,
+        activeTakedowns: [],
+        lastDecision: { status: 'rejected', reason: 'safety concern found via lookup' },
+      },
     });
   });
 
