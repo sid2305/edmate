@@ -61,7 +61,9 @@ function windowLabel(startsAt: Date, now: Date): LiveClassWindow {
 
 /**
  * `https://host/path`, no whitespace, no userinfo (11.1a/11.1c review: http is no longer
- * accepted). Length-capped before the regex so an over-length link fails fast and cheap.
+ * accepted). The length cap runs before the regex not for speed (zod v4's chained
+ * `.max().regex()` does not short-circuit on the first failure) but so the length error, not the
+ * shape error, is the one reported first when both are violated.
  */
 const HTTPS_URL = /^https:\/\/[^\s/?#@\\]+(?:[/?#]\S*)?$/;
 
@@ -108,6 +110,11 @@ export interface ListUpcomingOptions {
 
 /** Whether a class is still on, or the teacher cancelled it (task 11.1d). */
 export type LiveClassStatus = 'scheduled' | 'cancelled';
+const LiveClassStatusSchema = z.enum(['scheduled', 'cancelled']);
+/** Checked parse of a `live_classes.status` column value, reused by both list methods below. */
+function parseStatus(x: unknown, method: string): LiveClassStatus {
+  return parseArg(LiveClassStatusSchema, x, method);
+}
 
 /** One of the teacher's own scheduled classes, soonest first. */
 export interface TeacherLiveClassRow {
@@ -200,7 +207,13 @@ export function liveClassesRepo(db: Db) {
       );
     },
 
-    /** The scope's own classes, soonest first. Another teacher's classes never appear. */
+    /**
+     * The scope's own classes, soonest first. Another teacher's classes never appear. Past the
+     * `LIVE_CLASS_LIST_MAX` cap, the kept rows are the ones with the furthest-out `startsAt`
+     * (ordered descending for the query, then re-sorted ascending for return) so a teacher who
+     * schedules a new class far in the future never has it silently dropped in favour of classes
+     * closer to `now` (11.1d review LOW; lead answer, 25 Oct 2026, Q1).
+     */
     async listForTeacher(scope: TeacherScope): Promise<TeacherLiveClassRow[]> {
       const method = 'liveClasses.listForTeacher';
       const { teacherId } = teacherScope(scope, method);
@@ -215,13 +228,15 @@ export function liveClassesRepo(db: Db) {
         })
         .from(liveClasses)
         .where(eq(liveClasses.teacherId, teacherId))
-        .orderBy(asc(liveClasses.startsAt), asc(liveClasses.id))
+        .orderBy(desc(liveClasses.startsAt), desc(liveClasses.id))
         .limit(LIVE_CLASS_LIST_MAX);
-      return rows.map((r) => ({
-        ...r,
-        startsAt: iso(r.startsAt),
-        status: r.status as LiveClassStatus,
-      }));
+      return rows
+        .map((r) => ({
+          ...r,
+          startsAt: iso(r.startsAt),
+          status: parseStatus(r.status, method),
+        }))
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id));
     },
 
     /**
@@ -307,10 +322,13 @@ export function liveClassesRepo(db: Db) {
       return rows.map((r) => ({
         id: r.id,
         title: r.title,
-        link: r.link,
+        // A cancelled class stays visible (status shown) but the join link itself is dropped here,
+        // not just hidden client-side, so a cancelled class never hands a student a live link to
+        // join (11.1d review LOW).
+        link: r.status === 'cancelled' ? null : r.link,
         startsAt: iso(r.startsAt),
         window: windowLabel(r.startsAt, now),
-        status: r.status as LiveClassStatus,
+        status: parseStatus(r.status, method),
       }));
     },
 
@@ -319,7 +337,7 @@ export function liveClassesRepo(db: Db) {
      * row `FOR UPDATE` by id and teacherId first: another teacher's or a missing id is `not_found`
      * before any other check. A cancelled class, or one whose own (current) `startsAt` is no
      * longer in the future, is `invalid` — read inside the same lock, never the caller's value.
-     * Writes one `live_class.update` audit row (`link` left out of the payload, matching `create`).
+     * Writes one `live_class.update` audit row (`title`/`link`/`startsAt`, before and after).
      */
     async update(
       scope: TeacherScope,
@@ -338,6 +356,7 @@ export function liveClassesRepo(db: Db) {
               status: liveClasses.status,
               startsAt: liveClasses.startsAt,
               title: liveClasses.title,
+              link: liveClasses.link,
             })
             .from(liveClasses)
             .where(and(eq(liveClasses.id, classId), eq(liveClasses.teacherId, teacherId)))
@@ -355,8 +374,8 @@ export function liveClassesRepo(db: Db) {
             actorRole: 'teacher',
             action: 'live_class.update',
             target: `live_class:${classId}`,
-            before: { title: row.title, startsAt: iso(row.startsAt) },
-            after: { title: i.title, startsAt: i.startsAt },
+            before: { title: row.title, link: row.link, startsAt: iso(row.startsAt) },
+            after: { title: i.title, link: i.link, startsAt: iso(new Date(i.startsAt)) },
           });
           return { updated: true };
         }),

@@ -13,8 +13,9 @@ import type { PublicScorecard } from './scorecard';
 import type { Translate } from './format';
 
 const translator = createTranslator({ locale: 'en', messages, namespace: 'teacherPage' });
-const t: Translate = (key, values) =>
-  (translator as unknown as (k: string, v?: Record<string, string | number>) => string)(key, values);
+// Real next-intl translator, typed only loosely against `messages`' inferred shape; cast to the
+// app's `Translate` (the type `getTranslations('teacherPage')` actually returns) for the test.
+const t = translator as unknown as Translate;
 
 const PAID: PackageOffer = {
   packageId: 'pkg-paid',

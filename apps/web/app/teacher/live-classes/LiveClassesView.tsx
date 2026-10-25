@@ -274,11 +274,12 @@ export function LiveClassesView({
         setRowError((errs) => ({ ...errs, [c.id]: errorKey(result.code) }));
         return;
       }
-      if (editingIdRef.current !== c.id) {
-        // The edit was discarded (or another row's edit started) while the PUT was in flight;
-        // applying this now-stale draft would silently undo the discard.
-        return;
-      }
+      // 11.1e Phase B fix (review MEDIUM): the server's successful save applies to `c`'s row
+      // unconditionally -- it must not keep showing stale pre-edit values until reload, even
+      // when another row's edit started (or this one was discarded) while the PUT was in
+      // flight. Only closing the edit form (`setEditingId(null)`) is guarded: never close a
+      // form the teacher didn't ask to close, and never clobber `editingId` if it now points at
+      // a different row.
       setClasses((cs) =>
         cs.map((row) =>
           row.id === c.id
@@ -286,7 +287,9 @@ export function LiveClassesView({
             : row,
         ),
       );
-      setEditingId(null);
+      if (editingIdRef.current === c.id) {
+        setEditingId(null);
+      }
     } catch {
       setRowError((errs) => ({ ...errs, [c.id]: 'generic' }));
     } finally {
@@ -489,12 +492,18 @@ export function LiveClassesView({
                   {c.status === 'scheduled' && !hasStarted(c) ? (
                     <>
                       {' '}
-                      <button type="button" disabled={!!rowBusy[c.id]} onClick={() => startEdit(c)}>
+                      <button
+                        type="button"
+                        disabled={!!rowBusy[c.id]}
+                        aria-label={t('editButtonLabel', { title: c.title })}
+                        onClick={() => startEdit(c)}
+                      >
                         {t('editButton')}
                       </button>{' '}
                       <button
                         type="button"
                         disabled={!!rowBusy[c.id]}
+                        aria-label={t('cancelButtonLabel', { title: c.title })}
                         onClick={() => void onCancelClass(c)}
                       >
                         {rowBusy[c.id] ? t('cancelling') : t('cancelButton')}

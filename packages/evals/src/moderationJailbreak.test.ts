@@ -176,9 +176,9 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('42 moderation true positives, 12 near-misses, 57 jailbreak cases (all reviewed, none pending)', () => {
-    expect(seededMod).toHaveLength(42);
-    expect(seededNear).toHaveLength(12);
+  it('43 moderation true positives, 13 near-misses, 57 jailbreak cases (all reviewed, none pending)', () => {
+    expect(seededMod).toHaveLength(43);
+    expect(seededNear).toHaveLength(13);
     expect(seededJb).toHaveLength(57);
     // MVP first: the lead signed off every held-out case (4.4 sync with main after 4.3); none
     // is reviewed_by: pending any more.

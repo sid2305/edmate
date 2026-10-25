@@ -8,6 +8,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
+import { iso } from '../src/repositories/map.js';
 import {
   createRepositories,
   LIVE_CLASS_LINK_MAX_LENGTH,
@@ -180,7 +181,7 @@ describe.skipIf(!up)(`liveClasses on Postgres${up ? '' : ` (${SKIP_REASON})`}`, 
       ).toBe('not_found');
     });
 
-    it('fails invalid on a non-https or over-length link', async () => {
+    it('fails invalid on a non-https link', async () => {
       const id = await freshClass(tA, pkgA);
       expect(
         await kind(
@@ -188,6 +189,20 @@ describe.skipIf(!up)(`liveClasses on Postgres${up ? '' : ` (${SKIP_REASON})`}`, 
             { teacherId: tA },
             id,
             { title: '[A] bad link', link: 'http://meet.example.com/x', startsAt: FUTURE },
+          ),
+        ),
+      ).toBe('invalid');
+    });
+
+    it('fails invalid on an over-length link', async () => {
+      const id = await freshClass(tA, pkgA);
+      const pad = 'x'.repeat(LIVE_CLASS_LINK_MAX_LENGTH + 1 - 'https://e.co/'.length);
+      expect(
+        await kind(
+          repos.liveClasses.update(
+            { teacherId: tA },
+            id,
+            { title: '[A] over-length link', link: `https://e.co/${pad}`, startsAt: FUTURE },
           ),
         ),
       ).toBe('invalid');
@@ -252,6 +267,12 @@ describe.skipIf(!up)(`liveClasses on Postgres${up ? '' : ` (${SKIP_REASON})`}`, 
       expect(row?.title).toBe('[A] edited title');
       expect(row?.link).toBe(newLink);
       expect(row?.status).toBe('scheduled');
+      expect(row?.startsAt).toBe(iso(new Date(FUTURE_LATER)));
+      const auditCount = await raw.query<{ n: number }>(
+        `select count(*)::int as n from audit_log where target = $1 and action = 'live_class.update'`,
+        [`live_class:${id}`],
+      );
+      expect(auditCount.rows[0]!.n).toBe(1);
     });
   });
 
@@ -364,6 +385,7 @@ describe.skipIf(!up)(`liveClasses on Postgres${up ? '' : ` (${SKIP_REASON})`}`, 
       });
       const row = rows.find((r) => r.id === id);
       expect(row?.status).toBe('cancelled');
+      expect(row?.link).toBeNull();
     });
   });
 });

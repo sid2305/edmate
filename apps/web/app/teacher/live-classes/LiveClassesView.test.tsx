@@ -132,7 +132,12 @@ describe('LiveClassesView', () => {
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
       );
       const row = within(screen.getByRole('list', { name: 'Live classes' }));
-      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      // 11.1e Phase B fix (review LOW): each row's Edit/Cancel class buttons carry an
+      // aria-label with the class title so two same-named classes are distinguishable to a
+      // screen reader; the visible text stays "Edit" / "Cancel class" (joinLinkLabel pattern).
+      const editButton = row.getByRole('button', { name: 'Edit Ratios review' });
+      expect(editButton).toHaveTextContent('Edit');
+      fireEvent.click(editButton);
       fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Ratios review 2' } });
       fireEvent.change(row.getByLabelText('Join link (https://…)'), {
         target: { value: 'https://meet.example.com/xyz' },
@@ -153,7 +158,7 @@ describe('LiveClassesView', () => {
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
       );
       const row = within(screen.getByRole('list', { name: 'Live classes' }));
-      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit Ratios review' }));
       fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Changed' } });
       fireEvent.click(row.getByRole('button', { name: 'Cancel' }));
       expect(screen.getByText('Ratios review')).toBeInTheDocument();
@@ -169,7 +174,7 @@ describe('LiveClassesView', () => {
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
       );
       const row = within(screen.getByRole('list', { name: 'Live classes' }));
-      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit Ratios review' }));
       fireEvent.change(row.getByLabelText('Title'), { target: { value: 'Changed' } });
       fireEvent.click(row.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(updateLiveClass).toHaveBeenCalled());
@@ -183,6 +188,47 @@ describe('LiveClassesView', () => {
       await waitFor(() => expect(screen.getByText('Changed')).toBeInTheDocument());
     });
 
+    it("another row's edit starting mid-save still applies the first row's saved values (review MEDIUM)", async () => {
+      const CLASS_2: TeacherLiveClassRow = {
+        id: 'lc_2',
+        title: 'Second class',
+        link: 'https://meet.example.com/def',
+        startsAt: '2026-11-05T10:00:00.000Z',
+        packageIds: ['pkg_1'],
+        status: 'scheduled',
+      };
+      let resolveUpdate: (value: { ok: true }) => void = () => {};
+      const updateLiveClass = vi.fn(
+        () => new Promise<{ ok: true }>((resolve) => (resolveUpdate = resolve)),
+      );
+      renderIntl(
+        <LiveClassesView
+          classes={[CLASS, CLASS_2]}
+          packages={PACKAGES}
+          updateLiveClass={updateLiveClass}
+        />,
+      );
+      const list = within(screen.getByRole('list', { name: 'Live classes' }));
+      fireEvent.click(list.getByRole('button', { name: 'Edit Ratios review' }));
+      fireEvent.change(list.getByLabelText('Title'), { target: { value: 'Changed' } });
+      fireEvent.click(list.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(updateLiveClass).toHaveBeenCalled());
+      // The first row's own discard button is disabled while its save is in flight, but
+      // starting an edit on a different row is allowed -- editing one class never disables
+      // another row's controls.
+      fireEvent.click(list.getByRole('button', { name: 'Edit Second class' }));
+      await act(async () => {
+        resolveUpdate({ ok: true });
+        await Promise.resolve();
+      });
+      // The first row's save still applies even though `editingId` now points at the second
+      // row: it must not keep showing the stale pre-edit title until reload.
+      await waitFor(() => expect(screen.getByText('Changed')).toBeInTheDocument());
+      // The second row's edit form is still open -- the first row's resolve must not have
+      // clobbered `editingId` or closed a form the teacher didn't ask to close.
+      expect(list.getByLabelText('Title')).toBeInTheDocument();
+    });
+
     it('a failed PUT shows an error and re-enables the row (not stuck disabled)', async () => {
       const updateLiveClass = vi.fn(async () => ({
         ok: false as const,
@@ -193,7 +239,7 @@ describe('LiveClassesView', () => {
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} updateLiveClass={updateLiveClass} />,
       );
       const row = within(screen.getByRole('list', { name: 'Live classes' }));
-      fireEvent.click(row.getByRole('button', { name: 'Edit' }));
+      fireEvent.click(row.getByRole('button', { name: 'Edit Ratios review' }));
       const save = row.getByRole('button', { name: 'Save' });
       fireEvent.click(save);
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
@@ -207,7 +253,9 @@ describe('LiveClassesView', () => {
       renderIntl(
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} cancelLiveClass={cancelLiveClass} />,
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+      const cancelButton = screen.getByRole('button', { name: 'Cancel Ratios review' });
+      expect(cancelButton).toHaveTextContent('Cancel class');
+      fireEvent.click(cancelButton);
       await waitFor(() => expect(cancelLiveClass).toHaveBeenCalledWith('lc_1'));
       await waitFor(() => expect(screen.getByText('Cancelled')).toBeInTheDocument());
       expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
@@ -222,9 +270,9 @@ describe('LiveClassesView', () => {
       renderIntl(
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} cancelLiveClass={cancelLiveClass} />,
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel Ratios review' }));
       expect(cancelLiveClass).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: 'Cancel class' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel Ratios review' })).toBeInTheDocument();
       vi.restoreAllMocks();
     });
 
@@ -238,7 +286,7 @@ describe('LiveClassesView', () => {
       renderIntl(
         <LiveClassesView classes={[CLASS]} packages={PACKAGES} cancelLiveClass={cancelLiveClass} />,
       );
-      const button = screen.getByRole('button', { name: 'Cancel class' });
+      const button = screen.getByRole('button', { name: 'Cancel Ratios review' });
       fireEvent.click(button);
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
       expect(button).not.toBeDisabled();
