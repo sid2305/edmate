@@ -6757,7 +6757,7 @@ tasks:
         deferred: 2
         wontfix: 0
     human_questions: 2
-- id: 7.2i
+- id: 7.2j
   milestone: M13
   title: '7.2h review follow-ups: the vapes-at-school rule in packages/harness/src/guardrails/moderationPatterns.ts gets a romanised Hindi and Devanagari safety-net variant like the weapons and threat rules
     (MEDIUM), and tolerates an article before the place noun ("at the school"), for this rule and the precedent weapons rule (LOW); matching safety cases'
@@ -6766,7 +6766,7 @@ tasks:
   - 7.2h
   risk: high
   status: running
-  branch: m13/7.2i-vapes-variants
+  branch: m13/7.2j-vapes-variants
   model: plan:lead build:sonnet
 - id: 12.4e
   milestone: M13
