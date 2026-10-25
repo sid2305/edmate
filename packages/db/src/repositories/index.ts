@@ -231,6 +231,7 @@ export {
   OUTLINE_TITLE_MAX_LENGTH,
   OUTLINE_TOPICS_MAX,
   type OutlineInput,
+  OutlineInputSchema,
   TOPIC_CHUNKS_MAX,
 } from './outline.js';
 export type {
