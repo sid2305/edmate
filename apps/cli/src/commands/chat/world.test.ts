@@ -75,8 +75,24 @@ describe('loadChatPersonas (5.8a)', () => {
     expect(personas?.get('job-interview')?.endAfterQuestions).toBe(6);
   });
 
-  it('gives no personas (role-play off) when the directory does not load', () => {
-    expect(loadChatPersonas('/no/such/dir')).toEqual({ personas: undefined, source: 'none' });
+  it('gives no personas (role-play off) when the directory does not load, naming the bad dir', () => {
+    const { personas, source, reason } = loadChatPersonas('/no/such/dir');
+    expect(personas).toBeUndefined();
+    expect(source).toBe('none');
+    expect(reason).toMatch(/\/no\/such\/dir/);
+  });
+
+  it('names the bad persona file in the reason when one file in the directory is invalid', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edmate-chat-personas-'));
+    try {
+      writeFileSync(join(dir, 'broken@1.0.0.yaml'), 'id: broken\nname: X\n');
+      const { personas, source, reason } = loadChatPersonas(dir);
+      expect(personas).toBeUndefined();
+      expect(source).toBe('none');
+      expect(reason).toMatch(/broken@1\.0\.0\.yaml/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

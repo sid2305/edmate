@@ -3155,9 +3155,16 @@ tasks:
   accept: 'Tests: m13/13.skillpresent-a-harness-events gives task 13.skillpresent; m3/3.11d-foo still gives 3.11d; a branch with no slug is rejected.'
   deps: []
   risk: risky
-  status: running
+  status: review
   branch: m13/0.19c-gate-word-ids
   model: plan:lead build:sonnet
+- id: 0.20
+  milestone: M13
+  title: 'CI flakes seen 25 Oct 2026: (1) apps/web src/auth/index.test.ts "imports and serves public routes with no AUTH_* or DATABASE_URL set" hit its 20 s timeout on PR #276 (and in a 9.3k builder run under load); (2) packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" hit the 10 s test timeout on PR #277 even after 3.11g/3.11h. Find the slow step (cold import, input size) and make both robust under CI load without hiding a real regression.'
+  accept: 'Both tests pass five full CI node runs in a row; neither depends on a tight wall-clock bound.'
+  deps: []
+  risk: low
+  status: todo
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -3166,9 +3173,29 @@ tasks:
   deps:
   - 5.8a
   risk: risky
-  status: review
+  status: done
   branch: m13/5.8e-persona-cli-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 103
+    tokens_in: 320
+    tokens_out: 29389
+    cache_read_tokens: 7480533
+    wall_time_seconds: 330369
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset

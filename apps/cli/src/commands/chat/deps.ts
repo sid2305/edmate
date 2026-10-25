@@ -187,6 +187,10 @@ export interface ChatSetup {
   content: DemoTeacherContent;
   /** Where `deps.personas` came from: the real signed library, or none (role-play off). */
   personasSource: 'real' | 'none';
+  /** Why the personas didn't load, naming the bad file(s); only set when `personasSource === 'none'`. */
+  personasReason?: string;
+  /** Where `deps.promptPacks` came from: the real signed set, or the harness's fixture fallback. */
+  promptPackSource: 'real' | 'fixture';
 }
 
 /** Builds one run's full `PipelineDeps`, ready for `runTurn(input, { deps, steps: defaultSteps })`. */
@@ -196,8 +200,8 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     content,
     opts,
   );
-  const { library: promptPacks } = loadChatPromptPacks();
-  const { personas, source: personasSource } = loadChatPersonas();
+  const { library: promptPacks, source: promptPackSource } = loadChatPromptPacks();
+  const { personas, source: personasSource, reason: personasReason } = loadChatPersonas();
 
   const clock = opts.clock ?? systemClock();
   const usage = opts.usage ?? memoryUsageMeter();
@@ -252,5 +256,15 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     ...(personas === undefined ? {} : { personas }),
   };
 
-  return { deps, teacherId, agentId, studentId, sessionId, content, personasSource };
+  return {
+    deps,
+    teacherId,
+    agentId,
+    studentId,
+    sessionId,
+    content,
+    personasSource,
+    promptPackSource,
+    ...(personasReason === undefined ? {} : { personasReason }),
+  };
 }

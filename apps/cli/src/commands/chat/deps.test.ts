@@ -72,6 +72,7 @@ describe('buildChatDeps personas (5.8a)', () => {
       });
       expect([...(setup.deps.personas?.keys() ?? [])].sort()).toEqual(['job-interview', 'viva']);
       expect(setup.personasSource).toBe('real');
+      expect(setup.promptPackSource).toBe('real');
     },
   );
 });
