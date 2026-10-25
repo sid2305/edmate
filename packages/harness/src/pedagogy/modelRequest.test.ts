@@ -318,19 +318,23 @@ describe('forged teacher-note marker (3.11d)', () => {
   });
 
   /**
-   * Min-of-5 wall-clock time (ms) for `fn()`, after one untimed warm-up call. A median (the old
+   * Min-of-3 wall-clock time (ms) for `fn()`, after one untimed warm-up call. A median (the old
    * form) still let a single unlucky pair of samples (one low on `small`, one high on `large`)
    * swing the ratio on a loaded CI runner (PR #297: ratio 82 vs the 64 bound); the minimum is the
    * steadier estimate of the real cost, since noise only ever pushes a wall-clock reading up, never
-   * below the true floor. The untimed warm-up call keeps one-off JIT compilation out of the five
-   * timed samples. This still times wall-clock work (docs/lessons.md prefers counting work); the
-   * larger base input size below (8,000 units) gives each sample more real work relative to timer
-   * resolution and scheduler jitter, which is the other half of steadying this check.
+   * below the true floor. The untimed warm-up call keeps one-off JIT compilation out of the timed
+   * samples. This still times wall-clock work (docs/lessons.md prefers counting work); the base
+   * input size below (4,000 units) gives each sample more real work relative to timer resolution
+   * and scheduler jitter, which is the other half of steadying this check. Fix round (PR #299): CI
+   * is roughly 10x slower than a laptop under full-suite load with coverage on a 2-core runner, so
+   * n = 8,000 with 5 runs (83s) blew past the 60s test timeout; dropping to n = 4,000 with 3 runs
+   * keeps the total work close to the original n = 2,000 with 5 runs while the timeout widens to
+   * 120s as a margin.
    */
-  function minOf5(fn: () => void): number {
+  function minOf3(fn: () => void): number {
     fn(); // untimed warm-up: let JIT compilation happen outside the timed samples
     const times: number[] = [];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 3; i += 1) {
       const start = performance.now();
       fn();
       times.push(performance.now() - start);
@@ -357,11 +361,11 @@ describe('forged teacher-note marker (3.11d)', () => {
    * the CI job timeout ends the run.
    */
   function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
-    const n = 8_000;
+    const n = 4_000;
     const smallInput = buildInput(n);
     const largeInput = buildInput(16 * n);
-    const small = minOf5(() => run(smallInput));
-    const large = minOf5(() => run(largeInput));
+    const small = minOf3(() => run(smallInput));
+    const large = minOf3(() => run(largeInput));
     expect(large).toBeLessThan(10_000);
     // Guard against a near-zero small run making the ratio meaningless
     // (e.g. on a very fast machine); floor it at 0.5ms.
@@ -378,12 +382,12 @@ describe('forged teacher-note marker (3.11d)', () => {
       (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
       (input) => neutraliseForgedLabel(input, label),
     );
-  }, 60_000);
+  }, 120_000);
 
   it('expectLinear still fails a deliberately quadratic function (self-test)', () => {
     // A real quadratic workload would need to burn real CPU to show up in a wall-clock ratio,
     // which is itself slow and -- on a 100+ worker parallel CI run -- liable to blow past even a
-    // 60s test timeout (that was tried and timed out under full-suite load). Faking the clock
+    // 120s test timeout (that was tried and timed out under full-suite load). Faking the clock
     // instead keeps this self-test instant and deterministic: `run` reports elapsed time
     // proportional to input.length^2, with no real work behind it, so its 16x-input ratio (256)
     // reliably trips the <64 bound above regardless of CI load.

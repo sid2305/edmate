@@ -44,6 +44,7 @@ Status: DONE
   `breakFenceRuns` and `neutraliseForgedLabel`, with no risk of approaching 10s, so there was no
   need to shrink the factor and rescale the bound; keeping 16x/64 also meant less of the test and
   its comments needed to change.
+- Superseded in the fix round: n = 4,000, minimum of 3 runs, 120 s timeout (CI ran 83 s).
 
 ### 25 Oct 2026 · 0.20c merge a test-only change under the pedagogy risk path · decided by lead · risk: high
 - Decided: merge 0.20c. It touches packages/harness/src/pedagogy/**, a risky path, but changes only modelRequest.test.ts (how the linear-time check is timed). modelRequest.ts, the prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it; typescript-reviewer re-ran the suite under load.
@@ -59,6 +60,39 @@ Status: DONE
 
 ## Left to do
 None.
+
+## Fix round
+CI's `node` job on PR #299 failed: `runs in linear time on long hostile input` timed out at
+60,000ms (the test ran 83s). The base n = 8,000 (×16 = 128,000 units, run 6 times per function —
+5 timed plus the untimed warm-up) was about 10x slower on the 2-core CI runner under full-suite
+load with coverage than it measured locally.
+
+Changed `packages/harness/src/pedagogy/modelRequest.test.ts` only:
+- Base `n` dropped from 8,000 to 4,000 (kept the 16x factor and the bound of 64).
+- `minOf5` renamed to `minOf3`, taking the minimum of 3 timed runs after the one untimed warm-up
+  (was 5).
+- The test's timeout raised from 60,000ms to 120,000ms.
+- Updated the function's doc comment and the self-test's comment to explain why: CI runs about
+  10x slower than a laptop under full-suite load with coverage on a 2-core runner, so the total
+  work (4,000 × (1 + 16) × 3 timed-equivalent samples) stays close to the original n = 2,000 with
+  5 runs, while the wider timeout gives headroom.
+
+Measured locally (this worktree, `packages/harness`):
+- `vitest run src/pedagogy/modelRequest.test.ts --coverage`: 85 tests pass, test file duration
+  4.44s.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness --force`, run 3 times
+  sequentially (no concurrent load): green all 3 times (27.1s, 23.3s, 20.1s).
+- One early sequential-gate attempt that overlapped with another concurrent run in this worktree
+  (a stray background job started during this fix round) produced a flaky single failure (ratio
+  107.9 vs the 64 bound) and a SIGTERM-killed run; once that contention was cleared, the 3 clean
+  sequential gate runs above were all green. This matches the fix round's premise — the test is
+  sensitive to machine load — and is why the gate must run with no other load sharing the runner.
+- The faked-clock self-test ("expectLinear still fails a deliberately quadratic function") still
+  throws as expected; unchanged logic, only the comment's timeout reference was updated
+  (60s → 120s).
+- `python3 .githooks/secret-scan.py --all`: clean (no output).
+
+Tool calls: 24
 
 ## Budget
 Tool calls used: 46 (harness count; the builder reported 19)
