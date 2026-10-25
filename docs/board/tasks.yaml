@@ -8010,7 +8010,9 @@ tasks:
   deps:
   - 8.1b
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.1d-cli-arg-union
+  model: plan:lead build:sonnet
 - id: 9.3k
   milestone: M13
   title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'
