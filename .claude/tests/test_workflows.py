@@ -195,6 +195,12 @@ class Workflows(unittest.TestCase):
         self.assertFalse(is_docs_only(["docs/edmate-prd.md", "packages/harness/src/index.ts"], "push"))
         self.assertFalse(is_docs_only([], "push"))
 
+    def test_docs_only_classifier_treats_any_extension_under_docs_as_docs_only(self):
+        self.assertTrue(is_docs_only(["docs/system-design.html"], "push"))
+        self.assertTrue(is_docs_only(["docs/board/tasks.yaml"], "push"))
+        self.assertFalse(is_docs_only(["apps/web/docs/x.md"], "push"))
+        self.assertFalse(is_docs_only(["docs/system-design.html", "apps/web/app/page.tsx"], "push"))
+
     def test_docs_only_classifier_always_false_on_schedule(self):
         # The nightly run has no diff to judge; it must always run the full suite.
         self.assertFalse(is_docs_only(["README.md"], "schedule"))

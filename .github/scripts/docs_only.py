@@ -5,7 +5,9 @@
 
 Reads changed paths one per line from `paths-file` (or stdin if omitted; empty lines ignored) and prints
 "true" if every path is a doc (under `docs/`, a top-level `*.md` file, or a `.md` file under `.github/`)
-and the list is non-empty, else "false". `--event-name schedule` always prints "false": the nightly run has
+and the list is non-empty, else "false". Any path under `docs/` counts as a doc whatever its extension
+(for example `docs/system-design.html` or `docs/board/tasks.yaml`): `docs/` holds no code that the
+`node` job builds, types or tests, even when the python-harness job still reads it. `--event-name schedule` always prints "false": the nightly run has
 no diff to check and must run the full suite regardless of what last changed. An empty path list (no diff
 could be computed, or a non-schedule event with zero changed files) also prints "false": skip only when
 we're sure.
