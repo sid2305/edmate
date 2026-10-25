@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
+import { computeHealthMetrics } from '@edmate/harness';
 import { createDb } from './client.js';
 import { createIdentityStore, ROLES, type IdentityStore, type Role } from './identity/index.js';
 import { migrateDatabase } from './migrate.js';
@@ -474,6 +475,117 @@ export async function runTeacherQuestionsCli(
       return 1;
     }
     log(`db:questions: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
+    return 1;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+/** Opens the turnTraces repository for the health-report CLI (injected in tests). */
+export type OpenHealthReport = (url: string) => {
+  turnTraces: Pick<Repositories['turnTraces'], 'listForTeacherSince'>;
+  close: () => Promise<void>;
+};
+
+const openHealthReport: OpenHealthReport = (url) => {
+  const { db, close } = createDb({ DATABASE_URL: url });
+  return { turnTraces: createRepositories(db).turnTraces, close };
+};
+
+const HR_USAGE = 'usage: db:health-report -- --teacher <id> --since <iso> [--limit <n>]';
+
+interface HrArgs {
+  teacherId: string;
+  since: string;
+  limit?: number;
+}
+
+/** The parsed health-report arguments, or a one-line usage string. */
+function parseHrArgs(argv0: string[]): HrArgs | string {
+  const argv = argv0[0] === '--' ? argv0.slice(1) : argv0;
+  let values: Record<string, string | boolean | undefined>;
+  try {
+    ({ values } = parseArgs({
+      args: argv,
+      options: {
+        teacher: { type: 'string' },
+        since: { type: 'string' },
+        limit: { type: 'string' },
+      },
+      strict: true,
+      allowPositionals: false,
+    }));
+  } catch {
+    return HR_USAGE;
+  }
+  const { teacher, since, limit } = values;
+  if (typeof teacher !== 'string' || typeof since !== 'string') return HR_USAGE;
+  if (limit === undefined) return { teacherId: teacher, since };
+  const n = Number(limit);
+  if (!Number.isInteger(n)) return HR_USAGE;
+  return { teacherId: teacher, since, limit: n };
+}
+
+/**
+ * `pnpm --filter @edmate/db db:health-report -- --teacher <id> --since <iso> [--limit <n>]`
+ * (task 7.7a): an operator's p50/p95 latency (including the derived `firstToken` step), error
+ * rate (by step) and guard rate (by guard) for one teacher over a window, computed by piping
+ * `listForTeacherSince`'s rows through `@edmate/harness`'s `computeHealthMetrics`. Prints only
+ * the redacted database target, ids and numbers -- never a student's or teacher's personal
+ * details (the repository selects none). An invalid `--limit`/`--since` surfaces as the
+ * repository's own fail-closed `RepositoryError('invalid', ...)`, caught below like any other
+ * repository error. Returns the exit code.
+ */
+export async function runHealthReportCli(
+  argv: string[],
+  env: { DATABASE_URL?: string | undefined },
+  log: (line: string) => void,
+  open: OpenHealthReport = openHealthReport,
+): Promise<number> {
+  const args = parseHrArgs(argv);
+  if (typeof args === 'string') {
+    log(`db:health-report: ${args}`);
+    return 1;
+  }
+  const url = env.DATABASE_URL;
+  if (!url) {
+    log('db:health-report: DATABASE_URL is not set');
+    return 1;
+  }
+  log(`db:health-report: target ${redactTarget(url)}`);
+  let handle: ReturnType<OpenHealthReport> | undefined;
+  try {
+    handle = open(url);
+    const rows = await handle.turnTraces.listForTeacherSince(
+      { teacherId: args.teacherId },
+      args.since,
+      args.limit,
+    );
+    if (rows.length === 0) {
+      log('db:health-report: turns=0 (no turns in this window)');
+      return 0;
+    }
+    const metrics = computeHealthMetrics(rows);
+    log(`db:health-report: turns=${metrics.turns}`);
+    for (const [name, stats] of Object.entries(metrics.stepLatencyMs)) {
+      if (!stats) continue;
+      log(`db:health-report: ${name} p50=${stats.p50} p95=${stats.p95} n=${stats.n}`);
+    }
+    log(
+      `db:health-report: errorRate=${metrics.errorRate} errorsByStep=${JSON.stringify(
+        metrics.errorsByStep,
+      )}`,
+    );
+    log(
+      `db:health-report: guardRate=${metrics.guardRate} guardsByName=${JSON.stringify(
+        metrics.guardsByName,
+      )}`,
+    );
+    return 0;
+  } catch (err) {
+    log(
+      `db:health-report: failed: ${redact(err instanceof Error ? err.message : String(err))}`,
+    );
     return 1;
   } finally {
     await handle?.close().catch(() => undefined);

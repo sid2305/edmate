@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 5.6h budget over the plan cap · decided by lead · risk: low
+- Decided: accept 48 tool calls against the plan's 25 (stop at 35); the first builder stalled when the Mac slept, the lead committed its work, and a fresh finisher re-ran the gate, did the hardcode check and wrote the handoff.
+- Why: the overrun came from the restart (repeated setup and gate runs), not rework; both reviewers approve with no findings.
+
+---
+
+### 24 Oct 2026 · 7.7a repository-adjacent negative-path tests and CLI reading through turnTraces · decided by builder · risk: high
+- Decided: added two negative-path tests directly exercising `turn-traces.ts`'s scope-checking
+  path (`listForTeacherSince` with an invalid `limit`/`since`), and a new CLI command
+  (`runHealthReportCli`) that reads through the same teacher-scoped repository method. No change
+  to the repository method itself (it already fails closed per task 7.7).
+- Why: matches the plan's "Risky paths touched" call for `packages/db/src/repositories/**`
+  (teacher/student data-isolation group); the lead's plan answer named security-reviewer as a
+  required reviewer for this PR.
+
+---
+
+### 24 Oct 2026 · 7.7a CLI location and index style · decided by builder · risk: low
+- Decided: built the CLI in `packages/db/src/cli.ts` + `src/bin/health-report.ts` (not
+  `apps/cli`), and used a plain `CREATE INDEX` (not `CONCURRENTLY`).
+- Why: matches the existing `db:*` operator-CLI convention and avoids a new `apps/cli` →
+  `@edmate/db` dependency edge; the table is pilot-scale with no measured slowness. Both already
+  approved in the plan's "Lead answers" (Q1, Q2).
+
+---
+
+### 25 Oct 2026 · 7.7a budget over the plan cap · decided by lead · risk: low
+- Decided: accept 60 tool calls against the plan's 45 (stop at 55); the builder finished and committed the work, then stalled before pushing, and the lead pushed its commit.
+- Why: the work is complete, all four reviewers approve with no findings, and the overrun came mostly from setup and gate runs, not rework.
+
+---
+
 ### 24 Oct 2026 · 9.3i a student can pause or cancel a subscription whose agent is suspended · decided by builder · risk: high
 
 - Decided: the `listUnavailableForStudent` fallback in `PATCH /api/subscriptions/:id` is tried

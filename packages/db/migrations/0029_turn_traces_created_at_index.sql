@@ -1,0 +1,1 @@
+CREATE INDEX "turn_traces_session_id_created_at_idx" ON "turn_traces" USING btree ("session_id","created_at");

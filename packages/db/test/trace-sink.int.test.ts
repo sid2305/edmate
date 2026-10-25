@@ -242,4 +242,26 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
 
     await raw.query(`delete from turn_traces where turn_id = 'trn_health'`);
   });
+
+  // Task 7.7a: invalid --limit/--since fail closed (RepositoryError('invalid', ...)), never a
+  // driver error or an empty result that looks like "no rows".
+  it('listForTeacherSince rejects an out-of-range limit', async () => {
+    const teacherA = { teacherId: teacherId('A') };
+    expect(
+      await kind(repos.turnTraces.listForTeacherSince(teacherA, '2000-01-01T00:00:00Z', 0)),
+    ).toBe('invalid');
+    expect(
+      await kind(repos.turnTraces.listForTeacherSince(teacherA, '2000-01-01T00:00:00Z', 201)),
+    ).toBe('invalid');
+  });
+
+  it('listForTeacherSince rejects a malformed since (not RFC 3339 with an offset)', async () => {
+    const teacherA = { teacherId: teacherId('A') };
+    expect(await kind(repos.turnTraces.listForTeacherSince(teacherA, 'not-a-date'))).toBe(
+      'invalid',
+    );
+    expect(
+      await kind(repos.turnTraces.listForTeacherSince(teacherA, '2026-10-20T09:00:00')),
+    ).toBe('invalid');
+  });
 });
