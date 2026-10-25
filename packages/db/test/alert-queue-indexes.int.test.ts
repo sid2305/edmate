@@ -3,8 +3,11 @@
 //    (acknowledged_at is not null, escalated_at is null, created_at, id) WHERE acknowledged_at is
 //    null exactly, so the open-list scan needs no Sort node.
 // 2. safety_alerts_acknowledged_by_idx covers the acknowledged_by FK for staff lookups.
-// 3. class_questions_live_class_id_created_at_id_idx matches the teacher queue scan's ORDER BY
-//    (live_class_id, created_at, id), replacing the old live_class_id-only index.
+// 3. class_questions_live_class_id_created_at_id_idx serves the join from live_classes to
+//    class_questions by live_class_id (with each live class's rows already in (created_at, id)
+//    order), replacing the old live_class_id-only index. It does not remove the Sort in the
+//    teacher queue scan's cross-class ORDER BY; that scan still sorts a bounded set (capped at
+//    QUEUE_SCAN_MAX) across all of a teacher's upcoming classes.
 // See test/pg.ts for how to start Postgres.
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -73,6 +76,35 @@ describe.skipIf(!up)(`alert and queue indexes on Postgres${up ? '' : ` (${SKIP_R
         [`cq_idx_${i}`, liveClassId, `question ${i}`, new Date(Date.UTC(2026, 9, 20, 0, i))],
       );
     }
+
+    // A bigger, skewed dataset for the EXPLAIN test below: 100 teachers, 400 upcoming live
+    // classes (4 per teacher) and 150000 questions (375 per class), so a seq scan of
+    // class_questions costs enough more than a few index probes (one per matching live class)
+    // that the planner naturally prefers the index.
+    await raw.query(
+      `insert into users (id, name, locale, market, role)
+         select 'tch_perf_' || gs, 'Perf Teacher ' || gs, 'en-US', 'US', 'teacher'
+         from generate_series(1, 100) gs`,
+    );
+    await raw.query(
+      `insert into live_classes (id, teacher_id, title, starts_at, link, package_ids)
+         select 'lc_perf_' || gs,
+                'tch_perf_' || (((gs - 1) % 100) + 1),
+                'Perf class ' || gs,
+                now() + interval '1 day',
+                'https://meet.example.com/perf',
+                '{}'
+         from generate_series(1, 400) gs`,
+    );
+    await raw.query(
+      `insert into class_questions (id, live_class_id, text, created_at)
+         select 'cq_perf_' || gs,
+                'lc_perf_' || (((gs - 1) % 400) + 1),
+                'perf question ' || gs,
+                timestamp '2026-10-20 00:00:00' + (gs || ' seconds')::interval
+         from generate_series(1, 150000) gs`,
+    );
+    await raw.query('analyze class_questions, live_classes');
   });
 
   afterAll(async () => {
@@ -112,6 +144,19 @@ describe.skipIf(!up)(`alert and queue indexes on Postgres${up ? '' : ` (${SKIP_R
       /\(live_class_id, created_at, id\)/,
     );
     expect(defs.class_questions_live_class_id_idx).toBeUndefined();
+  });
+
+  it('accesses class_questions through the new index for a query shaped like listQueueForTeacher', async () => {
+    const { rows } = await raw.query<{ 'QUERY PLAN': string }>(
+      `explain select cq.id from class_questions cq
+         inner join live_classes lc on lc.id = cq.live_class_id
+         where lc.teacher_id = $1 and lc.starts_at > now()
+         order by cq.created_at, cq.id
+         limit 200`,
+      ['tch_perf_1'],
+    );
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
+    expect(plan).toContain('class_questions_live_class_id_created_at_id_idx');
   });
 
   it('scans the open safety-alert list in index order with no Sort node', async () => {

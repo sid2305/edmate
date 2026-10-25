@@ -116,9 +116,11 @@ export const classQuestions = pgTable(
     ...timestamps(),
   },
   (t) => [
-    // Task 11.2c: the teacher queue scan orders by (live_class_id, created_at, id); this
-    // index replaces the old live_class_id-only index (a strict prefix of this one, so
-    // dropping it loses nothing).
+    // Task 11.2c: serves the join from live_classes to class_questions by live_class_id, with
+    // each live class's rows already in (created_at, id) order. It does not remove the Sort in
+    // the teacher queue scan's cross-class ORDER BY (that scan still sorts a bounded set, capped
+    // at QUEUE_SCAN_MAX, across all of the teacher's upcoming classes). This index replaces the
+    // old live_class_id-only index (a strict prefix of this one, so dropping it loses nothing).
     index('class_questions_live_class_id_created_at_id_idx').on(
       t.liveClassId,
       t.createdAt,

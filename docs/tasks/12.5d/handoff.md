@@ -62,5 +62,36 @@ the new `REVIEWED_INDEX_DROPS` assertion.
 
 `python3 .githooks/secret-scan.py --all` → no output, exit clean.
 
+### 25 Oct 2026 · 12.5d class_questions index serves the join, not the cross-class order · decided by builder · risk: low
+- Decided: corrected the `class_questions_live_class_id_created_at_id_idx` comment in
+  `packages/db/src/schema/operations.ts` and the header comment in
+  `packages/db/test/alert-queue-indexes.int.test.ts`: the index serves the join from
+  `live_classes` to `class_questions` by `live_class_id`, with each live class's own rows already
+  in `(created_at, id)` order; it does not remove the `Sort` in `listQueueForTeacher`'s
+  cross-class `ORDER BY`, which still sorts a bounded set (capped at `QUEUE_SCAN_MAX`) across all
+  of a teacher's upcoming classes. Also added an `EXPLAIN` test in
+  `alert-queue-indexes.int.test.ts` for a query shaped exactly like `listQueueForTeacher` (same
+  join, teacher filter, `starts_at > now()`, order, limit), seeded with 100 teachers, 400 live
+  classes and 150000 class questions plus `ANALYZE`, asserting the plan accesses
+  `class_questions` through the new index — without forcing it via `enable_seqscan`.
+- Why: the original wording claimed the index "matches the teacher queue scan's ORDER BY", which
+  is only true within one live class, not across the teacher's whole upcoming set; a reviewer
+  reading the comment alone could wrongly conclude the cross-class scan never sorts. The seeded
+  `EXPLAIN` test needed enough rows (150000, well beyond the first two smaller seeds tried) before
+  Postgres' planner naturally preferred the index-backed nested loop over a sequential scan of
+  `class_questions`, so the assertion holds without disabling `enable_seqscan`.
+
+## Fix round
+- database-reviewer HIGH (comment overstated what the index serves): fixed — corrected the
+  comment in `packages/db/src/schema/operations.ts` and the matching header comment in
+  `packages/db/test/alert-queue-indexes.int.test.ts`.
+- code-reviewer MEDIUM (int test's wording overstated the same thing): fixed — same comment
+  correction in `alert-queue-indexes.int.test.ts`.
+- database-reviewer MEDIUM (the int test only checked the index exists via `pg_indexes`, not that
+  it is used): fixed — added an `EXPLAIN` test against a query shaped like
+  `listQueueForTeacher`, seeded so the planner naturally picks the index (no
+  `enable_seqscan = off`).
+Tool calls: 17
+
 ## Budget
 Tool calls used: 32
