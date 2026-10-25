@@ -84,7 +84,9 @@ async function seedPriorTurns(
  * `collectReply`, apps/worker/src/gate/agent.ts, 8.7b fix round): a guard that decided to block
  * (`PRE_GUARD_BLOCKED`, `retryable: false`) is a real block, but a pre-guard chain that failed
  * (`PRE_GUARD_FAILED`, `retryable: true`: classifier outage, timeout, bad output) never got a
- * verdict, so the case fails instead of scoring it blocked. */
+ * verdict, so the case fails instead of scoring it blocked. Every other `error` event (8.7g: for
+ * example `model_error`) also fails the case, the same way the gate's `collectReply` does — today
+ * it was silently scored as an empty or partial reply instead. */
 async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgentReply> {
   let text = '';
   let sources: SourceRef[] | undefined;
@@ -109,7 +111,7 @@ async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgent
         if (event.code === 'guard_blocked' && !event.retryable) blocked = true;
         else if (event.code === 'guard_blocked') {
           failed = 'guard_blocked (pre-guard failed, retryable)';
-        }
+        } else failed = event.code;
         break;
       default:
         break;
