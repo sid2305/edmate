@@ -7823,4 +7823,6 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.3j-home-reads-parallel
+  model: build:sonnet
