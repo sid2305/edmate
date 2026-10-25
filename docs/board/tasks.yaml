@@ -2672,9 +2672,28 @@ tasks:
   accept: tests cover each item; harness tests pass
   deps:
   - '6.1'
-  status: running
+  status: done
   branch: m13/6.1a-topic-map-strict
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 80
+    tokens_out: 1005
+    cache_read_tokens: 967194
+    wall_time_seconds: 75
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 4
 - id: 6.1b
   milestone: M13
   title: '6.1a Phase B (deferred by the lead, 25 Oct 2026): courseOutlineInputFromDraft in packages/harness/src/memory/fromOutlineDraft.ts, duck-typing ingest''s OutlineDraft (no new dependency), so studio-drafted
@@ -3025,9 +3044,9 @@ tasks:
   deps:
   - '0.19'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/0.19a-closeout-digest
+  model: plan:lead build:sonnet
 - id: 6.5a
   milestone: M13
   title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold
@@ -8029,7 +8048,9 @@ tasks:
   deps:
   - 9.3i
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.3l-plan-page-comments
+  model: plan:lead build:sonnet
 - id: 5.6h
   milestone: M13
   title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text;
