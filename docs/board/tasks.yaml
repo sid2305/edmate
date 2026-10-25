@@ -2713,7 +2713,7 @@ tasks:
   accept: the report shows p50/p95 latency (incl. first token), error and guard rates for one teacher over a window; the index lands in a migration; invalid limit/since tests fail closed
   deps:
   - '7.7'
-  status: running
+  status: review
   branch: m13/7.7a-health-report
   model: plan:sonnet build:sonnet
 - id: 5.11b
@@ -7922,9 +7922,28 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: review
+  status: done
   branch: m13/9.3i-suspended-pause-cancel
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.3j
   milestone: M13
   title: '9.3f review LOW: apps/web/src/chat/liveChats.ts homeLinks starts listUnavailableForStudent alongside listLiveForStudent (Promise.all) instead of after the owner lookups'
