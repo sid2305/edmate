@@ -38,4 +38,4 @@ None.
 
 ## Budget
 
-Tool calls used: 17
+Tool calls used: 33 (harness count; the agent reported 17)
