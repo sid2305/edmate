@@ -5224,7 +5224,9 @@ tasks:
   deps:
   - 8.7c
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.7j-gate-result-guard
+  model: build:sonnet
 - id: 9.6f
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
@@ -6358,7 +6360,9 @@ tasks:
   deps:
   - 12.5f
   risk: high
-  status: todo
+  status: review
+  branch: m13/12.5g-alert-permanent-error
+  model: plan:sonnet build:sonnet
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
@@ -6577,7 +6581,9 @@ tasks:
   deps:
   - 9.7b
   risk: low
-  status: todo
+  status: review
+  branch: m13/9.7d-e2e-steady
+  model: build:sonnet
 - id: 12.4f
   milestone: M13
   title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
@@ -7673,7 +7679,7 @@ tasks:
   deps:
   - 5.6b
   risk: low
-  status: running
+  status: review
   branch: m13/5.6g-stream-gate-window
   model: build:sonnet
 - id: 8.9e
