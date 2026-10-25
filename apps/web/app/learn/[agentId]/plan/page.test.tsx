@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   findLive: vi.fn(),
   liveForAgent: vi.fn(),
   getById: vi.fn(),
+  listUnavailableForStudent: vi.fn(),
   viewProps: [] as Array<Record<string, unknown>>,
 }));
 
@@ -23,7 +24,10 @@ vi.mock('../../../../src/auth', () => ({
   serverDatabase: () => ({
     repos: {
       agents: { owner: state.owner },
-      subscriptions: { findLive: state.findLive },
+      subscriptions: {
+        findLive: state.findLive,
+        listUnavailableForStudent: state.listUnavailableForStudent,
+      },
       packageVersions: { liveForAgent: state.liveForAgent, getById: state.getById },
     },
   }),
@@ -61,6 +65,7 @@ beforeEach(() => {
   state.findLive.mockReset();
   state.liveForAgent.mockReset();
   state.getById.mockReset();
+  state.listUnavailableForStudent.mockReset();
   state.viewProps.length = 0;
 });
 
@@ -102,7 +107,31 @@ describe('PlanPage', () => {
   it('a non-live or malformed agent gives notFound', async () => {
     state.requireRole.mockResolvedValue(PRINCIPAL);
     state.owner.mockResolvedValue(null);
+    state.listUnavailableForStudent.mockResolvedValue([]);
     await expect(PlanPage({ params: params('agt_1') })).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
+  it('task 9.3i: a suspended agent with a matching listUnavailableForStudent row renders with agentAvailable: false', async () => {
+    state.requireRole.mockResolvedValue(PRINCIPAL);
+    state.owner.mockResolvedValue(null);
+    state.listUnavailableForStudent.mockResolvedValue([{ agentId: 'agt_1', teacherId: 'tch_asha' }]);
+    state.findLive.mockResolvedValue(null);
+    state.liveForAgent.mockResolvedValue([]);
+    const el = await PlanPage({ params: params('agt_1') });
+    render(el);
+    expect(screen.getByText('plan view')).toBeInTheDocument();
+    expect(state.owner).toHaveBeenCalledTimes(1);
+    expect(state.viewProps[0]).toMatchObject({ agentAvailable: false });
+  });
+
+  it('task 9.3i: a live agent never calls listUnavailableForStudent and renders agentAvailable true', async () => {
+    state.requireRole.mockResolvedValue(PRINCIPAL);
+    state.owner.mockResolvedValue({ teacherId: 'tch_asha' });
+    state.findLive.mockResolvedValue(null);
+    state.liveForAgent.mockResolvedValue([]);
+    render(await PlanPage({ params: params('agt_1') }));
+    expect(state.listUnavailableForStudent).not.toHaveBeenCalled();
+    expect(state.viewProps[0]).toMatchObject({ agentAvailable: true });
   });
 
   it('task 9.6i: a getById miss for the live subscription fails closed (notFound), never the internal version id', async () => {

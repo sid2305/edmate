@@ -64,6 +64,9 @@ interface Overrides {
   pause?: (scope: unknown, input: unknown) => Promise<LiveSubscription>;
   resume?: (scope: unknown, input: unknown) => Promise<LiveSubscription>;
   cancel?: (scope: unknown, input: unknown) => Promise<LiveSubscription>;
+  listUnavailableForStudent?: (
+    studentId: string,
+  ) => Promise<Array<{ agentId: string; teacherId: string }>>;
 }
 
 function fakeBackend(overrides: Overrides = {}) {
@@ -114,6 +117,11 @@ function fakeBackend(overrides: Overrides = {}) {
         calls.push({ method: 'cancel', scope, input });
         if (overrides.cancel) return overrides.cancel(scope, input);
         return { ...SUBSCRIPTION, status: 'ended' };
+      },
+      listUnavailableForStudent: async (studentId) => {
+        calls.push({ method: 'listUnavailableForStudent', input: studentId });
+        if (overrides.listUnavailableForStudent) return overrides.listUnavailableForStudent(studentId);
+        return [];
       },
     },
   };
@@ -209,6 +217,74 @@ describe('createPlanHandlers.patch', () => {
     const res = await patch(req({ agentId: 'agt_missing', action: 'pause' }), ctxFor(STUDENT, 'sub_1'));
     expect(res.status).toBe(404);
     expect(calls.some((c) => c.method === 'findLive')).toBe(false);
+  });
+
+  it('pauses via the fallback when the agent is suspended but listed as unavailable for the student', async () => {
+    const { backend, calls } = fakeBackend({
+      owner: async () => null,
+      listUnavailableForStudent: async () => [{ agentId: 'agt_susp', teacherId: 'tch_asha' }],
+    });
+    const { patch } = createPlanHandlers(backend);
+    const res = await patch(req({ agentId: 'agt_susp', action: 'pause' }), ctxFor(STUDENT, 'sub_1'));
+    expect(res.status).toBe(200);
+    const pause = calls.find((c) => c.method === 'pause');
+    expect(pause?.scope).toEqual({ studentId: 'std_amy', teacherId: 'tch_asha' });
+  });
+
+  it('cancels via the fallback when the agent is suspended but listed as unavailable for the student', async () => {
+    const { backend, calls } = fakeBackend({
+      owner: async () => null,
+      listUnavailableForStudent: async () => [{ agentId: 'agt_susp', teacherId: 'tch_asha' }],
+    });
+    const { patch } = createPlanHandlers(backend);
+    const res = await patch(req({ agentId: 'agt_susp', action: 'cancel' }), ctxFor(STUDENT, 'sub_1'));
+    expect(res.status).toBe(200);
+    const cancel = calls.find((c) => c.method === 'cancel');
+    expect(cancel?.scope).toEqual({ studentId: 'std_amy', teacherId: 'tch_asha' });
+  });
+
+  it('resume still 404s for a suspended agent even when it is in the fallback list', async () => {
+    const { backend, calls } = fakeBackend({
+      owner: async () => null,
+      listUnavailableForStudent: async () => [{ agentId: 'agt_susp', teacherId: 'tch_asha' }],
+    });
+    const { patch } = createPlanHandlers(backend);
+    const res = await patch(req({ agentId: 'agt_susp', action: 'resume' }), ctxFor(STUDENT, 'sub_1'));
+    expect(res.status).toBe(404);
+    expect(calls.some((c) => c.method === 'resume')).toBe(false);
+  });
+
+  it('change still 404s for a suspended agent even when it is in the fallback list', async () => {
+    const { backend, calls } = fakeBackend({
+      owner: async () => null,
+      listUnavailableForStudent: async () => [{ agentId: 'agt_susp', teacherId: 'tch_asha' }],
+    });
+    const { patch } = createPlanHandlers(backend);
+    const res = await patch(
+      req({ agentId: 'agt_susp', action: 'change', packageId: 'pkg_free' }),
+      ctxFor(STUDENT, 'sub_1'),
+    );
+    expect(res.status).toBe(404);
+    expect(calls.some((c) => c.method === 'changePackage')).toBe(false);
+  });
+
+  it('an agentId matching neither owner nor the fallback list still 404s for pause', async () => {
+    const { backend, calls } = fakeBackend({
+      owner: async () => null,
+      listUnavailableForStudent: async () => [{ agentId: 'agt_other', teacherId: 'tch_asha' }],
+    });
+    const { patch } = createPlanHandlers(backend);
+    const res = await patch(req({ agentId: 'agt_missing', action: 'pause' }), ctxFor(STUDENT, 'sub_1'));
+    expect(res.status).toBe(404);
+    expect(calls.some((c) => c.method === 'pause')).toBe(false);
+  });
+
+  it('the fallback is not called when owner resolves (the live path costs no extra query)', async () => {
+    const { backend, calls } = fakeBackend();
+    const { patch } = createPlanHandlers(backend);
+    const res = await patch(req({ agentId: 'agt_demo', action: 'pause' }), ctxFor(STUDENT, 'sub_1'));
+    expect(res.status).toBe(200);
+    expect(calls.some((c) => c.method === 'listUnavailableForStudent')).toBe(false);
   });
 
   it('no live subscription for the pair is 404', async () => {
