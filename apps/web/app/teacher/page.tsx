@@ -7,8 +7,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function TeacherPage() {
   const principal = await requireRole(['teacher']);
-  const changedSincePublish = await serverDatabase().repos.publish.changedSinceLastPublish({
-    teacherId: principal.userId,
-  });
+  let changedSincePublish = false;
+  try {
+    changedSincePublish = await serverDatabase().repos.publish.changedSinceLastPublish({
+      teacherId: principal.userId,
+    });
+  } catch (err) {
+    console.error('teacher_page.changed_since_publish_failed', err instanceof Error ? err.name : 'unknown');
+  }
   return await TeacherView({ changedSincePublish });
 }

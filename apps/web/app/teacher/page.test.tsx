@@ -68,4 +68,18 @@ describe('/teacher', () => {
     await expect(TeacherPage()).rejects.toThrow('NOT_FOUND');
     expect(state.changedSinceLastPublish).not.toHaveBeenCalled();
   });
+
+  it('still renders (no note, no throw) when changedSinceLastPublish rejects, logging the error name only', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    state.requireRole.mockResolvedValueOnce({ userId: 'tch_a', role: 'teacher' });
+    state.changedSinceLastPublish.mockRejectedValueOnce(new Error('db down: secret detail'));
+    render(await TeacherPage());
+    expect(
+      screen.queryByText("You've made changes since your last publish."),
+    ).not.toBeInTheDocument();
+    const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+    expect(logged).not.toContain('secret detail');
+    expect(logged).toContain('Error');
+    errorSpy.mockRestore();
+  });
 });

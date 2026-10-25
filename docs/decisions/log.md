@@ -10,6 +10,40 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.7l STALE_QUEUE_MS value · decided by builder · risk: low
+- Decided: `STALE_QUEUE_MS = 2 * 60 * 1000` (2 minutes).
+- Why: the plan's own "Open questions" flagged this as a judgement call, not spec'd. The worker
+  should claim a queued gate run almost at once, so 2 minutes is generous slack against a
+  transient blip rather than a real expected wait; easy to retune later since it's a single
+  exported constant with no persisted state depending on its value.
+
+---
+
+### 25 Oct 2026 · 8.7l /teacher page error-log style · decided by builder · risk: low
+- Decided: on a `changedSinceLastPublish` failure, log
+  `console.error('teacher_page.changed_since_publish_failed', err instanceof Error ? err.name :
+  'unknown')` — a fixed code string plus the error name only, never the message or stack.
+- Why: matches the existing house style in
+  `apps/web/app/teachers/[slug]/page.tsx`'s `teacherScorecard` failure log (`console.error(
+  'teacher_page.scorecard_read_failed', err instanceof Error ? err.name : 'unknown')`), which the
+  plan's open question pointed at for consistency rather than inventing a new convention or a
+  `ServerLog` wiring that `/teacher/insights/page.tsx` doesn't use either (that page has no
+  read-failure path to copy from directly).
+
+---
+
+### 25 Oct 2026 · 8.7l uncovered branches and the exact stale boundary left as they are · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOWs: pre-existing uncovered branches in apps/web/src/studio/publish.ts and apps/web/src/studio/publishClient.ts (backend-construction error path, failure() outer catch for invalid JSON), and no test in apps/web/src/studio/publish.test.ts at exactly STALE_QUEUE_MS (only one millisecond either side).
+- Why: neither is a regression from this diff, the strict greater-than check is simple, and MEDIUM/LOW findings are not fixed before merge.
+
+---
+
+### 25 Oct 2026 · 8.7l merge: publish-run follow-ups · decided by lead · risk: low
+- Decided: merge 8.7l with code-reviewer and typescript-reviewer approval; the three deferred plan items are board task 8.7m.
+- Why: the diff stays in apps/web, touches no risk path, and the gate is green.
+
+---
+
 ### 25 Oct 2026 · 7.2h vapes rule coded under `other_unsafe` · decided by builder · risk: low
 - Decided: code the new vapes-at-school transaction rule under `other_unsafe`, the same code the
   drug buy/sell precedent already uses in this table.

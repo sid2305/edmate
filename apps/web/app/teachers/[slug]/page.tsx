@@ -84,17 +84,21 @@ export default async function TeacherPage({ params }: TeacherPageProps) {
 
   const { repos } = serverDatabase();
   // Each live agent's live packages, as 9.3's compare page reads them. Only the public offer is
-  // kept (never the packageVersionId); an agent with none left gets no section and no link.
-  const offers = await Promise.all(
-    teacher.agentIds.map(async (agentId) => ({
-      agentId,
-      packages: (await repos.packageVersions.liveForAgent({ agentId })).map(
-        (p): PackageOffer => p.offer,
-      ),
-    })),
-  );
+  // kept (never the packageVersionId); an agent with none left gets no section and no link. Run
+  // alongside the scorecard read (independent of each other); `teacherScorecard` keeps its own
+  // try/catch so a scorecard-read failure never makes this `Promise.all` reject.
+  const [offers, scorecard] = await Promise.all([
+    Promise.all(
+      teacher.agentIds.map(async (agentId) => ({
+        agentId,
+        packages: (await repos.packageVersions.liveForAgent({ agentId })).map(
+          (p): PackageOffer => p.offer,
+        ),
+      })),
+    ),
+    teacherScorecard(repos, teacher.agentIds),
+  ]);
   const agents = offers.filter((a) => a.packages.length > 0);
-  const scorecard = await teacherScorecard(repos, teacher.agentIds);
 
   const shell = await getTranslations('shell');
   const discovery = await getTranslations('discovery');
