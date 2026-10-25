@@ -10,6 +10,40 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 9.3i a student can pause or cancel a subscription whose agent is suspended · decided by builder · risk: high
+
+- Decided: the `listUnavailableForStudent` fallback in `PATCH /api/subscriptions/:id` is tried
+  only for `action: 'pause'` and `action: 'cancel'` (never `resume` or `change`), and only after
+  `agents.owner` has already returned `null`. The fallback list itself is scoped to the
+  signed-in student's own rows (the method's own contract, shipped unchanged by 9.3f), so the
+  route can only ever resolve a subscription the student already owns — it cannot be used to
+  discover or act on any other student's or any other agent's subscription.
+- Why: `agents.owner` and `studentTurnScope` (used everywhere turn, chat, memory and export
+  access is decided) stay byte-for-byte unchanged, so this task cannot widen turn access. Keeping
+  `resume` and `change` out of the fallback (narrower than the plan's original Q1 recommendation,
+  per the Lead's answer) avoids ever resuming or billing a plan for an agent the student cannot
+  use, which matters once payments go live.
+
+---
+
+### 24 Oct 2026 · 9.3i PlanView hides Resume/change controls and redirects to /home when unavailable · decided by builder · risk: low
+
+- Decided: `PlanView`'s Resume button and the "other packages" (change-plan) section are hidden
+  when `agentAvailable === false`, and a successful pause or cancel from that state pushes to
+  `/home` instead of `/learn/<agentId>`.
+- Why: per the Lead's answers to Q1 and Q3 — the route itself refuses `resume`/`change` for an
+  unavailable agent, so showing those controls would only produce a 409/404 the student can't
+  act on; `/learn/<agentId>` 404s for a suspended agent, so `/home` is the only working landing
+  spot after cancelling or pausing from this page.
+
+---
+
+### 24 Oct 2026 · 9.3i review LOWs deferred to 9.3l · decided by lead · risk: low
+- Decided: the two LOW stale header comments in apps/web/app/learn/[agentId]/plan/page.tsx and apps/web/src/subscriptions/PlanView.tsx are deferred to board task 9.3l.
+- Why: comment-only fixes; the policy is to fix only CRITICAL and HIGH before merge.
+
+---
+
 ### 24 Oct 2026 · 5.6f release a correctly graded practice key · decided by lead · risk: high
 - Decided: A practice key is released from `mustNotReveal`, and the loaded item is dropped from the
   turn's `items`/`practiceKeys`, on a turn `classifyAttempt` grades `correct` for the held key

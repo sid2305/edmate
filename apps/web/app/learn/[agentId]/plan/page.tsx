@@ -28,8 +28,22 @@ export default async function PlanPage({ params }: PlanPageProps) {
   const agentId = parsed.data;
   const repos = serverDatabase().repos;
   const owner = await repos.agents.owner({ agentId });
-  if (owner === null) return notFound();
-  const scope = { studentId: principal.userId, teacherId: owner.teacherId };
+  let teacherId: string;
+  let agentAvailable: boolean;
+  if (owner !== null) {
+    teacherId = owner.teacherId;
+    agentAvailable = true;
+  } else {
+    // Task 9.3i: a suspended/draft agent still renders when the student already has a
+    // subscription for it (found through the student's own listUnavailableForStudent rows, the
+    // same read 9.3f's /home line uses) -- no new enumeration beyond the student's own rows.
+    const unavailable = await repos.subscriptions.listUnavailableForStudent(principal.userId);
+    const match = unavailable.find((row) => row.agentId === agentId);
+    if (!match) return notFound();
+    teacherId = match.teacherId;
+    agentAvailable = false;
+  }
+  const scope = { studentId: principal.userId, teacherId };
 
   const [live, offers] = await Promise.all([
     repos.subscriptions.findLive(scope),
@@ -43,7 +57,7 @@ export default async function PlanPage({ params }: PlanPageProps) {
   }));
   let subscription: PlanSubscription | null = null;
   if (live !== null && live.status !== 'ended') {
-    const current = await repos.packageVersions.getById({ teacherId: owner.teacherId }, live.packageVersionId);
+    const current = await repos.packageVersions.getById({ teacherId }, live.packageVersionId);
     // Task 9.6i: fail closed like the PATCH route does, never showing the internal version id.
     if (current === null) return notFound();
     subscription = {
@@ -69,7 +83,12 @@ export default async function PlanPage({ params }: PlanPageProps) {
       <h1>{t('title')}</h1>
       {/* English-only pilot: only the plan view's own strings go to the client. */}
       <NextIntlClientProvider locale="en" messages={{ plan: messages.plan }}>
-        <PlanView agentId={agentId} subscription={subscription} offers={planOffers} />
+        <PlanView
+          agentId={agentId}
+          subscription={subscription}
+          offers={planOffers}
+          agentAvailable={agentAvailable}
+        />
       </NextIntlClientProvider>
     </AppShell>
   );
