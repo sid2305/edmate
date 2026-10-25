@@ -406,7 +406,7 @@ describe('ChatView', () => {
       lang: 'en',
       clientTs: NOW.toISOString(),
     });
-    f.push(tok('Nice structure, but check your thesis.'), done);
+    f.push(feedbackSkill, tok('Nice structure, but check your thesis.'), done);
 
     type('What about my conclusion?');
     await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
@@ -414,6 +414,23 @@ describe('ChatView', () => {
       agentId: 'agt_a',
       kind: 'message',
       text: 'What about my conclusion?',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('a feedback turn never leaves activeSkill tagged: a later Hint click carries no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Get feedback' }));
+    type('Here is my essay.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(feedbackSkill, tok('Nice structure, but check your thesis.'), done);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Get a hint' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'hint_request',
       lang: 'en',
       clientTs: NOW.toISOString(),
     });
@@ -652,7 +669,7 @@ describe('ChatView', () => {
     type('My answer.');
     await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
     f.push(rolePlaySkill({ phase: 'debrief', total: 1 }), tok('Debrief text.'), done);
-    expect(screen.getByText('Interview complete — 1 questions asked')).toBeInTheDocument();
+    expect(screen.getByText('Interview complete — 1 question asked')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
 
     type('Thanks for the debrief.');

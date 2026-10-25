@@ -202,6 +202,9 @@ export function ChatView({
     const terminal = progress !== null && (progress.phase === 'stopped' || progress.phase === 'ended');
     setActiveSkill((prev) => {
       if (terminal) return null;
+      // feedback is a one-shot marker (set by the "Get feedback" toggle above), never a
+      // persisted, ladder-style activeSkill -- a feedback turn must not leave Hint/etc. tagged.
+      if (named === 'feedback') return null;
       if (named !== undefined) return named;
       if (turn.locked !== null) return null;
       return prev === 'mock_interview' ? prev : null;

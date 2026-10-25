@@ -215,3 +215,40 @@ the file reads as one running decision list for the task).
 ## Budget
 Tool calls used: 101 (harness count, Phase A)
 Phase B tool calls used: 44
+Phase B fix round tool calls used: 18
+
+## Fix round (Phase B)
+Findings fixed from review:
+1. [HIGH] `activeSkill` no longer persists `'feedback'`. `ChatView.tsx`'s turn-sync effect now
+   clears `activeSkill` whenever the turn's last skill card names `'feedback'` (before falling
+   through to the general "named skill persists" branch), so a feedback turn never leaves a later
+   bare Hint click (or any other follow-up) tagged with `skill: 'feedback'`. Only ladder skills
+   (`practice`, `mock_interview`) still persist. Updated the Phase A regression test near
+   `ChatView.test.tsx:396` so its fixture now pushes the harness-computed `feedbackSkill` event
+   (previously missing), and added a new test, "a feedback turn never leaves activeSkill tagged:
+   a later Hint click carries no skill", that submits feedback then clicks Hint and asserts the
+   `hint_request` carries no `skill`.
+2. [MEDIUM] `MockInterviewControls.tsx`'s progress `<p>` now has `role="status"` so screen readers
+   get the question/pause/debrief/stopped/ended line without it needing the thread's own
+   aria-live region. Added a test asserting `screen.getByRole('status')` shows the progress text.
+3. [LOW] `en.json`'s `chat.skills.mockInterview.progress.debrief` key now uses an ICU plural
+   (`{total, plural, one {# question} other {# questions}}`), matching the style of
+   `moderation.openCount`. Added a `total: 1` case to `MockInterviewControls.test.tsx`'s
+   `it.each` table ("1 question asked") and fixed the stale expectation in
+   `ChatView.test.tsx` (was asserting "1 questions asked" for a one-question debrief).
+
+Evidence:
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/web
+  → typecheck, lint pass; test: 1 failed (src/auth/index.test.ts, 20s timeout under load) out of
+    157 files / 2522 tests. Re-ran that file alone:
+corepack pnpm --filter @edmate/web vitest run src/auth/index.test.ts
+  → 27/27 passed (noted per the brief: this file times out under load, re-run once)
+corepack pnpm --filter @edmate/web vitest run src/chat/MockInterviewControls.test.tsx src/chat/ChatView.test.tsx
+  → 2 files passed, 45/45 tests passed
+
+python3 .githooks/secret-scan.py --all
+  → clean (no output, exit 0)
+```
+`e2e/skills.spec.ts` was checked for the old debrief text (`"questions asked"`); it does not
+assert that string, so no update was needed there. Not run locally, per the brief.

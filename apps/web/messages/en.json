@@ -142,7 +142,7 @@
       "progress": {
         "question": "Question {question} of {total}",
         "paused": "Paused — question {question} of {total}",
-        "debrief": "Interview complete — {total} questions asked",
+        "debrief": "Interview complete — {total, plural, one {# question} other {# questions}} asked",
         "stopped": "Interview stopped — {answered} question(s) answered",
         "ended": "Interview ended"
       }

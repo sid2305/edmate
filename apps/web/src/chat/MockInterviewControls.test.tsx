@@ -40,11 +40,24 @@ describe('MockInterviewControls', () => {
     [{ phase: 'resume', question: 2, total: 6 }, 'Question 2 of 6'],
     [{ phase: 'pause', question: 2, total: 6 }, 'Paused — question 2 of 6'],
     [{ phase: 'debrief', total: 6 }, 'Interview complete — 6 questions asked'],
+    [{ phase: 'debrief', total: 1 }, 'Interview complete — 1 question asked'],
     [{ phase: 'stopped', answered: 4 }, 'Interview stopped — 4 question(s) answered'],
     [{ phase: 'ended' }, 'Interview ended'],
   ] as const)('renders the %s progress line', (progress, text) => {
     renderIntl(<MockInterviewControls disabled={false} onPause={vi.fn()} onStop={vi.fn()} progress={progress} />);
     expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
+  it('announces the progress line to screen readers via role="status"', () => {
+    renderIntl(
+      <MockInterviewControls
+        disabled={false}
+        onPause={vi.fn()}
+        onStop={vi.fn()}
+        progress={{ phase: 'question', question: 3, total: 6 }}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Question 3 of 6');
   });
 
   it('parseRolePlayProgress rejects an unparseable payload instead of throwing', () => {

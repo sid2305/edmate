@@ -62,7 +62,11 @@ export function MockInterviewControls({ disabled, onPause, onStop, progress }: M
   })();
   return (
     <div className="chat-mock-interview-controls">
-      {progressText === null ? null : <p className="chat-mock-interview-progress">{progressText}</p>}
+      {progressText === null ? null : (
+        <p className="chat-mock-interview-progress" role="status">
+          {progressText}
+        </p>
+      )}
       <button type="button" disabled={disabled} onClick={onPause}>
         {t('mockInterview.pause')}
       </button>
