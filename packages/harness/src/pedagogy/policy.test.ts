@@ -174,6 +174,84 @@ describe('mustNotReveal', () => {
   });
 });
 
+describe('practice key release on a correct attempt (5.6f)', () => {
+  const key = ['B'];
+
+  it('drops the solved item key from mustNotReveal when the attempt grades correct', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ attempt: 'correct' }),
+        help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
+      }),
+    );
+    expect(r.mustNotReveal).toEqual([]);
+  });
+
+  it('a carried key from an unrelated skipped item stays guarded even on a correct attempt', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ attempt: 'correct' }),
+        help: helpWith({
+          answerKey: key,
+          practiceItemId: 'item-1',
+          practiceCarriedKey: ['4321'],
+        }),
+      }),
+    );
+    expect(r.mustNotReveal).toEqual(['4321']);
+  });
+
+  it.each(['wrong', 'partial', 'none'] as const)(
+    'an attempt graded %s keeps the key guarded (regression)',
+    (attempt) => {
+      const r = decidePolicy(
+        base({
+          ctx: ctxWith({ attempt }),
+          help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
+        }),
+      );
+      expect(r.mustNotReveal).toEqual(key);
+    },
+  );
+
+  it.each([
+    ['distress' as const],
+    ['misuse' as const],
+    ['off_topic' as const],
+    ['meta' as const],
+  ])('a closed path (%s) never releases the key even if attempt reads correct', (intent) => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ intent, attempt: 'correct' }),
+        help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
+      }),
+    );
+    expect(r.mustNotReveal).toEqual(key);
+  });
+
+  it('a locked skill never releases the key even if attempt reads correct', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ entitlement: { skills: [] }, attempt: 'correct' }),
+        help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
+      }),
+    );
+    expect(r.move).toBe('locked');
+    expect(r.mustNotReveal).toEqual(key);
+  });
+
+  it('not_covered never releases the key even if attempt reads correct', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ retrieved: [], attempt: 'correct' }),
+        help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
+      }),
+    );
+    expect(r.move).toBe('ask_teacher');
+    expect(r.mustNotReveal).toEqual(key);
+  });
+});
+
 describe('purity and determinism', () => {
   it('reads deep-frozen inputs without mutating them and returns fresh state', () => {
     const input = deepFreeze(base({ help: helpWith({ answerKey: ['a'], stuckTurns: 1 }) }));
