@@ -182,6 +182,11 @@ New/changed test names for Phase B's builder to build on:
 
 None. Both phases are done; every item (1–12) from the plan's numbered scope list landed.
 
+## Fix round
+
+CI build of apps/worker failed (processor.ts read reason on the union); fixed by narrowing.
+Tool calls: 20
+
 ## Budget
 
 Tool calls used: 107 (harness count: Phase A 47, Phase B 60; the builders reported 26 and 28)
