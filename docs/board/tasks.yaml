@@ -3166,7 +3166,7 @@ tasks:
   deps:
   - 5.8a
   risk: risky
-  status: running
+  status: review
   branch: m13/5.8e-persona-cli-followups
   model: plan:sonnet build:sonnet
 - id: 6.5b
@@ -3880,9 +3880,17 @@ tasks:
   deps:
   - 8.4a
   risk: high
+  status: running
+  branch: m13/8.4c-style-card-sanitize
+  model: plan:sonnet build:sonnet
+- id: 8.4d
+  milestone: M13
+  title: '8.4c Phases A and B (deferred by the lead, 25 Oct 2026): a teacher-scoped studio usage ledger in packages/db, wired into style-card and ingest drafting in apps/web. Build it with or after the
+    contracts change that makes generateObject report usage; design in docs/tasks/8.4c/plan.md Phases A and B.'
+  accept: Each studio drafting call writes one teacher-scoped usage row with real token counts.
+  deps: []
+  risk: risky
   status: todo
-  branch: null
-  model: null
 - id: 8.6a
   milestone: M8
   title: '8.6 Phase A: packages/gateway model-mix table (B-42), Sonnet 5 price and per-turn cost estimate (plan docs/tasks/8.6/plan.md)'
