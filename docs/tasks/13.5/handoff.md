@@ -69,6 +69,30 @@ no rollback risk. Flagged for the human/architect to revisit once real usage vol
   `EXPLAIN` result — the human/architect should revisit before this read runs at a much larger
   scale than pilot.
 
+### 25 Oct 2026 · 13.5 fix round · decided by builder · risk: low
+- Decided: fixed three review findings. (1) Moved the `exact(value, method)` bigint-to-number
+  guard (`integrity` past 2^53) out of `usage-ledger.ts` into the shared `map.ts` (alongside
+  `checked`/`iso`) and made `subscriptions.activeCountByPackage` import it instead of duplicating
+  the check inline, so the guard's `integrity` branch stays covered by `usage-ledger.int.test.ts`'s
+  existing MAX_SAFE_INTEGER test with no new untested branch in `subscriptions.ts` (100% statement
+  coverage restored for `src/repositories/**`). (2) Added `usageLedger.costByPackageSince` and
+  `subscriptions.activeCountByPackage` to README rule 11's list of unscoped system reads, naming
+  `/api/staff/cost` as the one caller; left the `teacherIdsWithUsageSince` "no route exposes it"
+  note as-is since it's still correct (the staff cost route calls the other two methods, not this
+  one). (3) Added a boundary test to `usage-ledger.int.test.ts`'s `costByPackageSince` describe
+  block: a row exactly at `since` is included, a row exactly at `until` is excluded.
+- Why: the smaller fix for the coverage gap was to reuse the existing, already-tested exact-count
+  pattern rather than add a new test that can't realistically reach a 2^53-row `count(distinct)`
+  overflow through real data.
+
+### 25 Oct 2026 · 13.5 merge · decided by lead · risk: high
+- Decided: merge the two new unscoped, cross-teacher aggregate reads in packages/db/src/repositories (usageLedger.costByPackageSince, subscriptions.activeCountByPackage) and the staff-only GET /api/staff/cost route and /staff/cost page.
+- Why: both reads follow the teacherIdsWithUsageSince precedent, are listed in README rule 11 and are reachable only through withRole(['staff']) and requireRole(['staff']). security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved both phases; the one HIGH (a coverage gap) is fixed and re-reviewed.
+
+### 25 Oct 2026 · 13.5 budget · decided by lead · risk: low
+- Decided: accept 234 harness tool calls in total: Phase A 96 (the builder reported 46), Phase B 74 (34) and the fix round 64 (about 30). The plan budgeted 75.
+- Why: the work was done in phases with fresh agents as planned; the overrun came from int-test setup against the shared Postgres and a full coverage run. Reviews found one HIGH, fixed in one round.
+
 ## Phase B
 
 ### What changed
@@ -161,23 +185,4 @@ no rollback risk. Flagged for the human/architect to revisit once real usage vol
 None.
 
 ## Budget
-Tool calls used (Phase A): 46
-Phase B tool calls used: 34
-
-## Decisions
-
-### 25 Oct 2026 · 13.5 fix round · decided by builder · risk: low
-- Decided: fixed three review findings. (1) Moved the `exact(value, method)` bigint-to-number
-  guard (`integrity` past 2^53) out of `usage-ledger.ts` into the shared `map.ts` (alongside
-  `checked`/`iso`) and made `subscriptions.activeCountByPackage` import it instead of duplicating
-  the check inline, so the guard's `integrity` branch stays covered by `usage-ledger.int.test.ts`'s
-  existing MAX_SAFE_INTEGER test with no new untested branch in `subscriptions.ts` (100% statement
-  coverage restored for `src/repositories/**`). (2) Added `usageLedger.costByPackageSince` and
-  `subscriptions.activeCountByPackage` to README rule 11's list of unscoped system reads, naming
-  `/api/staff/cost` as the one caller; left the `teacherIdsWithUsageSince` "no route exposes it"
-  note as-is since it's still correct (the staff cost route calls the other two methods, not this
-  one). (3) Added a boundary test to `usage-ledger.int.test.ts`'s `costByPackageSince` describe
-  block: a row exactly at `since` is included, a row exactly at `until` is excluded.
-- Why: the smaller fix for the coverage gap was to reuse the existing, already-tested exact-count
-  pattern rather than add a new test that can't realistically reach a 2^53-row `count(distinct)`
-  overflow through real data.
+Tool calls used: 234 (harness count: Phase A 96, Phase B 74, fix round 64; the builders reported 46, 34 and about 30)
