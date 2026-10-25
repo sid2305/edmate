@@ -5623,7 +5623,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.3d-start-concurrent-verification
+  model: plan:lead build:sonnet
 - id: 9.7c
   milestone: M13
   title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
