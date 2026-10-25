@@ -53,6 +53,14 @@ board's `accept` line.
   every action that starts a turn, not only typed messages. No assertion changed.
 - risk: low (test-only).
 
+### 24 Oct 2026 · 9.7d postOnce double-send risk deferred · decided by lead · risk: low
+- Decided: the typescript-reviewer MEDIUM on `apps/web/e2e/fixtures.ts` (`postOnce` can re-run `act()` and double-send when a slow request misses the 2s poll, and `mockTurns` hides it) is deferred to board task 9.7e.
+- Why: the helper is moved verbatim from `full-flow.spec.ts`, where it already shipped; the risk is low against mocked routes and test-only, and the MVP rule fixes only CRITICAL and HIGH before merge.
+
+### 24 Oct 2026 · 9.7d tool calls over the brief's cap · decided by lead · risk: low
+- Decided: accept 38 tool calls (harness count) against the brief's cap of 25.
+- Why: the builder stayed under the brief's stop point in its own count and finished the task with a green gate; the overrun was setup in a fresh worktree (install and build) that the cap did not allow for.
+
 ## Budget
 
-Tool calls used: 19
+Tool calls used: 38 (harness count; the agent reported 19)
