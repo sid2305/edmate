@@ -1,0 +1,67 @@
+# Reference only (task 8.2g, ADR-0014 consequence) -- illustrates the network segmentation
+# described in docs/setup/web-link-egress-firewall.md. NEVER run as part of the dev stack and
+# NEVER combined with docker/compose.yaml via `-f`: it is a separate, standalone file (its own
+# `name:` below) meant to be read, not run in this shape against real production services.
+#
+# Validate its syntax alone, without starting anything:
+#   docker compose -f docker/compose.production-egress.example.yaml config
+#
+# Shape: postgres, redis and minio sit on an `internal: true` network, which Compose gives no
+# route out of at all. worker is the only service that also joins a second `egress` network,
+# which does have a route out -- that is the only network a host or cloud firewall rule needs to
+# restrict, to 443 plus the three service endpoints (see the doc above for why Compose itself
+# cannot express that port/destination restriction).
+
+name: edmate-production-egress-example
+
+networks:
+  internal:
+    internal: true
+  egress: {}
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-edmate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edmate-dev}
+      POSTGRES_DB: ${POSTGRES_DB:-edmate}
+    networks:
+      - internal
+
+  redis:
+    image: redis:7.4.6-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    networks:
+      - internal
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-edmate-dev}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-edmate-dev-storage}
+    networks:
+      - internal
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    image: edmate-worker:dev
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-edmate}:${POSTGRES_PASSWORD:-edmate-dev}@postgres:5432/${POSTGRES_DB:-edmate}
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-edmate-dev}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-edmate-dev-storage}
+      # Web links (task 8.2e, ADR-0014); the firewall rule on the `egress` network below is this
+      # value's second layer. See docs/setup/web-link-egress-firewall.md.
+      EDMATE_WEB_LINK_HOSTS: ${EDMATE_WEB_LINK_HOSTS-*}
+    networks:
+      - internal
+      - egress
