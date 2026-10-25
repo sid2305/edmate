@@ -19,8 +19,18 @@ const ASHA: QueueItem = {
   subject: 'Math',
   name: 'Asha Rao',
   email: 'asha@example.test',
+  activeTakedowns: [],
+  lastDecision: null,
 };
-const BEN: QueueItem = { teacherId: 'tch_b', slug: 'ben-physics', subject: 'Physics', name: 'Ben', email: null };
+const BEN: QueueItem = {
+  teacherId: 'tch_b',
+  slug: 'ben-physics',
+  subject: 'Physics',
+  name: 'Ben',
+  email: null,
+  activeTakedowns: [],
+  lastDecision: null,
+};
 
 const SAFETY_LABEL =
   "Safety concern: also stop every student's access to this teacher's agent now";
@@ -225,6 +235,51 @@ describe('StaffQueueView', () => {
       expect(await axe(container)).toHaveNoViolations();
       unmount();
     }
+  });
+
+  it('shows "None" and "No previous decision" when a teacher has neither (9.3h)', () => {
+    renderIntl(<StaffQueueView initial={[ASHA]} />);
+    const row = rowOf('asha-math');
+    expect(within(row).getByText('None')).toBeInTheDocument();
+    expect(within(row).getByText('No previous decision')).toBeInTheDocument();
+  });
+
+  it('shows the active takedown count and the last decision line (9.3h)', () => {
+    const withHistory: QueueItem = {
+      ...ASHA,
+      activeTakedowns: [
+        { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+      ],
+      lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00.000Z' },
+    };
+    renderIntl(<StaffQueueView initial={[withHistory]} />);
+    const row = rowOf('asha-math');
+    expect(within(row).getByText('1 active takedown')).toBeInTheDocument();
+    expect(within(row).getByText('Rejected on Oct 19, 2026')).toBeInTheDocument();
+  });
+
+  it('pluralizes 2+ active takedowns (9.3h)', () => {
+    const withTwo: QueueItem = {
+      ...ASHA,
+      activeTakedowns: [
+        { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+        { kind: 'agent', category: 'other', createdAt: '2026-10-21T00:00:00.000Z' },
+      ],
+    };
+    renderIntl(<StaffQueueView initial={[withTwo]} />);
+    expect(within(rowOf('asha-math')).getByText('2 active takedowns')).toBeInTheDocument();
+  });
+
+  it('has no axe violations with active takedowns and a last decision shown (9.3h)', async () => {
+    const withHistory: QueueItem = {
+      ...ASHA,
+      activeTakedowns: [
+        { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+      ],
+      lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00.000Z' },
+    };
+    const { container } = renderIntl(<StaffQueueView initial={[withHistory]} />);
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
 
