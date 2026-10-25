@@ -8116,13 +8116,24 @@ tasks:
     human_questions: 0
 - id: 9.3k
   milestone: M13
-  title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows; plus 9.3h review: a view.test.tsx case
-    for a lookup-found row with takedown and last-decision lines (MEDIUM), and drop lastDecision.reason from the staff API payload until a UI renders it (LOW)'
-  accept: a staff view test shows a teacher's past subject changes on a queue row; web typecheck, lint and test green.
+  title: '9.3h review follow-ups: a view.test.tsx case for a lookup-found row with takedown and last-decision lines (MEDIUM), and drop lastDecision.reason from the staff API payload until a UI renders it
+    (LOW). Subject-edit history moved to 9.3m.'
+  accept: a staff view test shows the takedown and last-decision lines on a lookup-found row; the staff list and lookup responses carry no lastDecision.reason; web typecheck, lint and test green.
   deps:
   - 9.3h
-  risk: low
-  status: planning
+  risk: high
+  status: running
+  branch: m13/9.3k-staff-followups
+  model: plan:sonnet build:sonnet
+- id: 9.3m
+  milestone: M13
+  title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write
+    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). Waits on B-58; design start in docs/tasks/9.3k/plan.md.'
+  accept: editing a subject writes one teacher.subject audit row; a staff view test shows a teacher's past subject changes on a queue row; db and web typecheck, lint and test green.
+  deps:
+  - 9.3k
+  risk: high
+  status: blocked
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
