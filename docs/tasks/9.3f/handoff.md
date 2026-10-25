@@ -180,37 +180,28 @@ malformed-input case, and inconsistent with `decide` in the same file, which alr
 
 ## Decisions
 
-1. "`setVerification({safety:true})` already worked from any starting `verificationStatus`
-   (9.3e); the security review's MEDIUM was a console gap, not a repository one. Fixed with a new
-   staff-only `findBySlugForStaff` (status-independent) and a `lookup` route, both read-only, so a
-   verified teacher can now be found and safety-rejected through the existing, unchanged `decide`
-   call."
-   Decided: Phase A proved the repository half over Postgres (`teacher-profiles.int.test.ts`'s
-   acceptance case). Phase B added the console half: a `lookup` GET route/handler
-   (`apps/web/app/api/staff/verifications/{handlers.ts,lookup/route.ts}`), the client call
-   (`apps/web/app/staff/client.ts`'s `findTeacherBySlug`), and a search box in the staff console
-   (`apps/web/app/staff/view.tsx`) that reuses the existing `VerificationRow`/`decide` unchanged —
-   proved end to end over Postgres in `route.int.test.ts` (find teacher A, already verified,
-   by slug; safety-reject; 200; audit `after.safety === true`). `decide` and `list` are
-   byte-for-byte unchanged by this task.
-2. "B-49: a subscription whose agent stopped being `live` no longer silently disappears from
-   `/home` with zero trace. A new read-only `listUnavailableForStudent` (deliberately separate
-   from `listLiveForStudent`, which also feeds the live-classes question route unchanged) surfaces
-   it as one blame-free line, no teacher name, no link — pause/cancel while suspended and the
-   chat/plan pages' 404 are unchanged (Q5, deferred: no payment is live yet, so nobody is billed
-   for an agent they can't reach)."
-   Decided: Phase A builds and proves only the read itself; wiring it into `/home` is Phase C.
-   Phase C threaded it into `homeLinks`, `HomeView` and `en.json` exactly as designed, with no
-   change to the design: one shared catch (no per-field try/catch), one aggregate blame-free
-   line placed after the existing chats/startable/paused block (so it shows alongside both an
-   active chat and the empty-state placeholder), and dedupe by agent id.
+### 24 Oct 2026 · 9.3f a verified teacher is found by slug and safety-rejected through the unchanged decide call · decided by builder · risk: high
+- Decided: a new staff-only, status-independent `findBySlugForStaff` read in `packages/db` and a read-only `lookup` route (`apps/web/app/api/staff/verifications/{handlers.ts,lookup/route.ts}`), a `findTeacherBySlug` client call and a search box in `apps/web/app/staff/view.tsx` that reuses `VerificationRow` and `decide` unchanged; `decide` and `list` are byte-for-byte unchanged.
+- Why: `setVerification({safety:true})` already worked from any starting `verificationStatus` (9.3e), so the security review's MEDIUM was a console gap, not a repository one; proved over Postgres in `teacher-profiles.int.test.ts` and `route.int.test.ts` (find an already verified teacher by slug, safety-reject, 200, audit `after.safety === true`). `packages/db/src/repositories/**` and `apps/web/app/api/staff/**` are required-reviewer groups.
 
-(Phase A carries `risk: high` — `packages/db/src/repositories/**` is a required-reviewer group.
-Phase B also carries `risk: high` — `apps/web/app/api/staff/**` is a required-reviewer group.
-Phase C is not risky by path, per the plan.)
+### 24 Oct 2026 · 9.3f a subscription whose agent is no longer live shows one blame-free line on /home · decided by builder · risk: low
+- Decided: a read-only `listUnavailableForStudent` (separate from `listLiveForStudent`, which also feeds the live-classes question route) feeds one aggregate line in `homeLinks`, `HomeView` and `en.json`, with no teacher name and no link, deduped by agent id and placed after the chats, startable and paused block under the existing single catch.
+- Why: B-49: such a subscription used to vanish from `/home` with no trace. Pause or cancel while suspended and the chat and plan pages' 404 stay unchanged (plan Q5, deferred to 9.3i: no payment is live, so nobody is billed for an agent they cannot reach).
+
+### 24 Oct 2026 · 9.3f a malformed lookup slug is 400, not 403 · decided by builder · risk: high
+- Decided: `lookup`'s catch in `apps/web/app/api/staff/verifications/handlers.ts` switches on `error.kind` like `decide`: `invalid` is 400 validation, `scope` and `not_found` stay 403 forbidden, and `integrity` and `failed` fall through to the generic 500.
+- Why: the review's HIGH: a typo or pasted URL told staff they were not allowed, which is the wrong error and inconsistent with `decide` in the same file.
+
+### 24 Oct 2026 · 9.3f tool calls over the plan's budget · decided by lead · risk: low
+- Decided: accept 316 tool calls (harness count over phase A, phase B, the stalled and finishing phase C builders and the fixer) against the plan's 230.
+- Why: phase C stalled when the Mac slept and its work was preserved and finished by a second builder, and one fix round ran; every phase finished with a green gate.
 
 ## Left to do
 
 - Board follow-ups the lead already opened per the plan's lead answers: 9.3h (queue/lookup row
   shows active takedowns and last decision; subject-edit history) and 9.3i (pause/cancel for a
   subscription whose agent is suspended) — both deferred, not part of this task.
+
+## Budget
+
+Tool calls used: 316 (harness count across all builders and the fixer)
