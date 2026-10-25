@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 0.19b merge: closeout.py checks Decided: lines before it appends (.claude/**) · decided by lead · risk: high
+- Decided: merge 0.19b; closeout.py now refuses (exit 1, log, board and digest untouched) when any handoff decision entry lacks a `Decided:` line, naming each such heading, using the same DECIDED_LINE regex as board.py.
+- Why: today a bad entry was appended first and then the board refused, and a re-run skipped it as a duplicate (seen on 7.3); security-reviewer approved: the check runs before the only write, adds no subprocess or path surface, and prints only the task id and headings.
+
+---
+
 ### 25 Oct 2026 · 8.6e type-only ts-expect-error test does not run at runtime · decided by builder · risk: low
 - Decided: the three `@ts-expect-error` nested-assignment checks live in a module-scope function that is never called (referenced once via `void fn;` to satisfy lint), not inside an `it()` body.
 - Why: `MODEL_MIX` is deep-frozen at runtime (`Object.freeze`), so executing the assignment inside a test body throws `TypeError: Cannot assign to read only property` at runtime before the `@ts-expect-error` comment's compile-time check is reached; a type-only, uncalled function gets the same `tsc --noEmit` guarantee without a spurious runtime failure.
