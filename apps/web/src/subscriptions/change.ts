@@ -6,7 +6,7 @@
 // even be sent. `packageId` (the public offer's id) is mapped to the real `packageVersionId`
 // server-side via `packageVersions.liveForAgent`, never trusted from the client.
 import type { LiveSubscription, Repositories } from '@edmate/db';
-import { RepositoryError } from '@edmate/db';
+import { RepositoryError, studentScope } from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { serverDatabase } from '../auth';
@@ -21,7 +21,7 @@ export interface PlanBackend {
   packageVersions: Pick<Repositories['packageVersions'], 'liveForAgent' | 'getById'>;
   subscriptions: Pick<
     Repositories['subscriptions'],
-    'findLive' | 'changePackage' | 'pause' | 'resume' | 'cancel'
+    'findLive' | 'changePackage' | 'pause' | 'resume' | 'cancel' | 'listUnavailableForStudent'
   >;
 }
 
@@ -154,7 +154,21 @@ export function createPlanHandlers(backend: PlanBackend): { patch: Handler } {
     const body = BodySchema.safeParse(raw);
     if (!body.success) return validation();
 
-    const scope = await studentTurnScope(backend.agents, ctx.principal, body.data.agentId);
+    let scope = await studentTurnScope(backend.agents, ctx.principal, body.data.agentId);
+    // Task 9.3i: a suspended/draft agent's own subscription can still be paused or cancelled (never
+    // resumed or changed -- those stay 404, same as today). The fallback is scoped to the signed-in
+    // student's own rows only (listUnavailableForStudent), so it can never widen which subscriptions
+    // this route resolves; it is tried only once `owner` has already said the agent is not live.
+    if (scope === null && (body.data.action === 'pause' || body.data.action === 'cancel')) {
+      const unavailable = await backend.subscriptions.listUnavailableForStudent(ctx.principal.userId);
+      const match = unavailable.find((row) => row.agentId === body.data.agentId);
+      if (match) {
+        scope = studentScope(
+          { studentId: ctx.principal.userId, teacherId: match.teacherId },
+          'subscriptions.change.fallback',
+        );
+      }
+    }
     if (scope === null) return notFound();
 
     try {
@@ -209,5 +223,7 @@ export const planHandlers: { patch: Handler } = createPlanHandlers({
     pause: (scope, input) => serverDatabase().repos.subscriptions.pause(scope, input),
     resume: (scope, input) => serverDatabase().repos.subscriptions.resume(scope, input),
     cancel: (scope, input) => serverDatabase().repos.subscriptions.cancel(scope, input),
+    listUnavailableForStudent: (studentId) =>
+      serverDatabase().repos.subscriptions.listUnavailableForStudent(studentId),
   },
 });

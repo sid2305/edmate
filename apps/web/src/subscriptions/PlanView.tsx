@@ -28,6 +28,10 @@ export interface PlanViewProps {
   subscription: PlanSubscription | null;
   /** Every live offer of this agent, including the current one (so a label can compare prices). */
   offers: PlanOffer[];
+  /** Task 9.3i: false when the agent is suspended/draft (default true). Hides Resume and the
+   * change-plan controls, shows a blame-free notice, and sends a successful pause/cancel to
+   * /home instead of /learn/<agentId> (which would 404 for a non-live agent). */
+  agentAvailable?: boolean;
 }
 
 type Action = 'pause' | 'resume' | 'cancel' | `change:${string}`;
@@ -44,7 +48,7 @@ function labelFor(offer: PlanOffer, current: PlanOffer | undefined): 'upgrade' |
   return 'switch';
 }
 
-export function PlanView({ agentId, subscription, offers }: PlanViewProps) {
+export function PlanView({ agentId, subscription, offers, agentAvailable = true }: PlanViewProps) {
   const t = useTranslations('plan');
   const router = useRouter();
   const [busy, setBusy] = useState<Action | null>(null);
@@ -84,7 +88,10 @@ export function PlanView({ agentId, subscription, offers }: PlanViewProps) {
     setError(null);
     try {
       const ok = await send({ agentId, action: 'pause' });
-      if (ok) router.refresh();
+      if (ok) {
+        if (agentAvailable) router.refresh();
+        else router.push('/home');
+      }
     } finally {
       setBusy(null);
     }
@@ -106,7 +113,7 @@ export function PlanView({ agentId, subscription, offers }: PlanViewProps) {
     setError(null);
     try {
       const ok = await send({ agentId, action: 'cancel' });
-      if (ok) router.push(`/learn/${encodeURIComponent(agentId)}`);
+      if (ok) router.push(agentAvailable ? `/learn/${encodeURIComponent(agentId)}` : '/home');
     } finally {
       setBusy(null);
       setConfirmingCancel(false);
@@ -144,6 +151,7 @@ export function PlanView({ agentId, subscription, offers }: PlanViewProps) {
     <div>
       {error ? <p role="alert">{error}</p> : null}
       <p>{t('noPaymentNotice')}</p>
+      {agentAvailable === false ? <p>{t('agentUnavailable')}</p> : null}
       <section>
         <h2>{t('currentTitle')}</h2>
         <p>{current ? current.name : subscription.packageId}</p>
@@ -151,7 +159,7 @@ export function PlanView({ agentId, subscription, offers }: PlanViewProps) {
         <p>{t('periodEnd', { date: subscription.periodEnd })}</p>
       </section>
 
-      {others.length > 0 ? (
+      {agentAvailable && others.length > 0 ? (
         <section>
           <h2>{t('otherPackagesTitle')}</h2>
           <ul>
@@ -178,11 +186,11 @@ export function PlanView({ agentId, subscription, offers }: PlanViewProps) {
         {isPaused ? (
           pausedByEdmate ? (
             <p>{t('pausedByEdmate')}</p>
-          ) : (
+          ) : agentAvailable ? (
             <button type="button" disabled={busy !== null} onClick={() => void onResume()}>
               {busy === 'resume' ? t('resuming') : t('resumeButton')}
             </button>
-          )
+          ) : null
         ) : (
           <button type="button" disabled={busy !== null} onClick={() => void onPause()}>
             {busy === 'pause' ? t('pausing') : t('pauseButton')}
