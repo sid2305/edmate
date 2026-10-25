@@ -55,6 +55,14 @@ All three deferred 5.5 findings fixed in `packages/harness/src/tools/sandbox.ts`
   own tests for no safety gain, since the overflow case is just as well handled by refusing the
   unsafe input.
 
+### 25 Oct 2026 · 5.5a merge · decided by lead · risk: low
+- Decided: merge 5.5a. code-reviewer and typescript-reviewer both raised one HIGH (packages/harness/src/tools/sandbox.ts: lcm checked its inputs but not its result, so two large safe-integer arguments returned a wrong float above 2^53); one fix round made lcm refuse an unsafe result, and both reviewers re-reviewed and approved. Keeping gcd and lcm with safe-integer guards (the builder's decision) is accepted.
+- Why: every implicit-multiplication form in the plan is refused with tests, gcd and lcm can no longer return a silently wrong answer, and src/tools keeps 100% coverage.
+
+### 25 Oct 2026 · 5.5a budget · decided by lead · risk: low
+- Decided: accept 82 harness tool calls (build 50, fix round 32) against a planned 60.
+- Why: the overrun is the fix round for a real HIGH; the build itself stayed under its cap.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...` → all 10 tasks
@@ -66,7 +74,7 @@ All three deferred 5.5 findings fixed in `packages/harness/src/tools/sandbox.ts`
 
 ## Budget
 
-Tool calls used: 29
+Tool calls used: 50 (harness count; the builder reported 29)
 
 ## Fix round
 
@@ -96,4 +104,4 @@ float above 2^53.
   Prettier code style!"
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
-Tool calls used: 15
+Tool calls used: 32 (harness count; the fixer reported 15)
