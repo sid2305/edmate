@@ -269,6 +269,19 @@ describe('the ruling-out check holds across the whole reply (5.6b fix round 1)',
     expect(runAll(g, [text])).toBe(text);
     expect(g.tripped).toBe(false);
   });
+
+  it('a wrong-option mention split by a cap-forced cut is still caught live (5.6g)', () => {
+    // After `continue` is ruled out and committed, an unbroken (no-space) run of non-word filler
+    // forces a cap cut (SENTENCE_GATE_CAP = 200) mid-word, so "pass" is released half in one
+    // piece and half in the next. Only the window (the released half) plus the new piece spells
+    // the whole word; the bare piece alone never does.
+    const run = '~'.repeat(198) + 'pass' + '~'.repeat(50);
+    const text = `${RULE_OUT_S1} ${run}`;
+    const g = itemGate([RULE_OUT_ITEM]);
+    const shown = runAll(g, [text]);
+    expect(g.tripped).toBe(true);
+    expect(shown).not.toContain('pass');
+  });
 });
 
 describe('addKeys with items (5.6b)', () => {
