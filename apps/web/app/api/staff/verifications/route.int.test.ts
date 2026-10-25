@@ -14,6 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGuard, type CookieReader, type Principal } from '../../../../src/auth/guard';
 import { createStaffVerificationHandlers } from './handlers';
 
+const LOOKUP_PATH = '/api/staff/verifications/lookup';
+
 const DB_URL = process.env.TEST_DATABASE_URL?.trim() ?? '';
 const ORIGIN = 'http://localhost:8080';
 const PATH = '/api/staff/verifications';
@@ -87,7 +89,11 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
       },
     );
     const h = createStaffVerificationHandlers({ repos: () => db.repos, log: () => undefined });
-    return { GET: guard.withRole(['staff'], h.list), POST: guard.withRole(['staff'], h.decide) };
+    return {
+      GET: guard.withRole(['staff'], h.list),
+      POST: guard.withRole(['staff'], h.decide),
+      LOOKUP: guard.withRole(['staff'], h.lookup),
+    };
   }
   const call = (method: 'GET' | 'POST', as: string | null, body?: unknown) =>
     new NextRequest(`${ORIGIN}${PATH}`, {
@@ -97,6 +103,11 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
         ...(method === 'POST' ? { origin: ORIGIN, 'content-type': 'application/json' } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const lookup = (as: string | null, slug: string) =>
+    new NextRequest(`${ORIGIN}${LOOKUP_PATH}?slug=${encodeURIComponent(slug)}`, {
+      method: 'GET',
+      headers: as ? { cookie: `who=${as}` } : {},
     });
   const publish = (teacherId: string) =>
     db.repos.teacherProfiles.assertVerifiedForPublish({ teacherId });
@@ -188,6 +199,44 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
       after: { verificationStatus: 'verified' },
     });
     await expect(publish(teacherA)).resolves.toBeUndefined();
+  });
+
+  it('9.3f: staff find the now-verified teacher A by slug, then safety-reject them (one real round trip)', async () => {
+    // teacherA was verified in the previous test (listPendingForStaff would no longer show them,
+    // which is exactly the console gap this lookup closes).
+    const found = await routes().LOOKUP(lookup('staff', `asha-${tag}`));
+    expect(found.status).toBe(200);
+    expect(await found.json()).toMatchObject({
+      teacher: { teacherId: teacherA, slug: `asha-${tag}`, verificationStatus: 'verified' },
+    });
+    const before = await verifyRows(teacherA);
+    const res = await routes().POST(
+      call('POST', 'staff', {
+        teacherId: teacherA,
+        status: 'rejected',
+        reason: 'safety concern found via lookup',
+        safety: true,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ teacherId: teacherA, verificationStatus: 'rejected' });
+    const rows = await verifyRows(teacherA);
+    expect(rows).toHaveLength(before.length + 1);
+    expect(rows.find((r) => r.reason === 'safety concern found via lookup')).toMatchObject({
+      actor: staffId,
+      after: { verificationStatus: 'rejected', safety: true },
+    });
+  });
+
+  it('a signed-out or non-staff lookup is 401/403, nothing read', async () => {
+    expect((await routes().LOOKUP(lookup(null, `asha-${tag}`))).status).toBe(401);
+    expect((await routes().LOOKUP(lookup('teacher', `asha-${tag}`))).status).toBe(403);
+  });
+
+  it('an unknown slug is 200 with a null teacher', async () => {
+    const res = await routes().LOOKUP(lookup('staff', `no-such-slug-${tag}`));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ teacher: null });
   });
 
   it("a staff user can't verify their own profile (fixed 403, no audit row)", async () => {

@@ -370,5 +370,40 @@ export function teacherProfilesRepo(db: Db) {
         .limit(STAFF_QUEUE_MAX_LIMIT);
       return rows.map((r) => toTeacherVerificationQueueRow(r, method));
     },
+
+    /**
+     * A staff-only lookup by slug, **with no `verificationStatus` filter** (task 9.3f): staff can
+     * only reach `setVerification` through a `teacherId` taken from `listPendingForStaff`, which
+     * filters to `pending`, so a teacher who is already `verified` or `rejected` could never be
+     * named to a safety rejection -- `setVerification` itself has worked from any starting status
+     * since 9.3e. This closes that console gap with a read, not a write (no lock, unlike
+     * `setVerification`'s own `by` check). A malformed `by` or `slug` is `invalid` before any SQL
+     * (both are parsed first, same as every other method); a well-formed `by` who is not staff
+     * right now is `scope`; an unknown slug is `null`.
+     */
+    async findBySlugForStaff(
+      by: unknown,
+      slug: unknown,
+    ): Promise<TeacherVerificationQueueRow | null> {
+      const method = 'teacherProfiles.findBySlugForStaff';
+      const id = parseArg(IdSchema, by, method);
+      const s = parseArg(Slug, slug, method);
+      const [actor] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
+      if (actor?.role !== 'staff') throw new RepositoryError('scope', method);
+      const [row] = await db
+        .select({
+          id: teacherProfiles.id,
+          userId: teacherProfiles.userId,
+          slug: teacherProfiles.slug,
+          subject: teacherProfiles.subject,
+          verificationStatus: teacherProfiles.verificationStatus,
+          name: users.name,
+          email: users.email,
+        })
+        .from(teacherProfiles)
+        .innerJoin(users, eq(users.id, teacherProfiles.userId))
+        .where(eq(teacherProfiles.slug, s));
+      return row ? toTeacherVerificationQueueRow(row, method) : null;
+    },
   };
 }

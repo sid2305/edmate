@@ -10,9 +10,11 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import {
   decide as defaultDecide,
+  findTeacherBySlug as defaultFindTeacherBySlug,
   loadQueue as defaultLoadQueue,
   QueueSchema,
   type Decision,
+  type LookupItem,
   type QueueItem,
 } from './client';
 import { VerificationRow } from './verification-row';
@@ -23,9 +25,14 @@ export interface StaffQueueViewProps {
   /** Tests inject fakes; defaults call `/api/staff/verifications`. */
   decide?: typeof defaultDecide;
   loadQueue?: typeof defaultLoadQueue;
+  findTeacherBySlug?: typeof defaultFindTeacherBySlug;
 }
 
-type Busy = { kind: 'decide'; teacherId: string; status: Decision } | { kind: 'reload' } | null;
+type Busy =
+  | { kind: 'decide'; teacherId: string; status: Decision }
+  | { kind: 'reload' }
+  | { kind: 'find' }
+  | null;
 type ErrorKey = 'forbidden' | 'not_found' | 'validation' | 'generic' | 'loadFailed';
 type Notice = { status: Decision; slug: string; safety: boolean } | null;
 
@@ -42,6 +49,7 @@ export function StaffQueueView({
   initial,
   decide = defaultDecide,
   loadQueue = defaultLoadQueue,
+  findTeacherBySlug = defaultFindTeacherBySlug,
 }: StaffQueueViewProps) {
   const t = useTranslations('staff');
   const [teachers, setTeachers] = useState<QueueItem[] | null>(() => parseInitial(initial));
@@ -50,8 +58,17 @@ export function StaffQueueView({
     parseInitial(initial) === null ? 'loadFailed' : null,
   );
   const [notice, setNotice] = useState<Notice>(null);
+  const [slug, setSlug] = useState('');
+  const [found, setFound] = useState<LookupItem | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
-  const onDecide = async (item: QueueItem, status: Decision, reason: string, safety: boolean) => {
+  const onDecide = async (
+    item: QueueItem,
+    status: Decision,
+    reason: string,
+    safety: boolean,
+    fromLookup = false,
+  ) => {
     setError(null);
     setNotice(null);
     setBusy({ kind: 'decide', teacherId: item.teacherId, status });
@@ -61,12 +78,40 @@ export function StaffQueueView({
         setError(errorKey(result.code));
         return;
       }
-      setTeachers((list) => (list ?? []).filter((x) => x.teacherId !== item.teacherId));
+      if (fromLookup) {
+        setFound(null);
+      } else {
+        setTeachers((list) => (list ?? []).filter((x) => x.teacherId !== item.teacherId));
+      }
       setNotice({
         status: result.verificationStatus,
         slug: item.slug,
         safety: safety && result.verificationStatus === 'rejected',
       });
+    } catch {
+      setError('generic');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onFind = async () => {
+    setError(null);
+    setNotice(null);
+    setFound(null);
+    setNotFound(false);
+    setBusy({ kind: 'find' });
+    try {
+      const result = await findTeacherBySlug(slug.trim());
+      if (!result.ok) {
+        setError(errorKey(result.code));
+        return;
+      }
+      if (result.teacher === null) {
+        setNotFound(true);
+      } else {
+        setFound(result.teacher);
+      }
     } catch {
       setError('generic');
     } finally {
@@ -107,6 +152,42 @@ export function StaffQueueView({
             { slug: notice.slug },
           )}
         </p>
+      ) : null}
+      <form
+        className="staff-lookup"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onFind();
+        }}
+      >
+        <p className="staff-field">
+          <label htmlFor="staff-lookup-slug">{t('lookupLabel')}</label>
+          <input
+            id="staff-lookup-slug"
+            type="text"
+            value={slug}
+            placeholder={t('lookupPlaceholder')}
+            onChange={(e) => setSlug(e.target.value)}
+          />
+        </p>
+        <p>
+          <button type="submit" disabled={busy !== null || slug.trim() === ''}>
+            {busy?.kind === 'find' ? t('lookupBusy') : t('lookupButton')}
+          </button>
+        </p>
+      </form>
+      {notFound ? <p role="status">{t('lookupNotFound')}</p> : null}
+      {found ? (
+        <ul className="staff-list" aria-label={t('lookupLabel')}>
+          <VerificationRow
+            key={found.teacherId}
+            item={found}
+            currentStatus={found.verificationStatus}
+            pending={busy?.kind === 'decide' && busy.teacherId === found.teacherId ? busy.status : null}
+            disabled={busy !== null}
+            onDecide={(status, reason, safety) => void onDecide(found, status, reason, safety, true)}
+          />
+        </ul>
       ) : null}
       <p>
         <button type="button" disabled={busy !== null} onClick={() => void onReload()}>
