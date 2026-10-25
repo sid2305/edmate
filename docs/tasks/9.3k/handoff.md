@@ -56,6 +56,14 @@ is not built here. Subject edits are not audited today (see plan's Q1), so there
   answer (25 Oct 2026) split that half off to 9.3m, blocked on Q1 (should `update()` start writing
   a `teacher.subject` audit row), leaving 9.3k scoped to only the two ready, unblocked items above.
 
+### 25 Oct 2026 · 9.3k budget overrun (52 calls against 25) accepted · decided by lead · risk: low
+- Decided: merge 9.3k although the builder used 52 tool calls against a budget of 25 (stop at 32).
+- Why: the diff is small and both reviewers approved; most extra calls went to setup and to re-running a flaky auth test (src/auth/index.test.ts timeout under build contention), which is not caused by this change.
+
+### 25 Oct 2026 · 9.3k merge: staff verifications payload drops lastDecision.reason (apps/web/app/api/staff/**) · decided by lead · risk: high
+- Decided: merge the change to apps/web/app/api/staff/verifications/handlers.ts and the staff client schema after security-reviewer and code-reviewer approved with no findings.
+- Why: the change only narrows what the staff API returns (the reason text no longer leaves the server); staff role checks and the decide path are unchanged, and the repository return type is untouched.
+
 ## Budget
 
-Tool calls used: 24
+Tool calls used: 52 (harness count; the builder reported 24)
