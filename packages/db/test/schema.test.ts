@@ -397,6 +397,21 @@ describe('cost alarm migration (task 2.5): existing audit rows keep their role',
 const RELAX_NOT_NULL = /ALTER TABLE "(\w+)" ALTER COLUMN "(\w+)" DROP NOT NULL;/g;
 
 /**
+ * `DROP INDEX "name";`: an index drop touches no row data, only a lookup structure, so it is not
+ * the destructive statement this file otherwise guards against. Task 12.5d: 0030 replaces
+ * safety_alerts_open_created_at_id_idx and class_questions_live_class_id_idx with wider indexes
+ * covering the same (and more) queries; dropping each old one loses nothing (neither is a strict
+ * superset dropped early, and no other query used either beyond what the new index also serves).
+ */
+const REVIEWED_INDEX_DROPS: Record<string, string[]> = {
+  '0030_alert_queue_indexes.sql': [
+    'class_questions_live_class_id_idx',
+    'safety_alerts_open_created_at_id_idx',
+  ],
+};
+const DROP_INDEX = /DROP INDEX "(\w+)";/g;
+
+/**
  * `UPDATE "t" SET`: the only data updates a migration may make, per file, each reviewed. Task 3.16
  * (lead answer and security plan review): 0009 backfills the package pin of open sessions from
  * their entitlement, or ends them and clears that pair's last summary. No row is deleted.
@@ -429,8 +444,18 @@ describe('migrations are create-only', () => {
       // Relaxing NOT NULL loses no data (lead, task 2.4 fix round 1); everything else is checked.
       let rest = sql.replace(RELAX_NOT_NULL, '');
       if (file in REVIEWED_UPDATES) rest = rest.replace(UPDATE_SET, '');
+      if (file in REVIEWED_INDEX_DROPS) rest = rest.replace(DROP_INDEX, '');
       expect(DESTRUCTIVE_SQL.test(rest), `${file} is destructive`).toBe(false);
     }
+  });
+
+  it('drops only reviewed indexes, by name (task 12.5d)', () => {
+    const dropped = Object.fromEntries(
+      migrationSql()
+        .map(({ file, sql }) => [file, [...sql.matchAll(DROP_INDEX)].map((m) => m[1]!)] as const)
+        .filter(([, names]) => names.length > 0),
+    );
+    expect(dropped).toEqual(REVIEWED_INDEX_DROPS);
   });
 
   it('updates data only where a reviewed task did (task 3.16)', () => {
@@ -502,10 +527,21 @@ describe('safety_alerts: the staff alert inbox (task 12.5a)', () => {
     expect(value('safety_alerts_escalation_round_non_negative')).toMatch(/escalation_round" >= 0/);
   });
 
-  it('has the open-alert partial index on (created_at, id), and acknowledged_by -> users', () => {
-    const open = t.indexes['safety_alerts_open_created_at_id_idx'];
-    expect(open?.columns.map((c) => c.expression)).toEqual(['created_at', 'id']);
+  it('has the open-alert partial index matching the staff list order, and acknowledged_by -> users', () => {
+    // Task 12.5d: replaces the old (created_at, id)-only partial index with one whose key
+    // matches listForStaff's ORDER BY for the open set exactly.
+    const open = t.indexes['safety_alerts_open_created_at_created_id_idx'];
+    expect(open?.columns.map((c) => c.expression)).toEqual([
+      '("acknowledged_at" is not null)',
+      '("escalated_at" is null)',
+      'created_at',
+      'id',
+    ]);
     expect(open?.where).toMatch(/acknowledged_at" is null/);
+    expect(t.indexes['safety_alerts_open_created_at_id_idx']).toBeUndefined();
+    const ackBy = t.indexes['safety_alerts_acknowledged_by_idx'];
+    expect(ackBy?.columns.map((c) => c.expression)).toEqual(['acknowledged_by']);
+    expect(ackBy?.where).toMatch(/acknowledged_by" is not null/);
     const fk = Object.values(t.foreignKeys).find((f) => f.columnsFrom.includes('acknowledged_by'));
     expect(fk?.tableTo).toBe('users');
     for (const c of ['acknowledged_at', 'acknowledged_by', 'ack_note', 'escalated_at', 'last_paged_at']) {
