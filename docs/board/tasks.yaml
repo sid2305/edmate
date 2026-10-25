@@ -3125,8 +3125,38 @@ tasks:
   accept: 'A test: a handoff whose entry has no Decided: line leaves docs/decisions/log.md unchanged.'
   deps: []
   risk: risky
-  status: running
+  status: done
   branch: m13/0.19b-closeout-check-decided
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 57
+    tokens_in: 180
+    tokens_out: 5900
+    cache_read_tokens: 5009445
+    wall_time_seconds: 327839
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
+- id: 0.19c
+  milestone: M13
+  title: 'merge_gate.py --pr accepts task ids with a word after the dot (13.skillpresent, 13.regate): today its branch pattern needs a digit there, so those PRs fail the required Merge gate / check (seen
+    on PR #276).'
+  accept: 'Tests: m13/13.skillpresent-a-harness-events gives task 13.skillpresent; m3/3.11d-foo still gives 3.11d; a branch with no slug is rejected.'
+  deps: []
+  risk: risky
+  status: running
+  branch: m13/0.19c-gate-word-ids
   model: plan:lead build:sonnet
 - id: 5.8e
   milestone: M13
@@ -3136,9 +3166,9 @@ tasks:
   deps:
   - 5.8a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.8e-persona-cli-followups
+  model: plan:sonnet build:sonnet
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
@@ -3994,9 +4024,30 @@ tasks:
   deps:
   - 8.6a
   risk: low
-  status: running
+  status: done
   branch: m13/8.6e-model-mix-readonly
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 31
+    tokens_in: 122
+    tokens_out: 763
+    cache_read_tokens: 1435747
+    wall_time_seconds: 156
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.9a
   milestone: M8
   title: 'teacherQuestions.dismiss (8.9 Phase A, packages/db): close one open question, teacher-scoped'
@@ -8116,13 +8167,24 @@ tasks:
     human_questions: 0
 - id: 9.3k
   milestone: M13
-  title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows; plus 9.3h review: a view.test.tsx case
-    for a lookup-found row with takedown and last-decision lines (MEDIUM), and drop lastDecision.reason from the staff API payload until a UI renders it (LOW)'
-  accept: a staff view test shows a teacher's past subject changes on a queue row; web typecheck, lint and test green.
+  title: '9.3h review follow-ups: a view.test.tsx case for a lookup-found row with takedown and last-decision lines (MEDIUM), and drop lastDecision.reason from the staff API payload until a UI renders it
+    (LOW). Subject-edit history moved to 9.3m.'
+  accept: a staff view test shows the takedown and last-decision lines on a lookup-found row; the staff list and lookup responses carry no lastDecision.reason; web typecheck, lint and test green.
   deps:
   - 9.3h
-  risk: low
-  status: planning
+  risk: high
+  status: review
+  branch: m13/9.3k-staff-followups
+  model: plan:sonnet build:sonnet
+- id: 9.3m
+  milestone: M13
+  title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write
+    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). Waits on B-58; design start in docs/tasks/9.3k/plan.md.'
+  accept: editing a subject writes one teacher.subject audit row; a staff view test shows a teacher's past subject changes on a queue row; db and web typecheck, lint and test green.
+  deps:
+  - 9.3k
+  risk: high
+  status: blocked
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

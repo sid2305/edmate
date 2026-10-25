@@ -39,9 +39,18 @@ export class UnpricedModelError extends Error {
   }
 }
 
+/**
+ * A per-turn cost estimate was asked for with an invalid policy or token assumptions (a missing
+ * tier, a bad count, or a total too large to store exactly). Extends RangeError so existing
+ * `instanceof RangeError` callers still work; tests should match on this class, not the message.
+ */
+export class TurnCostError extends RangeError {
+  override readonly name = 'TurnCostError';
+}
+
 function modelOf(policy: ModelPolicy, tier: 'main' | 'small'): string {
   const route = policy.tiers[tier];
-  if (route === undefined) throw new RangeError(`policy has no ${tier} tier`);
+  if (route === undefined) throw new TurnCostError(`policy has no ${tier} tier`);
   return route.model;
 }
 
@@ -59,7 +68,7 @@ export function turnCostMicroUsd(
 ): number {
   const a = assumptions;
   if (!Number.isSafeInteger(a.smallCallsPerTurn) || a.smallCallsPerTurn < 0) {
-    throw new RangeError('smallCallsPerTurn must be a non-negative safe integer');
+    throw new TurnCostError('smallCallsPerTurn must be a non-negative safe integer');
   }
   const main = callCost(prices, modelOf(policy, 'main'), a.mainInputTokens, a.mainOutputTokens);
   const small = callCost(
@@ -70,7 +79,7 @@ export function turnCostMicroUsd(
   );
   const total = BigInt(main) + BigInt(small) * BigInt(a.smallCallsPerTurn);
   if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new RangeError('turn cost is too large to store exactly');
+    throw new TurnCostError('turn cost is too large to store exactly');
   }
   return Number(total);
 }

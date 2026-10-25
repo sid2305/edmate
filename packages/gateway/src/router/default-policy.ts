@@ -11,7 +11,18 @@ import type { ModelPolicy } from '@edmate/contracts';
 /** A package's tier for the model mix: a free package or a paid one. */
 export type PackageMixTier = 'free' | 'paid';
 
-function mix(main: string, small: string): ModelPolicy {
+/** Every property, nested objects included, read-only (no `as` casts needed to produce one). */
+export type DeepReadonly<T> = T extends undefined | null
+  ? T
+  : T extends (...args: never[]) => unknown
+    ? T
+    : T extends readonly (infer U)[]
+      ? readonly DeepReadonly<U>[]
+      : T extends object
+        ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+        : T;
+
+function mix(main: string, small: string): DeepReadonly<ModelPolicy> {
   return Object.freeze({
     tiers: Object.freeze({
       small: Object.freeze({ provider: 'anthropic', model: small }),
@@ -20,8 +31,8 @@ function mix(main: string, small: string): ModelPolicy {
   });
 }
 
-/** The model policy each package tier's agent is built with (B-42). Frozen. */
-export const MODEL_MIX: Readonly<Record<PackageMixTier, ModelPolicy>> = Object.freeze({
+/** The model policy each package tier's agent is built with (B-42). Frozen all the way down. */
+export const MODEL_MIX: DeepReadonly<Record<PackageMixTier, ModelPolicy>> = Object.freeze({
   free: mix('claude-sonnet-5', 'claude-haiku-4-5'),
   paid: mix('claude-sonnet-5', 'claude-haiku-4-5'),
 });
