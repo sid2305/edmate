@@ -95,6 +95,10 @@ recurs on CI.
 - Decided: accept the overrun and mark the task DONE. The builder stopped PARTIAL only on budget; both flakes are fixed and the targeted repeats are green. The other harness timeouts it saw under full local load (streamGate.sentence.test.ts, runner.test.ts) are left for a follow-up if CI shows them.
 - Why: the scope in the plan is done; CI's five-run check is the real proof, and this PR's runs count towards it.
 
+### 25 Oct 2026 · 0.20b review LOW not fixed: redundant cast in packages/harness/src/pedagogy/modelRequest.test.ts · decided by lead · risk: low
+- Decided: wontfix. The `as number` after sort in packages/harness/src/pedagogy/modelRequest.test.ts is harmless.
+- Why: a test-only nit; not worth another round.
+
 ## Budget
 
 Tool calls used: 58 (harness count)
