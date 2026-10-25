@@ -11,12 +11,30 @@ const LOOKUP_ENDPOINT = '/api/staff/verifications/lookup';
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
+/** Task 9.3h: one of this teacher's active takedowns, as the console shows it. */
+const TakedownSummarySchema = z.object({
+  kind: z.enum(['document', 'agent']),
+  category: z.string(),
+  createdAt: z.string(),
+});
+
+/** Task 9.3h: the teacher's last verify/reject decision, or null before any decision. */
+const LastDecisionSchema = z
+  .object({
+    status: z.enum(['verified', 'rejected']),
+    reason: z.string().nullable(),
+    ts: z.string(),
+  })
+  .nullable();
+
 export const QueueItemSchema = z.object({
   teacherId: z.string().min(1),
   slug: z.string().min(1),
   subject: z.string(),
   name: z.string(),
   email: z.string().nullable(),
+  activeTakedowns: z.array(TakedownSummarySchema),
+  lastDecision: LastDecisionSchema,
 });
 export const QueueSchema = z.array(QueueItemSchema);
 export type QueueItem = z.infer<typeof QueueItemSchema>;

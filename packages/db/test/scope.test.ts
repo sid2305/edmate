@@ -133,6 +133,11 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // own IdSchema and would reach the database. Its malformed/non-staff cases are in
     // teacher-profiles.test.ts and teacher-profiles.int.test.ts.
     if (name === 'teacherProfiles.findBySlugForStaff') continue;
+    // audit.findLastVerifyForStaff (9.3h) takes a bare staff id and a bare teacher id, like
+    // listPendingForStaff, not a TeacherScope or StudentScope object: a plain id string among
+    // BAD_SCOPES is well-formed by its own IdSchema and would reach the database. Its own
+    // malformed/non-staff cases are in audit.test.ts and repositories.int.test.ts.
+    if (name === 'audit.findLastVerifyForStaff') continue;
     // reports.listOpenForStaff and reports.review (12.2a) take a bare staff id first, like
     // listPendingForStaff: a plain id string among BAD_SCOPES is well-formed for them and would
     // reach the database. Their malformed/non-staff cases are in reports.test.ts and

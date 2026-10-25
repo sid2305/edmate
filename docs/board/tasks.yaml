@@ -8002,9 +8002,30 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: running
+  status: done
   branch: m13/9.3h-staff-takedowns-last-decision
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet(x3) review:sonnet
+  metrics:
+    tool_calls: 75
+    tokens_in: 268
+    tokens_out: 557
+    cache_read_tokens: 4612179
+    wall_time_seconds: 131
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 1
 - id: 9.3i
   milestone: M13
   title: '9.3f plan Q5 (deferred): a student can pause or cancel a subscription whose agent is suspended (today the /home line has no actions and the chat and plan pages 404); land before payments go live'
@@ -8101,7 +8122,7 @@ tasks:
   deps:
   - 9.3h
   risk: low
-  status: todo
+  status: planning
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

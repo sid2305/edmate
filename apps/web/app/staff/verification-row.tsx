@@ -3,7 +3,7 @@
 // reject buttons. The reason is this row's own state; the busy flag belongs to the parent view.
 // Task 9.3e: a "safety concern" checkbox (row state too) makes Reject a safety rejection; Approve
 // always sends `false`.
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import type { Decision, QueueItem } from './client';
 
@@ -33,6 +33,7 @@ export function VerificationRow({
   onDecide,
 }: VerificationRowProps) {
   const t = useTranslations('staff');
+  const format = useFormatter();
   const [reason, setReason] = useState('');
   const [safety, setSafety] = useState(false);
   const headingId = `staff-row-${item.teacherId}`;
@@ -55,6 +56,24 @@ export function VerificationRow({
         <dd>{item.name}</dd>
         <dt>{t('email')}</dt>
         <dd>{item.email ?? t('noEmail')}</dd>
+        <dt>{t('activeTakedownsLabel')}</dt>
+        <dd>
+          {item.activeTakedowns.length === 0
+            ? t('activeTakedownsNone')
+            : t('activeTakedownsCount', { count: item.activeTakedowns.length })}
+        </dd>
+        <dt>{t('lastDecisionLabel')}</dt>
+        <dd>
+          {item.lastDecision === null
+            ? t('lastDecisionNone')
+            : t('lastDecisionLine', {
+                status: t(`status.${item.lastDecision.status}`),
+                date: format.dateTime(new Date(item.lastDecision.ts), {
+                  dateStyle: 'medium',
+                  timeZone: 'UTC',
+                }),
+              })}
+        </dd>
       </dl>
       <p className="staff-field">
         <label htmlFor={reasonId}>{t('reasonLabel')}</label>

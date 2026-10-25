@@ -4,7 +4,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { decide, findTeacherBySlug, loadQueue } from './client';
 
-const ITEM = { teacherId: 'tch_a', slug: 'asha-math', subject: 'Math', name: 'Asha', email: null };
+const ITEM = {
+  teacherId: 'tch_a',
+  slug: 'asha-math',
+  subject: 'Math',
+  name: 'Asha',
+  email: null,
+  activeTakedowns: [],
+  lastDecision: null,
+};
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -33,6 +41,22 @@ describe('loadQueue', () => {
   it('uses the global fetch by default', async () => {
     // test/setup.ts makes the global fetch reject: the call still settles.
     expect(await loadQueue()).toEqual({ ok: false, code: 'provider_error' });
+  });
+
+  it('parses active takedowns and a last decision (9.3h)', async () => {
+    const withHistory = {
+      ...ITEM,
+      activeTakedowns: [{ kind: 'agent', category: 'other', createdAt: '2026-10-20T00:00:00Z' }],
+      lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00Z' },
+    };
+    const f = vi.fn(async () => json({ teachers: [withHistory] }));
+    expect(await loadQueue(f)).toEqual({ ok: true, teachers: [withHistory] });
+  });
+
+  it('an old-shaped reply (missing the new fields) is a fixed failure, never half-trusted (9.3h)', async () => {
+    const oldShape = { teacherId: 'tch_a', slug: 'asha-math', subject: 'Math', name: 'Asha', email: null };
+    const f = async () => json({ teachers: [oldShape] });
+    expect(await loadQueue(f)).toEqual({ ok: false, code: 'provider_error' });
   });
 });
 

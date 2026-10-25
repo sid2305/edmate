@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   requireRole: vi.fn(),
   listPendingForStaff: vi.fn(),
   listAlertsForStaff: vi.fn(),
+  listActiveForStaff: vi.fn(),
+  findLastVerifyForStaff: vi.fn(),
   seen: [] as unknown[],
 }));
 
@@ -22,6 +24,8 @@ vi.mock('../../src/auth', () => ({
     repos: {
       teacherProfiles: { listPendingForStaff: state.listPendingForStaff },
       safetyAlerts: { listForStaff: state.listAlertsForStaff },
+      takedowns: { listActiveForStaff: state.listActiveForStaff },
+      audit: { findLastVerifyForStaff: state.findLastVerifyForStaff },
     },
   }),
 }));
@@ -78,6 +82,10 @@ beforeEach(() => {
   state.listPendingForStaff.mockReset();
   state.listAlertsForStaff.mockReset();
   state.listAlertsForStaff.mockResolvedValue([]);
+  state.listActiveForStaff.mockReset();
+  state.listActiveForStaff.mockResolvedValue([]);
+  state.findLastVerifyForStaff.mockReset();
+  state.findLastVerifyForStaff.mockResolvedValue(null);
   state.seen = [];
 });
 
@@ -91,13 +99,58 @@ describe('/staff', () => {
     expect(state.seen).toEqual([
       {
         initial: [
-          { teacherId: 'tch_a', slug: 'asha-math', subject: 'Math', name: 'Asha', email: 'asha@example.test' },
+          {
+            teacherId: 'tch_a',
+            slug: 'asha-math',
+            subject: 'Math',
+            name: 'Asha',
+            email: 'asha@example.test',
+            activeTakedowns: [],
+            lastDecision: null,
+          },
         ],
       },
     ]);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Teacher verification');
     const nav = screen.getByRole('navigation', { name: 'Main' });
     expect(within(nav).getByRole('link', { name: 'Verification' })).toHaveAttribute('href', '/staff');
+  });
+
+  it('the SSR initial prop carries active takedowns and the last decision (9.3h)', async () => {
+    state.requireRole.mockResolvedValueOnce({ userId: 'stf_1', role: 'staff' });
+    state.listPendingForStaff.mockResolvedValueOnce([ROW]);
+    state.listActiveForStaff.mockResolvedValueOnce([
+      {
+        id: 'tkd_1',
+        kind: 'document',
+        targetId: 'doc_1',
+        teacherId: 'tch_a',
+        teacherSlug: 'asha-math',
+        category: 'other',
+        createdAt: '2026-10-20T00:00:00.000Z',
+      },
+    ]);
+    state.findLastVerifyForStaff.mockResolvedValueOnce({
+      status: 'rejected',
+      reason: 'unsafe advice',
+      ts: '2026-10-19T00:00:00.000Z',
+    });
+    render(await StaffPage());
+    expect(state.seen).toEqual([
+      {
+        initial: [
+          {
+            teacherId: 'tch_a',
+            slug: 'asha-math',
+            subject: 'Math',
+            name: 'Asha',
+            email: 'asha@example.test',
+            activeTakedowns: [{ kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' }],
+            lastDecision: { status: 'rejected', reason: 'unsafe advice', ts: '2026-10-19T00:00:00.000Z' },
+          },
+        ],
+      },
+    ]);
   });
 
   it('reads nothing when the guard refuses (signed out, student or teacher)', async () => {
