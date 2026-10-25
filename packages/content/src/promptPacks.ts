@@ -20,7 +20,8 @@ import {
 } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { z } from 'zod';
-import { comparePersonaVersions } from './personaTemplates.js';
+import { compareSemver } from './semver.js';
+import { isSignedOff } from './signOff.js';
 import type { ValidationResult } from './validate.js';
 
 const SET_FILE = /^set@(.+)\.yaml$/;
@@ -207,7 +208,7 @@ export function validatePromptPackDir(dir: string): ValidationResult {
   return { ok: issues.length === 0, issues };
 }
 
-const signed = (reviewedBy: string): boolean => reviewedBy.trim().toLowerCase() !== 'pending';
+const signed = (reviewedBy: string): boolean => isSignedOff(reviewedBy);
 
 /**
  * A set is signed when its manifest and every pack it pins carry a reviewer (task 5.8a, lead
@@ -227,7 +228,7 @@ export function newestSignedSet(library: PromptPackLibrary): PromptPackSet | und
   let best: PromptPackSet | undefined;
   for (const set of library.values()) {
     if (!isSignedSet(set)) continue;
-    if (best === undefined || comparePersonaVersions(set.version, best.version) > 0) best = set;
+    if (best === undefined || compareSemver(set.version, best.version) > 0) best = set;
   }
   return best;
 }

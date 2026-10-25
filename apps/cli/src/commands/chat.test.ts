@@ -244,6 +244,11 @@ describe('chatTurnInput (5.8a role-play mode)', () => {
     expect(next.input).toStrictEqual({ ...base, kind: 'message', text: 'What is a loop?' });
   });
 
+  it('/leave now (trailing words) still leaves the role-play, matching on the first word', () => {
+    const out = chatTurnInput(ROLEPLAY, '/leave now', IDS, now);
+    expect(out).toEqual({ state: { mode: 'normal' }, notice: 'left the role-play; back to normal chat' });
+  });
+
   it('/leave outside role-play only says so', () => {
     const out = chatTurnInput(NORMAL, '/leave', IDS, now);
     expect(out.input).toBeUndefined();
@@ -315,5 +320,59 @@ describe('edmate chat: a scripted role-play session (5.8a)', () => {
     );
     expect(code).toBe(0);
     expect(rec.out.join('')).toContain('Role-play is unavailable');
+  });
+
+  it('names the load failure reason in the banner when no personas loaded', async () => {
+    const rec = capture();
+    const code = await runChatCommand(
+      [],
+      rec.io,
+      {
+        env: {},
+        cwd: '.',
+        gateway: scriptedChatGateway(1),
+        buildDeps: async (opts) => {
+          const setup = await slackBuildDeps(opts);
+          return { ...setup, personasSource: 'none', personasReason: '/no/such/dir: no such persona-template directory' };
+        },
+      },
+      linesStream(['exit']),
+    );
+    expect(code).toBe(0);
+    expect(rec.out.join('')).toContain('/no/such/dir: no such persona-template directory');
+  });
+});
+
+describe('edmate chat: banner names the prompt-pack source (5.8e)', () => {
+  it('shows "signed set" for the default (real) build', async () => {
+    const rec = capture();
+    const code = await runChatCommand(
+      [],
+      rec.io,
+      { env: {}, cwd: '.', gateway: scriptedChatGateway(1), buildDeps: slackBuildDeps },
+      linesStream(['exit']),
+    );
+    expect(code).toBe(0);
+    expect(rec.out.join('')).toContain('signed set');
+  });
+
+  it('shows "fixture fallback" when the prompt-pack source is the fixture', async () => {
+    const rec = capture();
+    const code = await runChatCommand(
+      [],
+      rec.io,
+      {
+        env: {},
+        cwd: '.',
+        gateway: scriptedChatGateway(1),
+        buildDeps: async (opts) => {
+          const setup = await slackBuildDeps(opts);
+          return { ...setup, promptPackSource: 'fixture' };
+        },
+      },
+      linesStream(['exit']),
+    );
+    expect(code).toBe(0);
+    expect(rec.out.join('')).toContain('fixture fallback');
   });
 });

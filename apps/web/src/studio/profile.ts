@@ -46,8 +46,11 @@ function fromError(error: unknown): Response {
         return apiError('forbidden', MSG.forbidden, 403);
       case 'not_found':
         return apiError('not_found', MSG.notFound, 404);
+      // `teacherProfiles` has no cap, so this repo call never raises `'limit'`; grouped with
+      // `'invalid'` only so the exhaustive switch compiles.
       case 'invalid':
       case 'integrity':
+      case 'limit':
         return validation();
       case 'failed':
         return apiError('provider_error', MSG.failed, 500);

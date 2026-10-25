@@ -126,7 +126,10 @@ function fromError(error: unknown, action: Body['action']): Response {
     case 'not_found':
     case 'scope':
       return notFound();
+    // Subscription plan changes have no cap, so this repo call never raises `'limit'`; grouped
+    // with `'invalid'` only so the exhaustive switch compiles.
     case 'invalid':
+    case 'limit':
       return apiError('validation', INVALID_MSG[action], 409);
     case 'integrity':
       return validation();
