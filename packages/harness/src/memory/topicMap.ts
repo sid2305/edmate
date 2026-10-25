@@ -21,13 +21,13 @@ const idFormat = () =>
     .max(LIMITS.idMaxLength)
     .regex(/^[A-Za-z0-9_-]+$/, 'letters, digits, _ or -');
 
-const CourseOutlineModuleInputSchema = z.object({
+const CourseOutlineModuleInputSchema = z.strictObject({
   moduleId: idFormat(),
   title: z.string().min(1),
   order: z.number(),
 });
 
-const CourseOutlineTopicInputSchema = z.object({
+const CourseOutlineTopicInputSchema = z.strictObject({
   topicId: idFormat(),
   moduleId: idFormat(),
   title: z.string().min(1),
@@ -36,7 +36,7 @@ const CourseOutlineTopicInputSchema = z.object({
   prerequisiteTopicIds: z.array(idFormat()).optional(),
 });
 
-const CourseOutlineInputSchema = z.object({
+const CourseOutlineInputSchema = z.strictObject({
   courseId: idFormat(),
   teacherId: idFormat(),
   modules: z.array(CourseOutlineModuleInputSchema).max(MAX_TOPICS),
@@ -173,25 +173,53 @@ function topologicalOrder(
     return am - bm || ao - bo || aid.localeCompare(bid);
   };
 
-  const ready: string[] = [];
+  const heap: string[] = [];
+  const heapPush = (topicId: string): void => {
+    heap.push(topicId);
+    let index = heap.length - 1;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (compareTieBreak(heap[index] as string, heap[parent] as string) >= 0) break;
+      [heap[index], heap[parent]] = [heap[parent] as string, heap[index] as string];
+      index = parent;
+    }
+  };
+  const heapPop = (): string => {
+    const top = heap[0] as string;
+    const last = heap.pop() as string;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let index = 0;
+      for (;;) {
+        const left = index * 2 + 1;
+        const right = index * 2 + 2;
+        let smallest = index;
+        if (left < heap.length && compareTieBreak(heap[left] as string, heap[smallest] as string) < 0) {
+          smallest = left;
+        }
+        if (right < heap.length && compareTieBreak(heap[right] as string, heap[smallest] as string) < 0) {
+          smallest = right;
+        }
+        if (smallest === index) break;
+        [heap[index], heap[smallest]] = [heap[smallest] as string, heap[index] as string];
+        index = smallest;
+      }
+    }
+    return top;
+  };
+
   for (const [topicId, degree] of inDegree) {
-    if (degree === 0) ready.push(topicId);
+    if (degree === 0) heapPush(topicId);
   }
-  ready.sort(compareTieBreak);
 
   const order: string[] = [];
-  while (ready.length > 0) {
-    const topicId = ready.shift() as string;
+  while (heap.length > 0) {
+    const topicId = heapPop();
     order.push(topicId);
-    const nextReady: string[] = [];
     for (const dependent of dependents.get(topicId) ?? []) {
       const degree = (inDegree.get(dependent) ?? 0) - 1;
       inDegree.set(dependent, degree);
-      if (degree === 0) nextReady.push(dependent);
-    }
-    if (nextReady.length > 0) {
-      ready.push(...nextReady);
-      ready.sort(compareTieBreak);
+      if (degree === 0) heapPush(dependent);
     }
   }
 

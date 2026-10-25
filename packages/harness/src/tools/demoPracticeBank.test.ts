@@ -1,11 +1,13 @@
 // Task 5.6 Phase A: the demo fixture bank is well-formed and behaves like a real PracticeBank.
 import { describe, expect, it } from 'vitest';
 import {
+  buildDemoTopicMap,
   DEMO_PRACTICE_RECORDS,
   DEMO_PRACTICE_TEACHER_ID,
+  DEMO_TOPIC_MAP,
   demoPracticeBank,
 } from './demoPracticeBank.js';
-import { pickItem, validateItem, type PracticeScope } from './practiceItems.js';
+import { pickItem, validateItem, type PracticeItem, type PracticeScope } from './practiceItems.js';
 
 const T = DEMO_PRACTICE_TEACHER_ID;
 const ALL_MODULES = [...new Set(DEMO_PRACTICE_RECORDS.map((r) => r.item.moduleId))];
@@ -206,5 +208,57 @@ describe('demoPracticeBank via pickItem', () => {
     );
     expect(picked?.item.moduleId).toBe('module-arithmetic');
     expect(picked?.item.kind).toBe('numeric');
+  });
+});
+
+describe('DEMO_TOPIC_MAP (6.1a Q1)', () => {
+  const arithmeticScope: PracticeScope = { teacherId: T, allowedModuleIds: ['module-arithmetic'] };
+
+  it('serves the expected demo item end to end through pickItem when DEMO_TOPIC_MAP is passed', () => {
+    const picked = pickItem(
+      demoPracticeBank(),
+      arithmeticScope,
+      1,
+      [],
+      undefined,
+      undefined,
+      DEMO_TOPIC_MAP,
+    );
+    expect(picked?.item.id).toBe('demo:arithmetic:1:a');
+    expect(picked?.answerKey).toEqual(['7']);
+  });
+
+  it('skips a record whose topicId does not match DEMO_TOPIC_MAP, served when the map is not passed', () => {
+    const mutated: PracticeItem = { ...DEMO_PRACTICE_RECORDS[0]!.item, topicId: 'not-a-real-topic' };
+    const records = [{ item: mutated, answerKey: DEMO_PRACTICE_RECORDS[0]!.answerKey }];
+    const bank = demoPracticeBank(records);
+
+    const withMap = pickItem(bank, arithmeticScope, 1, [], undefined, undefined, DEMO_TOPIC_MAP);
+    expect(withMap?.item.id).not.toBe(mutated.id);
+    expect(withMap?.item.id).toMatch(/^gen:/);
+
+    const withoutMap = pickItem(bank, arithmeticScope, 1, []);
+    expect(withoutMap?.item.id).toBe(mutated.id);
+  });
+
+  it('builds the real DEMO_PRACTICE_RECORDS without throwing (fail-closed guard never fires today)', () => {
+    expect(() => buildDemoTopicMap(DEMO_PRACTICE_RECORDS)).not.toThrow();
+  });
+
+  it('throws (fail closed) when records would build an invalid topic map', () => {
+    // A record with an empty topicId fails `idFormat`'s min(1), so buildTopicMap returns
+    // `ok: false, reason: 'invalid'`; buildDemoTopicMap must throw rather than swallow it.
+    const bad: PracticeItem = {
+      id: 'bad:1',
+      teacherId: T,
+      topicId: '',
+      moduleId: 'module-bad',
+      level: 1,
+      kind: 'numeric',
+      prompt: 'What is 1 + 1?',
+    };
+    expect(() => buildDemoTopicMap([{ item: bad, answerKey: ['2'] }])).toThrow(
+      /do not build a valid topic map/,
+    );
   });
 });

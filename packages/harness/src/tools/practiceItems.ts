@@ -22,6 +22,7 @@
 // out of its prompt). `PracticeBank.itemFor` and `generatedPrompt` let the harness rebuild the
 // active item each turn (its prompt and options are never stored in HelpState).
 import { evaluateExpression } from './sandbox.js';
+import type { TopicMap } from '../memory/topicMap.js';
 import { PRACTICE_ID_MAX } from '../pedagogy/helpState.js';
 import { compileAnswerKeys, normaliseForMatch } from '../pipeline/generate/answerKey.js';
 import { contextAnswerKeys } from '../pipeline/generate/answerKeyContext.js';
@@ -142,13 +143,16 @@ export const GEN_VARIANTS = 64;
 /**
  * Whether an item may be served (5.6 review): a servable kind, inside `scope` (its module and, 5.6c,
  * its teacher, checked here too in case a bank ignores the teacher), an id short enough
- * for HelpState, not excluded, its key passes `validateItem` and the caller accepts it.
+ * for HelpState, not excluded, its key passes `validateItem` and the caller accepts it. When
+ * `topicMap` is given (6.1a Q1), the item's `topicId` must also exist in it under the item's own
+ * `moduleId` — an unknown or module-mismatched topic id is not servable.
  */
 function servable(
   picked: PickedPracticeItem,
   scope: PracticeScope,
   exclude: readonly string[],
   accept: AcceptItem,
+  topicMap?: TopicMap,
 ): boolean {
   const { item, answerKey } = picked;
   return (
@@ -157,6 +161,7 @@ function servable(
     scope.allowedModuleIds.includes(item.moduleId) &&
     item.id.length <= PRACTICE_ID_MAX &&
     !exclude.includes(item.id) &&
+    (topicMap === undefined || topicMap.getTopic(item.topicId)?.moduleId === item.moduleId) &&
     validateItem(item, answerKey) &&
     accept(item, answerKey)
   );
@@ -167,6 +172,11 @@ function servable(
  * the first allowed module as a placeholder topic (no real outline yet, Q4). Every item is checked
  * at runtime (`servable`): a bank item that fails is skipped and the bank asked again (at most
  * BANK_TRIES times), then the generator. Returns `undefined` (fail closed) when nothing is valid.
+ *
+ * `topicMap` (6.1a Q1, optional, last parameter): when given, gates only the bank-read loop below
+ * (a bank item's `topicId` must exist in `topicMap` under its own `moduleId`) — never the
+ * generator fallback, whose placeholder `${moduleId}:practice` topic id would never be in a real
+ * topic map (6.1's own Q4; see the plan's Design for why).
  */
 export function pickItem(
   bank: PracticeBank,
@@ -175,13 +185,17 @@ export function pickItem(
   exclude: readonly string[],
   profile?: LearnerPracticeProfile,
   accept: AcceptItem = () => true,
+  topicMap?: TopicMap,
 ): PickedPracticeItem | undefined {
   const skipped = [...exclude];
   for (let i = 0; i < BANK_TRIES; i++) {
     const item = bank.pick(scope, level, skipped, profile);
     if (item === undefined || skipped.includes(item.id)) break;
     const answerKey = bank.answerKeyFor(item.id, scope);
-    if (answerKey !== undefined && servable({ item, answerKey }, scope, skipped, accept)) {
+    if (
+      answerKey !== undefined &&
+      servable({ item, answerKey }, scope, skipped, accept, topicMap)
+    ) {
       return { item, answerKey };
     }
     skipped.push(item.id);
