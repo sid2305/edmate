@@ -1275,5 +1275,61 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       expect(rows[0]?.name).toBe('Teacher Erase');
       expect(await kindOf(() => identity.anonymise('usr_ghost_erase'))).toBe('not_found');
     });
+
+    it("dismisses the student's own open questions instead of colliding on the open-dedup index (fix round 2), leaves an answered question of theirs answered, and leaves another student's open question on the same agent untouched", async () => {
+      const { student, tid, agentId, questionId } = await seedErasable();
+      // A second open question of the same student's, to the same teacher's agent, with
+      // different text: before the fix, clearing both to '' collided on
+      // teacher_questions_open_dedup_key (unique on (teacher_id, student_id, agent_id,
+      // md5(text)) where status = 'open') and rolled back the whole transaction.
+      const secondOpenId = `tq_erase2_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text)
+         values ($1,$2,$3,$4,'a second open question only the student wrote')`,
+        [secondOpenId, tid, agentId, student.id],
+      );
+      // An already-answered question of the student's: must stay answered, not be dismissed.
+      const answeredId = `tq_erase3_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status, answer, answered_at)
+         values ($1,$2,$3,$4,'an already answered question','answered','the teacher''s answer',now())`,
+        [answeredId, tid, agentId, student.id],
+      );
+      // Another student's open question, same teacher's agent: must stay open and keep its text.
+      const other = await identity.createStudent({
+        email: email('erase-other'),
+        emailVerifiedAt: new Date('2026-10-01T00:00:00Z'),
+        name: 'Cora Kept',
+      });
+      const otherQuestionId = `tq_erase4_${(n += 1)}`;
+      await raw.query(
+        `insert into teacher_questions (id, teacher_id, agent_id, student_id, text)
+         values ($1,$2,$3,$4,'a question only the other student wrote')`,
+        [otherQuestionId, tid, agentId, other.id],
+      );
+
+      await identity.anonymise(student.id);
+
+      const { rows: erasedRows } = await raw.query(
+        `select id, text, status from teacher_questions where id in ($1,$2,$3) order by id`,
+        [questionId, secondOpenId, answeredId],
+      );
+      const byId = new Map(erasedRows.map((r: { id: string }) => [r.id, r]));
+      expect(byId.get(questionId)).toEqual({ id: questionId, text: '', status: 'dismissed' });
+      expect(byId.get(secondOpenId)).toEqual({
+        id: secondOpenId,
+        text: '',
+        status: 'dismissed',
+      });
+      expect(byId.get(answeredId)).toEqual({ id: answeredId, text: '', status: 'answered' });
+
+      const { rows: otherRows } = await raw.query(
+        'select text, status from teacher_questions where id = $1',
+        [otherQuestionId],
+      );
+      expect(otherRows).toEqual([
+        { text: 'a question only the other student wrote', status: 'open' },
+      ]);
+    });
   });
 });

@@ -109,6 +109,23 @@ Fix round (25 Oct 2026) additionally touched:
 
 ## Decisions
 
+### 25 Oct 2026 · 13.4 an erased student's open questions are dismissed · decided by lead · risk: high
+- Decided: `identity.anonymise` (`packages/db/src/identity/store.ts`) clears `teacher_questions.text`
+  and, in the same statement, also sets `status = 'dismissed'` for any of this student's rows
+  whose status is `'open'`; answered or already-dismissed rows of theirs keep their existing
+  status, and no other student's row is ever touched (the update is scoped by `studentId = id`).
+- Why: the partial unique index `teacher_questions_open_dedup_key`
+  (`packages/db/src/schema/learning.ts`) is on `(teacher_id, student_id, agent_id, md5(text))
+  where status = 'open'`. Clearing two of this student's open questions to the same teacher's
+  agent to `text = ''` without changing status made both rows collide on `md5('')` under that
+  index, throwing a unique violation and rolling back the whole account delete. A deleted student
+  can never receive an answer, so dismissing the row is correct, not just a workaround for the
+  index; checked `teacherQuestionsRepo` (`packages/db/src/repositories/teacher-questions.ts`)
+  first — `open`'s grouping read and `listGroupsForTeacher` both filter by `status = 'open'` per
+  row, never by `group_id` as a whole, and the teacher's own dismiss action already sets exactly
+  `status: 'dismissed'` on a single row — so this matches existing behaviour and a group whose
+  other rows belong to other students still shows them.
+
 ### 25 Oct 2026 · 13.4 fix round: anonymise also deletes auth_sessions/auth_accounts/auth_verification_tokens · decided by builder · risk: high
 - Decided: `identity.anonymise` (`packages/db/src/identity/store.ts`) now deletes the student's own
   `auth_sessions` and `auth_accounts` rows, and (by the old email, captured before it is nulled)
@@ -302,3 +319,6 @@ budget-overrun norm rather than stopping mid-way with a broken gate).
    (`8 successful, 8 total`, 26.5s).
 
 Tool calls: 97
+
+Round 2: open-question dedup collision on erase fixed (status dismissed)
+Tool calls: 17

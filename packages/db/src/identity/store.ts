@@ -1,6 +1,6 @@
 // Identity store (task 1.3): the one path sign-in uses to read and write users, linked accounts
 // and database sessions; since 1.4 also email sign-in links. See README.md for its rules; it is deliberately not a repository.
-import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -153,7 +153,11 @@ export interface IdentityStore {
    * signed-in device must not keep working after delete, mirroring the under-age erase branch of
    * `recordAgeAnswer` above — and clears the free text of theirs that can restate what they said:
    * `sessions.summary`, `learner_profiles.last_summary` (every pair's) and
-   * `teacher_questions.text` (every question of theirs). Leaves `safety_alerts`, payments, ledger
+   * `teacher_questions.text` (every question of theirs; an `open` one of theirs is also set to
+   * `dismissed` in the same statement, fix round 2 — a deleted student can never receive an
+   * answer, and clearing two open questions' text to `''` would otherwise collide on
+   * `teacher_questions_open_dedup_key`; answered/dismissed rows of theirs keep their status, and
+   * this never touches another student's row). Leaves `safety_alerts`, payments, ledger
    * and `audit_log` untouched (none of those tables store name/email/phone/message text by
    * design — see the task's handoff). Writes one `platform_audit_log` row
    * (`actor: userId`, `actorRole: 'student'`, `action: 'account.delete'`). Idempotent: calling it
@@ -609,9 +613,23 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
           .update(learnerProfiles)
           .set({ lastSummary: null })
           .where(eq(learnerProfiles.studentId, id));
+        // Also dismiss this student's own open rows in the same statement: two of the student's
+        // open questions to the same teacher's agent would otherwise both land on text = '' and
+        // collide on teacher_questions_open_dedup_key (unique on (teacher_id, student_id,
+        // agent_id, md5(text)) where status = 'open'), rolling back the whole delete (fix round
+        // 2). A deleted student can never receive an answer, so the open question leaves the
+        // teacher's inbox. This only ever touches this student's own rows (scoped by
+        // `studentId = id`), so it cannot dismiss or hide another student's open question, even
+        // one in the same `group_id` — grouping only ever filters by `status = 'open'` per row,
+        // never by group as a whole (teacherQuestionsRepo.open/listGroupsForTeacher), so a group
+        // whose other rows belong to other students still shows them. Answered/dismissed rows of
+        // this student's keep their existing status.
         await tx
           .update(teacherQuestions)
-          .set({ text: '' })
+          .set({
+            text: '',
+            status: sql`case when ${teacherQuestions.status} = 'open' then 'dismissed'::teacher_question_status else ${teacherQuestions.status} end`,
+          })
           .where(eq(teacherQuestions.studentId, id));
         await tx.insert(platformAuditLog).values({
           actor: id,
