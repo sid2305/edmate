@@ -12,6 +12,7 @@ import {
   type ChangeKind,
   type GateScope,
 } from './gateScope.js';
+import { GATE_DEADLINE_MS } from './qualityGate.js';
 import type { EvalCase } from './schema.js';
 
 function evalCase(id: string, suite: string): EvalCase {
@@ -216,6 +217,10 @@ describe('defaultGateDeadlineMs', () => {
     ] as ChangeKind[][]) {
       expect(defaultGateDeadlineMs(changes)).toBe(15 * 60_000);
     }
+  });
+
+  it('non-full-scope default equals qualityGate.ts\'s GATE_DEADLINE_MS (item 11, task 7.4a)', () => {
+    expect(defaultGateDeadlineMs(['material'])).toBe(GATE_DEADLINE_MS);
   });
 
   it('is 120 minutes for a full-scope change, alone or unioned with anything', () => {

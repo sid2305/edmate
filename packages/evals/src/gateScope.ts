@@ -78,15 +78,14 @@ export class GateScopeError extends Error {
 }
 
 /** Validates a change set (fail closed on empty or unknown) and reports whether it is full-scope. */
-function validateAndCheckFull(changes: readonly ChangeKind[]): boolean {
-  const set = new Set<string>(changes);
-  if (set.size === 0) throw new GateScopeError('a gate needs at least one change kind');
-  for (const kind of set) {
+function validateAndCheckFull(changes: ReadonlySet<string>): boolean {
+  if (changes.size === 0) throw new GateScopeError('a gate needs at least one change kind');
+  for (const kind of changes) {
     if (!(CHANGE_KINDS as readonly string[]).includes(kind)) {
       throw new GateScopeError(`unknown change kind "${kind}"`);
     }
   }
-  return set.has('first_publish') || set.has('prompt_pack_bump');
+  return changes.has('first_publish') || changes.has('prompt_pack_bump');
 }
 
 /**
@@ -96,7 +95,9 @@ function validateAndCheckFull(changes: readonly ChangeKind[]): boolean {
  * change set, same as `selectGateCases`.
  */
 export function defaultGateDeadlineMs(changes: readonly ChangeKind[]): number {
-  return validateAndCheckFull(changes) ? FULL_SCOPE_GATE_DEADLINE_MS : DEFAULT_GATE_DEADLINE_MS;
+  return validateAndCheckFull(new Set(changes))
+    ? FULL_SCOPE_GATE_DEADLINE_MS
+    : DEFAULT_GATE_DEADLINE_MS;
 }
 
 function isGroup(name: string): name is GateGroup {
@@ -181,7 +182,7 @@ export interface GateScopeInput {
 
 export function selectGateCases(input: GateScopeInput): GateScope {
   const changes = new Set<string>(input.changes);
-  const full = validateAndCheckFull(input.changes);
+  const full = validateAndCheckFull(changes);
   const agentAccuracy = full || changes.has('material');
   const agentLocked = agentAccuracy || changes.has('packages');
   const styleSample = !full && changes.has('style_card');
