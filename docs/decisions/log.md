@@ -10,6 +10,56 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 5.6f release a correctly graded practice key · decided by lead · risk: high
+- Decided: A practice key is released from `mustNotReveal`, and the loaded item is dropped from the
+  turn's `items`/`practiceKeys`, on a turn `classifyAttempt` grades `correct` for the held key
+  (never on a closed/redirect path, even if `attempt` coincidentally reads `correct`; never for a
+  `practiceCarriedKey` from a different, skipped item).
+- Why: This closes the 5.6b Q5 known limit: a correct-answer confirmation that restates the key is
+  now delivered instead of replaced by the safe hint, which was confusing and undermined trust in a
+  turn the student actually got right.
+
+---
+
+### 24 Oct 2026 · Q1: a question-phrased correct guess releases the key · decided by lead · risk: low
+- Decided: yes, release — "so it's B?" is treated the same as a flat "B" (existing, tested
+  `classifyAttempt` behaviour, unchanged by 5.6f). A hedged multi-label guess ("is it A, B or C?")
+  never grades `correct` (`labelsNamed` requires exactly one named label), confirmed by a new
+  `classify.test.ts` case, so it never releases.
+- Why: a tutor confirming a correct guess however it is phrased is intended behaviour, not a new
+  hole; this question-as-guess path was never exploitable before 5.6f (practice keys were never
+  released at all).
+
+---
+
+### 24 Oct 2026 · Q2: how the runner test reaches `ctx.attempt === 'correct'` · decided by lead · risk: low
+- Decided: adopt the recommendation — a narrow local `laterCorrect` helper overriding `route.run`
+  and `decide.run` only for the new/flipped tests, not a restructure of the suite's `turn()` helper.
+- Why: exercises the real risk (runner.ts's `items`/`practiceKeys` fix) without re-plumbing the
+  whole fixture file onto the real `decide`/`route` steps; `policy.test.ts` separately proves the
+  policy half.
+
+---
+
+### 24 Oct 2026 · Q3: `fallbackPolicy` stays guarded · decided by lead · risk: low
+- Decided: no change to `fallbackPolicy`.
+- Why: it only returns `ask`/`redirect` on a provider/judge failure; widening what a degraded path
+  may say is the wrong direction for a leak guard.
+
+---
+
+### 24 Oct 2026 · 5.6f budget overrun accepted · decided by lead · risk: low
+- Decided: accept 75 tool calls against the plan's 60.
+- Why: the diff stayed inside the plan's Files list, the harness gate is green and all three reviewers approve; the builder under-counted (26 reported).
+
+---
+
+### 24 Oct 2026 · 5.6f runner-level question-phrase test deferred to 5.6h · decided by lead · risk: low
+- Decided: defer the code-reviewer MEDIUM on packages/harness/src/pipeline/runner.practiceKinds.test.ts:377 (the "so it's B?" runner test is identical to the base correct case because `laterCorrect` cannot inject the guess text) to board task 5.6h.
+- Why: the question-phrase grading it claims to cover is proven in classify.test.ts, and the release itself is proven by the base runner test and policy.test.ts; the duplicate test is misleading but hides no leak.
+
+---
+
 ### 24 Oct 2026 · 8.1b leaves 9.3e's design unchanged: only a safety rejection suspends live agents · decided by builder · risk: high
 - Decided: a plain (non-safety) teacher rejection does not suspend the teacher's already-live
   agents; only a `safety: true` rejection does, as 9.3e set. The 8.1 review's literal wording
