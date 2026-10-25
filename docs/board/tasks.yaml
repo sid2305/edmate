@@ -6579,7 +6579,7 @@ tasks:
   deps:
   - 9.7b
   risk: low
-  status: running
+  status: review
   branch: m13/9.7d-e2e-steady
   model: build:sonnet
 - id: 12.4f
