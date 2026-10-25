@@ -12,13 +12,15 @@ import type { ModelPolicy } from '@edmate/contracts';
 export type PackageMixTier = 'free' | 'paid';
 
 /** Every property, nested objects included, read-only (no `as` casts needed to produce one). */
-export type DeepReadonly<T> = T extends readonly unknown[] | undefined | null
+export type DeepReadonly<T> = T extends undefined | null
   ? T
   : T extends (...args: never[]) => unknown
     ? T
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T;
+    : T extends readonly (infer U)[]
+      ? readonly DeepReadonly<U>[]
+      : T extends object
+        ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+        : T;
 
 function mix(main: string, small: string): DeepReadonly<ModelPolicy> {
   return Object.freeze({

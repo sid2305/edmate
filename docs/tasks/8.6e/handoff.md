@@ -28,5 +28,17 @@ apps/web consumers (`publish.ts`, `publishRuntime.ts`, `packages.ts`, `packagesR
 - Decided: added `'TurnCostError'` to `packages/gateway/test/keys/exports.test.ts`'s sorted list, one file outside the plan's Files list.
 - Why: that test enumerates every named export from the package root and fails if the list drifts; exporting `TurnCostError` (required by the plan) made it fail with no code-behaviour change, so updating the list was the minimal fix rather than skipping the new export.
 
+## Fix round
+
+### HIGH: `DeepReadonly<T>`'s array branch returned array types unchanged
+- Finding (typescript-reviewer): `packages/gateway/src/router/default-policy.ts:15-21` — the array branch (`T extends readonly unknown[] | undefined | null ? T : ...`) returned `T` unchanged for arrays, so `DeepReadonly<string[]>` still allowed `.push()` and index assignment, contradicting the doc comment and the plan's "correct for arrays".
+- Change: replaced the array branch so it recurses into the element type: `T extends readonly (infer U)[] ? readonly DeepReadonly<U>[] : ...`, keeping the `undefined | null` short-circuit, the function short-circuit, and the plain-object recursion unchanged. Primitives still fall through to `T` at the end.
+- Tests added (`packages/gateway/test/router/default-policy.test.ts`): a second type-only, never-called function `typeOnlyArrayElementsAreDeeplyReadonly` with three `@ts-expect-error` lines — `DeepReadonly<string[]>.push(...)`, index assignment on the same array, and `DeepReadonly<{ a: { b: number }[] }>`'s `nested.a[0].b = 1` (a field on an element inside an array).
+- Evidence:
+  - `corepack pnpm turbo run typecheck lint test --filter=@edmate/gateway... --force` → 14/14 tasks successful (gateway lint, typecheck, test; harness and config as dependencies), gateway test suite all green including the two type-only functions in `default-policy.test.ts` (checked by `tsc --noEmit`, not at runtime).
+  - `corepack pnpm turbo run typecheck --filter=@edmate/web` → 8/8 tasks successful; apps/web (`packagesRuntime.ts` and other MODEL_MIX consumers) still compiles with no casts against the now-truly-deep-readonly `DeepReadonly<ModelPolicy>`.
+  - `python3 .githooks/secret-scan.py --all` → no output, clean.
+- Commit: see sha below.
+
 ## Budget
 Tool calls used: 24
