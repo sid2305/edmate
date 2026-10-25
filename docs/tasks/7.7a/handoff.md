@@ -56,5 +56,9 @@
   `@edmate/db` dependency edge; the table is pilot-scale with no measured slowness. Both already
   approved in the plan's "Lead answers" (Q1, Q2).
 
+### 25 Oct 2026 · 7.7a budget over the plan cap · decided by lead · risk: low
+- Decided: accept 60 tool calls against the plan's 45 (stop at 55); the builder finished and committed the work, then stalled before pushing, and the lead pushed its commit.
+- Why: the work is complete, all four reviewers approve with no findings, and the overrun came mostly from setup and gate runs, not rework.
+
 ## Budget
-Tool calls used: 32
+Tool calls used: 60 (harness count; the agent reported 32)
