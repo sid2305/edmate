@@ -31,6 +31,18 @@ export function checked<T>(schema: z.ZodType<T>, value: unknown, method: string)
 
 export const iso = (d: Date) => d.toISOString();
 
+/**
+ * A bigint aggregate (count or sum), stringified by the query so Postgres never hands back a
+ * JS number silently losing precision, parsed back to an exact number -- or `integrity` past
+ * 2^53 (task 13.5: shared by `usageLedger` and `subscriptions` so this guard is exercised, and
+ * covered, in one place rather than duplicated).
+ */
+export function exact(value: string, method: string): number {
+  const n = Number(value);
+  if (!Number.isSafeInteger(n)) throw new RepositoryError('integrity', method);
+  return n;
+}
+
 export function toAgentConfig(
   row: { teacherId: string; agentId: string; version: number; config: unknown },
   method: string,

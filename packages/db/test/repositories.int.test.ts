@@ -2081,6 +2081,23 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 13.5 (cost dashboard): a system read across every teacher and package, like
+  // `usageLedger.teacherIdsWithUsageSince`. Exact counts and the ended-exclusion are checked
+  // against raw SQL in cost-alarm.int.test.ts's own describe block.
+  'subscriptions.activeCountByPackage': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const rows = await r.subscriptions.activeCountByPackage();
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.teacherId).toMatch(/^tch_/);
+        expect(row.packageId).toMatch(/^pkg/);
+        expect(row.activeStudents).toBeGreaterThan(0);
+      }
+      return 1;
+    },
+  },
   'subscriptions.pauseFreeForTeacher': {
     scope: 'teacher',
     op: 'write',
@@ -2973,6 +2990,40 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       for (const scope of bad) {
         await expectFailsClosed(
           () => r.usageLedger.teacherIdsWithUsageSince(scope as never),
+          ['scope'],
+          `bad scope ${JSON.stringify(scope)}`,
+        );
+      }
+      return 2 + bad.length;
+    },
+  },
+  // Task 13.5 (cost dashboard): a system read across every teacher and package. Exact sums,
+  // eval exclusion and the window bound are checked against raw SQL in
+  // usage-ledger.int.test.ts's own `describe('task 13.5: costByPackageSince')`.
+  'usageLedger.costByPackageSince': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const since = '2000-01-01T00:00:00Z';
+      const rows = await r.usageLedger.costByPackageSince({ since });
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.teacherId).toMatch(/^tch_/);
+        expect(row.packageId).toMatch(/^pkg/);
+        expect(row.calls).toBeGreaterThanOrEqual(row.recorded + row.unknown + row.unpriced);
+      }
+      expect(await r.usageLedger.costByPackageSince({ since: '2999-01-01T00:00:00Z' })).toEqual(
+        [],
+      );
+      const bad = [
+        {},
+        { since: 'yesterday' },
+        { since, teacherId: teacherId('A') },
+        { since, until: 'yesterday' },
+      ];
+      for (const scope of bad) {
+        await expectFailsClosed(
+          () => r.usageLedger.costByPackageSince(scope as never),
           ['scope'],
           `bad scope ${JSON.stringify(scope)}`,
         );

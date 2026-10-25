@@ -163,6 +163,12 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // subscriptions.listUnavailableForStudent (9.3f, B-49) is the same bare-id exception as
     // listLiveForStudent right above it.
     if (name === 'subscriptions.listUnavailableForStudent') continue;
+    // subscriptions.activeCountByPackage (13.5, the cost dashboard) takes no argument at all --
+    // a system read across every teacher and package, like usageLedger.teacherIdsWithUsageSince
+    // (which does keep a `{ since }` scope object and so stays in this grid). With no parameter
+    // to validate, a bad value passed here is simply ignored, not rejected as `scope`; its own
+    // checks run in repositories.int.test.ts's public case.
+    if (name === 'subscriptions.activeCountByPackage') continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(

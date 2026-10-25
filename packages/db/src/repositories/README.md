@@ -68,7 +68,12 @@ Isolation between teachers and between students is enforced here, not by Postgre
     (task 3.8) is a system read for the scheduled cost alarm: the sorted ids of teachers with
     non-eval usage since a date, and nothing else (no student, package or figure). Every argument
     is parsed like a scope or a strict input (`scope`/`invalid` before any SQL). Only server jobs
-    call `usageLedger`'s read; no route exposes it.
+    call `teacherIdsWithUsageSince`; no route exposes it. `usageLedger.costByPackageSince({
+    since, until? })` and `subscriptions.activeCountByPackage()` (task 13.5, the cost dashboard)
+    are the same kind of unscoped system read -- totals and active-student counts grouped by
+    `(teacherId, packageId)` across every teacher, no student-level detail. The staff-only
+    `/api/staff/cost` route is the one caller: it joins the two by `(teacherId, packageId)` after
+    checking the caller is staff.
 
     `teacherProfiles.listPendingForStaff(by)` (task 12.1a) is not a public read -- it takes no
     `TeacherScope`/`StudentScope`, but it is staff-only, checked by a plain (unlocked) read of

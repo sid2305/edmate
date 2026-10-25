@@ -14,7 +14,7 @@ import {
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, ScrubbedDbError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
-import { iso } from './map.js';
+import { checked, exact, iso } from './map.js';
 import {
   IdSchema,
   parseArg,
@@ -23,6 +23,24 @@ import {
   type StudentScope,
   type TeacherScope,
 } from './scope.js';
+
+/**
+ * Task 13.5 (cost dashboard): the number of distinct students with a not-`ended` subscription,
+ * per (teacher, package) — "active now", independent of any cost-reporting period (decision,
+ * 25 Oct 2026: a student who churned mid-period still counts toward that period's cost, their
+ * calls were real, but not toward "active now").
+ */
+export interface ActiveCountByPackageRow {
+  teacherId: string;
+  packageId: string;
+  activeStudents: number;
+}
+
+const ActiveCountByPackageRowSchema = z.strictObject({
+  teacherId: IdSchema,
+  packageId: IdSchema,
+  activeStudents: z.number().int().nonnegative(),
+});
 
 /** The fields EntitlementStore (3.2) needs from a live subscription. */
 export interface LiveSubscription {
@@ -263,6 +281,32 @@ async function writeChangeAudit(
 
 export function subscriptionsRepo(db: Db) {
   return {
+    /**
+     * Task 13.5: a **system read**, like `usageLedger.teacherIdsWithUsageSince` — no
+     * teacher/student scope check here, because the caller (the staff API route) is the access
+     * gate. Joins to `package_versions` for `package_id` (`subscriptions` only has
+     * `package_version_id`); a historical version's subscriber still counts toward its
+     * package's current total, same as any other row here.
+     */
+    async activeCountByPackage(): Promise<ActiveCountByPackageRow[]> {
+      const method = 'subscriptions.activeCountByPackage';
+      const rows = await db
+        .select({
+          teacherId: subscriptions.teacherId,
+          packageId: packageVersions.packageId,
+          activeStudents: sql<string>`(count(distinct ${subscriptions.studentId}))::text`,
+        })
+        .from(subscriptions)
+        .innerJoin(packageVersions, eq(packageVersions.id, subscriptions.packageVersionId))
+        .where(ne(subscriptions.status, 'ended'))
+        .groupBy(subscriptions.teacherId, packageVersions.packageId)
+        .orderBy(asc(subscriptions.teacherId), asc(packageVersions.packageId));
+      return rows.map((row) => {
+        const n = exact(row.activeStudents, method);
+        return checked(ActiveCountByPackageRowSchema, { ...row, activeStudents: n }, method);
+      });
+    },
+
     /** The scope's subscription that has not ended (at most one per student x teacher), or null. */
     async findLive(scope: StudentScope): Promise<LiveSubscription | null> {
       const method = 'subscriptions.findLive';

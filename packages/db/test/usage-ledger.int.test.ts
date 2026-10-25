@@ -470,5 +470,223 @@ describe.skipIf(!up)(
         repos.usageLedger.sumForStudent({ studentId: 'stu_1', teacherId: 'tch_b' }),
       ).rejects.toMatchObject({ kind: 'integrity', method: 'usageLedger.sumForStudent' });
     });
+
+    describe('task 13.5: costByPackageSince', () => {
+      // Far from "now" (when the suite's beforeAll/seed rows default createdAt to now()), so the
+      // window below only ever sees rows this describe block inserts with an explicit timestamp.
+      const since = '2027-01-01T00:00:00.000Z';
+      const until = '2027-02-01T00:00:00.000Z';
+      const inWindow = '2027-01-15T00:00:00Z';
+      const outOfWindow = '2026-12-31T00:00:00Z';
+
+      async function insertRow(opts: {
+        id: string;
+        teacherId: string;
+        packageId: string;
+        studentId: string;
+        turnId: string;
+        source: 'subscription' | 'teacher_preview' | 'eval';
+        status: 'recorded' | 'unknown' | 'unpriced';
+        cost: number | null;
+        createdAt: string;
+      }): Promise<void> {
+        const tokens = opts.status === 'unknown' ? [null, null] : [10, 20];
+        await raw.query(
+          `insert into usage_ledger (id, teacher_id, package_id, student_id, turn_id, source,
+             status, reason, model, tier, input_tokens, output_tokens, cost_micro_usd, created_at)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'main', $10, $11, $12, $13)`,
+          [
+            opts.id,
+            opts.teacherId,
+            opts.packageId,
+            opts.studentId,
+            opts.turnId,
+            opts.source,
+            opts.status,
+            opts.status === 'recorded'
+              ? null
+              : opts.status === 'unknown'
+                ? 'no_usage_reported'
+                : 'unpriced_model:m',
+            opts.status === 'unknown' ? null : 'm',
+            tokens[0],
+            tokens[1],
+            opts.cost,
+            opts.createdAt,
+          ],
+        );
+      }
+
+      it('groups sums, counts and distinct turns by (teacherId, packageId), excluding eval rows and rows outside the window', async () => {
+        const t1 = turn();
+        const t2 = turn();
+        const t3 = turn();
+        // Teacher A / pkg A, in window: two recorded calls on t1, one unknown on t1, one unpriced
+        // on t2 -> calls 4, recorded 2, unknown 1, unpriced 1, cost 300, distinctTurns 2.
+        await insertRow({
+          id: `cbp_${t1}_1`,
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          studentId: studentId('1'),
+          turnId: t1,
+          source: 'subscription',
+          status: 'recorded',
+          cost: 100,
+          createdAt: inWindow,
+        });
+        await insertRow({
+          id: `cbp_${t1}_2`,
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          studentId: studentId('1'),
+          turnId: t1,
+          source: 'subscription',
+          status: 'recorded',
+          cost: 200,
+          createdAt: inWindow,
+        });
+        await insertRow({
+          id: `cbp_${t1}_3`,
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          studentId: studentId('1'),
+          turnId: t1,
+          source: 'subscription',
+          status: 'unknown',
+          cost: null,
+          createdAt: inWindow,
+        });
+        await insertRow({
+          id: `cbp_${t2}_1`,
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          studentId: studentId('2'),
+          turnId: t2,
+          source: 'subscription',
+          status: 'unpriced',
+          cost: null,
+          createdAt: inWindow,
+        });
+        // Teacher B / pkg B, in window: one recorded call on t3 -> calls 1, cost 50.
+        await insertRow({
+          id: `cbp_${t3}_1`,
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          studentId: studentId('1'),
+          turnId: t3,
+          source: 'subscription',
+          status: 'recorded',
+          cost: 50,
+          createdAt: inWindow,
+        });
+        // Excluded: outside the window, and an eval row inside it.
+        await insertRow({
+          id: 'cbp_outside',
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          studentId: studentId('1'),
+          turnId: turn(),
+          source: 'subscription',
+          status: 'recorded',
+          cost: 999_999,
+          createdAt: outOfWindow,
+        });
+        await insertRow({
+          id: 'cbp_eval',
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          studentId: studentId('1'),
+          turnId: turn(),
+          source: 'eval',
+          status: 'recorded',
+          cost: 777_777,
+          createdAt: inWindow,
+        });
+
+        const rows = await repos.usageLedger.costByPackageSince({ since, until });
+        const a = rows.find(
+          (r) => r.teacherId === teacherId('A') && r.packageId === PKG_A,
+        );
+        const b = rows.find(
+          (r) => r.teacherId === teacherId('B') && r.packageId === PKG_B,
+        );
+        expect(a).toEqual({
+          teacherId: teacherId('A'),
+          packageId: PKG_A,
+          calls: 4,
+          recorded: 2,
+          unknown: 1,
+          unpriced: 1,
+          costMicroUsd: 300,
+          distinctTurns: 2,
+        });
+        expect(b).toEqual({
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          calls: 1,
+          recorded: 1,
+          unknown: 0,
+          unpriced: 0,
+          costMicroUsd: 50,
+          distinctTurns: 1,
+        });
+      });
+
+      it('an unbounded window (no until) still excludes rows before since', async () => {
+        const rows = await repos.usageLedger.costByPackageSince({ since });
+        const a = rows.find(
+          (r) => r.teacherId === teacherId('A') && r.packageId === PKG_A,
+        );
+        // From the previous test: 4 calls in-window, not the 999_999-cost row before `since`.
+        expect(a?.calls).toBe(4);
+        expect(a?.costMicroUsd).toBe(300);
+      });
+
+      it('rejects a malformed scope', async () => {
+        await expect(
+          repos.usageLedger.costByPackageSince({ since: 'not-a-date' } as never),
+        ).rejects.toMatchObject({ kind: 'scope' });
+      });
+
+      it('a row exactly at `since` is included, a row exactly at `until` is excluded', async () => {
+        // Teacher B / pkg B already has one in-window row from the first test in this describe
+        // (calls 1, recorded 1, cost 50, distinctTurns 1) -- this test adds to that baseline.
+        await insertRow({
+          id: 'cbp_at_since',
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          studentId: studentId('1'),
+          turnId: turn(),
+          source: 'subscription',
+          status: 'recorded',
+          cost: 10,
+          createdAt: since,
+        });
+        await insertRow({
+          id: 'cbp_at_until',
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          studentId: studentId('1'),
+          turnId: turn(),
+          source: 'subscription',
+          status: 'recorded',
+          cost: 999_999,
+          createdAt: until,
+        });
+
+        const rows = await repos.usageLedger.costByPackageSince({ since, until });
+        const b = rows.find((r) => r.teacherId === teacherId('B') && r.packageId === PKG_B);
+        expect(b).toEqual({
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          calls: 2,
+          recorded: 2,
+          unknown: 0,
+          unpriced: 0,
+          costMicroUsd: 60,
+          distinctTurns: 2,
+        });
+      });
+    });
   },
 );
