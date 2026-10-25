@@ -16,6 +16,7 @@ import {
   PersonaSchema,
   SafetyAlertSchema,
   SafetyEventCodeSchema,
+  SkillSchema,
   SourceRefSchema,
   StyleCardSchema,
   TurnContextSchema,
@@ -25,6 +26,7 @@ import {
 import { z } from 'zod';
 import { HelpStateSchema } from '../pedagogy/helpState.js';
 import type { PolicyReason } from '../pedagogy/policy.js';
+import type { RolePlay } from '../pedagogy/roleplay.js';
 import type {
   BuiltContext,
   DecideResult,
@@ -148,10 +150,31 @@ const POLICY_REASONS: Record<PolicyReason, true> = {
   fallback: true,
 };
 
+/**
+ * `PolicyResult.rolePlay` (13.skillpresent), checked here so a buggy policy value counts as
+ * decide failing, like every other guard entry. Not a `z.discriminatedUnion`: its `question` /
+ * `pause` / `resume` member shares one shape across three `phase` literals (pedagogy/roleplay.ts).
+ */
+const RolePlaySchema: z.ZodType<RolePlay> = z.union([
+  z.strictObject({
+    phase: z.enum(['question', 'pause', 'resume']),
+    question: z.int().min(0),
+    total: z.int().min(1),
+  }),
+  z.strictObject({ phase: z.literal('debrief'), total: z.int().min(1) }),
+  z.strictObject({ phase: z.literal('stopped'), answered: z.int().min(0) }),
+  z.strictObject({ phase: z.literal('ended') }),
+]);
+
 export const DecideResultSchema: z.ZodType<DecideResult> = z.strictObject({
   decision: PedagogyDecisionSchema,
   next: z.strictObject({ rung: TurnContextSchema.shape.helpRung, help: HelpStateSchema }),
   reason: z.enum(Object.keys(POLICY_REASONS) as [PolicyReason, ...PolicyReason[]]),
   promptPack: z.strictObject({ set: z.string().min(1), packs: z.record(z.string(), z.string()) }),
   sources: z.array(SourceRefSchema),
+  // 13.skillpresent: PolicyResult.skill/.rolePlay ride alongside `decision` (never inside it, so
+  // PedagogyDecision stays byte-identical); generate reads them to emit the harness-computed
+  // progress `skill` event with no new model-callable tool.
+  skill: SkillSchema.nullable().exactOptional(),
+  rolePlay: RolePlaySchema.exactOptional(),
 });

@@ -17,6 +17,7 @@ import {
   type Intent,
   type PedagogyDecision,
   type SafetyAlert,
+  type Skill,
   type SourceRef,
   type TurnContext,
   type TurnEvent,
@@ -39,6 +40,7 @@ import {
   withGroundingAsks,
   withPersonaCount,
 } from '../pedagogy/helpState.js';
+import type { RolePlay } from '../pedagogy/roleplay.js';
 import { assemble } from './assemble.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
@@ -600,6 +602,8 @@ class Turn {
       ctx,
       decision,
       decided.sources,
+      decided.skill,
+      decided.rolePlay,
       this.loadedStop !== false,
       {
         servedItemIds: built.helpState.practiceServed ?? [],
@@ -924,6 +928,8 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     sources: SourceRef[],
+    skill: Skill | null | undefined,
+    rolePlay: RolePlay | undefined,
     lockedStopped: boolean,
     practice: ToolSessionState,
   ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
@@ -948,6 +954,8 @@ class Turn {
               decision,
               sources,
               attempt,
+              ...(skill === undefined ? {} : { skill }),
+              ...(rolePlay === undefined ? {} : { rolePlay }),
               lockedStopped,
               onLockedTrip: () => {
                 this.lockedTrip = true;
