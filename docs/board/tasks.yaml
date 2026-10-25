@@ -8231,9 +8231,28 @@ tasks:
   deps:
   - 9.3h
   risk: high
-  status: review
+  status: done
   branch: m13/9.3k-staff-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 55
+    tokens_in: 190
+    tokens_out: 19252
+    cache_read_tokens: 3144496
+    wall_time_seconds: 1058
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 9.3m
   milestone: M13
   title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write
