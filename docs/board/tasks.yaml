@@ -7752,7 +7752,9 @@ tasks:
   deps:
   - 5.6b
   risk: high
-  status: todo
+  status: running
+  branch: m13/5.6f-release-correct-key
+  model: plan:sonnet build:sonnet
 - id: 1.4e
   milestone: M13
   title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs
@@ -7845,6 +7847,24 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: review
+  status: done
   branch: m13/9.3j-home-reads-parallel
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
