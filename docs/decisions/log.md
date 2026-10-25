@@ -10,6 +10,33 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.5c closed without code · decided by lead · risk: low
+- Decided: close the three 8.5a LOWs (composite packages index, AGENT_PACKAGES_MAX truncation, double teacherNoteParts) with no code change; if PACKAGES_MAX is ever raised above AGENT_PACKAGES_MAX, listForAgent must refuse (invalid) instead of truncating, like MODULE_CHUNKS_MAX.
+- Why: no bulk path reads listForAgent; the per-teacher PACKAGES_MAX cap of 20 means the limit of 100 can never cut a list; and insertTeacherNote's own check is the shared helper's guard for its other callers, costing two string trims.
+
+---
+
+### 25 Oct 2026 · 0.19a closeout.py regenerates the decisions digest (.claude/**) · decided by lead · risk: high
+- Decided: merge 0.19a; closeout.py now runs `board.py digest` right after `board.py set <id> done`, prints the reason and exits 1 if the digest fails (the board change stays and cleanup still runs), so the lead no longer runs the digest by hand after each closeout.
+- Why: a stale digest failed the RealRepo freshness test in CI for every later PR; security-reviewer approved with no findings (argument-list subprocess call with no task-id input, no hook or settings change).
+
+---
+
+### 25 Oct 2026 · 9.3l stale header comments · decided by builder · risk: low
+- Decided: treated the one failing test (`src/turn/routes.test.ts`, a timing/dot-count assertion
+  unrelated to the two comment-only files touched here) as a pre-existing flake rather than
+  blocking on it, per the lessons.md entry on wall-clock bounds on shared runners.
+- Why: the budget (15 calls, stop at 22) does not allow repeated full-suite reruns to chase a
+  flaky, unrelated test, and the diff cannot affect that test's behaviour.
+
+---
+
+### 25 Oct 2026 · 9.3l budget overrun (22 calls against a 15-call plan) · decided by lead · risk: low
+- Decided: accept the overrun.
+- Why: the lead-written 15-call budget did not count setup (pnpm install, building web's dependencies) and the full web gate; the change stayed comment-only in the two planned files.
+
+---
+
 ### 25 Oct 2026 · 8.3d outline schema reuse (packages/db/src/repositories) · decided by builder · risk: high
 - Decided: `packages/db/src/repositories/outline.ts` and `index.ts` are touched only to add/re-export `OutlineInputSchema` (export-visibility change, no logic or shape change); reviewed per plan as `security-reviewer`, `code-reviewer`, `typescript-reviewer`.
 - Why: the plan's risky-paths check matches `packages/db/src/repositories/**` by glob regardless of diff size, and CLAUDE.md non-negotiable 6 requires a logged `risk: high` decision whenever that group is touched.

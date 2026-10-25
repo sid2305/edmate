@@ -3044,9 +3044,29 @@ tasks:
   deps:
   - '0.19'
   risk: risky
-  status: running
+  status: done
   branch: m13/0.19a-closeout-digest
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 254
+    tokens_in: 860
+    tokens_out: 68046
+    cache_read_tokens: 20794830
+    wall_time_seconds: 327079
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 6.5a
   milestone: M13
   title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold
@@ -3105,9 +3125,9 @@ tasks:
   accept: 'A test: a handoff whose entry has no Decided: line leaves docs/decisions/log.md unchanged.'
   deps: []
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/0.19b-closeout-check-decided
+  model: plan:lead build:sonnet
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -3903,9 +3923,9 @@ tasks:
   deps:
   - 8.5a
   risk: high
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: lead-closed
 - id: 8.3d
   milestone: M13
   title: '8.3b review follow-ups: outline generate reads module chunks with Promise.all instead of one by one; outline.ts reuses the db package''s OutlineInputSchema instead of re-declaring it (drop the
@@ -4047,7 +4067,7 @@ tasks:
   deps:
   - 8.6b
   risk: high
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 8.5d
@@ -8075,7 +8095,8 @@ tasks:
     human_questions: 0
 - id: 9.3k
   milestone: M13
-  title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows'
+  title: '9.3h follow-up: staff see a teacher''s subject-edit history (each subject change with its date, from audit_log) on the verification queue and lookup rows; plus 9.3h review: a view.test.tsx case
+    for a lookup-found row with takedown and last-decision lines (MEDIUM), and drop lastDecision.reason from the staff API payload until a UI renders it (LOW)'
   accept: a staff view test shows a teacher's past subject changes on a queue row; web typecheck, lint and test green.
   deps:
   - 9.3h
@@ -8089,9 +8110,28 @@ tasks:
   deps:
   - 9.3i
   risk: low
-  status: running
+  status: done
   branch: m13/9.3l-plan-page-comments
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 5
+    tokens_in: 22
+    tokens_out: 30
+    cache_read_tokens: 215696
+    wall_time_seconds: 52
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.6h
   milestone: M13
   title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text;
