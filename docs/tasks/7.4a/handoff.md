@@ -184,4 +184,4 @@ None. Both phases are done; every item (1–12) from the plan's numbered scope l
 
 ## Budget
 
-Tool calls used: Phase A 47, Phase B 60 (harness count; the builders reported 26 and 28)
+Tool calls used: 107 (harness count: Phase A 47, Phase B 60; the builders reported 26 and 28)
