@@ -4628,7 +4628,7 @@ tasks:
   risk: high
   status: running
   model: plan:sonnet build:sonnet
-  branch: m13/13.skillpresent-a-harness-events
+  branch: m13/13.skillpresent-b-web-skill-panel
 - id: 8.7a
   milestone: M8
   title: Publish repository and eval_runs migration (8.7 Phase A, packages/db)
