@@ -93,9 +93,11 @@ export async function homeLinks(
 ): Promise<HomeLinks> {
   try {
     const deps = open();
-    const live = (await deps.subscriptions.listLiveForStudent(principal.userId)).filter(
-      (row) => row.status !== 'ended',
-    );
+    const [liveRaw, unavailableRows] = await Promise.all([
+      deps.subscriptions.listLiveForStudent(principal.userId),
+      deps.subscriptions.listUnavailableForStudent(principal.userId),
+    ]);
+    const live = liveRaw.filter((row) => row.status !== 'ended');
     const { chats, paused } = classifyHomeLinks(live);
     const liveIds = new Set(live.map((row) => row.agentId));
     const owned = await Promise.all(
@@ -105,7 +107,6 @@ export async function homeLinks(
     );
     const startable = owned.filter((agentId): agentId is string => agentId !== null);
     const teacherIds = [...new Set(live.map((row) => row.teacherId))];
-    const unavailableRows = await deps.subscriptions.listUnavailableForStudent(principal.userId);
     const unavailable = [...new Set(unavailableRows.map((row) => row.agentId))];
     return { chats, paused, startable, teacherIds, unavailable };
   } catch (error) {

@@ -263,6 +263,43 @@ describe('homeLinks', () => {
       expect(links.unavailable).toEqual([]);
     });
 
+    it('starts the live and unavailable reads together, before either resolves', async () => {
+      const calls: string[] = [];
+      let resolveLive!: (rows: LiveChat[]) => void;
+      let resolveUnavailable!: (rows: UnavailableChat[]) => void;
+      const d: LiveChatDeps = {
+        agents: { owner: vi.fn(async () => null) },
+        subscriptions: {
+          listLiveForStudent: vi.fn(() => {
+            calls.push('live.start');
+            return new Promise<LiveChat[]>((resolve) => {
+              resolveLive = (rows) => {
+                calls.push('live.resolve');
+                resolve(rows);
+              };
+            });
+          }),
+          listUnavailableForStudent: vi.fn(() => {
+            calls.push('unavailable.start');
+            return new Promise<UnavailableChat[]>((resolve) => {
+              resolveUnavailable = (rows) => {
+                calls.push('unavailable.resolve');
+                resolve(rows);
+              };
+            });
+          }),
+        },
+      };
+      const pending = homeLinks(() => d, STUDENT, [], { error: vi.fn() });
+      // Both reads start before either resolves -- neither is gated on the other.
+      expect(calls).toEqual(['live.start', 'unavailable.start']);
+      resolveUnavailable([{ agentId: 'agt_s', teacherId: 'tch_s' }]);
+      resolveLive([row('agt_a', 'active')]);
+      const links = await pending;
+      expect(links.chats).toEqual(['agt_a']);
+      expect(links.unavailable).toEqual(['agt_s']);
+    });
+
     it('a failing unavailable-list query gives no links at all (fails closed, shared catch)', async () => {
       const d = deps({ stu_1: [row('agt_a', 'active')] });
       vi.mocked(d.subscriptions.listUnavailableForStudent).mockRejectedValue(

@@ -2941,7 +2941,7 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: running
+  status: review
   branch: m13/5.8d-eval-pipeline-agent
   model: plan:sonnet build:sonnet
 - id: 0.19a
@@ -6620,9 +6620,28 @@ tasks:
   deps:
   - 9.7b
   risk: low
-  status: review
+  status: done
   branch: m13/9.7d-e2e-steady
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 9.7e
   milestone: M13
   title: '9.7d review follow-up: apps/web/e2e/fixtures.ts postOnce can re-run act() and double-send when a real post-hydration request takes longer than the inner 2s poll to show up, and mockTurns clamps
@@ -6631,7 +6650,9 @@ tasks:
   deps:
   - 9.7d
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.7e-e2e-double-send
+  model: build:sonnet
 - id: 12.4f
   milestone: M13
   title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
@@ -7731,7 +7752,9 @@ tasks:
   deps:
   - 5.6b
   risk: high
-  status: todo
+  status: running
+  branch: m13/5.6f-release-correct-key
+  model: plan:sonnet build:sonnet
 - id: 1.4e
   milestone: M13
   title: '1.4d follow-ups: apps/web/src/auth/redis-ready.ts whenReady comment (or per-caller timeout) since a second caller''s timeoutMs is ignored by the shared in-flight promise (review LOW); run apps/web/scripts/sandbox-magic-link.mjs
@@ -7824,6 +7847,24 @@ tasks:
   deps:
   - 9.3f
   risk: low
-  status: review
+  status: done
   branch: m13/9.3j-home-reads-parallel
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0

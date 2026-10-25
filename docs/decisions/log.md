@@ -10,6 +10,39 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 9.7d the shared send-retry helpers live in fixtures.ts · decided by builder · risk: low
+- Decided: `postOnce`, `SEND_PATH` and `STEP_TIMEOUT` moved from `full-flow.spec.ts` into
+  `fixtures.ts` and are imported by both specs, instead of copying `postOnce` into
+  `chat.spec.ts`.
+- Why: the brief said to reuse the pattern rather than copy it, and to move it into an existing
+  e2e helper file only if one exists; `fixtures.ts` already is that file for every other
+  cross-spec e2e helper.
+- risk: low (test-only).
+
+---
+
+### 24 Oct 2026 · 9.7d chat.spec.ts's "Get a hint" click also gets the hydration retry · decided by builder · risk: low
+- Decided: `getHint` wraps the hint-button click in `postOnce` on the same `SEND_PATH`, not just
+  the fill+Enter sends.
+- Why: the hint button starts a real turn through the same route as a normal send, so it can race
+  hydration the same way; the brief's "a postOnce-style send with one hydration retry" covers
+  every action that starts a turn, not only typed messages. No assertion changed.
+- risk: low (test-only).
+
+---
+
+### 24 Oct 2026 · 9.7d postOnce double-send risk deferred · decided by lead · risk: low
+- Decided: the typescript-reviewer MEDIUM on `apps/web/e2e/fixtures.ts` (`postOnce` can re-run `act()` and double-send when a slow request misses the 2s poll, and `mockTurns` hides it) is deferred to board task 9.7e.
+- Why: the helper is moved verbatim from `full-flow.spec.ts`, where it already shipped; the risk is low against mocked routes and test-only, and the MVP rule fixes only CRITICAL and HIGH before merge.
+
+---
+
+### 24 Oct 2026 · 9.7d tool calls over the brief's cap · decided by lead · risk: low
+- Decided: accept 38 tool calls (harness count) against the brief's cap of 25.
+- Why: the builder stayed under the brief's stop point in its own count and finished the task with a green gate; the overrun was setup in a fresh worktree (install and build) that the cap did not allow for.
+
+---
+
 ### 24 Oct 2026 · 8.7j inline the gate/publish steps instead of guarding the cast in place · decided by builder · risk: low
 - Decided: of the two options in the task (a runtime guard at the cast site, or returning the
   result through the gate step so no cast is needed), picked inlining `gatedPublish`'s two
