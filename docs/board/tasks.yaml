@@ -5484,9 +5484,29 @@ tasks:
   deps:
   - 11.1d
   risk: high
-  status: running
+  status: done
   branch: m13/11.1e-live-class-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 77
+    tokens_in: 270
+    tokens_out: 14953
+    cache_read_tokens: 3665349
+    wall_time_seconds: 1287
+    models:
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -5504,9 +5524,30 @@ tasks:
   deps:
   - 9.2c
   risk: low
-  status: running
+  status: done
   branch: m13/9.2f-discovery-type-cleanups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 76
+    tokens_out: 215
+    cache_read_tokens: 998818
+    wall_time_seconds: 107
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: 9.3d
   milestone: M13
   title: '9.3c review follow-ups: a concurrent int test where a second client holds setVerification''s FOR UPDATE on the profile while subscriptions.start runs, then commits a rejection, and start writes
@@ -5673,7 +5714,9 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.7l-publish-followups
+  model: plan:sonnet build:sonnet
 - id: 8.7m
   milestone: M13
   title: '8.7l deferred items: packages/db/src/repositories/publish.ts changedSinceLastPublish outline sub-select is NULL when the teacher has no course (coalesce or a comment that no course reads as not
@@ -6675,8 +6718,8 @@ tasks:
   model: plan:sonnet build:sonnet review:sonnet
 - id: 7.2i
   milestone: M13
-  title: '7.2h review follow-ups: the vapes-at-school rule in packages/harness/src/guardrails/moderationPatterns.ts gets a romanised Hindi and Devanagari safety-net variant like the weapons and threat
-    rules (MEDIUM), and tolerates an article before the place noun ("at the school"), for this rule and the precedent weapons rule (LOW); matching safety cases'
+  title: '7.2h review follow-ups: the vapes-at-school rule in packages/harness/src/guardrails/moderationPatterns.ts gets a romanised Hindi and Devanagari safety-net variant like the weapons and threat rules
+    (MEDIUM), and tolerates an article before the place noun ("at the school"), for this rule and the precedent weapons rule (LOW); matching safety cases'
   accept: harness guard tests for the Hinglish, Devanagari and article forms; safety cases added; harness and evals green.
   deps:
   - 7.2h

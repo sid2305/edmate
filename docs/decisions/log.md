@@ -10,6 +10,76 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 11.1e Phase A · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/live-classes.ts` is a risk-paths.txt match
+  (`packages/db/src/repositories/**`, line 40) → security-reviewer is required on this PR,
+  alongside database-reviewer, code-reviewer and typescript-reviewer per the plan's lead answer.
+- Why: the build-plan rule requires a logged `risk: high` decision whenever a risky-paths file is
+  touched, even when every change in it is a bug-fix-shaped LOW/MEDIUM rather than new write
+  behaviour (per the plan's own "Risky paths touched" note).
+
+---
+
+### 25 Oct 2026 · 11.1e Phase A · decided by builder · risk: low
+- Decided: no 501-row integration test was added for the `listForTeacher` 500-cap fix; the fix is
+  covered by reasoning in this handoff instead (see "Left for Phase B").
+- Why: the lead's Q2 answer in the plan explicitly agreed this is acceptable given the budget and
+  that no teacher is near the cap in the pilot.
+
+---
+
+### 25 Oct 2026 · 11.1e Phase B · decided by builder · risk: low
+- Decided: `editButtonLabel`/`cancelButtonLabel` are the key names used inside the
+  `liveClassesStudio` namespace (lead answer Q3 left the exact names to the builder).
+- Why: they mirror the existing `joinLinkLabel` naming pattern (`<action>Label`) already used in
+  the same namespace, so the three per-row accessible-name keys read consistently.
+
+---
+
+### 25 Oct 2026 · 11.1e budget: Phase A 55 calls, Phase B 40 calls (each budget 30, stop at 38) · decided by lead · risk: low
+- Decided: accept both phases as built (Phase A 55 calls, Phase B 40 calls, harness counts) rather than relaunching.
+- Why: each phase finished its whole item list in scope with a green gate, and every reviewer approved; the overrun is setup plus the db int-test runs, which the 30-call budget under-counted.
+
+---
+
+### 25 Oct 2026 · 11.1e no database-reviewer · decided by lead · risk: low
+- Decided: Phase A ran security-reviewer (the risk-paths requirement), code-reviewer and typescript-reviewer; database-reviewer, which the plan only recommended, did not run.
+- Why: the change adds no migration, index or schema change; the order/limit change and the audit shape were checked by code-reviewer and security-reviewer, and the lead's plan answer named these three reviewers for Phase A.
+
+---
+
+### 25 Oct 2026 · 11.1e re-sort tiebreak uses localeCompare · decided by lead · risk: low
+- Decided: keep `a.id.localeCompare(b.id)` as the ascending re-sort tiebreak in packages/db/src/repositories/live-classes.ts (wontfix security-reviewer's LOW).
+- Why: ids are lowercase hex UUIDs, so locale ordering matches byte ordering in practice; it only affects display order of two classes at the same start time at the 500-row boundary.
+
+---
+
+### 25 Oct 2026 · 11.1e merge: live-class review follow-ups · decided by lead · risk: high
+- Decided: merge 11.1e (packages/db/src/repositories/live-classes.ts: audit before/after carry link and ISO startsAt, a cancelled class's link never reaches a student, listForTeacher capped at the newest 500 and re-sorted ascending, status cast replaced by a parse; apps/web LiveClassesView: a save always updates its row but only closes its own form, per-row aria-labels).
+- Why: the risk-paths group packages/db/src/repositories/** needs security-reviewer, which approved; code-reviewer and typescript-reviewer approved both phases with no CRITICAL, HIGH or MEDIUM findings.
+
+---
+
+### 25 Oct 2026 · 9.2f format.ts fallback · decided by builder · risk: low
+- Decided: throw on an undefined `maximumFractionDigits` instead of silently defaulting to 2.
+- Why: the plan offered "throw" or "narrow with a comment" as equally acceptable; a silent `2`
+  would format a non-2-digit currency (JPY, KWD) wrong, so failing loudly is safer than guessing,
+  and this code path is unreachable for `style: 'currency'` in practice.
+
+---
+
+### 25 Oct 2026 · 9.2f · build ran 50 calls against a budget of 20 (stop at 26) · decided by lead · risk: low
+- Decided: accept the 9.2f build at 50 calls (budget 20, stop at 26; harness count); future lead-written plans for small web tasks budget at least 30.
+- Why: the lead-written plan left too little room for setup (install, build and the full web gate take about 10 calls); the work stayed in scope and both reviewers approved.
+
+---
+
+### 25 Oct 2026 · 9.2f · no test for the scorecard missing-key guard · decided by lead · risk: low
+- Decided: no test for the missing-key guard in apps/web/src/discovery/scorecard.ts (the existing "a missing category" test in apps/web/src/discovery/scorecard.test.ts covers the reachable path), and no test for the new throw in apps/web/src/discovery/format.ts (wontfix code-reviewer's MEDIUM and typescript-reviewer's LOWs).
+- Why: the stored schema's length-3 check over a 3-value enum rejects a missing-key row before the guard, so the guard is unreachable through toPublicScorecard and stays only as fail-closed defence in depth; Intl always resolves maximumFractionDigits, so the throw is unreachable in practice.
+
+---
+
 ### 25 Oct 2026 · 13.skillpresent skill progress is harness-computed, not a registry tool · decided by lead · risk: low
 - Decided: harness-computed events, no new model-callable tool and no registry entry. The accept
   line's "registry appends the feedback and role-play tools" is read as "the skill-event machinery
@@ -95,6 +165,8 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
   nothing to change here within Phase B's scope.
 
 ---
+
+
 
 ---
 
