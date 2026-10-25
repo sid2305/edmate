@@ -1,4 +1,4 @@
-**Status:** PARTIAL (Phases A and B done; Phase C left to do)
+**Status:** DONE
 
 ## Phase A
 
@@ -100,6 +100,50 @@ Built `apps/web`'s staff console reaching a verified (or already-rejected) teach
 
 `python3 .githooks/secret-scan.py --all`: clean (no output).
 
+## Phase C
+
+Built `apps/web`'s `/home` fix for B-49, tests first. A first attempt at this phase stopped
+mid-way (the builder's machine slept); its work-in-progress was already a clean, complete match
+for the plan, so this phase reviewed it against the plan item by item and found nothing to
+change — it finished by running the gates and writing this section.
+
+- `apps/web/src/chat/liveChats.ts`: `LiveChatDeps.subscriptions` gains
+  `listUnavailableForStudent(studentId): Promise<readonly UnavailableChat[]>` (new
+  `UnavailableChat = {agentId, teacherId}` type, exported). `homeLinks` calls it alongside
+  `listLiveForStudent`, dedupes agent ids via `Set`, and returns a new `unavailable: string[]`
+  field on `HomeLinks` (and `EMPTY`). No new try/catch: the existing single catch-and-log-and-
+  return-`EMPTY` shape covers the new call too (one extra failure mode for one more read-only
+  field is not worth splitting the function's error handling, per the plan).
+- `apps/web/app/home/page.tsx`: threads `unavailable` from `homeLinks` into
+  `<HomeView unavailable={unavailable} ... />`.
+- `apps/web/app/home/view.tsx`: `unavailable?: readonly string[]` prop; when non-empty, one
+  paragraph (`t('unavailableLine', {count: unavailable.length})`), placed after the existing
+  chats/startable/paused block so it still shows alongside both the existing-chat case and the
+  empty-state placeholder.
+- `apps/web/messages/en.json` (`home`): `unavailableLine` ICU plural
+  (`{count, plural, one {...} other {...}}`), same syntax `next-intl` already uses for
+  `liveClasses` plurals in this file.
+- Tests (written first): `apps/web/src/chat/liveChats.test.ts` (new `describe('unavailable ...')`:
+  a suspended agent's subscription appears in `unavailable`, not `chats`; a `draft` agent too;
+  dedupes repeated agent ids; a different student sees only their own rows; the function's
+  existing shared-catch failure path still returns `unavailable: []` whether the first query or
+  the new one throws); `apps/web/app/home/view.test.tsx` (new `describe('unavailable ...')`: absent
+  when omitted/empty; singular line for exactly one; plural line for two or more; shown alongside
+  an active chat with no teacher id/name leaking into the DOM, axe-clean; shown alongside the
+  empty-state placeholder); `apps/web/app/home/page.test.tsx` (the stub `HomeView` mock and every
+  `homeLinks` mock resolve now carry `unavailable`; one new case proves `unavailable` is threaded
+  from `homeLinks` to `HomeView` unchanged).
+
+### Gate
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force`:
+- typecheck: pass. lint: pass.
+- test: **157 test files passed, 2477 tests passed**, 0 skipped, 0 failed (up from Phase B's 155
+  files / 2456 tests; no test file skipped for this change).
+- Coverage thresholds met (task exits 0 across all 10 web tasks; no threshold failure reported).
+
+`python3 .githooks/secret-scan.py --all`: clean (no output).
+
 ## Decisions
 
 1. "`setVerification({safety:true})` already worked from any starting `verificationStatus`
@@ -122,16 +166,17 @@ Built `apps/web`'s staff console reaching a verified (or already-rejected) teach
    chat/plan pages' 404 are unchanged (Q5, deferred: no payment is live yet, so nobody is billed
    for an agent they can't reach)."
    Decided: Phase A builds and proves only the read itself; wiring it into `/home` is Phase C.
+   Phase C threaded it into `homeLinks`, `HomeView` and `en.json` exactly as designed, with no
+   change to the design: one shared catch (no per-field try/catch), one aggregate blame-free
+   line placed after the existing chats/startable/paused block (so it shows alongside both an
+   active chat and the empty-state placeholder), and dedupe by agent id.
 
 (Phase A carries `risk: high` — `packages/db/src/repositories/**` is a required-reviewer group.
-Phase B also carries `risk: high` — `apps/web/app/api/staff/**` is a required-reviewer group.)
+Phase B also carries `risk: high` — `apps/web/app/api/staff/**` is a required-reviewer group.
+Phase C is not risky by path, per the plan.)
 
 ## Left to do
 
-- **Phase C** (`apps/web/src/chat/liveChats.ts`, `/home`, not risky by path): thread
-  `listUnavailableForStudent` into `homeLinks`'s new `unavailable` field, `HomeView`'s new
-  paragraph, `en.json`'s `unavailableLine` ICU plural, and the `liveChats.test.ts` /
-  `view.test.tsx` / `page.test.tsx` cases (plan § Phase C, items 10-14).
 - Board follow-ups the lead already opened per the plan's lead answers: 9.3h (queue/lookup row
   shows active takedowns and last decision; subject-edit history) and 9.3i (pause/cancel for a
   subscription whose agent is suspended) — both deferred, not part of this task.
