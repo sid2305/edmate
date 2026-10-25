@@ -7013,8 +7013,9 @@ tasks:
   deps:
   - '13.4'
   risk: low
-  status: todo
-  branch: null
+  status: running
+  branch: m13/13.4a-concurrent-retention-indexes
+  model: plan:lead build:sonnet
 - id: 13.4b
   milestone: M13
   title: '13.4 Phase C (split out by the lead, 25 Oct 2026): apps/web account-wide export (GET /api/me/export) and account delete (DELETE /api/me calling identity.anonymise for the signed-in student only,
@@ -8448,7 +8449,9 @@ tasks:
   accept: each listed form is refused with a tested reason; gcd/lcm never return a wrong answer; harness tests pass with 100% coverage on src/tools
   deps:
   - '5.5'
-  status: todo
+  status: running
+  branch: m13/5.5a-calculator-followups
+  model: plan:lead build:sonnet
 - id: 3.3a
   milestone: M13
   title: 'Route follow-ups (3.3 review MEDIUM/LOW): count each student number once when matching answer-key parts (duplicate parts); share one cancel/timeout/validate helper between routing/modelFallback.ts
