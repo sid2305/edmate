@@ -1163,16 +1163,20 @@ class Turn {
    * `activeItem` hook), not the tools offered this turn, so a turn that offers no tool still
    * exempts a re-show. The practice keys are the held key and the carried key (design 4). An item
    * no hook resolves gets no spans and no derived keys (Q6): its key stays guarded by decide's
-   * `mustNotReveal`. A hook that throws is reported and treated as unresolved (fail closed).
+   * `mustNotReveal`. A hook that throws is reported and treated as unresolved (fail closed). A
+   * turn `ctx.attempt` grades correct for the held key drops the solved item from both outputs
+   * (5.6f), so `compileAnswerKeys` can't re-derive its label/option-text/position/ruling-out
+   * checks from `items` once `mustNotReveal` has released it; a carried key is unaffected.
    */
   private loadAnswerContext(ctx: TurnContext, help: Readonly<HelpState>): void {
     const holds = holdsPracticeKey(help);
+    const solved = holds && ctx.attempt === 'correct';
     this.loadedPracticeKeys = [
-      ...new Set([...(holds ? help.answerKey : []), ...(help.practiceCarriedKey ?? [])]),
+      ...new Set([...(holds && !solved ? help.answerKey : []), ...(help.practiceCarriedKey ?? [])]),
     ];
     this.loadedItems = [];
     const itemId = help.practiceItemId;
-    if (!holds || itemId === undefined) return;
+    if (!holds || solved || itemId === undefined) return;
     try {
       const tools = entitledTools(this.deps.tools ?? noTools, ctx.entitlement);
       const hook = tools.find((r) => r.activeItem !== undefined);

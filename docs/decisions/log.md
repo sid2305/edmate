@@ -10,6 +10,147 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 9.3i a student can pause or cancel a subscription whose agent is suspended · decided by builder · risk: high
+
+- Decided: the `listUnavailableForStudent` fallback in `PATCH /api/subscriptions/:id` is tried
+  only for `action: 'pause'` and `action: 'cancel'` (never `resume` or `change`), and only after
+  `agents.owner` has already returned `null`. The fallback list itself is scoped to the
+  signed-in student's own rows (the method's own contract, shipped unchanged by 9.3f), so the
+  route can only ever resolve a subscription the student already owns — it cannot be used to
+  discover or act on any other student's or any other agent's subscription.
+- Why: `agents.owner` and `studentTurnScope` (used everywhere turn, chat, memory and export
+  access is decided) stay byte-for-byte unchanged, so this task cannot widen turn access. Keeping
+  `resume` and `change` out of the fallback (narrower than the plan's original Q1 recommendation,
+  per the Lead's answer) avoids ever resuming or billing a plan for an agent the student cannot
+  use, which matters once payments go live.
+
+---
+
+### 24 Oct 2026 · 9.3i PlanView hides Resume/change controls and redirects to /home when unavailable · decided by builder · risk: low
+
+- Decided: `PlanView`'s Resume button and the "other packages" (change-plan) section are hidden
+  when `agentAvailable === false`, and a successful pause or cancel from that state pushes to
+  `/home` instead of `/learn/<agentId>`.
+- Why: per the Lead's answers to Q1 and Q3 — the route itself refuses `resume`/`change` for an
+  unavailable agent, so showing those controls would only produce a 409/404 the student can't
+  act on; `/learn/<agentId>` 404s for a suspended agent, so `/home` is the only working landing
+  spot after cancelling or pausing from this page.
+
+---
+
+### 24 Oct 2026 · 9.3i review LOWs deferred to 9.3l · decided by lead · risk: low
+- Decided: the two LOW stale header comments in apps/web/app/learn/[agentId]/plan/page.tsx and apps/web/src/subscriptions/PlanView.tsx are deferred to board task 9.3l.
+- Why: comment-only fixes; the policy is to fix only CRITICAL and HIGH before merge.
+
+---
+
+### 24 Oct 2026 · 5.6f release a correctly graded practice key · decided by lead · risk: high
+- Decided: A practice key is released from `mustNotReveal`, and the loaded item is dropped from the
+  turn's `items`/`practiceKeys`, on a turn `classifyAttempt` grades `correct` for the held key
+  (never on a closed/redirect path, even if `attempt` coincidentally reads `correct`; never for a
+  `practiceCarriedKey` from a different, skipped item).
+- Why: This closes the 5.6b Q5 known limit: a correct-answer confirmation that restates the key is
+  now delivered instead of replaced by the safe hint, which was confusing and undermined trust in a
+  turn the student actually got right.
+
+---
+
+### 24 Oct 2026 · Q1: a question-phrased correct guess releases the key · decided by lead · risk: low
+- Decided: yes, release — "so it's B?" is treated the same as a flat "B" (existing, tested
+  `classifyAttempt` behaviour, unchanged by 5.6f). A hedged multi-label guess ("is it A, B or C?")
+  never grades `correct` (`labelsNamed` requires exactly one named label), confirmed by a new
+  `classify.test.ts` case, so it never releases.
+- Why: a tutor confirming a correct guess however it is phrased is intended behaviour, not a new
+  hole; this question-as-guess path was never exploitable before 5.6f (practice keys were never
+  released at all).
+
+---
+
+### 24 Oct 2026 · Q2: how the runner test reaches `ctx.attempt === 'correct'` · decided by lead · risk: low
+- Decided: adopt the recommendation — a narrow local `laterCorrect` helper overriding `route.run`
+  and `decide.run` only for the new/flipped tests, not a restructure of the suite's `turn()` helper.
+- Why: exercises the real risk (runner.ts's `items`/`practiceKeys` fix) without re-plumbing the
+  whole fixture file onto the real `decide`/`route` steps; `policy.test.ts` separately proves the
+  policy half.
+
+---
+
+### 24 Oct 2026 · Q3: `fallbackPolicy` stays guarded · decided by lead · risk: low
+- Decided: no change to `fallbackPolicy`.
+- Why: it only returns `ask`/`redirect` on a provider/judge failure; widening what a degraded path
+  may say is the wrong direction for a leak guard.
+
+---
+
+### 24 Oct 2026 · 5.6f budget overrun accepted · decided by lead · risk: low
+- Decided: accept 75 tool calls against the plan's 60.
+- Why: the diff stayed inside the plan's Files list, the harness gate is green and all three reviewers approve; the builder under-counted (26 reported).
+
+---
+
+### 24 Oct 2026 · 5.6f runner-level question-phrase test deferred to 5.6h · decided by lead · risk: low
+- Decided: defer the code-reviewer MEDIUM on packages/harness/src/pipeline/runner.practiceKinds.test.ts:377 (the "so it's B?" runner test is identical to the base correct case because `laterCorrect` cannot inject the guess text) to board task 5.6h.
+- Why: the question-phrase grading it claims to cover is proven in classify.test.ts, and the release itself is proven by the base runner test and policy.test.ts; the duplicate test is misleading but hides no leak.
+
+---
+
+### 24 Oct 2026 · 8.1b leaves 9.3e's design unchanged: only a safety rejection suspends live agents · decided by builder · risk: high
+- Decided: a plain (non-safety) teacher rejection does not suspend the teacher's already-live
+  agents; only a `safety: true` rejection does, as 9.3e set. The 8.1 review's literal wording
+  ("a reject suspends live agents") is read as already satisfied by the TOCTOU fix (no new agent
+  can go live once rejected), not as a product-behaviour change to 9.3e.
+- Why: the task's acceptance line only needs the publish-vs-reject race closed; re-opening 9.3e's
+  decision is out of this cleanup task's scope. (Lead answer to Q1, logged `risk: high` as the
+  first decision per rule 6, since this PR touches `packages/db/src/repositories/**`, a risk
+  path requiring `security-reviewer`.)
+
+---
+
+### 24 Oct 2026 · 8.1b adds --user-id to both verify-teacher and grant-role · decided by builder · risk: low
+- Decided: `--user-id` (as an alternative to `--email`) and the "no personal details in --reason"
+  usage note go on both `db:grant-role` and `db:verify-teacher`, not only the verify CLI the
+  review named.
+- Why: the board task groups "verify/grant-role CLIs" together; `grant-role`'s `--email` has the
+  same shell-history exposure and its `reason` lands in `audit_log` (`role.grant`) the same way
+  as `verify-teacher`'s. (Lead answer to Q2.)
+
+---
+
+### 24 Oct 2026 · 8.1b redacted-target format mirrors packages/gateway's redactUrl · decided by builder · risk: low
+- Decided: `redactTarget` returns `scheme://host/pathname` (host includes port; pathname is the
+  database name) -- no userinfo, query or fragment -- logged once per CLI run before the
+  database handle opens.
+- Why: matches an existing, reviewed shape (`packages/gateway/src/transcriber/source.ts`'s
+  `redactUrl`) instead of inventing a new one; `packages/db` does not depend on
+  `packages/gateway`, so the function is a new, standalone mirror, not a shared import. (Lead
+  answer to Q3.)
+
+---
+
+### 24 Oct 2026 · 8.1b leaves migration 0016's cast style and publish.ts untouched · decided by builder · risk: low
+- Decided: migration 0016's `USING` cast style (omitting the intermediate `::text` 0005 used) is
+  a note only, not edited; `publish.ts` itself is not touched (no behaviour change needed -- the
+  existing lock order already closes the race, proven by the new test).
+- Why: the review calls the cast difference "functionally equivalent"; editing a generated
+  migration plus its snapshot/journal metadata for a cosmetic difference carries more risk than
+  it resolves. Editing `publish.ts` to "make a test pass" without one failing first would be an
+  unflagged behaviour change to a risky path beyond this task's listed files. (Lead answer to
+  Q4; plan's "Exit conditions".)
+
+---
+
+### 24 Oct 2026 · 8.1b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 75 tool calls against the plan's 55.
+- Why: the diff stayed inside the planned packages/db files, the gate is green and all four reviewers approve; the builder under-counted its calls (37 reported).
+
+---
+
+### 24 Oct 2026 · 8.1b review MEDIUM/LOW deferred to 8.1d · decided by lead · risk: low
+- Decided: defer the typescript-reviewer MEDIUM (packages/db/src/cli.ts:134 and :261, `args.email!` relies on the either-or check in another function; use a discriminated union) and the code-reviewer LOW (packages/db/src/cli.ts:90 and :216, the either-or check reads as a disguised XNOR) to board task 8.1d. The database-reviewer MEDIUM (packages/db/src/repositories/README.md cited `publish.ts`'s `lockVerified` as a `lockRole` example) is fixed by the lead in this PR.
+- Why: neither cli.ts point is reachable today (a drift would surface as a caught ZodError and exit 1); MEDIUM and LOW findings wait for a follow-up task under the fix-only-blockers rule.
+
+---
+
 ### 24 Oct 2026 · 5.8d persona-test reply text must carry no spurious citation · decided by builder · risk: low
 - Decided: use a citation-free scripted reply (`'Here is your next question.'`) for the three
   live persona tests (1-3) instead of the file's default reply, which carries a `[1]` citation.

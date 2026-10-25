@@ -177,5 +177,59 @@ describe('PlanView', () => {
     expect(await axe(withSub)).toHaveNoViolations();
     const { container: noSub } = renderIntl(<PlanView agentId="agt_1" subscription={null} offers={OFFERS} />);
     expect(await axe(noSub)).toHaveNoViolations();
+    const { container: unavailable } = renderIntl(
+      <PlanView agentId="agt_1" subscription={SUBSCRIPTION} offers={OFFERS} agentAvailable={false} />,
+    );
+    expect(await axe(unavailable)).toHaveNoViolations();
+  });
+
+  describe('task 9.3i: agentAvailable=false (suspended/draft agent)', () => {
+    it('shows the blame-free notice and keeps Pause enabled, with no Resume or change controls', () => {
+      renderIntl(
+        <PlanView agentId="agt_1" subscription={SUBSCRIPTION} offers={OFFERS} agentAvailable={false} />,
+      );
+      expect(
+        screen.getByText("This teacher's agent isn't available right now. You can still pause or cancel below."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Pause' })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+      expect(screen.queryByText('Other packages with this teacher')).toBeNull();
+    });
+
+    it('a successful pause goes to /home, not /learn/<agentId>', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { status: 'paused', packageId: 'pkg_paid' }));
+      vi.stubGlobal('fetch', fetchMock);
+      renderIntl(
+        <PlanView agentId="agt_1" subscription={SUBSCRIPTION} offers={OFFERS} agentAvailable={false} />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/home'));
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it('a successful cancel goes to /home, not /learn/<agentId>', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { status: 'ended', packageId: 'pkg_paid' }));
+      vi.stubGlobal('fetch', fetchMock);
+      renderIntl(
+        <PlanView agentId="agt_1" subscription={SUBSCRIPTION} offers={OFFERS} agentAvailable={false} />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, cancel my plan' }));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/home'));
+    });
+
+    it('a paused subscription shows no Resume button and no "paused by Edmate" text', () => {
+      renderIntl(
+        <PlanView
+          agentId="agt_1"
+          subscription={{ ...SUBSCRIPTION, status: 'paused' }}
+          offers={OFFERS}
+          agentAvailable={false}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    });
   });
 });
