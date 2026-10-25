@@ -8,7 +8,7 @@ import { demoTurnInput } from '@edmate/contracts/fixtures';
 import { cancelSource, defaultSteps, TurnRejection } from '@edmate/harness';
 import { stepEnvExtras, testDeps } from '@edmate/harness/testing';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
@@ -187,6 +187,16 @@ describe.skipIf(!up)(
       await dropDatabase(dbName);
     }, 60_000);
 
+    // Task 5.10d: sessions.create reuses an existing open session for the same
+    // (teacher, student, agent) triple. Each test here calls openSession() expecting a fresh
+    // row, so end whatever a previous test left open on ONE_A/agt_a first.
+    beforeEach(async () => {
+      await raw.query(
+        `update sessions set ended_at = now()
+         where teacher_id = 'tch_a' and student_id = 'stu_1' and agent_id = 'agt_a' and ended_at is null`,
+      );
+    });
+
     it(
       'control: an unchanged package loads, the session stays open and the summary is kept',
       async () => {
@@ -275,13 +285,15 @@ describe.skipIf(!up)(
         const old = await openSession();
         await subscribe('pv_a_2');
         expect(await entitleCode(old)).toBe('no_access');
-        const fresh = await openSession();
-        await setSummary('[newer] summary of the new session');
-
-        // A retry of the old turn, through the store and straight at the repository.
+        // A retry of the old turn, through the store: notices the stale pin and ends it (3.16),
+        // the same way the real route would before any caller opens a fresh session on this
+        // triple — task 5.10d, at most one open session per (teacher, student, agent).
         expect(
           await turnConfigStoreFor(repos, { locales }).load(await entitlement(), old),
         ).toBeNull();
+        const fresh = await openSession();
+        await setSummary('[newer] summary of the new session');
+
         expect(await entitleCode(old)).toBe('no_access');
         expect(await repos.sessions.endOnPackageChange(ONE_A, old)).toEqual({ ended: false });
         expect(await summary()).toBe('[newer] summary of the new session');

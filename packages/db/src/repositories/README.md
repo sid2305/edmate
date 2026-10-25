@@ -335,6 +335,18 @@ one row). Adding the unique index first needs that caller to check for an existi
 which is outside `packages/db`'s and this task's bounds (`apps/web` is out of bounds for this
 builder). Left for a follow-up task.
 
+**Follow-up, closed (task 5.10d).** `sessions.create` now reuses an existing open session for the
+same `(teacher_id, student_id, agent_id)` triple instead of inserting a second one — one
+transaction, `ON CONFLICT (teacher_id, student_id, agent_id) WHERE ended_at IS NULL DO NOTHING`
+then a same-transaction read on a lost race, same shape as `teacherQuestions.open`'s
+insert-or-return-existing. The unique partial index
+(`sessions_open_teacher_student_agent_key`, migration 0028) is schema-only
+(`src/schema/learning.ts`) and built by the post-migrate step with `CREATE UNIQUE INDEX
+CONCURRENTLY`, same as this table's other two indexes — not a plain migration, because `sessions`
+is big and high-write. The migration itself ends (never deletes) any pre-existing duplicate open
+sessions first, keeping the newest (most likely to hold live `help_state`) so the index build
+never sees a duplicate.
+
 **`teacherQuestions.dismiss(scope, questionId)`** (task 8.9) closes the scope's own open question
 alone: a single scoped UPDATE (`status 'open' -> 'dismissed'`, `answer`/`answered_at` left null),
 never the group or the other members — unlike `answer`, dismissing one wording never silently

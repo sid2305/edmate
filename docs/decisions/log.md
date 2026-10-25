@@ -10,6 +10,55 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 9.5c fixed label id kept · decided by lead · risk: low
+- Decided: won't fix the review LOW in apps/web/src/chat/SkillLauncher.tsx (a fixed id instead of useId() for the group label). SkillLauncher renders once per page, in ChatView.tsx.
+- Why: no collision is possible today; switch to useId() if the component is ever reused.
+
+---
+
+### 23 Oct 2026 · 5.10d: `create()`'s reuse fallback in `packages/db/src/repositories/sessions.ts` · decided by builder · risk: high
+- Decided: added a second, independent ownership `SELECT` before trusting "an open session exists
+  for the triple" as proof of a lost race, because the unique index's conflict target
+  (`teacher_id, student_id, agent_id`) is not version-specific. Without it, a call with a bad
+  `agentVersion`/`packageVersion`/`packageId` on a triple that already has some other, valid,
+  open session would wrongly return that unrelated session instead of `not_found`.
+- Why: the plan's Design 2 described the simpler "check for any open session" fallback; it is
+  incorrect in general for exactly the reason above. This changes write-path logic on the
+  sessions table and needs `database-reviewer` and `security-reviewer` review before merge.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.10d: migration 0028's data `UPDATE` in `packages/db/migrations/0028_sessions_open_unique.sql` · decided by lead (pre-decided) · risk: high
+- Decided: pre-existing duplicate open sessions for one `(teacher_id, student_id, agent_id)`
+  triple are ended (never deleted), keeping the newest row by `(created_at desc, id desc)`.
+- Why: the newest row is most likely to hold the live `help_state`/hint-ladder state
+  (ADR-0005); ending (not deleting) keeps the row and its history for audit/export. Already
+  decided by the lead's "Lead answers" section of the plan; restated here because this file is
+  on the risky-paths list and needs `database-reviewer` and `security-reviewer` review before
+  merge.
+- risk: high
+
+---
+
+### 23 Oct 2026 · 5.10d: same `201` status/body both ways · decided by lead (pre-decided) · risk: low
+- Decided: `startSession`/`sessions.create` return the identical `{ id }` shape and status
+  whether a session was newly created or an existing open session was reused; no route change
+  needed in `apps/web/src/turn/routes.ts`.
+- Why: already decided by the lead's "Lead answers" section of the plan; restated here for the
+  record since it governs the repository-layer change above.
+- risk: low
+
+---
+
+### 24 Oct 2026 · 5.10d ran over its tool budget · decided by lead · risk: low
+- Decided: accept 195 tool calls against the plan's 60 (cap 72). The first builder used 32 before the weekly usage limit cut it off; the resumed builder used 163 while reporting 24.
+- Why: the interruption meant re-reading and re-running the db suite, and the builder added the ownership re-check the plan missed. The lead's review of builder budgets (0.22) uses harness counts for this reason.
+
+Tool calls used: 195 (harness count: first builder 32, resumed builder 163; the resumed agent reported 24)
+
+---
+
 ### 24 Oct 2026 · 5.6b The ruling-out check holds across the whole reply, not just `reach` · decided by builder · risk: high
 - Decided: the stream gate keeps a per-reply, per-item record of which wrong options its released
   text has already named (updated only when a piece is actually released). A piece whose release
