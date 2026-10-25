@@ -59,7 +59,7 @@ Worktree: .claude/worktrees/agent-a2ddbb4bd693427ca
 - Why: none of them loses data or hides a failure. The next edit to the file can wrap the long lines.
 
 ### 25 Oct 2026 · 13.4c budget · decided by lead · risk: low
-- Decided: accept 51 tool calls (harness count; the builder reported 32) against the plan's 30.
+- Decided: accept 51 tool calls (harness count; the builder reported 26 in the handoff and 32 in its return) against the plan's 30.
 - Why: five separate findings, each with its own tests first, plus a full worker gate.
 
 ## Left to do
@@ -68,4 +68,4 @@ None.
 
 ## Budget
 
-Tool calls used: 51 (harness count; the builder reported 32)
+Tool calls used: 51 (harness count; the builder reported 26)
