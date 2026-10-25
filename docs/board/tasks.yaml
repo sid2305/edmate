@@ -5380,7 +5380,9 @@ tasks:
   deps:
   - 11.1d
   risk: high
-  status: todo
+  status: running
+  branch: m13/11.1e-live-class-followups
+  model: plan:sonnet build:sonnet
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
