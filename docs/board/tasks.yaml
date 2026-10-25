@@ -2286,9 +2286,9 @@ tasks:
   accept: /home and /teacher score >= 95 at 360 px on a production build; the score runs in CI.
   deps:
   - '9.1'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/9.1a-lighthouse-a11y
+  model: plan:sonnet build:sonnet
 - id: 9.1b
   milestone: M13
   title: '9.1 review follow-ups: log the error that currentPrincipal swallows before returning null; export HOME_PATH and TEACHER_PATH next to SIGN_IN_PATH; drop the /home self-link'
@@ -6819,8 +6819,9 @@ tasks:
   deps:
   - 7.2j
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/7.2k-devanagari-conjugations
+  model: plan:sonnet build:sonnet
 - id: 7.4d
   milestone: M13
   title: '7.4a review LOWs (silent-failure-hunter): packages/evals/src/qualityGate.ts threads an AbortSignal so a timed-out case is cancelled, not left running; the per-case timeout follows the injected
