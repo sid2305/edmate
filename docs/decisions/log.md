@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 0.19c the merge gate accepts task ids with a word after the dot · decided by builder · risk: low
+- Decided: Use one module-level pattern `TASK_BRANCH = re.compile(r"m\d+/(\d+\.[0-9a-z]+)-")` for both `pr_head` and `main`'s branch parsing, keeping the trailing `-` (slug) required.
+- Why: The plan calls for exactly this; a single shared pattern avoids the two call sites drifting again, and keeping the slug required matches the documented `m<milestone>/<task-id>-<slug>` branch shape so a slug-less branch (`m13/13.skillpresent`) still fails with the existing message.
+
+---
+
+### 25 Oct 2026 · 0.19c budget overrun (40 calls against 20) accepted · decided by lead · risk: low
+- Decided: merge 0.19c although the builder used 40 tool calls against a budget of 20 (stop at 26).
+- Why: the change is one pattern with tests, security-reviewer approved it, and it unblocks PR #276; the extra calls went to reading the existing gate tests.
+
+---
+
+### 25 Oct 2026 · 0.19c merge: the merge gate accepts word task ids (.claude/skills/merge-gate/merge_gate.py) · decided by lead · risk: high
+- Decided: merge the shared TASK_BRANCH pattern in .claude/skills/merge-gate/merge_gate.py after security-reviewer approved it.
+- Why: the captured task id holds only ASCII lower-case letters, digits and one dot, so it cannot point outside docs/tasks or at another task's files; the slug stays required; no other gate check changed.
+
+---
+
+### 25 Oct 2026 · 0.19c wontfix: re.ASCII on TASK_BRANCH (.claude/skills/merge-gate/merge_gate.py) · decided by lead · risk: low
+- Decided: leave `\d` without re.ASCII in .claude/skills/merge-gate/merge_gate.py's TASK_BRANCH for now.
+- Why: the behaviour was already there before this change; a Unicode digit could only produce a docs/tasks/<id> path that doesn't exist, so the gate fails closed.
+
+---
+
 ### 25 Oct 2026 · 5.8e persona/prompt-pack helper moves · decided by builder · risk: high
 - Decided: `comparePersonaVersions` (semver precedence) and the three `pending` sign-off checks in
   `promptPacks.ts`, `personaTemplates.ts` and `agePolicy.ts` move to two new shared files

@@ -3155,9 +3155,30 @@ tasks:
   accept: 'Tests: m13/13.skillpresent-a-harness-events gives task 13.skillpresent; m3/3.11d-foo still gives 3.11d; a branch with no slug is rejected.'
   deps: []
   risk: risky
-  status: review
+  status: done
   branch: m13/0.19c-gate-word-ids
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 168
+    tokens_in: 532
+    tokens_out: 82906
+    cache_read_tokens: 17182511
+    wall_time_seconds: 329028
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.2
   milestone: M13
   title: 'CI flakes seen 25 Oct 2026: (1) apps/web src/auth/index.test.ts "imports and serves public routes with no AUTH_* or DATABASE_URL set" hit its 20 s timeout on PR #276 (and in a 9.3k builder run
