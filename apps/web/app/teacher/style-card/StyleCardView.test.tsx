@@ -135,6 +135,35 @@ describe('StyleCardView', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.');
   });
 
+  it('discards a draft reply that resolves after a save has already landed', async () => {
+    const draftCalls: ((reply: Response) => void)[] = [];
+    const saved = { ...CARD, version: 2, text: 'Saved text.', mistakeTags: ['x'] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (method === 'POST' && url.endsWith('/draft')) {
+          return new Promise<Response>((resolve) => draftCalls.push(resolve));
+        }
+        return Promise.resolve(json({ status: 201, body: { card: saved } }));
+      }),
+    );
+    renderIntl(<StyleCardView initialCard={CARD} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate draft' }));
+    await waitFor(() => expect(draftCalls).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByText('Current version: 2')).toBeInTheDocument());
+
+    // The slow draft now resolves, after the save already landed: it must be discarded.
+    draftCalls[0]!(json({ status: 200, body: { draft: DRAFT } }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate draft' })).not.toBeDisabled());
+    // The draft's text is discarded: the editable field still holds what was saved, not DRAFT.text.
+    expect(screen.getByLabelText('Style card text')).toHaveValue(CARD.text);
+    expect(screen.getByText('Current version: 2')).toBeInTheDocument();
+  });
+
   it('has no axe violations', async () => {
     api();
     const { container } = renderIntl(<StyleCardView initialCard={CARD} />);

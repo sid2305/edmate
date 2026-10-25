@@ -10,6 +10,152 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.skillpresent skill progress is harness-computed, not a registry tool · decided by lead · risk: low
+- Decided: harness-computed events, no new model-callable tool and no registry entry. The accept
+  line's "registry appends the feedback and role-play tools" is read as "the skill-event machinery
+  covers these two skills".
+- Why: role-play's whole point (ADR-0013) was moving progress out of model control into clamped,
+  server-computed state, specifically because the model cannot be trusted to self-report or count
+  correctly; a new tool the model calls to report its own progress (or its own feedback band)
+  would reopen exactly that risk, and would need a prompt-pack change (an ADR-sized change under
+  `pedagogy/**`/`content/prompt-packs/**`) — not "MVP first". No contracts, ADR or prompt-pack
+  change; no architect check needed.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent `results.ts` and its `DecideResultSchema` needed updating too · decided by builder · risk: low
+- Decided: added `packages/harness/src/pipeline/results.ts` to the Phase A diff, even though the
+  plan's Files list did not name it, and extended `DecideResultSchema` (plus a new local
+  `RolePlaySchema`) with the two new optional fields.
+- Why: `DecideResultSchema` is a `z.strictObject`, and `runner.ts`'s `decide()` runs every decide
+  result through it via `check(..., DecideResultSchema)` before using the value. Without this
+  change the new `skill`/`rolePlay` fields would fail strict validation on every turn that sets
+  them, silently falling the turn back to `decide.fallback` (an `ask`/`redirect` move) instead of
+  reaching generate — the opposite of fail-closed-but-visible: it would look like the feature
+  simply never fires, with no test able to catch it except one that exercises the real runner
+  (which `roleplay.integration.test.ts`'s new cases do). `results.ts` sits in the same `pipeline/`
+  directory as the files the plan did list and validates the exact `DecideResult` interface
+  `types.ts` (a listed file) defines; it does not touch `pedagogy/**`, `content/**` or
+  `packages/contracts`.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent Phase A merge: harness skill-progress events · decided by lead · risk: high
+- Decided: merge Phase A of 13.skillpresent (packages/harness/src/pipeline: decide, generate and runner thread the active skill and role-play state; generate emits harness-computed skill-progress events, with the feedback marker payload `{ given: true }`) after code-reviewer and typescript-reviewer (Sonnet) approved with no CRITICAL, HIGH or MEDIUM findings; Phase B (apps/web) follows on its own branch.
+- Why: the board tags the task risk: high because it changes what the harness emits every turn; the reviewers confirmed the event helpers are pure and fail closed (entitlement and size checks, never throw), the new fields are not dropped by the strict DecideResultSchema, the harness import boundary holds, and the integration test drives start, pause, resume, stop and end through the real pipeline.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent oversized-note test cast kept · decided by lead · risk: low
+- Decided: keep the `as unknown as RolePlay` cast in packages/harness/src/pipeline/generate/skillProgress.test.ts (wontfix the typescript-reviewer's LOW).
+- Why: the test deliberately builds an impossible oversized value to prove the fail-closed size check; a cast in a test is the only way to reach that branch, and no production code casts.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent terminal mock-interview line moves from the controls into the thread · decided by builder · risk: low
+- Decided: while the interview is live (`question`/`pause`/`resume`/`debrief`), the progress line
+  ("Question 3 of 6", "Paused — question 3 of 6", "Interview complete — N questions asked") shows
+  next to the Pause/Stop controls (`MockInterviewControls`, via the new `progress` prop and
+  `parseRolePlayProgress`). Once the harness marks a turn terminal (`stopped`/`ended`) the
+  `activeSkill` effect clears, so Pause/Stop (and the controls' progress line with them) disappear
+  on that same render; the terminal line ("Interview stopped — N question(s) answered" /
+  "Interview ended") is instead rendered by `TurnExtras` as a thread note on that final turn, so
+  the student still sees it once the controls are gone.
+- Why: the plan's Q3 only asked where the reset point lives, not where the terminal progress text
+  shows; discovered by a first failing test draft (the control disappears in the same render the
+  terminal phase arrives, so a progress line attached to it can never be seen) -- fixing it needed
+  one of (a) delay the reset by a render, (b) keep the controls mounted a turn longer, or (c) show
+  the terminal line somewhere that survives the reset. (c) is simplest and matches the existing
+  "feedback given" marker pattern already added for the feedback skill event, so it was chosen.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent debrief is not a terminal phase, per the plan's own Q3 wording · decided by builder · risk: low
+- Decided: `ChatView`'s reset effect clears `activeSkill` only on `payload.phase` `'stopped'` or
+  `'ended'`, matching the plan's Q3 recommendation verbatim; `'debrief'` keeps Pause/Stop visible
+  (a student can still explicitly Stop after the debrief, or the harness can later emit `'ended'`
+  on the next turn).
+- Why: an early test draft asserted debrief also clears Pause/Stop; it failed, and rereading Q3
+  confirmed only `stopped`/`ended` are named there -- `RolePlay`'s own `ROLEPLAY_PHASES` lists
+  `debrief` and `ended` as two separate, later phases, not one. Kept the test (now named for the
+  `ended` case) as the regression check for this distinction.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent SkillLauncher left untouched · decided by builder · risk: low
+- Decided: `apps/web/src/chat/SkillLauncher.tsx` was not changed. The feedback marker event is
+  rendered as a "Feedback given" note on the reply itself (`ChatView`'s `TurnExtras`, new
+  `chat.feedback.given` key); the toggle's one-shot `feedbackPending` flag still clears
+  synchronously on submit (9.5b's original design), since it is consumed by the request the
+  student is sending, not by the server's eventual reply -- there is nothing in `SkillLauncher`
+  for the new event to reconcile.
+- Why: the plan listed this file as "only if the feedback marker changes how the toggle's flag is
+  reconciled"; on inspection the toggle's flag and the marker event answer two different questions
+  (what the *next outgoing* turn is tagged, vs. confirming what a *past* reply was), so there was
+  nothing to change here within Phase B's scope.
+
+---
+
+---
+
+### 25 Oct 2026 · 13.skillpresent Phase B ran 70 calls against a budget of 60 (stop at 75), and its fix round took 45 · decided by lead · risk: low
+- Decided: accept Phase B at 70 calls (budget 60, stop at 75) and its fix round at 45 (harness counts).
+- Why: Phase B stayed inside its stop point; the fix round folded the MEDIUM (role="status") and LOW (ICU plural) into the HIGH's pass, cheaper than a new task, and re-ran the web suite after an auth test timed out under load; both reviewers verified the fixes.
+
+---
+
+### 25 Oct 2026 · 13.skillpresent Phase B merge: student skill panel · decided by lead · risk: low
+- Decided: merge Phase B (apps/web/src/chat, apps/web/messages, the e2e spec; no risk path) after code-reviewer and typescript-reviewer verified the fix round.
+- Why: the HIGH (feedback persisted as the active skill), MEDIUM (status role) and LOW (plural) were all fixed and verified.
+
+---
+
+### 25 Oct 2026 · 8.4c Phase C · the override/role-play phrase list is small and literal · decided by builder · risk: low
+- Decided: `stripOverridePhrases` uses a fixed, purpose-built list of ~11 regexes covering the
+  two phrase families named in the plan (role-play, rule-override), matched case-insensitively
+  on the raw text, not a reuse of `packages/harness/src/guardrails/jailbreakPatterns.ts`'s
+  `RULES` table. The "act as" and "pretend" patterns match a *closed* list of jailbreak targets
+  (`dan`, `a jailbroken ai/model`, `an/a unfiltered|unrestricted ai/model/assistant`,
+  `a different ai`, `an ai with no rules`) rather than an open `[\w\s-]{0,40}` tail, and "no
+  rules" only fires as `(you have|there are|with) no rules` or as "no rules" at a sentence
+  boundary not followed by "of" — fixed in the 25 Oct 2026 fix round after review found the open
+  tails deleted ordinary teaching text ("act as a guide", "no rules of thumb", "pretend to be
+  confused so the student explains it back").
+- Why: the lead's answer (25 Oct 2026, plan Q2) already settled the separate-list question — the
+  harness table matches on `normaliseForDistress`'s normalised forms with no span mapped back to
+  raw text to strip, and covers categories out of scope here (authority/package claims, encoded
+  instructions, prompt leaks). A narrow, separate list is the agreed scope; unifying the two
+  lists later is its own task if drift becomes a real problem. The closed target list keeps the
+  list narrow without reopening that scope question.
+
+---
+
+### 25 Oct 2026 · 8.4c Phase C · save strips the raw input before validation, not the parsed value · decided by builder · risk: low
+- Decided: in `save`, the raw body's `text` field is sanitized before `SaveSchema.safeParse`
+  runs (re-building the input object with the cleaned text), rather than sanitizing
+  `parsed.data.text` after validation.
+- Why: the plan says explicitly "run it on `text` before `SaveSchema` validation", so a card
+  whose only problem is an override phrase inflating its word count is cleaned before the cap is
+  checked, not after.
+
+---
+
+### 25 Oct 2026 · 8.4c Phase C · the stale-draft guard is a bumped save counter, not an AbortController · decided by builder · risk: low
+- Decided: a `useRef<number>` counter bumped on every successful `onSave`; `onDraft` snapshots
+  the counter before its `await` and only applies the draft's result if the counter is still the
+  same afterward.
+- Why: matches the plan's description exactly and is the smallest fix for the named bug class
+  (`docs/lessons.md` "UI state and server replies: trust neither, reset everything") — no network
+  cancellation is needed, since the draft response is just discarded, not stopped mid-flight.
+
+---
+
+### 25 Oct 2026 · 8.4c · build ran 42 calls against a budget of 30 (stop at 38), and two fix rounds took 34 and 23 · decided by lead · risk: low
+- Decided: accept the 8.4c build at 42 calls (budget 30, stop at 38) and run a second, one-finding fix round (34 then 23 calls, harness counts) instead of relaunching.
+- Why: the work was complete and in scope; the first fix round left one HIGH (the "(you have|there are|with) no rules" pattern had no end-of-clause check), and policy allows one more small round when a HIGH remains; code-reviewer verified it.
+
+---
+
 ### 25 Oct 2026 · 8.7g budget: 31 calls against 15 (stop at 20) · decided by lead · risk: low
 - Decided: accept. The change is small and correct; most of the calls went to setup (install and build).
 - Why: re-running it would cost more. Small lead-written tasks need a setup allowance of about 10 calls in their budget.

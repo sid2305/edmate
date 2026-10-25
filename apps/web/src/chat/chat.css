@@ -161,7 +161,20 @@ p.bubble-text {
 .chat-mock-interview-controls {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.chat-mock-interview-progress {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-muted, #666);
+}
+
+.chat-feedback-given {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  font-style: italic;
 }
 
 .practice-card .practice-options {
