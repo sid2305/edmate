@@ -12,7 +12,7 @@ import type { Outline, OutlineInput, Repositories, TeacherScope } from '@edmate/
 import { OutlineInputSchema, RepositoryError } from '@edmate/db';
 import { draftOutline, type OutlineModuleInput } from '@edmate/ingest';
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { MAX_BODY_BYTES, readJson, TOO_LARGE, type ServerLog } from './routes';
@@ -64,7 +64,7 @@ async function moduleInputs(
   outline: Outline,
 ): Promise<OutlineModuleInput[]> {
   const candidates = await Promise.all(
-    outline.modules.map(async (m) => {
+    outline.modules.map(async (m): Promise<OutlineModuleInput | null> => {
       const chunks = await b.chunks.listForModule(scope, m.id);
       if (chunks.length === 0) return null;
       return {
@@ -74,7 +74,7 @@ async function moduleInputs(
       };
     }),
   );
-  return candidates.filter((x): x is OutlineModuleInput => x !== null);
+  return candidates.filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
 /** The drafted topics, mapped back onto `replaceOutline`'s input shape: only the modules that
