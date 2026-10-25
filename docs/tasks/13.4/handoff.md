@@ -1,5 +1,7 @@
 # 13.4 handoff
 
+Status: DONE (Phases A and B; Phase C moved to board task 13.4b)
+
 ## Phase A
 
 ### What changed
@@ -286,6 +288,22 @@ Fix round (25 Oct 2026) additionally touched:
   and a decision the architect should make once (see Open question below), not one a single
   builder should make inside an unrelated phase's PR.
 
+### 25 Oct 2026 · 13.4 Phase C split out to 13.4b · decided by lead · risk: low
+- Decided: 13.4 merges with Phases A (packages/db: anonymise, retention purges, migrations 0031 and 0032) and B (apps/worker: the daily retention job, dry run by default). Phase C (apps/web: the account export route and DELETE /api/me, per docs/tasks/13.4/plan.md Phase C) moves to a new board task 13.4b that waits on the human's B-59 answers. Nothing in apps/web calls `identity.anonymise` yet, so no student can trigger a delete before then.
+- Why: Phase C's open questions (what a delete keeps, legal holds, export scope) are the human's to answer, and holding Phases A and B on them would also hold the five packages/db tasks waiting behind 13.4.
+
+### 25 Oct 2026 · 13.4 Phase B review follow-ups deferred to 13.4c · decided by lead · risk: low
+- Decided: defer the Phase B review findings, none CRITICAL or HIGH, to a new board task 13.4c: apps/worker/src/retention/workers.ts `purgeTable` logs the rows already deleted when a later loop call fails (silent-failure-hunter MEDIUM); `purgeLimit` is passed into the purge call or dropped as a separate knob so the loop's limit and the database's cannot drift (typescript-reviewer MEDIUM, code-reviewer LOW); apps/worker/src/retention/config.ts `cutoffFor` refuses a retention period of zero or fewer days (security-reviewer LOW); apps/worker/src/retention/schedule.ts warns once when a run is not a dry run (security-reviewer LOW); apps/worker/src/index.ts treats a failed retention schedule registration as more than a log line (silent-failure-hunter LOW).
+- Why: retention runs as a dry run by default with hard-coded periods, so none of these can delete data wrongly in the pilot; they harden the job before the dry-run flag is turned off.
+
+### 25 Oct 2026 · 13.4 merge: account delete and data retention (Phases A and B) · decided by lead · risk: high
+- Decided: merge 13.4 Phases A and B. Phase A was reviewed by code-reviewer, typescript-reviewer, security-reviewer and database-reviewer; its HIGHs (left sign-in sessions, uncleared free-text summaries, missing cutoff indexes, unbounded purges, and the fix round's dedup collision on dismissed questions) are fixed and re-verified by the reviewer who raised each. Phase B was reviewed by code-reviewer, typescript-reviewer, silent-failure-hunter and security-reviewer, all approving. The packages/db/src/repositories/** risk group has security-reviewer; migration 0032 only adds indexes, and database-reviewer reviewed it anyway.
+- Why: the delete and retention building blocks are in place and tested against real Postgres; retention ships as a dry run with placeholder periods pending counsel, and the delete has no caller until 13.4b, so nothing changes for students until the human answers B-59.
+
+### 25 Oct 2026 · 13.4 budget 382 vs 115 · decided by lead · risk: low
+- Decided: accept 382 tool calls against the plan's 115 for all three phases (harness count: Phase A 131, fix rounds 111 and 48, Phase B 92; the agents reported 196), recorded in docs/tasks/13.4/handoff.md.
+- Why: the account delete had to reach every table holding a student's free text, the first fix round added a migration and bounded purges, and Phase B's int test needed a real-Postgres seed. Phase C (planned at ~45) is not built here. The overrun is noted for planning future data-deletion tasks.
+
 ## Phase B
 
 ### What changed
@@ -371,22 +389,6 @@ or `@edmate/db/internal`'s `createDb` + `retentionRepo(db)`), same as it already
 migration. If more system-level jobs are planned, the grid may be worth a fourth `IsolationCase`
 shape (`scope: 'system'`) rather than each one being exported standalone — a one-time decision,
 not blocking this phase.
-
-### 25 Oct 2026 · 13.4 Phase C split out to 13.4b · decided by lead · risk: low
-- Decided: 13.4 merges with Phases A (packages/db: anonymise, retention purges, migrations 0031 and 0032) and B (apps/worker: the daily retention job, dry run by default). Phase C (apps/web: the account export route and DELETE /api/me, per docs/tasks/13.4/plan.md Phase C) moves to a new board task 13.4b that waits on the human's B-59 answers. Nothing in apps/web calls `identity.anonymise` yet, so no student can trigger a delete before then.
-- Why: Phase C's open questions (what a delete keeps, legal holds, export scope) are the human's to answer, and holding Phases A and B on them would also hold the five packages/db tasks waiting behind 13.4.
-
-### 25 Oct 2026 · 13.4 Phase B review follow-ups deferred to 13.4c · decided by lead · risk: low
-- Decided: defer the Phase B review findings, none CRITICAL or HIGH, to a new board task 13.4c: apps/worker/src/retention/workers.ts `purgeTable` logs the rows already deleted when a later loop call fails (silent-failure-hunter MEDIUM); `purgeLimit` is passed into the purge call or dropped as a separate knob so the loop's limit and the database's cannot drift (typescript-reviewer MEDIUM, code-reviewer LOW); apps/worker/src/retention/config.ts `cutoffFor` refuses a retention period of zero or fewer days (security-reviewer LOW); apps/worker/src/retention/schedule.ts warns once when a run is not a dry run (security-reviewer LOW); apps/worker/src/index.ts treats a failed retention schedule registration as more than a log line (silent-failure-hunter LOW).
-- Why: retention runs as a dry run by default with hard-coded periods, so none of these can delete data wrongly in the pilot; they harden the job before the dry-run flag is turned off.
-
-### 25 Oct 2026 · 13.4 merge: account delete and data retention (Phases A and B) · decided by lead · risk: high
-- Decided: merge 13.4 Phases A and B. Phase A was reviewed by code-reviewer, typescript-reviewer, security-reviewer and database-reviewer; its HIGHs (left sign-in sessions, uncleared free-text summaries, missing cutoff indexes, unbounded purges, and the fix round's dedup collision on dismissed questions) are fixed and re-verified by the reviewer who raised each. Phase B was reviewed by code-reviewer, typescript-reviewer, silent-failure-hunter and security-reviewer, all approving. The packages/db/src/repositories/** risk group has security-reviewer; migration 0032 only adds indexes, and database-reviewer reviewed it anyway.
-- Why: the delete and retention building blocks are in place and tested against real Postgres; retention ships as a dry run with placeholder periods pending counsel, and the delete has no caller until 13.4b, so nothing changes for students until the human answers B-59.
-
-### 25 Oct 2026 · 13.4 budget 382 vs 115 · decided by lead · risk: low
-- Decided: accept 382 tool calls against the plan's 115 for all three phases (harness count: Phase A 131, fix rounds 111 and 48, Phase B 92; the agents reported 196), recorded in docs/tasks/13.4/handoff.md.
-- Why: the account delete had to reach every table holding a student's free text, the first fix round added a migration and bounded purges, and Phase B's int test needed a real-Postgres seed. Phase C (planned at ~45) is not built here. The overrun is noted for planning future data-deletion tasks.
 
 ## Left to do
 - **Phase C** (moved to board task 13.4b, see the lead decision) (`apps/web`): `src/export/accountExport.ts`, `app/api/me/export/route.ts`,
