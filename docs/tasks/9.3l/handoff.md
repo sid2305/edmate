@@ -44,5 +44,9 @@ Comment-only fixes to two stale header comments.
 - Why: the budget (15 calls, stop at 22) does not allow repeated full-suite reruns to chase a
   flaky, unrelated test, and the diff cannot affect that test's behaviour.
 
+### 25 Oct 2026 · 9.3l budget overrun (22 calls against a 15-call plan) · decided by lead · risk: low
+- Decided: accept the overrun.
+- Why: the lead-written 15-call budget did not count setup (pnpm install, building web's dependencies) and the full web gate; the change stayed comment-only in the two planned files.
+
 ## Budget
-Tool calls used: 18
+Tool calls used: 22 (harness count; the builder self-reported 18)
