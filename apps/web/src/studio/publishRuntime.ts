@@ -60,6 +60,7 @@ async function build(env: Env, hooks: PublishHooks): Promise<PublishBackend> {
     judgeModel,
     enqueue: (job) => enqueueGate(queue, job),
     log: hooks.log,
+    now: () => new Date(),
   };
 }
 

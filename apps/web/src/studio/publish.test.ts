@@ -51,6 +51,8 @@ interface Opts {
   changed?: boolean;
   fail?: Partial<Record<string, unknown>>;
   enqueueFails?: boolean;
+  /** ISO timestamp for `b.now()`; defaults to the fixture's own `createdAt` (never stale). */
+  now?: string;
 }
 
 function memoryBackend(opts: Opts = {}) {
@@ -112,6 +114,7 @@ function memoryBackend(opts: Opts = {}) {
       if (opts.enqueueFails) throw new Error('redis down: host secret');
     }),
     log,
+    now: () => new Date(opts.now ?? '2026-10-22T10:00:00.000Z'),
   };
   return { backend, calls, log };
 }
@@ -375,6 +378,37 @@ describe('GET /api/studio/publish', () => {
       'publish.latestRun',
       'publish.changedSinceLastPublish',
     ]);
+  });
+
+  it('a queued run past the stale deadline is status error, errorCode stale (never queued)', async () => {
+    const { h } = handlers({
+      latest: run({ status: 'queued' }),
+      now: '2026-10-22T10:02:00.001Z', // one ms past the 2-minute stale deadline
+    });
+    const body = (await (await h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
+    expect(body.run.status).toBe('error');
+    expect(body.run.errorCode).toBe('stale');
+  });
+
+  it('a running run past the stale deadline is status error, errorCode stale (never running)', async () => {
+    const { h } = handlers({
+      latest: run({ status: 'running' }),
+      now: '2026-10-22T10:02:00.001Z',
+    });
+    const body = (await (await h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
+    expect(body.run.status).toBe('error');
+    expect(body.run.errorCode).toBe('stale');
+  });
+
+  it('a fresh queued run (within the deadline) stays queued', async () => {
+    const { h, calls } = handlers({
+      latest: run({ status: 'queued' }),
+      now: '2026-10-22T10:01:59.999Z', // one ms inside the deadline
+    });
+    const body = (await (await h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
+    expect(body.run.status).toBe('queued');
+    expect(body.run.errorCode).toBeNull();
+    expect(calls.map((c) => c.method)).not.toContain('publish.failedCases');
   });
 
   it('repo errors map like POST: failed is 503, unknown is 500', async () => {

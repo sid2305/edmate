@@ -7,6 +7,15 @@ import { z } from 'zod';
 
 const BASE = '/api/studio/publish';
 
+/** A fetch that never settles is aborted after this long (8.7l: a hung fetch must surface as a
+ * failure result, not hang the caller forever). */
+export const FETCH_TIMEOUT_MS = 15_000;
+
+const ErrorBodySchema = z.object({
+  error: z.object({ code: z.string().optional() }).optional(),
+  reason: z.string().optional(),
+});
+
 const GroupSchema = z.object({
   origin: z.enum(['platform', 'agent']),
   group: z.string(),
@@ -64,10 +73,11 @@ export type PublishResult<T> = { ok: true; value: T } | PublishFailure;
 
 async function failure(res: Response): Promise<PublishFailure> {
   try {
-    const body = (await res.json()) as { error?: { code?: unknown }; reason?: unknown };
-    const code = typeof body.error?.code === 'string' ? body.error.code : 'provider_error';
+    const parsed = ErrorBodySchema.safeParse(await res.json());
+    if (!parsed.success) return { ok: false, status: res.status, code: 'provider_error' };
+    const code = parsed.data.error?.code ?? 'provider_error';
     const out: PublishFailure = { ok: false, status: res.status, code };
-    if (typeof body.reason === 'string') out.reason = body.reason;
+    if (parsed.data.reason !== undefined) out.reason = parsed.data.reason;
     return out;
   } catch {
     return { ok: false, status: res.status, code: 'provider_error' };
@@ -76,10 +86,14 @@ async function failure(res: Response): Promise<PublishFailure> {
 
 async function call<T>(init: RequestInit, schema: z.ZodType<T>): Promise<PublishResult<T>> {
   let res: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    res = await fetch(BASE, { cache: 'no-store', ...init });
+    res = await fetch(BASE, { cache: 'no-store', ...init, signal: controller.signal });
   } catch {
     return { ok: false, status: 0, code: 'provider_error' };
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) return failure(res);
   try {
