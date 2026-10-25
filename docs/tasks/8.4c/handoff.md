@@ -76,11 +76,8 @@
   cancellation is needed, since the draft response is just discarded, not stopped mid-flight.
 
 ### 25 Oct 2026 · 8.4c · build ran 42 calls against a budget of 30 (stop at 38), and two fix rounds took 34 and 23 · decided by lead · risk: low
-The builder overran its stop point by 4 calls finishing the gate and handoff; the work was complete
-and in scope, so the lead accepted it rather than relaunching. The first fix round left one HIGH
-(the "(you have|there are|with) no rules" pattern had no end-of-clause check), so the lead ran a
-second, one-finding round under the policy that allows one more small round when a HIGH remains;
-code-reviewer verified it. Counts are the harness's, not the agents' own reports.
+- Decided: accept the 8.4c build at 42 calls (budget 30, stop at 38) and run a second, one-finding fix round (34 then 23 calls, harness counts) instead of relaunching.
+- Why: the work was complete and in scope; the first fix round left one HIGH (the "(you have|there are|with) no rules" pattern had no end-of-clause check), and policy allows one more small round when a HIGH remains; code-reviewer verified it.
 
 ## Fix round
 Findings from code-reviewer and typescript-reviewer, fixed 25 Oct 2026:
