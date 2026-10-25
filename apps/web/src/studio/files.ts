@@ -42,6 +42,11 @@ export interface UploadType {
    * text, so it is a transcript by chunk kind but needs no transcription.
    */
   transcribe: boolean;
+  /**
+   * Task 11.4f: whether the worker's Whisper transcriber can split a large file of this type.
+   * Only meaningful when `transcribe` is true; `doc()` and `caption()` set it to `false`.
+   */
+  splittable: boolean;
 }
 
 const doc = (contentType: string, ext: string, fileKind: IngestFileKind): UploadType => ({
@@ -51,13 +56,13 @@ const doc = (contentType: string, ext: string, fileKind: IngestFileKind): Upload
   chunkKind: 'material',
   maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
   transcribe: false,
+  splittable: false,
 });
-/** `splittable`: whether the worker's Whisper transcriber can split this type when it is large. */
 const media = (
   contentType: string,
   ext: string,
   fileKind: IngestFileKind,
-  splittable: boolean,
+  { splittable }: { splittable: boolean },
 ): UploadType => ({
   contentType,
   ext,
@@ -65,6 +70,7 @@ const media = (
   chunkKind: 'transcript',
   maxBytes: splittable ? MAX_MEDIA_UPLOAD_BYTES : MAX_UNSPLIT_MEDIA_BYTES,
   transcribe: true,
+  splittable,
 });
 /**
  * Task 8.2c, Phase C: a caption file (.vtt or .srt) the teacher exports from YouTube Studio.
@@ -79,6 +85,7 @@ const caption = (contentType: string, ext: string, fileKind: IngestFileKind): Up
   chunkKind: 'transcript',
   maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
   transcribe: false,
+  splittable: false,
 });
 
 export const UPLOAD_TYPES: readonly UploadType[] = [
@@ -86,11 +93,11 @@ export const UPLOAD_TYPES: readonly UploadType[] = [
   doc('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx', 'docx'),
   doc('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'pptx', 'pptx'),
   doc('text/markdown', 'md', 'markdown'),
-  media('audio/mpeg', 'mp3', 'audio', true),
-  media('audio/wav', 'wav', 'audio', true),
-  media('audio/mp4', 'm4a', 'audio', false),
-  media('video/mp4', 'mp4', 'video', false),
-  media('video/webm', 'webm', 'video', false),
+  media('audio/mpeg', 'mp3', 'audio', { splittable: true }),
+  media('audio/wav', 'wav', 'audio', { splittable: true }),
+  media('audio/mp4', 'm4a', 'audio', { splittable: false }),
+  media('video/mp4', 'mp4', 'video', { splittable: false }),
+  media('video/webm', 'webm', 'video', { splittable: false }),
   // Task 8.2c: no IANA type exists for SubRip; `application/x-subrip` is the common convention
   // (decisions, risk: low). The client falls back to the extension when the browser reports none.
   caption('text/vtt', 'vtt', 'vtt'),

@@ -10,6 +10,7 @@ export {
 } from './age.js';
 export {
   type AgeAnswer,
+  ANONYMISED_NAME,
   createIdentityStore,
   OPERATOR,
   ROLES,

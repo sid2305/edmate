@@ -93,6 +93,8 @@ export const sessions = pgTable(
       sql`(${t.packageId} is null) = (${t.packageVersion} is null)`,
     ),
     check('sessions_open_has_package', sql`${t.endedAt} is not null or ${t.packageId} is not null`),
+    // Task 13.4: retentionRepo.purgeOldSessions' cutoff scan.
+    index('sessions_created_at_idx').on(t.createdAt),
   ],
 );
 
@@ -142,6 +144,9 @@ export const turnTraces = pgTable(
     uniqueIndex('turn_traces_turn_id_key').on(t.turnId),
     // Task 7.7a: serves listForTeacherSince's created_at-ordered, session-joined read.
     index('turn_traces_session_id_created_at_idx').on(t.sessionId, t.createdAt),
+    // Task 13.4: retentionRepo.purgeOldTraces' cutoff scan (created_at alone, not led by
+    // session_id, unlike the composite index above).
+    index('turn_traces_created_at_idx').on(t.createdAt),
   ],
 );
 

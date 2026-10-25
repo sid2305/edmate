@@ -7677,9 +7677,28 @@ tasks:
   deps:
   - 11.4b
   risk: low
-  status: running
+  status: done
   branch: m13/11.4f-splittable-flag
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 13
+    tokens_in: 48
+    tokens_out: 304
+    cache_read_tokens: 444487
+    wall_time_seconds: 42
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 11.4g
   milestone: M11
   title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the
@@ -8166,9 +8185,31 @@ tasks:
   - M12
   - M8
   - M9
-  status: running
+  status: done
   branch: m13/13.4-privacy-rights
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 293
+    tokens_in: 1012
+    tokens_out: 40029
+    cache_read_tokens: 19481950
+    wall_time_seconds: 7722
+    models:
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 1
+    findings:
+      total: 15
+      by_severity:
+        HIGH: 5
+        MEDIUM: 4
+        LOW: 6
+      by_status:
+        fixed: 8
+        open: 0
+        deferred: 6
+        wontfix: 1
+    human_questions: 2
 - id: '13.5'
   milestone: M13
   title: 'Cost dashboard: AI cost per turn and per active student per package against price'
@@ -8178,9 +8219,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/13.5-cost-dashboard
+  model: plan:sonnet build:sonnet
 - id: '13.6'
   milestone: M13
   title: Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist

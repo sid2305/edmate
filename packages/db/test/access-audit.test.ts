@@ -56,7 +56,9 @@ const RETRIEVAL = 'packages/db/src/repositories/retrieval.ts';
 const CHUNKS_ALLOWED = [
   /^packages\/db\/src\/schema\//,
   /^packages\/db\/src\/internal\.ts$/,
-  /^packages\/db\/src\/repositories\/(chunks|retrieval)\.ts$/,
+  // Task 13.4: retention.ts purges past-cutoff transcript chunks by kind and date, never a
+  // search or a read of chunk content — no leak risk, so it joins the allowed list.
+  /^packages\/db\/src\/repositories\/(chunks|retrieval|retention)\.ts$/,
 ];
 const INDEX_IMPLEMENTERS = new Set([
   // The port itself (an interface: it declares the methods and implements nothing).

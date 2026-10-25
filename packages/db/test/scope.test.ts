@@ -260,14 +260,15 @@ describe('package surface', () => {
 describe('repositories source', () => {
   const dir = fileURLToPath(new URL('../src/repositories', import.meta.url));
 
-  it('has no raw SQL strings and no deletes outside chunks.ts, learner.ts and outline.ts (8.2, 6.5, 8.3)', () => {
+  it('has no raw SQL strings and no deletes outside chunks.ts, learner.ts, outline.ts and retention.ts (8.2, 6.5, 8.3, 13.4)', () => {
     const files = readdirSync(dir).filter((f) => f.endsWith('.ts'));
     expect(files.length).toBeGreaterThan(5);
+    const deletesAllowed = ['chunks.ts', 'learner.ts', 'outline.ts', 'retention.ts'];
     for (const f of files) {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(src.includes('sql.raw('), `${f} uses sql.raw(`).toBe(false);
       expect(/\bdelete\s+from\b/i.test(src), `${f} deletes in SQL text`).toBe(false);
-      if (f !== 'chunks.ts' && f !== 'learner.ts' && f !== 'outline.ts') {
+      if (!deletesAllowed.includes(f)) {
         expect(src.includes('.delete('), `${f} uses .delete(`).toBe(false);
       }
     }

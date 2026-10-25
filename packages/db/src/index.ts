@@ -7,7 +7,12 @@ import {
   type IdentityStore,
   type IdentityStoreOptions,
 } from './identity/index.js';
-import { createRepositories, type Repositories } from './repositories/index.js';
+import {
+  createRepositories,
+  retentionRepo,
+  type RetentionRepo,
+  type Repositories,
+} from './repositories/index.js';
 
 export * from './repositories/index.js';
 // Task 8.2o: the one name for the kinds an uploaded file can have (apps/web's upload table reuses it).
@@ -29,12 +34,15 @@ export function openDatabase(
 ): {
   repos: Repositories;
   identity: IdentityStore;
+  /** Task 13.4 (Phase A): the scheduled retention jobs (apps/worker's Phase B calls these). */
+  retention: RetentionRepo;
   close: () => Promise<void>;
 } {
   const { db, close } = createDb(env);
   return {
     repos: createRepositories(db),
     identity: createIdentityStore(db, options.identity),
+    retention: retentionRepo(db),
     close,
   };
 }

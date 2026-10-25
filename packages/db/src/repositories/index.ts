@@ -329,3 +329,16 @@ export {
   type RegulatedSubjectInput,
 } from './regulated-subjects.js';
 export type { RegulatedAgentRow } from './map.js';
+/**
+ * Task 13.4 (Phase A): retention jobs. Not part of `createRepositories` — these are scheduled,
+ * cross-account purges, not a signed-in teacher or student's own scoped reads/writes, so they
+ * take no scope and are deliberately outside the isolation grid in
+ * `test/repositories.int.test.ts`. A caller builds one with its own `Db` the same way `openDatabase`
+ * builds `repos` and `identity`.
+ */
+export {
+  retentionRepo,
+  RETENTION_PURGE_LIMIT,
+  type RetentionRepo,
+  type RetentionResult,
+} from './retention.js';
