@@ -195,6 +195,22 @@ class Workflows(unittest.TestCase):
         self.assertFalse(is_docs_only(["docs/edmate-prd.md", "packages/harness/src/index.ts"], "push"))
         self.assertFalse(is_docs_only([], "push"))
 
+    def test_docs_only_classifier_treats_any_extension_under_docs_as_docs_only(self):
+        self.assertTrue(is_docs_only(["docs/system-design.html"], "push"))
+        self.assertTrue(is_docs_only(["docs/board/tasks.yaml"], "push"))
+        self.assertFalse(is_docs_only(["apps/web/docs/x.md"], "push"))
+        self.assertFalse(is_docs_only(["docs/system-design.html", "apps/web/app/page.tsx"], "push"))
+
+    def test_docs_only_classifier_excludes_docs_read_at_test_time_by_the_node_job(self):
+        # These docs/ paths are read by a test the `node` job runs (not just mentioned in a comment),
+        # so a diff touching only one of them must not skip that job (task 0.13a).
+        self.assertFalse(is_docs_only(["docs/edmate-harness-build-plan.md"], "push"))
+        self.assertFalse(
+            is_docs_only(["docs/edmate-harness-build-plan.md", "docs/edmate-prd.md"], "push")
+        )
+        # A doc the node job's tests never read stays docs-only.
+        self.assertTrue(is_docs_only(["docs/system-design.html"], "push"))
+
     def test_docs_only_classifier_always_false_on_schedule(self):
         # The nightly run has no diff to judge; it must always run the full suite.
         self.assertFalse(is_docs_only(["README.md"], "schedule"))
