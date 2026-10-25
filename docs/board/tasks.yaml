@@ -2672,8 +2672,18 @@ tasks:
   accept: tests cover each item; harness tests pass
   deps:
   - '6.1'
+  status: running
+  branch: m13/6.1a-topic-map-strict
+  model: plan:sonnet build:sonnet
+- id: 6.1b
+  milestone: M13
+  title: '6.1a Phase B (deferred by the lead, 25 Oct 2026): courseOutlineInputFromDraft in packages/harness/src/memory/fromOutlineDraft.ts, duck-typing ingest''s OutlineDraft (no new dependency), so studio-drafted
+    outlines can feed buildTopicMap; design in docs/tasks/6.1a/plan.md Phase B. Build when a task wires studio outlines into buildTopicMap.'
+  accept: a converted draft builds a topic map, and unknown-module and duplicate ids are rejected, in tests; harness typecheck, lint and test green.
+  deps:
+  - 6.1a
+  risk: low
   status: todo
-  branch: null
 - id: 5.8a
   milestone: M5
   title: 'Role-play wiring: personas in CLI chat/eval and web runtime, newest set'
