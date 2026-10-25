@@ -110,8 +110,8 @@
 - Decided: accept 75 tool calls against the plan's 55.
 - Why: the diff stayed inside the planned packages/db files, the gate is green and all four reviewers approve; the builder under-counted its calls (37 reported).
 
-### 24 Oct 2026 · 8.1b review MEDIUM/LOW deferred to 8.1c · decided by lead · risk: low
-- Decided: defer the typescript-reviewer MEDIUM (packages/db/src/cli.ts:134 and :261, `args.email!` relies on the either-or check in another function; use a discriminated union) and the code-reviewer LOW (packages/db/src/cli.ts:90 and :216, the either-or check reads as a disguised XNOR) to board task 8.1c. The database-reviewer MEDIUM (packages/db/src/repositories/README.md cited `publish.ts`'s `lockVerified` as a `lockRole` example) is fixed by the lead in this PR.
+### 24 Oct 2026 · 8.1b review MEDIUM/LOW deferred to 8.1d · decided by lead · risk: low
+- Decided: defer the typescript-reviewer MEDIUM (packages/db/src/cli.ts:134 and :261, `args.email!` relies on the either-or check in another function; use a discriminated union) and the code-reviewer LOW (packages/db/src/cli.ts:90 and :216, the either-or check reads as a disguised XNOR) to board task 8.1d. The database-reviewer MEDIUM (packages/db/src/repositories/README.md cited `publish.ts`'s `lockVerified` as a `lockRole` example) is fixed by the lead in this PR.
 - Why: neither cli.ts point is reachable today (a drift would surface as a caught ZodError and exit 1); MEDIUM and LOW findings wait for a follow-up task under the fix-only-blockers rule.
 
 ## Budget

@@ -7,5 +7,5 @@ All four reviewers approve. Only staff can verify a teacher (`setVerification`'s
 ## Findings
 
 - [MEDIUM] [fixed] packages/db/src/repositories/README.md:105 — cited `publish.ts`'s `lockVerified` (a verification-status check) as a `lockRole` example; the lead removed it.
-- [MEDIUM] [deferred 8.1c] packages/db/src/cli.ts:134 — `args.email!` relies on the either-or check in `parseGrantArgs`/`parseVerifyArgs` (also :261); a discriminated union would let the compiler narrow it.
-- [LOW] [deferred 8.1c] packages/db/src/cli.ts:90 — the either-or check reads as a disguised XNOR and is duplicated at :216; `(email === undefined) === (userId === undefined)` is clearer.
+- [MEDIUM] [deferred 8.1d] packages/db/src/cli.ts:134 — `args.email!` relies on the either-or check in `parseGrantArgs`/`parseVerifyArgs` (also :261); a discriminated union would let the compiler narrow it.
+- [LOW] [deferred 8.1d] packages/db/src/cli.ts:90 — the either-or check reads as a disguised XNOR and is duplicated at :216; `(email === undefined) === (userId === undefined)` is clearer.
