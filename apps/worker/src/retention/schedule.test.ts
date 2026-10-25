@@ -12,7 +12,7 @@ import {
   retentionJob,
   scheduleRetention,
 } from './schedule.js';
-import type { RetentionBackend } from './workers.js';
+import { RetentionPurgeError, type RetentionBackend } from './workers.js';
 
 const NOW = new Date('2026-10-25T04:00:00.000Z');
 
@@ -109,6 +109,72 @@ describe('retentionJob', () => {
     expect(lines.some((l) => l.event === 'retention.table' && l.level === 'warn')).toBe(true);
     expect(lines.at(-1)).toEqual(expect.objectContaining({ level: 'warn', event: 'retention.run' }));
   }, 10_000);
+
+  it('a dry run logs no live-run warning', async () => {
+    const lines: LogLine[] = [];
+    const run = retentionJob({
+      retention: backend({}),
+      now: () => NOW,
+      log: (l) => lines.push(l),
+    });
+    await run();
+    expect(lines.filter((l) => l.event === 'retention.live_run')).toHaveLength(0);
+  });
+
+  it('a live run logs exactly one live-run warning naming the tables and their cutoffs', async () => {
+    const lines: LogLine[] = [];
+    const run = retentionJob({
+      retention: backend({}),
+      config: { days: { sessions: 730, turnTraces: 90, transcriptChunks: 730 }, dryRun: false },
+      now: () => NOW,
+      log: (l) => lines.push(l),
+    });
+    await run();
+    const warnings = lines.filter((l) => l.event === 'retention.live_run');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toEqual(
+      expect.objectContaining({
+        level: 'warn',
+        event: 'retention.live_run',
+        tables: expect.objectContaining({
+          sessions: expect.any(String),
+          turnTraces: expect.any(String),
+          transcriptChunks: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  it('logs retention.purge_failed with the rows already deleted before the job fails', async () => {
+    const lines: LogLine[] = [];
+    let calls = 0;
+    const failingPurge = () => {
+      calls += 1;
+      if (calls === 2) return Promise.reject(new Error('db connection lost'));
+      return Promise.resolve({ count: 5, dryRun: false });
+    };
+    const run = retentionJob({
+      retention: {
+        purgeOldSessions: failingPurge,
+        purgeOldTraces: () => Promise.resolve({ count: 0, dryRun: false }),
+        purgeOldTranscriptChunks: () => Promise.resolve({ count: 0, dryRun: false }),
+      },
+      config: { days: { sessions: 730, turnTraces: 90, transcriptChunks: 730 }, dryRun: false },
+      purgeLimit: 5,
+      now: () => NOW,
+      log: (l) => lines.push(l),
+    });
+    await expect(run()).rejects.toBeInstanceOf(RetentionPurgeError);
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        level: 'error',
+        event: 'retention.purge_failed',
+        table: 'sessions',
+        deletedSoFar: 5,
+        calls: 2,
+      }),
+    );
+  });
 });
 
 /** A Redis stand-in that never opens a socket (rule 4), as in insights/schedule.test.ts. */

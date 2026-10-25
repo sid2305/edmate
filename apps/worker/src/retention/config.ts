@@ -32,5 +32,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The cutoff date for a table kept `days` days: everything older than this may be purged. */
 export function cutoffFor(now: Date, days: number): Date {
+  if (!Number.isInteger(days) || days <= 0) {
+    throw new Error(`retention days must be a positive integer, got ${days}`);
+  }
   return new Date(now.getTime() - days * DAY_MS);
 }

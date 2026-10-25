@@ -6961,9 +6961,29 @@ tasks:
   deps:
   - 9.1a
   risk: low
-  status: running
+  status: done
   branch: m13/9.1c-teacher-a11y
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 131
+    tokens_in: 404
+    tokens_out: 52957
+    cache_read_tokens: 11408117
+    wall_time_seconds: 720
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 13.4a
   milestone: M13
   title: '13.4 database review: packages/db/migrations/0032_retention_indexes.sql builds its three indexes with plain CREATE INDEX; move them to the concurrentIndex post-migrate pattern in packages/db/src/migrate.ts
@@ -6993,9 +7013,29 @@ tasks:
   deps:
   - '13.4'
   risk: low
-  status: running
+  status: done
   branch: m13/13.4c-retention-hardening
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -8295,7 +8335,9 @@ tasks:
   accept: docs_only.py has a test for a non-.md file under docs/ and the behaviour is stated in its docstring; safety-reviewer.md line 13 reworded; the python harness tests pass
   deps:
   - '0.13'
-  status: todo
+  status: running
+  branch: m13/0.13a-agent-followups
+  model: plan:lead build:sonnet
 - id: 5.3a
   milestone: M13
   title: 'Retrieval follow-ups (5.3 review MEDIUM/LOW): HNSW-usable vector query (inner ORDER BY distance LIMIT with scope, outer id tie-break) and a guard test that can fail; batch the termStats IDF queries;
