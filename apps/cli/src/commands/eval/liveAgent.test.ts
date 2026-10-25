@@ -2,6 +2,7 @@
 // demo-teacher content and a scripted `ModelGateway` only (rule 4: no real model call in tests).
 // Five representative cases, as the plan asks: a plain reply, a reply with sources, a
 // guard-blocked turn, an escalated turn, and a seeded prior turn.
+import { fileURLToPath } from 'node:url';
 import type { ModelGateway } from '@edmate/contracts';
 import {
   adviceJudgeGateway,
@@ -11,6 +12,7 @@ import {
   ScriptedGateway,
   spyGateway,
 } from '@edmate/harness/testing';
+import { loadCasesFromDir, memoryRecorder, runSuite } from '@edmate/evals';
 import { describe, expect, it } from 'vitest';
 import { slackClock } from '../chat/deps.js';
 import { buildLiveEvalAgent } from './liveAgent.js';
@@ -188,5 +190,136 @@ describe('buildLiveEvalAgent', () => {
     const sent = JSON.stringify(spy.requests);
     expect(sent).toContain('What is a variable?');
     expect(sent).toContain('a named slot that stores a value');
+  }, 20000);
+});
+
+// A role-play turn retrieves no grounding material, so a reply claiming a `[1]` citation (the
+// file's default `scriptedChatGateway` reply) gets rewritten by the grounding guard to a safe
+// fallback (no source backs the citation) — and the runner then counts that as "the student
+// never saw the model's own reply" (`pipeline/runner.ts`'s `withPersonaCount` on a guard
+// replacement), discarding the persona-count increment it had just decided on. A plain reply with
+// no citation marker (same choice as test 5's `scriptedChatGateway(3, 'Here is your next
+// question.')`) avoids tripping the grounding guard on a role-play turn.
+const ROLEPLAY_REPLY = 'Here is your next question.';
+
+describe('persona role-play cases (task 5.8d)', () => {
+  it('turn 0 sends a skill_action start carrying only the bare persona id', async () => {
+    const spy = spyGateway(scriptedChatGateway(1, ROLEPLAY_REPLY));
+    const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
+    await agent.reply({
+      caseId: 'rp-1',
+      turnIndex: 0,
+      student: "Let's start.",
+      skill: 'mock_interview',
+      persona: 'job-interview@1.0.0',
+      priorTurns: [],
+    });
+    const system = spy.requests.find((r) => r.tier === 'main')?.system ?? '';
+    expect(system).toContain('Interviewer');
+    expect(system).toMatch(/question 1 of 6/u);
+  }, 20000);
+
+  it('a later call for the same caseId continues the count (the session is reused)', async () => {
+    const spy = spyGateway(scriptedChatGateway(2, ROLEPLAY_REPLY));
+    const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
+    const start = await agent.reply({
+      caseId: 'rp-1',
+      turnIndex: 0,
+      student: "Let's start.",
+      skill: 'mock_interview',
+      persona: 'job-interview@1.0.0',
+      priorTurns: [],
+    });
+    await agent.reply({
+      caseId: 'rp-1',
+      turnIndex: 1,
+      student: 'A variable is a name that points to a value.',
+      skill: 'mock_interview',
+      persona: 'job-interview@1.0.0',
+      priorTurns: [{ student: "Let's start.", reply: start.text }],
+    });
+    const mainRequests = spy.requests.filter((r) => r.tier === 'main');
+    const system = mainRequests[mainRequests.length - 1]?.system ?? '';
+    expect(system).toMatch(/question 2 of 6/u);
+    expect(system).toContain('Interviewer');
+  }, 20000);
+
+  it('a different caseId gets its own fresh session', async () => {
+    const spy = spyGateway(scriptedChatGateway(3, ROLEPLAY_REPLY));
+    const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
+    const start = await agent.reply({
+      caseId: 'rp-1',
+      turnIndex: 0,
+      student: "Let's start.",
+      skill: 'mock_interview',
+      persona: 'job-interview@1.0.0',
+      priorTurns: [],
+    });
+    await agent.reply({
+      caseId: 'rp-1',
+      turnIndex: 1,
+      student: 'A variable is a name that points to a value.',
+      skill: 'mock_interview',
+      persona: 'job-interview@1.0.0',
+      priorTurns: [{ student: "Let's start.", reply: start.text }],
+    });
+    await agent.reply({
+      caseId: 'rp-2',
+      turnIndex: 0,
+      student: "Let's start.",
+      skill: 'mock_interview',
+      persona: 'job-interview@1.0.0',
+      priorTurns: [],
+    });
+    const mainRequests = spy.requests.filter((r) => r.tier === 'main');
+    const system = mainRequests[mainRequests.length - 1]?.system ?? '';
+    expect(system).toMatch(/question 1 of 6/u);
+    expect(system).not.toMatch(/question 2 of 6/u);
+  }, 20000);
+
+  it('a malformed persona ref throws instead of silently sending a plain message', async () => {
+    const spy = spyGateway(scriptedChatGateway(1));
+    const agent = buildLiveEvalAgent({ env: {}, gateway: spy, clock: slackClock(STEP_BUDGET_SLACK) });
+    await expect(
+      agent.reply({
+        caseId: 'rp-bad',
+        turnIndex: 0,
+        student: "Let's start.",
+        skill: 'mock_interview',
+        persona: 'job interview@1.0.0',
+        priorTurns: [],
+      }),
+    ).rejects.toThrow(/job interview@1\.0\.0/);
+    expect(spy.requests.length).toBe(0);
+  }, 20000);
+
+  it('one real persona case runs end to end through runSuite with failed: 0', async () => {
+    const dir = fileURLToPath(new URL('../../../../../evals/suites/persona/', import.meta.url));
+    const cases = loadCasesFromDir(dir);
+    const evalCase = cases.find((c) => c.id === 'persona-roleplay-restart-en');
+    if (evalCase === undefined) throw new Error('persona-roleplay-restart-en case not found');
+
+    const agent = buildLiveEvalAgent({
+      env: {},
+      gateway: scriptedChatGateway(3, 'Here is your next question.'),
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
+    const stubJudge: ModelGateway = {
+      stream: () => {
+        throw new Error('stubJudge.stream should never be called');
+      },
+      embed: () => Promise.reject(new Error('stubJudge.embed should never be called')),
+      generateObject: <T>() => Promise.resolve({ pass: true, reason: 'stub' } as T),
+    };
+
+    const result = await runSuite([evalCase], {
+      agent,
+      judgeGateway: stubJudge,
+      judgeModel: { provider: 'anthropic', model: 'stub' },
+      recorder: memoryRecorder('record'),
+    });
+
+    expect(result.failed).toBe(0);
+    expect(result.results[0]?.turns.length).toBe(3);
   }, 20000);
 });
