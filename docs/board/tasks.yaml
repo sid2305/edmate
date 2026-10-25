@@ -5623,7 +5623,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.3d-start-concurrent-verification
+  model: plan:lead build:sonnet
 - id: 9.7c
   milestone: M13
   title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
@@ -8255,10 +8257,31 @@ tasks:
   - M12
   - M8
   - M9
-  status: running
+  status: done
   risk: risky
   branch: m13/13.3-security-review
-  model: plan:sonnet review:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 95
+    tokens_in: 296
+    tokens_out: 31741
+    cache_read_tokens: 5349599
+    wall_time_seconds: 461512
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 4
+        wontfix: 2
+    human_questions: 0
 - id: '13.4'
   milestone: M13
   title: 'Privacy rights per the locale pack''s `privacyLaw`: per-user export and delete, retention jobs'
@@ -8984,7 +9007,9 @@ tasks:
   deps:
   - '13.3'
   risk: low
-  status: todo
+  status: running
+  branch: m13/13.3a-security-headers
+  model: plan:sonnet build:sonnet
 - id: 13.3b
   milestone: M13
   title: '13.3 review LOWs: packages/db/src/repositories/chunks.ts insertTopicLinks and topicSources go through teacherScope() or join the scope.test.ts grid; apps/web/src/turn/routes.ts uses a dedicated
