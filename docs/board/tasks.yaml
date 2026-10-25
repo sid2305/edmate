@@ -6586,8 +6586,8 @@ tasks:
   model: build:sonnet
 - id: 9.7e
   milestone: M13
-  title: '9.7d review follow-up: apps/web/e2e/fixtures.ts postOnce can re-run act() and double-send when a real post-hydration request takes longer than the inner 2s poll to show up, and mockTurns
-    clamps on overflow so the double-send passes silently (typescript-reviewer MEDIUM); make mockTurns fail on an unexpected extra turn (or count requests per send) so a double-send fails loudly'
+  title: '9.7d review follow-up: apps/web/e2e/fixtures.ts postOnce can re-run act() and double-send when a real post-hydration request takes longer than the inner 2s poll to show up, and mockTurns clamps
+    on overflow so the double-send passes silently (typescript-reviewer MEDIUM); make mockTurns fail on an unexpected extra turn (or count requests per send) so a double-send fails loudly'
   accept: a test or spec assertion fails when one send produces two turn requests; the full-flow and chat e2e specs stay green.
   deps:
   - 9.7d
@@ -7688,9 +7688,27 @@ tasks:
   deps:
   - 5.6b
   risk: low
-  status: review
+  status: done
   branch: m13/5.6g-stream-gate-window
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: 8.9e
   milestone: M13
   title: '8.9d review MEDIUM: apps/web/src/studio/questions/routes.ts fromError gets a `default` branch assigning error.kind to `never`, so a new RepositoryErrorKind fails to compile instead of falling

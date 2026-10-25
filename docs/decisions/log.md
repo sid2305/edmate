@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 24 Oct 2026 · 5.6g · tool calls over the brief's cap · decided by lead · risk: low
+- Decided: accept 60 tool calls against the brief's 35 (harness counts: first builder 19 before it stalled when the Mac slept, a retry 0, the finishing builder 41; that builder reported 21).
+- Why: the extra calls were restarts after machine sleep, not scope growth; the diff stays inside the three briefed items and all three reviewers approved.
+
+---
+
 ### 24 Oct 2026 · 9.5c fixed label id kept · decided by lead · risk: low
 - Decided: won't fix the review LOW in apps/web/src/chat/SkillLauncher.tsx (a fixed id instead of useId() for the group label). SkillLauncher renders once per page, in ChatView.tsx.
 - Why: no collision is possible today; switch to useId() if the component is ever reused.
