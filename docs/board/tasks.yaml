@@ -2940,9 +2940,9 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.8d-eval-pipeline-agent
+  model: plan:sonnet build:sonnet
 - id: 0.19a
   milestone: M13
   title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest
