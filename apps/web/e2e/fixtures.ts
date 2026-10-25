@@ -154,15 +154,31 @@ export function sseBody(events: readonly TurnEvent[]): string {
 }
 
 /**
- * Routes every `POST /api/sessions/:id/turns` request to the next fixture in `bodies`, in order;
- * a request past the end of the list reuses the last one. The real route is never reached: no
- * model call, no Redis dependency for the turn stream itself (plan: "no real model calls").
+ * Routes every `POST /api/sessions/:id/turns` request to the next fixture in `bodies`, in order,
+ * each single-use. The real route is never reached: no model call, no Redis dependency for the
+ * turn stream itself (plan: "no real model calls").
+ *
+ * A request past the end of `bodies` used to reuse the last fixture, which let a double-send
+ * (`postOnce` re-running its `act` if a real post-hydration request outlasts the inner 2s poll,
+ * fixtures.ts's doc comment above) pass silently (9.7d review MEDIUM, deferred to 9.7e). It now
+ * fails loudly instead: the extra request gets a 500 (so the page's own stream-error UI shows
+ * rather than hanging), and the handler then throws, which Playwright Test surfaces as a failed
+ * test via its unhandled-rejection reporting. A test that really expects more turns than one send
+ * per fixture must script that many fixtures up front -- `bodies` is never implicitly stretched.
  */
 export async function mockTurns(page: Page, bodies: readonly string[]): Promise<void> {
   if (bodies.length === 0) throw new Error('mockTurns: at least one fixture body is required');
   let at = 0;
   await page.route('**/api/sessions/*/turns', async (route: Route) => {
-    const body = bodies[Math.min(at, bodies.length - 1)] ?? bodies[0]!;
+    if (at >= bodies.length) {
+      const message =
+        `mockTurns: turn request #${at + 1} has no scripted fixture (only ${bodies.length} ` +
+        'provided) -- likely a double-send (postOnce re-running act after a slow hydration) or ' +
+        'a test sending more turns than it scripted; add one fixture per expected send.';
+      await route.fulfill({ status: 500, headers: { 'content-type': 'text/plain' }, body: message });
+      throw new Error(message);
+    }
+    const body = bodies[at]!;
     at += 1;
     await route.fulfill({
       status: 200,

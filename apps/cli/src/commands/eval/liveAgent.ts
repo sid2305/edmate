@@ -3,13 +3,23 @@
 // `edmate eval --record` runs real suites against the real agent instead of the stub
 // `unwiredAgent`. No real model call in tests (rule 4): every test injects a scripted
 // `ModelGateway` via `LiveEvalAgentOptions.gateway`, exactly as `chat/deps.ts` already does.
+// Task 5.8d: one `ChatSetup` per case (cached by `caseId`), so a persona's role-play state (the
+// question count, the stored persona id, in the session's help state) carries across a case's
+// `reply()` calls instead of resetting every turn; turn 0 of a persona case is sent as a
+// `skill_action` start carrying only the bare persona id.
 import { randomUUID } from 'node:crypto';
 import type { Message, ModelGateway, ModelPolicy, SourceRef, TurnEvent } from '@edmate/contracts';
 import type { MeterSink } from '@edmate/gateway';
-import { defaultSteps, isBlockReply, runTurn, type Clock } from '@edmate/harness';
+import {
+  defaultSteps,
+  isBlockReply,
+  PersonaStartPayloadSchema,
+  runTurn,
+  type Clock,
+} from '@edmate/harness';
 import type { MemoryUsageMeter } from '@edmate/harness/testing';
 import type { EvalAgent, EvalAgentReply, EvalTurnInput, PriorTurn } from '@edmate/evals';
-import { buildChatDeps, type ChatDepsOptions } from '../chat/deps.js';
+import { buildChatDeps, type ChatDepsOptions, type ChatSetup } from '../chat/deps.js';
 import type { Env } from '../chat/gateway.js';
 import type { ChatPackageId } from '../chat/world.js';
 
@@ -114,49 +124,90 @@ async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgent
   };
 }
 
+/** Takes the bare persona id (the part of `personaRef` before `@`, or the whole string if there
+ * is no `@`) and validates it against `PersonaStartPayloadSchema` (task 5.8d): a start turn's
+ * `skillPayload` must be a bare id, no version, matching `chatTurnInput`'s `/roleplay <id>`
+ * convention. Throws a clear error naming the bad ref on a malformed case instead of silently
+ * sending a plain message (lesson: "a silent no-op is easy to miss"). */
+function startPayloadFor(personaRef: string): { persona: string } {
+  const bareId = personaRef.split('@')[0] ?? personaRef;
+  const parsed = PersonaStartPayloadSchema.safeParse({ persona: bareId });
+  if (!parsed.success) {
+    throw new Error(`live eval: malformed persona ref "${personaRef}" (bare id "${bareId}" invalid)`);
+  }
+  return parsed.data;
+}
+
 /**
- * The pipeline-backed `EvalAgent`: one fresh in-memory `ChatSetup` per `reply()` call (one case
- * = one fresh session), seeded with `input.priorTurns`, then one live `runTurn` for
- * `input.student`. `input.skill`/`input.persona` have no `TurnInput` field to carry them onto a
- * plain turn today (lead answer Q2, task 7.6); a case naming either is run as a plain message and
- * flagged as a gap in the handoff, not guessed at here.
+ * The pipeline-backed `EvalAgent`: one `ChatSetup` per `caseId` (task 5.8d), cached in a
+ * `Map<string, ChatSetup>` closed over this agent instance (matching the existing "fresh agent
+ * per `--models` sweep pairing" design). The first `reply()` call for a `caseId` builds a fresh
+ * session and seeds `input.priorTurns`; every later call for the same `caseId` reuses that
+ * session (and ignores `priorTurns` — the session already holds that history for real, more
+ * accurate than re-seeding synthetic text), so role-play state (the question count, the stored
+ * persona id) carries across turns the way it does in production. Turn 0 of a persona case is
+ * sent as a `skill_action` start carrying only the bare persona id
+ * (`startPayloadFor`/`PersonaStartPayloadSchema`); every other turn is a plain message, tagged
+ * with `input.skill` when present.
  */
 export function buildLiveEvalAgent(opts: LiveEvalAgentOptions): EvalAgent {
+  const sessions = new Map<string, ChatSetup>();
+
+  async function setupFor(caseId: string, priorTurns: readonly PriorTurn[]): Promise<ChatSetup> {
+    const cached = sessions.get(caseId);
+    if (cached !== undefined) return cached;
+
+    const depsOpts: ChatDepsOptions = {
+      env: opts.env,
+      market: opts.market ?? 'global',
+      packageId: opts.packageId ?? 'paid',
+      source: 'eval',
+      evalStudentId: `eval-${caseId}`,
+      ...(opts.gateway === undefined ? {} : { gateway: opts.gateway }),
+      ...(opts.contentDir === undefined ? {} : { contentDir: opts.contentDir }),
+      ...(opts.modelPolicy === undefined ? {} : { modelPolicy: opts.modelPolicy }),
+      ...(opts.clock === undefined ? {} : { clock: opts.clock }),
+      ...(opts.usage === undefined ? {} : { usage: opts.usage }),
+      ...(opts.onUnmetered === undefined ? {} : { onUnmetered: opts.onUnmetered }),
+      ...(opts.baseURL === undefined ? {} : { baseURL: opts.baseURL }),
+    };
+    const setup = await buildChatDeps(depsOpts);
+    await seedPriorTurns(setup.sessionId, priorTurns, setup.deps.transcripts);
+    sessions.set(caseId, setup);
+    return setup;
+  }
+
   return {
     async reply(input: EvalTurnInput): Promise<EvalAgentReply> {
-      const depsOpts: ChatDepsOptions = {
-        env: opts.env,
-        market: opts.market ?? 'global',
-        packageId: opts.packageId ?? 'paid',
-        source: 'eval',
-        evalStudentId: `eval-${input.caseId}`,
-        ...(opts.gateway === undefined ? {} : { gateway: opts.gateway }),
-        ...(opts.contentDir === undefined ? {} : { contentDir: opts.contentDir }),
-        ...(opts.modelPolicy === undefined ? {} : { modelPolicy: opts.modelPolicy }),
-        ...(opts.clock === undefined ? {} : { clock: opts.clock }),
-        ...(opts.usage === undefined ? {} : { usage: opts.usage }),
-        ...(opts.onUnmetered === undefined ? {} : { onUnmetered: opts.onUnmetered }),
-        ...(opts.baseURL === undefined ? {} : { baseURL: opts.baseURL }),
-      };
-      const setup = await buildChatDeps(depsOpts);
-      await seedPriorTurns(setup.sessionId, input.priorTurns, setup.deps.transcripts);
+      const setup = await setupFor(input.caseId, input.priorTurns);
 
       if (input.teacher !== undefined) {
         await setup.deps.transcripts.append(setup.sessionId, message('teacher', input.teacher));
       }
 
-      const run = runTurn(
-        {
-          agentId: setup.agentId,
-          sessionId: setup.sessionId,
-          studentId: setup.studentId,
-          kind: 'message',
-          text: input.student,
-          lang: 'en',
-          clientTs: new Date().toISOString(),
-        },
-        { deps: setup.deps, steps: defaultSteps },
-      );
+      const base = {
+        agentId: setup.agentId,
+        sessionId: setup.sessionId,
+        studentId: setup.studentId,
+        lang: 'en' as const,
+        clientTs: new Date().toISOString(),
+      };
+      const turnInput =
+        input.turnIndex === 0 && input.persona !== undefined
+          ? {
+              ...base,
+              kind: 'skill_action' as const,
+              skill: 'mock_interview' as const,
+              skillPayload: startPayloadFor(input.persona),
+            }
+          : {
+              ...base,
+              kind: 'message' as const,
+              text: input.student,
+              ...(input.skill === undefined ? {} : { skill: input.skill }),
+            };
+
+      const run = runTurn(turnInput, { deps: setup.deps, steps: defaultSteps });
       const reply = await collectReply(run.events);
       await run.finished;
       return reply;

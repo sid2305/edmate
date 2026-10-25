@@ -2941,9 +2941,30 @@ tasks:
   accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
   deps:
   - 5.8a
-  status: review
+  status: done
   branch: m13/5.8d-eval-pipeline-agent
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 279
+    tokens_in: 946
+    tokens_out: 105992
+    cache_read_tokens: 27383823
+    wall_time_seconds: 277532
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.19a
   milestone: M13
   title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest
@@ -6650,9 +6671,27 @@ tasks:
   deps:
   - 9.7d
   risk: low
-  status: review
+  status: done
   branch: m13/9.7e-e2e-double-send
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.4f
   milestone: M13
   title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
@@ -7887,5 +7926,14 @@ tasks:
   accept: a staff view test shows a teacher's past subject changes on a queue row; web typecheck, lint and test green.
   deps:
   - 9.3h
+  risk: low
+  status: todo
+- id: 5.6h
+  milestone: M13
+  title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text;
+    drive the real route step (or pass the text through) so the runner test proves a question-phrased correct guess releases and a wrong one does not, or remove it'
+  accept: the runner test fails if question-phrased grading changes; harness typecheck, lint and test green.
+  deps:
+  - 5.6f
   risk: low
   status: todo
