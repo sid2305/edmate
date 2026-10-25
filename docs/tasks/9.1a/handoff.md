@@ -96,6 +96,14 @@ Cached:    7 cached, 11 total
   `chrome-launcher` cannot find a binary on `ubuntu-latest`, the fix is one pinned
   `browser-actions/setup-chrome` step (by SHA), a small follow-up, not a redesign.
 
+### 25 Oct 2026 · 9.1a merge: Lighthouse accessibility test on signed-in pages · decided by lead · risk: low
+- Decided: merge 9.1a. apps/web/test/lighthouse-a11y.test.ts scores /home and /teacher at 360 px on a production build in the build-smoke run and fails below 95; lighthouse and chrome-launcher are exact-pinned devDependencies of apps/web. code-reviewer and typescript-reviewer approved after one fix round (independent afterAll cleanup, captured server stderr).
+- Why: no risky path changed (.github untouched); this PR's own CI run is the check that chrome-launcher finds Chrome on the CI runner.
+
+### 25 Oct 2026 · 9.1a budget 101 vs 40 · decided by lead · risk: low
+- Decided: accept 101 tool calls (harness count: build 71, fix round 30; the agents reported 56 and 17) against the plan's 40.
+- Why: local production builds collided on .next/lock and had to be re-run; the result is complete and approved.
+
 ## Left to do
 
 None — status DONE. (If CI's `ubuntu-latest` run shows headless Chrome genuinely unavailable,
@@ -124,4 +132,4 @@ Tool calls: 17
 
 ## Budget
 
-Tool calls used: 56
+Tool calls used: 101 (harness count: build 71, fix round 30; the agents reported 56 and 17)
