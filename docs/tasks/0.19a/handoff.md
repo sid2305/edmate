@@ -36,7 +36,10 @@
   with `find .claude -name __pycache__`, no matches).
 
 ## Decisions
-None.
+
+### 25 Oct 2026 · 0.19a closeout.py regenerates the decisions digest (.claude/**) · decided by lead · risk: high
+- Decided: merge 0.19a; closeout.py now runs `board.py digest` right after `board.py set <id> done`, prints the reason and exits 1 if the digest fails (the board change stays and cleanup still runs), so the lead no longer runs the digest by hand after each closeout.
+- Why: a stale digest failed the RealRepo freshness test in CI for every later PR; security-reviewer approved with no findings (argument-list subprocess call with no task-id input, no hook or settings change).
 
 ## Budget
-Tool calls used: 19
+Tool calls used: 35 (harness count; the builder self-reported 19)
