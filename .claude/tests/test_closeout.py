@@ -3,11 +3,15 @@ git worktree/branch. Fixture simulates a PR already merged into main (handoff/re
 there), same style as test_board.py and test_merge_gate.py's RepoCase."""
 import json
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from helpers import ENV, RepoCase, git, require_tools, task
+from helpers import ENV, HARNESS, RepoCase, git, require_tools, task
+
+sys.path.insert(0, str(HARNESS / "skills" / "board"))
+import digest  # noqa: E402
 
 FIXTURE_TRANSCRIPT = Path(__file__).resolve().parent / "fixtures" / "transcript-sample.jsonl"
 MARKER = "EDMATE_TEST_MARKER_DO_NOT_LEAK_7f3a9c"
@@ -18,6 +22,16 @@ Status: DONE
 ## Decisions
 ### 18 Oct 2026 · 9.9 Thing · decided by lead · risk: low
 Decided: Keep it simple.
+Why: x.
+"""
+
+# A risk: high lead decision is in-digest (digest.in_digest), unlike HANDOFF's risk: low entry.
+HIGH_HANDOFF = """# 9.9 handoff
+Status: DONE
+
+## Decisions
+### 18 Oct 2026 · 9.9 Big thing · decided by lead · risk: high
+Decided: Ship it.
 Why: x.
 """
 
@@ -212,6 +226,40 @@ class LessonsReminder(CloseoutCase):
         self.assertEqual(code, 1, out)
         self.assertIn(REMINDER, out)
         self.assertNotIn("status: done", self.board_text())
+
+
+class DigestRegeneration(CloseoutCase):
+    """0.19a: closeout regenerates docs/decisions/digest.md after appending decisions, so a
+    stale digest never fails the RealRepo freshness test in CI for a later PR."""
+
+    def digest_text(self):
+        return (self.repo.root / "docs/decisions/digest.md").read_text()
+
+    def rendered_digest(self):
+        entries = digest.parse_log_entries(self.log_text())
+        return digest.render_digest(entries)
+
+    def test_digest_matches_board_digest_render_and_includes_new_entry(self):
+        self.set_handoff(HIGH_HANDOFF)
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.digest_text(), self.rendered_digest())
+        self.assertIn("9.9 Big thing", self.digest_text())
+
+    def set_handoff(self, text):
+        self.repo.write("docs/tasks/9.9/handoff.md", text)
+
+    def test_digest_failure_prints_reason_after_board_done_and_keeps_board_change(self):
+        # A standing rule that cites a heading no entry has makes board.py digest refuse to
+        # write digest.md -- closeout must still report the board as done, not undo it.
+        self.repo.write(
+            "docs/decisions/standing-rules.md",
+            "- A made-up rule (cites: 1 Jan 2099 · Nothing real)\n",
+        )
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 1, out)
+        self.assertIn("could not regenerate docs/decisions/digest.md", out)
+        self.assertIn("status: done", self.board_text())
 
 
 if __name__ == "__main__":

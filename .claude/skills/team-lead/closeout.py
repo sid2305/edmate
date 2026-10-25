@@ -11,13 +11,18 @@ tree). It:
   2. prints a one-line reminder to add a docs/lessons.md entry when the handoff has a
      `## Fix round` heading or a just-appended decision is "decided by you" (never blocks);
   3. runs `board.py set <id> done` (which itself refuses unless every `Decided:` line is logged);
-  4. removes the task's git worktree, if one still exists for its board branch, and deletes the
+  4. regenerates docs/decisions/digest.md with `board.py digest`, so a stale digest never fails
+     the RealRepo freshness test in CI for a later PR -- if that fails, prints the reason and
+     still does step 5, but the command exits non-zero so the lead sees it and runs
+     `board.py digest` by hand;
+  5. removes the task's git worktree, if one still exists for its board branch, and deletes the
      local branch -- but only if the branch is fully merged into main. An unmerged branch is left
      alone with a clear message (mirrors board.py's refuse-without-decisions check); pass
      `--remote` to also delete the branch on origin once it is removed locally.
 
 Exit codes: 0 = closed out (or safely partial, e.g. branch left because it isn't merged yet),
-1 = couldn't even log decisions / mark the board done (board.py's own refusal reasons print as-is).
+1 = couldn't even log decisions / mark the board done (board.py's own refusal reasons print as-is),
+or the board was set done but `board.py digest` then failed (step 4).
 """
 import json
 import os
@@ -201,6 +206,12 @@ def main(argv):
     if code:
         return code
 
+    digest_failed = False
+    code, out = sh(root, "python3", board_py, "digest")
+    if code:
+        print(f"could not regenerate docs/decisions/digest.md: {out}")
+        digest_failed = True
+
     if branch_name:
         wt = worktree_for_branch(root, branch_name)
         if wt:
@@ -220,7 +231,7 @@ def main(argv):
             print(f"branch {branch_name} has unmerged commits: left in place (delete it yourself once it is merged)")
 
     print(f"{task_id} closed out: {added} decision(s) appended, board set to done.")
-    return 0
+    return 1 if digest_failed else 0
 
 
 if __name__ == "__main__":
