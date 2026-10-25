@@ -158,6 +158,21 @@ corepack pnpm --filter @edmate/web e2e:stack
 - Each run signs in a new `student-<n>@example.test`.
 - Screenshots go to `apps/web/test-results/`.
 
+## 9. Optional: load test (50 concurrent students)
+
+Checks the harness's own overhead under 50 concurrent turns, no running stack needed (no Docker,
+no Postgres, no real model call — the scripted gateway stands in for the model):
+
+```bash
+corepack pnpm turbo run build --filter=@edmate/contracts...
+corepack pnpm turbo run build --filter=@edmate/harness
+node packages/harness/scripts/loadTest50.ts
+```
+
+It prints one line, e.g. `50 concurrent students, harness overhead (ms): p50=294 p95=309 p99=311`:
+p50/p95/p99 of the harness's own time per turn, with the scripted model's own 150 ms delay already
+subtracted out. The script exits 1 (and the line still prints) when p95 is at or over 500 ms.
+
 ## Troubleshooting
 
 - **The chat says "Something went wrong"**: run `docker compose -f docker/compose.yaml logs web`

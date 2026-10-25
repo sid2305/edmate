@@ -145,3 +145,4 @@ export {
   type ScriptedStreamCall,
   type StreamStep,
 } from './scriptedGateway.js';
+export { percentile } from './percentiles.js';
