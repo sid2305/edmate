@@ -5714,9 +5714,29 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: running
+  status: done
   branch: m13/8.7l-publish-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 73
+    tokens_in: 246
+    tokens_out: 28545
+    cache_read_tokens: 4997176
+    wall_time_seconds: 920
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 8.7m
   milestone: M13
   title: '8.7l deferred items: packages/db/src/repositories/publish.ts changedSinceLastPublish outline sub-select is NULL when the teacher has no course (coalesce or a comment that no course reads as not
@@ -6745,7 +6765,9 @@ tasks:
   deps:
   - 7.2h
   risk: high
-  status: todo
+  status: running
+  branch: m13/7.2i-vapes-variants
+  model: plan:lead build:sonnet
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -7917,9 +7939,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.4-privacy-rights
+  model: plan:sonnet build:sonnet
 - id: '13.5'
   milestone: M13
   title: 'Cost dashboard: AI cost per turn and per active student per package against price'
