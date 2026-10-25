@@ -6474,9 +6474,9 @@ tasks:
   deps:
   - 12.5a
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.5d-alert-indexes
+  model: plan:lead build:sonnet review:sonnet
 - id: 12.4a
   milestone: M12
   title: Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)
