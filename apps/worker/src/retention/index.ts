@@ -9,6 +9,7 @@ export { logRetentionRun, logRetentionTable } from './logSink.js';
 export {
   MAX_ITERATIONS_PER_TABLE,
   purgeTable,
+  RetentionPurgeError,
   type PurgeMethod,
   type RetentionBackend,
   type TablePurgeResult,

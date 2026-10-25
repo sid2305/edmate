@@ -23,6 +23,7 @@
 import { randomBytes } from 'node:crypto';
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { cp } from 'node:fs/promises';
 import { connect, createServer } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +34,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APPS_WEB = dirname(HERE);
 const BUILD_SERVER_JS = join(APPS_WEB, '.next', 'standalone', 'apps', 'web', 'server.js');
+// The standalone output never carries static assets (CSS, chunk JS) on its own -- the same
+// reason `apps/web/Dockerfile` has its own `COPY .../.next/static .../apps/web/.next/static`
+// step. Without it, `/_next/static/**` 404s and every page renders with zero CSS: accessibility
+// audits that depend on layout (e.g. `target-size`, spacing between nav links) would be scored
+// against unstyled markup, not the real deployed site. Idempotent (`force: true` overwrites a
+// stale copy from an earlier build).
+const BUILD_STATIC_SRC = join(APPS_WEB, '.next', 'static');
+const BUILD_STATIC_DEST = join(APPS_WEB, '.next', 'standalone', 'apps', 'web', '.next', 'static');
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgres://127.0.0.1:55432/no-such-db';
 const AUTH_SECRET = 'lighthouse-a11y-test-secret-'.padEnd(40, 'x');
 const SESSION_COOKIE = 'authjs.session-token'; // http, not https: secureCookies is false
@@ -85,15 +94,24 @@ async function waitForHealth(origin: string, deadlineMs: number): Promise<void> 
   throw new Error(`server never became healthy at ${origin}: ${String(lastError)}`);
 }
 
+interface AccessibilityResult {
+  /** 0-100 integer score (Lighthouse's own accessibility category score, rounded). */
+  score: number;
+  /** Ids of weighted audits (weight > 0) that did not score 1, soonest-failing-first -- named in
+   * the assertion message below so a future regression names its own cause instead of a bare
+   * number. */
+  failingAuditIds: string[];
+}
+
 /** Lighthouse's accessibility category score for `path`, at a 360x640 mobile viewport, through
  * `cookie` (a real session cookie -- Lighthouse's own `extraHeaders` flag, not a Puppeteer page,
- * since no interaction beyond "load the page" is needed). Returns a 0-100 integer score. */
+ * since no interaction beyond "load the page" is needed). */
 async function accessibilityScore(
   chrome: chromeLauncher.LaunchedChrome,
   origin: string,
   path: string,
   cookie: string,
-): Promise<number> {
+): Promise<AccessibilityResult> {
   const result = await lighthouse(
     `${origin}${path}`,
     {
@@ -108,10 +126,13 @@ async function accessibilityScore(
     undefined,
   );
   const score = result?.lhr.categories.accessibility?.score;
-  if (score === null || score === undefined) {
+  if (score === null || score === undefined || !result) {
     throw new Error(`lighthouse: no accessibility score for ${path}`);
   }
-  return Math.round(score * 100);
+  const failingAuditIds = (result.lhr.categories.accessibility?.auditRefs ?? [])
+    .filter((ref) => ref.weight > 0 && result.lhr.audits[ref.id]?.score !== 1)
+    .map((ref) => ref.id);
+  return { score: Math.round(score * 100), failingAuditIds };
 }
 
 const up = await reachable();
@@ -136,6 +157,7 @@ describe.skipIf(!up)(`lighthouse accessibility: /home and /teacher${up ? '' : ` 
         `${BUILD_SERVER_JS} is missing: run \`next build --webpack\` (this package's own build task) before lighthouse-a11y`,
       );
     }
+    await cp(BUILD_STATIC_SRC, BUILD_STATIC_DEST, { recursive: true, force: true });
 
     const { migrateDatabase, openDatabase } = await import('@edmate/db');
     await migrateDatabase(TEST_DATABASE_URL);
@@ -245,17 +267,21 @@ describe.skipIf(!up)(`lighthouse accessibility: /home and /teacher${up ? '' : ` 
 
   it(`/home scores >= ${MIN_ACCESSIBILITY_SCORE} (accessibility, 360x640, production build)`, async () => {
     if (!chrome) throw new Error('chrome did not launch');
-    const score = await accessibilityScore(chrome, origin, '/home', studentCookie);
+    const { score, failingAuditIds } = await accessibilityScore(chrome, origin, '/home', studentCookie);
     // eslint-disable-next-line no-console -- the handoff pastes this console output as evidence.
     console.log(`[lighthouse-a11y] /home accessibility score: ${score}`);
-    expect(score).toBeGreaterThanOrEqual(MIN_ACCESSIBILITY_SCORE);
+    expect(score, `failing audits: ${failingAuditIds.join(', ') || 'none'}`).toBeGreaterThanOrEqual(
+      MIN_ACCESSIBILITY_SCORE,
+    );
   });
 
   it(`/teacher scores >= ${MIN_ACCESSIBILITY_SCORE} (accessibility, 360x640, production build)`, async () => {
     if (!chrome) throw new Error('chrome did not launch');
-    const score = await accessibilityScore(chrome, origin, '/teacher', teacherCookie);
+    const { score, failingAuditIds } = await accessibilityScore(chrome, origin, '/teacher', teacherCookie);
     // eslint-disable-next-line no-console -- the handoff pastes this console output as evidence.
     console.log(`[lighthouse-a11y] /teacher accessibility score: ${score}`);
-    expect(score).toBeGreaterThanOrEqual(MIN_ACCESSIBILITY_SCORE);
+    expect(score, `failing audits: ${failingAuditIds.join(', ') || 'none'}`).toBeGreaterThanOrEqual(
+      MIN_ACCESSIBILITY_SCORE,
+    );
   });
 });

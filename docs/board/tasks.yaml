@@ -6961,9 +6961,29 @@ tasks:
   deps:
   - 9.1a
   risk: low
-  status: running
+  status: done
   branch: m13/9.1c-teacher-a11y
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 131
+    tokens_in: 404
+    tokens_out: 52957
+    cache_read_tokens: 11408117
+    wall_time_seconds: 720
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 13.4a
   milestone: M13
   title: '13.4 database review: packages/db/migrations/0032_retention_indexes.sql builds its three indexes with plain CREATE INDEX; move them to the concurrentIndex post-migrate pattern in packages/db/src/migrate.ts
@@ -6993,9 +7013,29 @@ tasks:
   deps:
   - '13.4'
   risk: low
-  status: running
+  status: done
   branch: m13/13.4c-retention-hardening
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -8149,9 +8189,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.2-load-test
+  model: plan:sonnet build:sonnet
 - id: 3.11f
   milestone: M13
   title: 'Teacher-label LOWs parked from 3.11d/3.11e: MessageSchema.text and ChunkSchema.text have no max length (contracts, ADR); foldForMatch misses digit swaps (Pl4tform), small caps and a Devanagari
