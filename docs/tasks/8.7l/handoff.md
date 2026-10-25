@@ -72,6 +72,14 @@ Status: DONE
   `ServerLog` wiring that `/teacher/insights/page.tsx` doesn't use either (that page has no
   read-failure path to copy from directly).
 
+### 25 Oct 2026 · 8.7l uncovered branches and the exact stale boundary left as they are · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOWs: pre-existing uncovered branches in apps/web/src/studio/publish.ts and apps/web/src/studio/publishClient.ts (backend-construction error path, failure() outer catch for invalid JSON), and no test in apps/web/src/studio/publish.test.ts at exactly STALE_QUEUE_MS (only one millisecond either side).
+- Why: neither is a regression from this diff, the strict greater-than check is simple, and MEDIUM/LOW findings are not fixed before merge.
+
+### 25 Oct 2026 · 8.7l merge: publish-run follow-ups · decided by lead · risk: low
+- Decided: merge 8.7l with code-reviewer and typescript-reviewer approval; the three deferred plan items are board task 8.7m.
+- Why: the diff stays in apps/web, touches no risk path, and the gate is green.
+
 ## Left to do
 
 None for this task's scope. Deferred items (named in the plan, filed as follow-ups, not done
@@ -82,4 +90,4 @@ write-before-fail change), and merging the duplicate "no published scorecard yet
 
 ## Budget
 
-Tool calls used: 24
+Tool calls used: 41 (harness count; the builder reported 24)
