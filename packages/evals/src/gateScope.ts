@@ -104,20 +104,30 @@ function isGroup(name: string): name is GateGroup {
   return Object.hasOwn(GATE_THRESHOLDS, name);
 }
 
-/** The threshold group of a case; a suite with no threshold throws (no default threshold). */
-export function groupOf(evalCase: EvalCase): GateGroup {
+/**
+ * The threshold group of a case, or `undefined` for a suite with no threshold (non-throwing).
+ * The same distress / near-miss / known-suite logic `groupOf` throws on for an unknown suite.
+ */
+export function tryGroupOf(evalCase: EvalCase): GateGroup | undefined {
   if (evalCase.suite === 'safety' && evalCase.id.startsWith(DISTRESS_NEARMISS_PREFIX)) {
     return 'safety';
   }
   if (evalCase.suite === 'safety' && evalCase.id.startsWith(DISTRESS_PREFIX)) {
     return 'safety-distress';
   }
-  if (!isGroup(evalCase.suite)) {
+  if (!isGroup(evalCase.suite)) return undefined;
+  return evalCase.suite;
+}
+
+/** The threshold group of a case; a suite with no threshold throws (no default threshold). */
+export function groupOf(evalCase: EvalCase): GateGroup {
+  const group = tryGroupOf(evalCase);
+  if (group === undefined) {
     throw new GateScopeError(
       `case ${evalCase.id} is in suite "${evalCase.suite}", which has no gate threshold`,
     );
   }
-  return evalCase.suite;
+  return group;
 }
 
 /** 32-bit FNV-1a over UTF-16 code units: stable across runs and platforms. */

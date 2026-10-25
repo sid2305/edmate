@@ -1,8 +1,45 @@
 # Handoff: 7.4a — quality gate hardening
 
-Status: DONE (Phase A only — items 1–6, 11, 12).
+Status: DONE (Phase A — items 1–6, 11, 12 — and Phase B — items 7, 8, 9).
 
 ## What changed
+
+### Phase B (items 7, 8, 9)
+
+- `packages/evals/src/gateScope.ts`
+  - New exported `tryGroupOf(evalCase): GateGroup | undefined`: the same distress /
+    near-miss-distress / known-suite logic as `groupOf`, but returns `undefined` for an unknown
+    suite instead of throwing (item 7). `groupOf` now calls `tryGroupOf` and throws only when it
+    returns `undefined`; one implementation, not two.
+- `packages/evals/src/gateScope.test.ts`
+  - New `describe('tryGroupOf', ...)`: distress, near-miss, known suite, and unknown suite →
+    `undefined`.
+- New file `packages/evals/src/demoContentAdapter.ts` (item 8): `adaptDemoTeacherContent`,
+  `PACKAGE_IDS`, and `toPackage`, moved verbatim out of `apps/cli/src/commands/gate/demoInput.ts`
+  (minus its `GATE_DEMO_CONTENT_DIR` constant and `loadDemoPerAgentInput` function, which stay in
+  `demoInput.ts`) — no behaviour change.
+- `packages/evals/src/index.ts` — exports `adaptDemoTeacherContent`, `PACKAGE_IDS`, `toPackage`
+  (new adapter) and `tryGroupOf` (new classifier).
+- `packages/evals/package.json` — `@edmate/content` moved from `devDependencies` to
+  `dependencies` (see Decisions); `pnpm-lock.yaml` regenerated (`pnpm install --lockfile-only`
+  then `--frozen-lockfile`).
+- `packages/evals/src/demoSuiteInput.testkit.ts` — now calls the shared
+  `adaptDemoTeacherContent` and appends the two `APPROVED_DRAFT_ROWS` to `answerable` on top of
+  it, instead of duplicating the whole adapter; `adapt()` and `DEMO_DIR`/`PACKAGE_IDS` exports
+  unchanged for `perAgentSuiteDemo.test.ts` and `qualityGateDemo.test.ts` (both still green,
+  unmodified).
+- `apps/cli/src/commands/gate/demoInput.ts` — now only `GATE_DEMO_CONTENT_DIR` and
+  `loadDemoPerAgentInput`, which calls the shared `adaptDemoTeacherContent` from `@edmate/evals`
+  instead of its own copy (item 8) — no behaviour change (the two synthetic `teacher-answer` rows
+  stay testkit-only, as before).
+- `apps/cli/src/commands/gate.ts` — `fullScopeGaps` now classifies each platform case with
+  `tryGroupOf` from `@edmate/evals` instead of its own `DISTRESS_PREFIX` /
+  `DISTRESS_NEARMISS_PREFIX` constants and `as GateGroup` cast (item 7 wiring); dropped the
+  unused `GateCommandDeps.now` (item 9, confirmed dead: no test or caller set it).
+- `apps/cli/src/commands/gate.test.ts` — unchanged; re-run as the regression check, still green
+  (19/19), no new case needed (no error-message wording changed).
+
+### Phase A (unchanged from the previous handoff; see below)
 
 - `packages/evals/src/qualityGate.ts`
   - Each case now races the agent/judge call against the time left on the deadline (a
@@ -49,6 +86,8 @@ Status: DONE (Phase A only — items 1–6, 11, 12).
 
 ## Evidence
 
+### Phase A
+
 ```
 $ corepack pnpm turbo run typecheck lint test --filter=@edmate/evals --filter=@edmate/cli
 ...
@@ -56,6 +95,27 @@ $ corepack pnpm turbo run typecheck lint test --filter=@edmate/evals --filter=@e
 @edmate/evals:test:       Tests  1423 passed (1423)
 @edmate/cli:test:    (included in the same run; all cli tests green)
  Tasks:    11 successful, 11 total
+```
+
+```
+$ python3 .githooks/secret-scan.py --all
+(no output — clean)
+```
+
+### Phase B
+
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/evals --filter=@edmate/cli
+...
+@edmate/evals:test:  Test Files  31 passed (31)
+@edmate/evals:test:       Tests  1427 passed (1427)
+ Tasks:    11 successful, 11 total
+```
+
+```
+$ corepack pnpm --filter @edmate/cli exec vitest run src/commands/gate.test.ts
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
 ```
 
 ```
@@ -97,13 +157,19 @@ New/changed test names for Phase B's builder to build on:
   because their agents resolve synchronously well before any real timer would fire, so the race
   always resolves on the "done" side in those tests, same behaviour as before.
 
+### 25 Oct 2026 · 7.4a @edmate/content promoted to a real dependency of packages/evals · decided by builder · risk: low
+- Decided: moved `@edmate/content` from `packages/evals/package.json`'s `devDependencies` to
+  `dependencies`, and regenerated `pnpm-lock.yaml` to match.
+- Why: `packages/evals/src/demoContentAdapter.ts` (new, src code, built and shipped) now imports
+  `@edmate/content` directly, where before only test files (`demoSuiteInput.testkit.ts`) did. An
+  internal workspace-dependency edge, not a tech-stack or `packages/contracts` change, so no ADR
+  per the plan's Open questions note; `apps/cli` already depends on `@edmate/content` directly,
+  so this adds no new package to the dependency graph, only a new edge within it.
+
 ## Left to do
 
-Phase B (items 7, 8, 9 — not started, per plan): the non-throwing `tryGroupOf` classifier in
-`gateScope.ts`, the shared `demoContentAdapter.ts` moved out of `apps/cli`'s `demoInput.ts` and
-the evals testkit, dropping `GateCommandDeps.now`, and wiring `apps/cli/src/commands/gate.ts`'s
-`fullScopeGaps` to the new classifier. Starts after this PR merges, per the plan.
+None. Both phases are done; every item (1–12) from the plan's numbered scope list landed.
 
 ## Budget
 
-Tool calls used: 26
+Tool calls used: Phase A 26; Phase B 28

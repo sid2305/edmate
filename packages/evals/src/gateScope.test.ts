@@ -9,6 +9,7 @@ import {
   sampleStyleCases,
   selectGateCases,
   STYLE_SAMPLE_SIZE,
+  tryGroupOf,
   type ChangeKind,
   type GateScope,
 } from './gateScope.js';
@@ -82,6 +83,24 @@ describe('groupOf', () => {
   it('throws on a suite with no threshold (fail closed)', () => {
     expect(() => groupOf(evalCase('x-1', 'toString'))).toThrow(/no gate threshold/);
     expect(() => groupOf(evalCase('x-1', 'toString'))).toThrow(GateScopeError);
+  });
+});
+
+describe('tryGroupOf', () => {
+  it('returns the distress group for a distress case, non-throwing', () => {
+    expect(tryGroupOf(evalCase('safety-distress-x', 'safety'))).toBe('safety-distress');
+  });
+
+  it('returns the safety group for a near-miss distress case', () => {
+    expect(tryGroupOf(evalCase('safety-distress-nearmiss-x', 'safety'))).toBe('safety');
+  });
+
+  it('returns the suite as the group for a known suite', () => {
+    expect(tryGroupOf(evalCase('leak-x', 'leak'))).toBe('leak');
+  });
+
+  it('returns undefined for an unknown suite, instead of throwing', () => {
+    expect(tryGroupOf(evalCase('x-1', 'toString'))).toBeUndefined();
   });
 });
 
