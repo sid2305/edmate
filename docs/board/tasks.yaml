@@ -2286,9 +2286,9 @@ tasks:
   accept: /home and /teacher score >= 95 at 360 px on a production build; the score runs in CI.
   deps:
   - '9.1'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/9.1a-lighthouse-a11y
+  model: plan:sonnet build:sonnet
 - id: 9.1b
   milestone: M13
   title: '9.1 review follow-ups: log the error that currentPrincipal swallows before returning null; export HOME_PATH and TEACHER_PATH next to SIGN_IN_PATH; drop the /home self-link'
@@ -3273,9 +3273,29 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: running
+  status: done
   branch: m13/7.4a-gate-hardening
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 98
+    tokens_in: 332
+    tokens_out: 22107
+    cache_read_tokens: 5866575
+    wall_time_seconds: 1409
+    models:
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 7.6a
   milestone: M7
   title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep
@@ -6819,8 +6839,9 @@ tasks:
   deps:
   - 7.2j
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/7.2k-devanagari-conjugations
+  model: plan:sonnet build:sonnet
 - id: 7.4d
   milestone: M13
   title: '7.4a review LOWs (silent-failure-hunter): packages/evals/src/qualityGate.ts threads an AbortSignal so a timed-out case is cancelled, not left running; the per-case timeout follows the injected

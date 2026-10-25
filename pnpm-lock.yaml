@@ -541,6 +541,9 @@ importers:
 
   packages/evals:
     dependencies:
+      '@edmate/content':
+        specifier: workspace:*
+        version: link:../content
       '@edmate/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -554,9 +557,6 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
-      '@edmate/content':
-        specifier: workspace:*
-        version: link:../content
       '@edmate/harness':
         specifier: workspace:*
         version: link:../harness
