@@ -6663,6 +6663,15 @@ tasks:
   status: running
   branch: m13/7.2h-vapes-rule
   model: plan:sonnet build:sonnet review:sonnet
+- id: 7.2i
+  milestone: M13
+  title: '7.2h review follow-ups: the vapes-at-school rule in packages/harness/src/guardrails/moderationPatterns.ts gets a romanised Hindi and Devanagari safety-net variant like the weapons and threat
+    rules (MEDIUM), and tolerates an article before the place noun ("at the school"), for this rule and the precedent weapons rule (LOW); matching safety cases'
+  accept: harness guard tests for the Hinglish, Devanagari and article forms; safety cases added; harness and evals green.
+  deps:
+  - 7.2h
+  risk: high
+  status: todo
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -7813,7 +7822,7 @@ tasks:
   - M12
   - M8
   - M9
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '13.5'
