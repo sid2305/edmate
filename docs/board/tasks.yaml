@@ -8900,3 +8900,30 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 1
+- id: 13.5a
+  milestone: M13
+  title: '13.5 review LOWs: usageLedger.costByPackageSince refuses until < since; a raw-SQL cross-check of teacher B totals in usage-ledger.int.test.ts; /api/staff/cost caps the since/until span; Promise.all
+    for the per-teacher and per-package reads in apps/web/app/api/staff/cost/handlers.ts; a scope RepositoryError there maps to 500, not 400; same-origin hardening for GETs (app-wide, decide with 13.3b)'
+  accept: per docs/tasks/13.5/review.md deferred 13.5a findings; db and web typecheck, lint and test green.
+  deps:
+  - '13.5'
+  risk: risky
+  status: todo
+- id: 13.3a
+  milestone: M13
+  title: 'Security headers (13.3 Phase D MEDIUM): apps/web/next.config.ts headers() sets a CSP that works with Next.js (nonce or hash for inline scripts), X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy,
+    and HSTS once behind TLS; a test asserts the headers on a page and an API route; the e2e suite still passes'
+  accept: headers present on pages and API routes; web typecheck, lint, test and e2e green; per docs/tasks/13.3/findings-D.md.
+  deps:
+  - '13.3'
+  risk: low
+  status: todo
+- id: 13.3b
+  milestone: M13
+  title: '13.3 review LOWs: packages/db/src/repositories/chunks.ts insertTopicLinks and topicSources go through teacherScope() or join the scope.test.ts grid; apps/web/src/turn/routes.ts uses a dedicated SessionIdSchema
+    for the session id param; decide the 30-day database session maxAge in apps/web/src/auth/config.ts before a wider launch'
+  accept: per docs/tasks/13.3/review.md deferred 13.3b findings; db and web typecheck, lint and test green.
+  deps:
+  - '13.3'
+  risk: risky
+  status: todo
