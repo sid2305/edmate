@@ -33,12 +33,13 @@ rulings (B-59 recommendation).
   - Leaves `sessions`, `safety_alerts`, `payments`/`ledger_entries`/`payouts`, `audit_log` and the
     teacher's own row completely untouched (an int test seeds one of each and asserts they are
     unchanged after `anonymise`).
-- **Migration `0030_platform_actor_role_student.sql`** — adds `'student'` to the
+- **Migration `0031_platform_actor_role_student.sql`** — adds `'student'` to the
   `platform_actor_role` enum (previously `staff`/`operator` only), so `anonymise`'s self-actioned
-  audit row is possible at all. Generated with `drizzle-kit generate` after merging `origin/main`
-  (still at 0029), then renamed from the generated `0030_huge_mongu.sql` to a descriptive name and
-  the journal tag updated to match (the repo's own convention — 0027, 0029 are renamed the same
-  way).
+  audit row is possible at all. First generated as `0030` (main was still at 0029 when this phase
+  started); 12.5d's `0030_alert_queue_indexes` landed on `main` while this phase was in progress,
+  so after merging `origin/main` the migration was regenerated as `0031` against the merged
+  schema and renamed from the generated `0031_fearless_union_jack.sql` to a descriptive name, the
+  journal tag updated to match (the repo's own convention — 0027, 0029 are renamed the same way).
 - **`retentionRepo(db)`** (new `packages/db/src/repositories/retention.ts`) —
   `purgeOldSessions`, `purgeOldTraces`, `purgeOldTranscriptChunks`, each `(cutoff, dryRun = true)`
   returning `{ count, dryRun }`:
@@ -168,6 +169,8 @@ not blocking this phase.
   against the plan's recommendation regardless, per the brief's lead rulings.
 
 ## Budget
-Tool calls used: 76 (over the brief's 45/55 cap — the file-location and isolation-grid
-discoveries above needed real investigation before any code could land safely; flagging per the
+Tool calls used: 90 (over the brief's 45/55 cap — the file-location and isolation-grid
+discoveries above needed real investigation before any code could land safely, and a
+post-investigation merge conflict (12.5d's 0030 migration landing mid-phase, as the plan warned
+it might) needed a clean renumber-and-regenerate rather than a hand patch; flagging per the
 budget-overrun norm rather than stopping mid-way with a broken gate).
