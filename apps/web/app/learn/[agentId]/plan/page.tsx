@@ -1,8 +1,11 @@
 // Task 9.6 Phase D: the student's plan page. Clearance stays at the default `age` (not `agent`),
 // the same precedent as the memory and progress pages: a student waiting on a parent's consent
-// can still manage their own plan. The agent must still be live (`agents.owner`); a draft,
-// suspended or missing one gives notFound. No payment yet, so every live offer of the agent is
-// shown as an "other package" alongside the current one (9.6c Q1 = (a)).
+// can still manage their own plan. Task 9.3i: a draft, suspended or missing agent still renders
+// (as `agentAvailable: false`) when the student's own listUnavailableForStudent rows have a
+// subscription for it; notFound now only fires for an invalid agentId, an unmatched unavailable
+// agent, or (9.6i) a missing package version for the student's live subscription. No payment yet,
+// so every live offer of the agent is shown as an "other package" alongside the current one
+// (9.6c Q1 = (a)).
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
