@@ -10,6 +10,75 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 7.2j Hinglish vapes variant written as two order alternatives · decided by builder · risk: low
+- Decided: the Hinglish rule is `(school-word ... vape-word ... verb) | (vape-word ... verb ...
+  school-word)`, i.e. two bounded alternatives rather than a single order, each still bounded with
+  `gap(3)`.
+- Why: the plan's examples span both orders ("school mein vape bechna hai" — school first; "vape
+  khareedna hai school ke paas" — vape first), and the plan explicitly says "in either order,
+  bounded with the existing `gap(n)` helper" — a single-order pattern (like the weapons
+  `hathiyar...chhupa` precedent) would miss the school-mein-vape order.
+- Exact lists chosen: vape word `(?:vapes?|vaping|juul\S*)`; school word `(?:school|class|college|
+  campus)` with optional postposition `(?: (?:mein|me|main|pe|par))?`; transaction verb `(?:bech\S*|
+  bik\S*|khareed\S*|kharid\S*|le\S* aa\S*|mang\S*|supply)` — exactly the lists the plan named.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2j Devanagari vapes variant, no school word required · decided by builder · risk: low
+- Decided: the Devanagari rule is `(?:वेप|वेप्स|वेपिंग)${gap(4)} (?:बेच|बिक|खरीद)` with no school
+  word requirement.
+- Why: the plan says "with or without स्कूल|क्लास", and the existing weapons Devanagari precedent
+  (`(?:हथियार|चाकू|बंदूक|बम)${gap(4)} (?:छुपा|छिपा|ले जा)`) also has no place-word requirement —
+  same style, same precedent.
+- Exact lists chosen: vape word `(?:वेप|वेप्स|वेपिंग)`; transaction verb `(?:बेच|बिक|खरीद)` —
+  exactly the lists the plan named.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2j article tolerance added to two existing rules · decided by builder · risk: low
+- Decided: added `(?:the |my |our )?` between the preposition and the place noun in the English
+  vapes-at-school rule and the precedent weapons "sneak ... into school" rule.
+- Why: the plan named both exact locations and the exact optional-article group to add; no
+  judgment call beyond following the plan.
+- risk: low.
+
+---
+
+### 25 Oct 2026 · 7.2j merge: vapes rule Hinglish, Devanagari and article forms · decided by lead · risk: high
+- Decided: merge 7.2j, a guard-table change in packages/harness/src/guardrails/moderationPatterns.ts with two new cases under evals/suites/safety/moderation/, on code-reviewer (APPROVE) and typescript-reviewer approval. safety-reviewer is deferred to task 13.3 under the MVP-first rule, as for 7.2h. The typescript-reviewer MEDIUM (the new case files used a -hinglish suffix where the folder's convention is -hi-latin) is fixed: evals/suites/safety/moderation/safety-moderation-sell-vapes-school-hi-latin.yaml and safety-moderation-nearmiss-vaping-essay-hi-latin.yaml.
+- Why: both reviewers checked the plan's true positives and near misses match as intended, every gap is bounded, and the pinned counts are exact; Hindi and Hinglish appear only as a guard safety net, which the English-only pilot allows.
+
+---
+
+### 25 Oct 2026 · 7.2j Devanagari conjugated verb forms deferred to 7.2k · decided by lead · risk: medium
+- Decided: the Devanagari vapes rule in packages/harness/src/guardrails/moderationPatterns.ts matches bare stems only (बेच, बिक, खरीद), so a conjugated form such as "स्कूल में वेप बेचना है" does not match; the weapons Devanagari precedent has the same gap. Board task 7.2k widens both rules to common conjugations while keeping essay-style questions ("वेप बेचना गैरकानूनी क्यों है") clean.
+- Why: the code-reviewer showed the bare stem is what keeps that essay question clean, so widening needs its own near-miss design; Devanagari input is a safety net during the English-only pilot, and the English and romanised Hindi forms are covered now.
+
+---
+
+### 25 Oct 2026 · 7.2j budget: 49 tool calls against a plan of 40 · decided by lead · risk: low
+- Decided: accept the overrun (49 by the harness count; the builder reported 33); it stayed under the plan's 48-call PARTIAL line by one.
+- Why: the build covered two scripts and two rules plus pinned counts in three test files; lead-written plans for guard follow-ups should budget about 50.
+
+---
+
+### 25 Oct 2026 · 7.2j eval cases signed by the lead · decided by lead · risk: low
+- Decided: the lead signs the two new safety moderation cases
+  (`safety-moderation-sell-vapes-school-hi-latin.yaml` and
+  `safety-moderation-nearmiss-vaping-essay-hi-latin.yaml`) under the MVP-first rule that the lead
+  signs eval cases until the pilot gate.
+- Why: both cases mirror signed precedents, and both reviewers checked them on the branch.
+
+---
+
+### 25 Oct 2026 · 7.2j task id renamed from 7.2i · decided by lead · risk: low
+- Decided: the vapes follow-up was first filed as 7.2i, an id already used by the 22 Oct leak case fixes (PR #208). It is now 7.2j: board entry, docs/tasks/7.2j/plan.md, docs/tasks/7.2j/handoff.md and branch m13/7.2j-vapes-variants. The old docs/tasks/7.2i/handoff.md is restored unchanged. The 7.2h merge decision's "deferred to 7.2i" means this task.
+- Why: one id per task keeps the board, the task folders and the decision log unambiguous; the old 7.2i handoff is history and must not be overwritten.
+
+---
+
 ### 25 Oct 2026 · 12.5d old safety_alerts open-list index dropped · decided by builder · risk: low
 - Decided: drop `safety_alerts_open_created_at_id_idx` in the same migration that adds its
   replacement, rather than keeping both.
