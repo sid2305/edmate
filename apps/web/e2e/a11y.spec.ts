@@ -47,12 +47,14 @@ test.describe('accessibility (axe, no serious violations)', () => {
   test('student, signed in: /home', async ({ page, context, baseURL }) => {
     await signInAsStudent(context, baseURL!);
     await page.goto(`${baseURL}/home`);
+    await expect(page).toHaveURL(/\/home(?:[/?#]|$)/);
     await expectNoSeriousViolations(page, '/home (student)');
   });
 
   test('teacher, signed in: /teacher', async ({ page, context, baseURL }) => {
     await signInAsTeacher(context, baseURL!, DEMO_TEACHER);
     await page.goto(`${baseURL}/teacher`);
+    await expect(page).toHaveURL(/\/teacher(?:[/?#]|$)/);
     await expectNoSeriousViolations(page, '/teacher');
   });
 });

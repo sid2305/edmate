@@ -99,3 +99,7 @@ $ python3 .githooks/secret-scan.py --all
 ## Budget
 
 Tool calls used: 21
+
+## Fix round
+- [MEDIUM] fixed apps/web/e2e/a11y.spec.ts — signed-in cases now assert the URL after goto.
+Tool calls: 8
