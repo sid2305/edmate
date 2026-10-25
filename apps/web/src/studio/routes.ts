@@ -19,7 +19,6 @@ import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import type { StudioStorage } from '../storage/presign';
 import {
-  MAX_UNSPLIT_MEDIA_BYTES,
   isLinkKey,
   isRecordingType,
   newLinkKey,
@@ -216,7 +215,7 @@ function newFile(input: z.infer<typeof NewFileSchema>): UploadType | Response {
     // Task 11.4 Phase B (Q3): an M4A, MP4 or WebM over the Whisper-split cap is refused here,
     // before any upload URL is signed, with words that point to a splittable or transcript
     // alternative. Today such a file uploads (the 500 MB media cap) and fails minutes later.
-    return tooLarge(type.maxBytes === MAX_UNSPLIT_MEDIA_BYTES ? MSG.mediaTooLarge : MSG.tooLarge);
+    return tooLarge(type.transcribe && !type.splittable ? MSG.mediaTooLarge : MSG.tooLarge);
   }
   return type;
 }

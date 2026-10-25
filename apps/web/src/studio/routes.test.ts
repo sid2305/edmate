@@ -6,7 +6,14 @@ import type { IngestJob } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createGuard, type CookieReader, type Principal, type RoleContext } from '../auth/guard';
-import { MAX_DOCUMENT_UPLOAD_BYTES, MAX_MEDIA_UPLOAD_BYTES, isLinkKey, uploadTypeOfKey } from './files';
+import * as files from './files';
+import {
+  MAX_DOCUMENT_UPLOAD_BYTES,
+  MAX_MEDIA_UPLOAD_BYTES,
+  MAX_UNSPLIT_MEDIA_BYTES,
+  isLinkKey,
+  uploadTypeOfKey,
+} from './files';
 import { fakeLinkRateLimiter, failingLinkRateLimiter } from './linkRateLimit';
 import {
   LINK_REFUSAL_MESSAGE,
@@ -396,6 +403,32 @@ describe('POST /api/studio/documents (create, task 11.4 Phase B: class recording
     expect(withClass.status).toBe(413);
     expect((await json(withClass)).error?.message).toMatch(/24 MB/);
     expect(s.rows.size).toBe(0);
+  });
+
+  it('picks the message from the splittable flag, not from the byte cap (task 11.4f)', async () => {
+    // A document type whose cap happens to equal MAX_UNSPLIT_MEDIA_BYTES, with transcribe: false
+    // and splittable: false. If `newFile` still chose the message by comparing maxBytes, this
+    // would get MSG.mediaTooLarge instead of MSG.tooLarge.
+    const spy = vi.spyOn(files, 'uploadTypeFor').mockReturnValue({
+      contentType: PDF,
+      ext: 'pdf',
+      fileKind: 'pdf',
+      chunkKind: 'material',
+      maxBytes: MAX_UNSPLIT_MEDIA_BYTES,
+      transcribe: false,
+      splittable: false,
+    });
+    try {
+      const s = setup();
+      const res = await s.h.create(
+        req('POST', '/x', { ...NEW_PDF, byteSize: MAX_UNSPLIT_MEDIA_BYTES + 1 }),
+        ctx(ASHA),
+      );
+      expect(res.status).toBe(413);
+      expect((await json(res)).error?.message).toBe('The file is too large.');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('a 30 MB audio/mpeg gives 201 (MP3 keeps the 500 MB splittable cap)', async () => {

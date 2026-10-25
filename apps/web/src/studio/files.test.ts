@@ -86,6 +86,13 @@ describe('the fail-fast cap for media the worker cannot split (task 11.4 Phase B
     expect(MAX_UNSPLIT_MEDIA_BYTES).toBe(24 * 1024 * 1024);
   });
 
+  it("sets splittable per type (task 11.4f): mp3/wav true, m4a/mp4/webm and every document or caption false", () => {
+    for (const t of UPLOAD_TYPES) {
+      const expected = t.contentType === 'audio/mpeg' || t.contentType === 'audio/wav';
+      expect(t.splittable, t.contentType).toBe(expected);
+    }
+  });
+
   it('keeps the mp3/wav cap at 500 MB; m4a/mp4/webm get the 24 MB cap', () => {
     expect(uploadTypeFor('audio/mpeg')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
     expect(uploadTypeFor('audio/wav')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
