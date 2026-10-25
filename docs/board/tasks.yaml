@@ -8210,9 +8210,29 @@ tasks:
   - M12
   - M8
   - M9
-  status: running
+  status: done
   branch: m13/13.2-load-test
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 52
+    tokens_in: 154
+    tokens_out: 33690
+    cache_read_tokens: 4964969
+    wall_time_seconds: 407
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 3.11f
   milestone: M13
   title: 'Teacher-label LOWs parked from 3.11d/3.11e: MessageSchema.text and ChunkSchema.text have no max length (contracts, ADR); foldForMatch misses digit swaps (Pl4tform), small caps and a Devanagari
@@ -8911,8 +8931,8 @@ tasks:
   status: todo
 - id: 13.3a
   milestone: M13
-  title: 'Security headers (13.3 Phase D MEDIUM): apps/web/next.config.ts headers() sets a CSP that works with Next.js (nonce or hash for inline scripts), X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy,
-    and HSTS once behind TLS; a test asserts the headers on a page and an API route; the e2e suite still passes'
+  title: 'Security headers (13.3 Phase D MEDIUM): apps/web/next.config.ts headers() sets a CSP that works with Next.js (nonce or hash for inline scripts), X-Frame-Options DENY, X-Content-Type-Options nosniff,
+    Referrer-Policy, and HSTS once behind TLS; a test asserts the headers on a page and an API route; the e2e suite still passes'
   accept: headers present on pages and API routes; web typecheck, lint, test and e2e green; per docs/tasks/13.3/findings-D.md.
   deps:
   - '13.3'
@@ -8920,8 +8940,8 @@ tasks:
   status: todo
 - id: 13.3b
   milestone: M13
-  title: '13.3 review LOWs: packages/db/src/repositories/chunks.ts insertTopicLinks and topicSources go through teacherScope() or join the scope.test.ts grid; apps/web/src/turn/routes.ts uses a dedicated SessionIdSchema
-    for the session id param; decide the 30-day database session maxAge in apps/web/src/auth/config.ts before a wider launch'
+  title: '13.3 review LOWs: packages/db/src/repositories/chunks.ts insertTopicLinks and topicSources go through teacherScope() or join the scope.test.ts grid; apps/web/src/turn/routes.ts uses a dedicated
+    SessionIdSchema for the session id param; decide the 30-day database session maxAge in apps/web/src/auth/config.ts before a wider launch'
   accept: per docs/tasks/13.3/review.md deferred 13.3b findings; db and web typecheck, lint and test green.
   deps:
   - '13.3'

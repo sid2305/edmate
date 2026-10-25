@@ -10,6 +10,49 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.2 load script imports its own built dist by relative path · decided by builder · risk: low
+- Decided: `scripts/loadTest50.ts` imports `../dist/...` files, not `@edmate/harness`'s package
+  name and not the `src/*.ts` files directly.
+- Why: the plan's draft convention (Node native TS run against `src/*.ts` with explicit `.ts`
+  extensions, mirroring `packages/db/scripts/record-demo-embeddings.ts`) hits two real walls here
+  that db's script doesn't: (1) the harness's own internal `src/` files use `.js`-suffixed
+  relative imports (for `tsc`'s benefit), which Node's resolver will not map to sibling `.ts`
+  files, so a deep import chain (`steps/index.ts` → `admit.ts` → ...) fails to resolve when run
+  directly from source; (2) `runner.ts`'s `Turn` class uses constructor parameter properties,
+  which Node's default strip-only type-stripping cannot erase (confirmed by running it: "TypeScript
+  parameter property is not supported in strip-only mode"). Importing the package's own compiled
+  `dist/` by a relative path (allowed by the harness-purity ESLint rule, which only blocks
+  self-importing the package's own specifier, not a relative path that stays inside
+  `packages/harness`) solves both at once, and matches what every other consumer of `@edmate/harness`
+  already does: run against the built output, never the raw source.
+
+---
+
+### 25 Oct 2026 · 13.2 load script verifies each turn finished cleanly before counting its time · decided by builder · risk: low
+- Decided: `runOne` throws if a turn's events don't include `done`, or do include `error`,
+  instead of only timing the turn and trusting the number.
+- Why: while wiring up the 50 worlds, a few setup mistakes (a mismatched profile student id, a
+  `generateObject`/`stream` script shape) each produced a *fast* failure (a guard block or a
+  scripted-gateway mismatch) that would have reported a deceptively low p95 if the script only
+  measured wall time. The plan didn't call this out explicitly, but "wall time of a thing that
+  didn't do the real work" is exactly the kind of silent-failure the house rules ask every build
+  to guard against; the check costs nothing once turns succeed, since it is only reading the
+  already-collected events.
+
+---
+
+### 25 Oct 2026 · 13.2 budget · decided by lead · risk: low
+- Decided: accept the build at 141 harness tool calls (the builder reported 61) against a plan cap of about 35.
+- Why: the overrun came from finding the Node strip-only limit on parameter properties and the fast-failure bug; both are fixed and logged, and both reviewers approved with no blocking findings.
+
+---
+
+### 25 Oct 2026 · 13.2 review LOW · decided by lead · risk: low
+- Decided: wontfix the redundant `--filter=@edmate/harness` build line in docs/try-it.md.
+- Why: it matches the plan's commands, and turbo's cache makes it free; it also builds harness explicitly for a reader who skips the first line.
+
+---
+
 ### 25 Oct 2026 · 0.20c keep the 16x factor and n = 8,000 · decided by builder · risk: low
 - Decided: kept the 16x input-size factor (rather than switching to 8x) and raised the base size
   to n = 8,000, keeping the existing bound of 64.
