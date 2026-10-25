@@ -13,7 +13,12 @@ import { onJobFailed } from '../commit/deadLetter.js';
 import { describeError, type Log } from '../log.js';
 import { cutoffFor, type RetentionConfig, defaultRetentionConfig } from './config.js';
 import { logRetentionRun, logRetentionTable } from './logSink.js';
-import { purgeTable, type RetentionBackend, type TablePurgeResult } from './workers.js';
+import {
+  purgeTable,
+  RetentionPurgeError,
+  type RetentionBackend,
+  type TablePurgeResult,
+} from './workers.js';
 
 export const RETENTION_QUEUE = 'edmate-retention';
 export const RETENTION_SCHEDULER_ID = 'retention-daily';
@@ -73,16 +78,41 @@ export function retentionJob(deps: RetentionJobDeps): () => Promise<RetentionRun
   const purgeLimit = deps.purgeLimit ?? RETENTION_PURGE_LIMIT;
   return async () => {
     const now = deps.now();
-    const tables: TablePurgeResult[] = [];
-    for (const [table, days, purge] of [
+    const entries = [
       ['sessions', config.days.sessions, deps.retention.purgeOldSessions] as const,
       ['turnTraces', config.days.turnTraces, deps.retention.purgeOldTraces] as const,
       ['transcriptChunks', config.days.transcriptChunks, deps.retention.purgeOldTranscriptChunks] as const,
-    ]) {
-      const cutoff = cutoffFor(now, days);
-      const result = await purgeTable(table, purge, cutoff, config.dryRun, purgeLimit);
-      logRetentionTable(deps.log, result);
-      tables.push(result);
+    ];
+    const cutoffs = new Map(entries.map(([table, days]) => [table, cutoffFor(now, days)]));
+    if (!config.dryRun) {
+      deps.log({
+        level: 'warn',
+        event: 'retention.live_run',
+        tables: Object.fromEntries(
+          [...cutoffs].map(([table, cutoff]) => [table, cutoff.toISOString()]),
+        ),
+      });
+    }
+    const tables: TablePurgeResult[] = [];
+    for (const [table, , purge] of entries) {
+      const cutoff = cutoffs.get(table)!;
+      try {
+        const result = await purgeTable(table, purge, cutoff, config.dryRun, purgeLimit);
+        logRetentionTable(deps.log, result);
+        tables.push(result);
+      } catch (error) {
+        if (error instanceof RetentionPurgeError) {
+          deps.log({
+            level: 'error',
+            event: 'retention.purge_failed',
+            table: error.table,
+            deletedSoFar: error.deletedSoFar,
+            calls: error.calls,
+            error: describeError(error.cause),
+          });
+        }
+        throw error;
+      }
     }
     const byTable: Record<string, number> = Object.fromEntries(
       tables.map((t) => [t.table, t.count]),
