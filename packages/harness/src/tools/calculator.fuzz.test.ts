@@ -93,6 +93,9 @@ const ATTACKS = [
   '-'.repeat(199) + '1',
   'gcd(9007199254740991, 9007199254740990)',
   'gcd(2^1000, 3)',
+  // safe-integer inputs whose lcm result overflows safe-integer range (5.5a fix round)
+  'lcm(9007199254740990, 9007199254740988)',
+  'lcm(9007199254740881, 9007199254740879)',
   'round(1, 15)',
   'max(' + Array.from({ length: 60 }, () => '1').join(',') + ')',
   // implicit multiplication, not only when glued (5.5a)

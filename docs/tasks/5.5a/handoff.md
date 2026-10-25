@@ -67,3 +67,33 @@ All three deferred 5.5 findings fixed in `packages/harness/src/tools/sandbox.ts`
 ## Budget
 
 Tool calls used: 29
+
+## Fix round
+
+Raised by `code-reviewer` and `typescript-reviewer`: `requireSafeIntegers` only checked `gcd`/
+`lcm` inputs, so `lcm(9007199254740990, 9007199254740988)` and
+`lcm(9007199254740881, 9007199254740879)` — both safe-integer inputs — silently returned a wrong
+float above 2^53.
+
+- `packages/harness/src/tools/sandbox.ts` — `lcm`'s wrapper now also refuses when
+  `originalLcm(...)`'s result fails `Number.isSafeInteger`, via the same refusal message/reason
+  path as the input check. `gcd` needs no result check: a one-line comment explains why (its
+  result is always `<= min(|a|, |b|)`, so a safe-integer input guarantees a safe-integer result).
+- `packages/harness/src/tools/sandbox.test.ts` — test-first: added the two overflow cases to the
+  `evaluation_failed` rejection table, plus `lcm(2, 3)` → `6` and the large-but-safe
+  `lcm(4294967296, 3)` → `12884901888` to the accept table. Both overflow cases failed before the
+  fix (no `CalculatorError` thrown) and passed after.
+- `packages/harness/src/tools/calculator.fuzz.test.ts` — added both overflow cases to the
+  `ATTACKS` corpus.
+
+### Gate
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...` → 10/10 tasks
+  successful; `src/tools` stays at 100% coverage (statements/branches/functions/lines). One
+  unrelated test (`modelRequest.test.ts`'s linear-time timing check) failed once under full
+  parallel load and passed cleanly on its own and on a second full run — a pre-existing flake,
+  not touched by this change.
+- `corepack pnpm exec prettier --check` on the three changed files → "All matched files use
+  Prettier code style!"
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+
+Tool calls used: 15

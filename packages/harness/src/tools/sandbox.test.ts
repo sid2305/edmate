@@ -77,6 +77,9 @@ describe('evaluateExpression: valid arithmetic', () => {
     ['pow(2, 3)', '8'],
     ['mod(-7, 3)', '2'],
     ['gcd(12, 18) + lcm(4, 6)', '18'],
+    ['lcm(2, 3)', '6'],
+    // lcm result stays a safe integer even with a large-but-safe input (5.5a fix round)
+    ['lcm(4294967296, 3)', '12884901888'],
     ['sign(-4) + cbrt(27)', '2'],
     ['hypot(3, 4)', '5'],
     ['sin(0) + cos(0) + tan(0)', '1'],
@@ -214,6 +217,9 @@ describe('evaluateExpression: evaluation errors are fixed-text', () => {
     // gcd/lcm silently give a wrong answer above the safe integer range (5.5a); refuse instead
     ['gcd(2^1000, 3)', 'evaluation_failed'],
     ['lcm(2^1000, 3)', 'evaluation_failed'],
+    // Safe-integer inputs whose lcm result overflows safe-integer range (5.5a fix round)
+    ['lcm(9007199254740990, 9007199254740988)', 'evaluation_failed'],
+    ['lcm(9007199254740881, 9007199254740879)', 'evaluation_failed'],
   ])('%j → %s, with no mathjs message', (expression, reason) => {
     let caught: unknown;
     try {

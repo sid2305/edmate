@@ -128,7 +128,14 @@ function buildRestricted(): Restricted {
       },
       lcm: (...args: number[]) => {
         requireSafeIntegers(args);
-        return originalLcm(...args);
+        const result = originalLcm(...args);
+        // Safe-integer inputs can still produce an lcm above 2^53 (5.5a fix round); refuse
+        // rather than return a silently wrong float. gcd needs no such check: its result is
+        // always <= min(|a|, |b|), so a safe-integer input guarantees a safe-integer result.
+        if (!Number.isSafeInteger(result)) {
+          throw new Error('gcd/lcm argument outside the safe integer range');
+        }
+        return result;
       },
     },
     { override: true },
