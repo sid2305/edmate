@@ -92,6 +92,10 @@
   act on; `/learn/<agentId>` 404s for a suspended agent, so `/home` is the only working landing
   spot after cancelling or pausing from this page.
 
+### 24 Oct 2026 · 9.3i review LOWs deferred to 9.3l · decided by lead · risk: low
+- Decided: the two LOW stale header comments in apps/web/app/learn/[agentId]/plan/page.tsx and apps/web/src/subscriptions/PlanView.tsx are deferred to board task 9.3l.
+- Why: comment-only fixes; the policy is to fix only CRITICAL and HIGH before merge.
+
 ## Budget
 
-Tool calls used: 32
+Tool calls used: 67 (harness count; the agent reported 32)
