@@ -6358,7 +6358,9 @@ tasks:
   deps:
   - 12.5f
   risk: high
-  status: todo
+  status: running
+  branch: m13/12.5g-alert-permanent-error
+  model: plan:sonnet build:sonnet
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
