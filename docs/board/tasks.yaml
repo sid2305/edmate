@@ -3044,9 +3044,9 @@ tasks:
   deps:
   - '0.19'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/0.19a-closeout-digest
+  model: plan:lead build:sonnet
 - id: 6.5a
   milestone: M13
   title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold
@@ -8048,7 +8048,9 @@ tasks:
   deps:
   - 9.3i
   risk: low
-  status: todo
+  status: running
+  branch: m13/9.3l-plan-page-comments
+  model: plan:lead build:sonnet
 - id: 5.6h
   milestone: M13
   title: '5.6f review MEDIUM: packages/harness/src/pipeline/runner.practiceKinds.test.ts:377, the "so it''s B?" runner test repeats the base correct case because laterCorrect cannot inject the guess text;
