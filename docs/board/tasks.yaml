@@ -8219,9 +8219,9 @@ tasks:
   - M12
   - M8
   - M9
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/13.5-cost-dashboard
+  model: plan:sonnet build:sonnet
 - id: '13.6'
   milestone: M13
   title: Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist
