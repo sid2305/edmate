@@ -10,6 +10,47 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.1 devDependency pin · decided by builder · risk: low
+- Decided: Added `@axe-core/playwright` pinned to the exact version `4.14.0` (no `^`/`~`) as an
+  `apps/web` devDependency, no ADR.
+- Why: it is a test-only axe runner for Playwright, adding no production code path and no
+  behaviour change outside the test run — the same category task 9.1 set precedent for
+  (`jest-axe`/`next-intl`, pinned without a tech-stack ADR). Followed that precedent rather than
+  opening a new ADR for a dev-only test tool.
+
+---
+
+### 25 Oct 2026 · 13.1 ci.yml touch, considered then not made · decided by builder · risk: high
+- Decided: Logged as `risk: high` per the plan's own instruction (any touch to `.github/workflows/ci.yml`
+  keeps the `.github/**` risk-path group's reviewer requirement — `code-reviewer`,
+  `typescript-reviewer`, `security-reviewer` — regardless of diff size), but in the end made **no
+  edit** to the file: the new spec is already picked up by the existing `e2e` job's test runner
+  and existing `testMatch` glob, and the measured local run (42s) does not approach the job's
+  20-minute `timeout-minutes`.
+- Why: recording this even though the file ends up untouched, so a reviewer checking the diff
+  against the plan's risky-paths section isn't surprised by its absence — the plan anticipated a
+  touch; the measurement showed one wasn't needed.
+
+---
+
+### 25 Oct 2026 · 13.1 budget accepted · decided by lead · risk: low
+- Decided: accept 41 builder tool calls against the plan's 40 and 17 for the fix round (harness counts).
+- Why: one call over plan; the fix round was a single MEDIUM.
+
+---
+
+### 25 Oct 2026 · 13.1 URL check matches the whole URL · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW in apps/web/e2e/a11y.spec.ts: the toHaveURL patterns match the whole URL, so a redirect to /sign-in?callbackUrl=/home would still pass. Today requireRole redirects to a plain /sign-in with no callback parameter, so the check fails as intended on a real redirect.
+- Why: the original MEDIUM (a silent redirect passing) is closed for the app's real behaviour; one fix round per policy.
+
+---
+
+### 25 Oct 2026 · 13.1 merge: axe accessibility spec in the e2e job · decided by lead · risk: low
+- Decided: merge 13.1 with code-reviewer and typescript-reviewer approval. ci.yml was not changed (the e2e job already runs every spec under apps/web/e2e), so no .github reviewers are needed; the builder's risk: high entry records a touch that was considered and not made.
+- Why: the diff touches no risk path; the manual WCAG 2.2 AA pass is handed to a human in docs/a11y/manual-pass.md.
+
+---
+
 ### 25 Oct 2026 · 11.1e Phase A · decided by builder · risk: high
 - Decided: `packages/db/src/repositories/live-classes.ts` is a risk-paths.txt match
   (`packages/db/src/repositories/**`, line 40) → security-reviewer is required on this PR,
