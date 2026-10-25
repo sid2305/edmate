@@ -49,7 +49,7 @@ const ModuleInputSchema = z.strictObject({
   topics: z.array(TopicInputSchema).max(OUTLINE_TOPICS_MAX),
 });
 
-const OutlineInputSchema = z
+export const OutlineInputSchema = z
   .strictObject({ modules: z.array(ModuleInputSchema).min(1).max(OUTLINE_MODULES_MAX) })
   .refine((o) => unique(o.modules.map((m) => m.id)))
   .refine((o) => unique(o.modules.flatMap((m) => m.topics.flatMap((t) => t.id ?? []))));
