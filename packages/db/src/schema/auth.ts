@@ -81,7 +81,9 @@ export const authVerificationTokens = pgTable(
 );
 
 /** Who acted at platform level: a staff user, or the operator CLI (no user). */
-export const platformActorRole = pgEnum('platform_actor_role', ['staff', 'operator']);
+// Task 13.4: 'student' added so a self-initiated account.delete (identity.anonymise) can be
+// audited at the platform level, the same table role.grant already uses.
+export const platformActorRole = pgEnum('platform_actor_role', ['staff', 'operator', 'student']);
 
 /**
  * Platform-level audit (task 1.3): staff and operator actions that belong to no teacher, starting
