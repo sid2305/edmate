@@ -28,6 +28,10 @@ apps/web consumers (`publish.ts`, `publishRuntime.ts`, `packages.ts`, `packagesR
 - Decided: added `'TurnCostError'` to `packages/gateway/test/keys/exports.test.ts`'s sorted list, one file outside the plan's Files list.
 - Why: that test enumerates every named export from the package root and fails if the list drifts; exporting `TurnCostError` (required by the plan) made it fail with no code-behaviour change, so updating the list was the minimal fix rather than skipping the new export.
 
+### 25 Oct 2026 · 8.6e budget overrun (69 calls against 35) · decided by lead · risk: low
+- Decided: accept 8.6e at 69 tool calls (harness count: build 47, fix round 22) against the plan's 35; no rework.
+- Why: the build ran 47 including setup the lead-written budget left out, and the fix round for the typescript-reviewer's HIGH (DeepReadonly arrays) was a separate fresh agent; the reviewer verified the fix.
+
 ## Fix round
 
 ### HIGH: `DeepReadonly<T>`'s array branch returned array types unchanged
@@ -41,4 +45,4 @@ apps/web consumers (`publish.ts`, `publishRuntime.ts`, `packages.ts`, `packagesR
 - Commit: see sha below.
 
 ## Budget
-Tool calls used: 24
+Tool calls used: 69 (harness count: build 47 + fix round 22)
