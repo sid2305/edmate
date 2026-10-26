@@ -60,6 +60,15 @@ Status: DONE
   change does not affect — see the embedded-UUID test), and the plan does not ask for it; flagged
   here in case a future value hits it.
 
+### 25 Oct 2026 · 8.7m fix round: prefixed-id and hex-digest spans are exempt from PHONE_CANDIDATE · decided by builder · risk: low
+- Decided: treat whole `<prefix>_<rest>` id tokens and bare 32+ char hex digests as exempt spans,
+  the same way UUID-shaped runs already are, instead of narrowing `PHONE_CANDIDATE`'s lookbehind
+  further.
+- Why: narrowing the lookbehind back to block letters would undo the 8.7m fix (glued phone
+  numbers like `abc5551234567` would stop being redacted again); excluding the specific id/hash
+  shapes that need protecting keeps both behaviours and stays a single linear scan per regex (no
+  nested quantifiers).
+
 ### 25 Oct 2026 · 8.7m fix round 2: HEX_DIGEST requires at least one a-f letter · decided by builder · risk: low
 - Decided: add a lookahead to `HEX_DIGEST` requiring at least one a-f letter in the run, instead
   of any other way to exclude pure-digit runs.
@@ -67,6 +76,22 @@ Status: DONE
   phone-length digit run); only an actual hex digest (one with a letter) needs the exemption.
   Requiring a letter is the minimal fix and keeps the single linear pass per regex, no nested
   quantifiers.
+
+### 25 Oct 2026 · 8.7m two fix rounds, not a failed round · decided by lead · risk: low
+- Decided: run a second fix round without asking the human. Round 1 fixed the CRITICAL (report ids corrupted) and both typescript-reviewer findings; its new HEX_DIGEST exemption introduced a separate HIGH (pure-digit 32+ runs escaped redaction), which round 2 fixed. Both reviewers approved round 2.
+- Why: the two-failed-rounds rule is for a finding that a fix round fails to fix; here every finding was fixed in the round that targeted it.
+
+### 25 Oct 2026 · 8.7m id followed by a space and a phone number deferred · decided by lead · risk: low
+- Decided: defer typescript-reviewer's round-2 MEDIUM to board task 8.7p: in packages/db/src/repositories/redact-json.ts a `rp_<hex40>`, prefixed id or hex digest followed by one space and then a phone-shaped run is redacted together with the phone, so the id's tail is lost. The builder decision above that says a separator protects ids holds for a word separator, not a bare space.
+- Why: the phone number is still redacted (no personal data leaks), audit ids are stored as whole values rather than next to phone numbers, and the fix-only-blockers rule defers MEDIUM findings.
+
+### 25 Oct 2026 · 8.7m budget over cap · decided by lead · risk: low
+- Decided: accept 128 harness-counted builder tool calls (build 35, fix round 1 46, fix round 2 47) against caps of 30 + 25 + 20.
+- Why: the two fix rounds came from a CRITICAL and a HIGH on a security-sensitive redaction path; the fixers wrote differential and linearity probes that the reviewers then confirmed. Builders reported 24 + 20 + 19; briefs keep the foreground-tests rule.
+
+### 25 Oct 2026 · 8.7m merge · decided by lead · risk: high
+- Decided: merge 8.7m. It touches packages/db/src/repositories/redact-json.ts (a risky path, security-reviewer group). code-reviewer, typescript-reviewer and security-reviewer ran; the CRITICAL, the HIGH, the MEDIUM and the LOW were fixed, and a new MEDIUM is deferred to 8.7p. The pre-existing EMAIL regex slowness found by security-reviewer is board task 8.7o.
+- Why: glued phone numbers are now redacted, report ids, UUIDs and hex digests survive, a 200k-case differential fuzz found nothing redacted on main that survives on the branch, and the gate passes.
 
 ## Gate
 
@@ -78,7 +103,7 @@ Status: DONE
 
 ## Budget
 
-Tool calls used: 24
+Tool calls used: 128 (harness count: build 35, fix round 1 46, fix round 2 47; the builders reported 24 + 20 + 19)
 
 ## Fix round
 
@@ -105,15 +130,6 @@ Tool calls used: 24
     separator (typescript-reviewer MEDIUM); a one-line comment on the existing glued-UUID-and-
     phone test noting it already passed pre-8.7m and guards the fail-closed invariant, not new
     8.7m behaviour (typescript-reviewer LOW).
-
-### 25 Oct 2026 · 8.7m fix round: prefixed-id and hex-digest spans are exempt from PHONE_CANDIDATE · decided by builder · risk: low
-- Decided: treat whole `<prefix>_<rest>` id tokens and bare 32+ char hex digests as exempt spans,
-  the same way UUID-shaped runs already are, instead of narrowing `PHONE_CANDIDATE`'s lookbehind
-  further.
-- Why: narrowing the lookbehind back to block letters would undo the 8.7m fix (glued phone
-  numbers like `abc5551234567` would stop being redacted again); excluding the specific id/hash
-  shapes that need protecting keeps both behaviours and stays a single linear scan per regex (no
-  nested quantifiers).
 
 ## Fix round gate
 
@@ -144,14 +160,6 @@ Tool calls used: 20
   - Added: a 32-char hex digest with exactly one letter (31 digits + `a`) still survives
     unredacted; reran the existing `rp_<hex40>` property test and the 64-char hex digest test,
     both still pass.
-
-### 25 Oct 2026 · 8.7m fix round 2: HEX_DIGEST requires at least one a-f letter · decided by builder · risk: low
-- Decided: add a lookahead to `HEX_DIGEST` requiring at least one a-f letter in the run, instead
-  of any other way to exclude pure-digit runs.
-- Why: a bare 32+ digit run is exactly the shape `PHONE_CANDIDATE` must redact (it is itself a
-  phone-length digit run); only an actual hex digest (one with a letter) needs the exemption.
-  Requiring a letter is the minimal fix and keeps the single linear pass per regex, no nested
-  quantifiers.
 
 ## Fix round 2 gate
 
