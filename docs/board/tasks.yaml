@@ -8768,9 +8768,60 @@ tasks:
     decision
   deps:
   - 3.9b
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
   branch: m13/3.9c-warm-preguard
+  metrics:
+    tool_calls: 605
+    tokens_in: 2048
+    tokens_out: 193973
+    cache_read_tokens: 77772182
+    wall_time_seconds: 3752
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 3.9e
+  milestone: M13
+  title: '3.9c review LOWs: packages/harness/src/guardrails/warmup.ts swallows a matcher throw with no trace at all (return a count of failed matchers, or similar, that the web and worker call sites log
+    by matcher name only, no text); apps/web/instrumentation.test.ts gains a case where the harness import or warmPreGuardPatterns throws, asserting console.error logs the error name and register() does
+    not throw, like the warmPool failure tests'
+  accept: a throwing matcher during warm-up is visible in the web and worker logs (no student text); the instrumentation failure test passes; harness 100% branch coverage on src/guardrails/** holds.
+  deps:
+  - 3.9c
+  risk: low
+  status: todo
+- id: 3.9f
+  milestone: M13
+  title: 'CLI chat on the db retrieval index (deferred from 3.9a, 3.9 Q3): switch apps/cli edmate chat from the lexical retrieval index to the db-backed retrieval index, then re-test the reported same-topic
+    phrasing ("I still don''t get it") on the db index'
+  accept: edmate chat retrieves from the db-backed index when a database is configured; a test shows the same-topic phrasing climbs the help ladder on the db index; no real model calls in tests.
+  deps:
+  - 3.9a
+  risk: low
+  status: todo
+- id: 3.9g
+  milestone: M13
+  title: '3.9a review LOWs: apps/cli/src/commands/chat.test.ts SIGINT test asserts process.listenerCount(''SIGINT'') is back to its baseline after the run; apps/cli/src/commands/chat.ts does not print a stray
+    "> " prompt for a turn cancelled by Ctrl+C before printing bye'
+  accept: the SIGINT test checks the listener count before and after; a cancelled turn prints no extra prompt before bye; apps/cli coverage holds.
+  deps:
+  - 3.9a
+  risk: low
+  status: todo
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or

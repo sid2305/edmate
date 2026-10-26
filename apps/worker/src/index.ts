@@ -9,6 +9,7 @@
 // REDIS_URL and DATABASE_URL come from the environment (docker/compose.yaml sets both).
 import { S3Client } from '@aws-sdk/client-s3';
 import { openDatabase } from '@edmate/db';
+import { warmPreGuardPatterns } from '@edmate/harness';
 import { ALERT_QUEUE, DEAD_LETTER_QUEUE } from '@edmate/queue';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
@@ -48,6 +49,16 @@ const costAlarmQueue = new Queue(COST_ALARM_QUEUE, { connection });
 const weeklyInsightsQueue = new Queue(WEEKLY_INSIGHTS_QUEUE, { connection });
 const retentionQueue = new Queue(RETENTION_QUEUE, { connection });
 const alertQueue = new Queue(ALERT_QUEUE, { connection });
+
+// Task 3.9c (found by 3.9b): warm preGuard's pattern matchers before the first queue worker
+// starts, so a freshly started process's first turn does not pay the cold regex-compile cost
+// against preGuard's budget. Pure, synchronous CPU work; must not throw out of module scope (that
+// would crash the process), so it is caught here like every other startup error in this file.
+try {
+  warmPreGuardPatterns();
+} catch (error) {
+  log({ level: 'error', event: 'guard_warmup.failed', error: describeError(error) });
+}
 
 const noop = createNoopWorker(connection, { autorun: true });
 const turn = createTurnWorkers({ connection, repos: db.repos, deadLetter, log, autorun: true });
