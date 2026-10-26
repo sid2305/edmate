@@ -7919,7 +7919,9 @@ tasks:
   deps:
   - 11.4e
   risk: low
-  status: todo
+  status: running
+  branch: m13/11.4h-document-class-fk
+  model: plan:sonnet build:sonnet
 - id: 8.7o
   milestone: M13
   title: '8.7m security review follow-up: the EMAIL regex in packages/db/src/repositories/redact-json.ts (unchanged since before 8.7m) is quadratic on adversarial input such as ''a1_''.repeat(N), about
