@@ -14,7 +14,6 @@ Fixed the two 3.9a typescript-review LOWs in `apps/cli`:
   `[error: ...]` event and `bye` contains no `> ` prompt (fails on main before the fix).
 
 ## Decisions
-None (plan fully specified the fix; no deviation).
 
 ### 25 Oct 2026 · 3.9g budget · decided by lead · risk: low
 - Decided: accept 26 tool calls against a plan budget of 20.
