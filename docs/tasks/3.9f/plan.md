@@ -212,7 +212,7 @@ Budget: 48 tool calls (1 phase, apps/cli)
 
 ## Allowed tools
 
-Read, Grep, Glob, Edit, Write, Bash (pnpm install, typecheck/lint/test, secret scan, and starting
+Read, Grep, Glob, Edit, Write, Bash (pnpm install, typecheck/lint/test, secret scan;
 no docker or compose commands)
 
 ## Exit conditions
