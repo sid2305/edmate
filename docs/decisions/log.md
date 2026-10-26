@@ -10,6 +10,35 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 3.3a index.ts narrowing without a non-null assertion · decided by builder · risk: low
+- Decided: Rewrote `classifyTurn`'s intent ternary as explicit branches (an early return for
+  `rule.confident`, then an `if (text === undefined)` guard kept only to satisfy the type
+  checker, then the model-fallback call) instead of a `text!` non-null assertion or a `satisfies`
+  cast.
+- Why: the plan allowed either "a local narrowing check or an explicit non-null assertion with a
+  one-line comment"; no behaviour change either way since the guard branch is unreachable
+  (`classifyIntentByRules` returns `confident: true` for undefined text), but the explicit branch
+  reads clearer than a bare assertion and needs no suppression comment.
+
+---
+
+### 25 Oct 2026 · 3.3a new distress rows' wording · decided by builder · risk: low
+- Decided: Picked plain, generic distress phrasing ("I feel so hopeless about everything these
+  days", "nothing I do matters anymore, I give up trying", etc.) with no helpline numbers,
+  contacts or personal details, verified individually against `classifyIntentByRules` via a
+  scratch test (written, run, then deleted before commit) rather than assumed.
+- Why: the plan required each row to genuinely exercise the model-fallback path (soft or
+  no-hit), not just read as plausible; checking against the real rule function was the only way
+  to confirm that without a real model call (rule 4).
+
+---
+
+### 25 Oct 2026 · 3.3a merge · decided by lead · risk: high
+- Decided: merge 3.3a (a shared guarded model call in packages/harness/src/pipeline/guardedModelCall.ts used by routing/modelFallback.ts and guardrails/safetyClassifier.ts; answer-key dedupe in routing/classify.ts; the dead branch in routing/index.ts removed; 5 English soft/indirect distress rows in routing/labelledTurns.ts) with no findings.
+- Why: it touches packages/harness/src/guardrails/** (a risky path); code-reviewer, typescript-reviewer and silent-failure-hunter each verified the safety classifier keeps the same timeout, error types and fail-closed behaviour, with its existing tests passing unedited, and that the new distress rows reach the model fallback as labelled.
+
+---
+
 ### 25 Oct 2026 · 13.3a Referrer-Policy value · decided by builder · risk: low
 - Decided: `Referrer-Policy: strict-origin-when-cross-origin` (browsers' current safe default),
   since the plan named the header but not its exact value.

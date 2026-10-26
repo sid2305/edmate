@@ -8538,9 +8538,29 @@ tasks:
   accept: a duplicate-part key with one matching number scores partial; both callers use the shared helper; route accuracy stays at or above 90%
   deps:
   - '3.3'
-  status: running
+  status: done
   branch: m13/3.3a-route-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 253
+    tokens_in: 864
+    tokens_out: 66482
+    cache_read_tokens: 23224872
+    wall_time_seconds: 1366
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 3.4c
   milestone: M13
   title: 'Same-topic turns degrade to locked (3.9 report): retrievalQuery.ts appends the last agent reply, diluting overlap below the 0.5 coverage threshold while probe() counts any locked score > 0 as
