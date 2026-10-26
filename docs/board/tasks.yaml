@@ -8771,6 +8771,16 @@ tasks:
   status: running
   model: plan:sonnet build:sonnet
   branch: m13/3.9c-warm-preguard
+- id: 3.9e
+  milestone: M13
+  title: '3.9c review LOWs: packages/harness/src/guardrails/warmup.ts swallows a matcher throw with no trace at all (return a count of failed matchers, or similar, that the web and worker call sites log by matcher
+    name only, no text); apps/web/instrumentation.test.ts gains a case where the harness import or warmPreGuardPatterns throws, asserting console.error logs the error name and register() does not throw,
+    like the warmPool failure tests'
+  accept: a throwing matcher during warm-up is visible in the web and worker logs (no student text); the instrumentation failure test passes; harness 100% branch coverage on src/guardrails/** holds.
+  deps:
+  - 3.9c
+  risk: low
+  status: todo
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
