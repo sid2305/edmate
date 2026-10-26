@@ -10,6 +10,43 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 3.9c warm-up scope is preGuard's matchers only · decided by builder · risk: low
+- Decided: `warmPreGuardPatterns()` warms only `distressKeywordMatch`, `matchModeration` and
+  `matchJailbreak` — not mathjs (used by `generate`'s tool-call code, step 8, never preGuard) and
+  not the access filter (runs in `entitle`, step 2).
+- Why: the plan pre-made this scoping call; the accept line is about preGuard's budget only.
+
+---
+
+### 25 Oct 2026 · 3.9c guardrails-path change · decided by builder · risk: high
+- Decided: logging this as `risk: high` per the MVP-first standing rule, even though
+  `packages/harness/src/guardrails/warmup.ts` is additive and read-only (calls only
+  already-exported pure matcher functions; touches no guard decision logic, no
+  `packages/harness/src/pipeline/**`).
+- Why: `packages/harness/src/guardrails/**` matches the "student safety and teaching behaviour"
+  risk-paths group, so the handoff must log `risk: high` regardless of the change's actual risk
+  profile.
+
+---
+
+### 25 Oct 2026 · 3.9c fix-round scope · decided by lead · risk: low
+- Decided: the fix round also took typescript-reviewer's MEDIUM (drop the `as string` cast) and silent-failure-hunter's LOW (warm `matchModeration` without context too), alongside code-reviewer's HIGH and MEDIUM; the other two LOWs (a trace when a matcher throws during warm-up, an instrumentation failure-path test) are deferred to 3.9e.
+- Why: the included items were a few lines in the same files the HIGH fix touched; the deferred ones touch the web/worker call sites and are not blockers.
+
+---
+
+### 25 Oct 2026 · 3.9c budget over cap · decided by lead · risk: low
+- Decided: accept 169 harness-counted builder tool calls (build 117, fix round 52) against caps of 45 + 25.
+- Why: the build ran across a stalled session and found and fixed a real problem (the cold-start test's CPU load starved sibling test files); the harness timer typing without @types/node took several attempts. Builders reported about 95 + 22.
+
+---
+
+### 25 Oct 2026 · 3.9c merge · decided by lead · risk: high
+- Decided: merge 3.9c. It adds packages/harness/src/guardrails/warmup.ts and its tests (a risky path, safety group; code-reviewer is the required reviewer before the pilot gate) and calls the warm-up from apps/web/instrumentation.ts and apps/worker/src/index.ts. code-reviewer, typescript-reviewer and silent-failure-hunter ran; the HIGH and the MEDIUMs are fixed, two LOWs are deferred to 3.9e. No guard result and no step budget changes.
+- Why: warming the distress, moderation (including the minor-marker table) and jailbreak patterns at start-up removes the ~150 ms cold cost 3.9b measured from a real student's first turn, and the gate passes.
+
+---
+
 ### 25 Oct 2026 · 12.3e budget over cap · decided by lead · risk: low
 - Decided: accept 38 harness-counted builder tool calls against a cap of 15.
 - Why: the full @edmate/db gate needed a rerun after an unrelated harness timing flake (modelRequest.test.ts, a known flake); the change itself is small and both reviewers approved.
