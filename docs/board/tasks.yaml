@@ -8804,6 +8804,24 @@ tasks:
   - 3.9c
   risk: low
   status: todo
+- id: 3.9f
+  milestone: M13
+  title: 'CLI chat on the db retrieval index (deferred from 3.9a, 3.9 Q3): switch apps/cli edmate chat from the lexical retrieval index to the db-backed retrieval index, then re-test the reported same-topic
+    phrasing ("I still don''t get it") on the db index'
+  accept: edmate chat retrieves from the db-backed index when a database is configured; a test shows the same-topic phrasing climbs the help ladder on the db index; no real model calls in tests.
+  deps:
+  - 3.9a
+  risk: low
+  status: todo
+- id: 3.9g
+  milestone: M13
+  title: '3.9a review LOWs: apps/cli/src/commands/chat.test.ts SIGINT test asserts process.listenerCount(''SIGINT'') is back to its baseline after the run; apps/cli/src/commands/chat.ts does not print a stray
+    "> " prompt for a turn cancelled by Ctrl+C before printing bye'
+  accept: the SIGINT test checks the listener count before and after; a cancelled turn prints no extra prompt before bye; apps/cli coverage holds.
+  deps:
+  - 3.9a
+  risk: low
+  status: todo
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
