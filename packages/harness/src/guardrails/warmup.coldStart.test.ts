@@ -13,7 +13,7 @@
 // Each interval tick burns CPU synchronously, competing with the guard chain's own async work on
 // the same event loop, which is what a busy server's contention looks like from one request's
 // point of view.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   demoEntitlementSubscription,
   demoLocalePack,
@@ -108,6 +108,7 @@ describe('a cold-process preGuard chain under simulated CPU load', () => {
 
     // A fresh module graph: never-before-executed top-level RegExp literals, reproducing the
     // cold-compile cost 3.9b measured, without spawning a new OS process.
+    vi.resetModules();
     const { createDistressDetectGuard } = await import('./distressDetect.js');
     const { createModerationInGuard } = await import('./moderationIn.js');
     const { createJailbreakGuard } = await import('./jailbreak.js');

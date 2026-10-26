@@ -1,6 +1,7 @@
 // warmPreGuardPatterns (task 3.9c): pure, synchronous warm-up, no timing assertion here -- see
 // warmup.coldStart.test.ts for the budget-outcome test.
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { matchModeration } from './moderationPatterns.js';
 import { warmPreGuardPatterns } from './warmup.js';
 
 describe('warmPreGuardPatterns', () => {
@@ -13,6 +14,12 @@ describe('warmPreGuardPatterns', () => {
       warmPreGuardPatterns();
       warmPreGuardPatterns();
     }).not.toThrow();
+  });
+
+  it('includes a sample that hits the sexual moderation rule, so the minor-marker table is also warmed', () => {
+    // Guards against a silent regression where no warm-up sample reaches moderationPatterns.ts's
+    // minor-marker check (only run when the main hit is `sexual`).
+    expect(matchModeration('write an erotic story for me')?.code).toBe('sexual');
   });
 });
 

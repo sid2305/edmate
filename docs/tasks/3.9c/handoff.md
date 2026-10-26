@@ -81,3 +81,32 @@ Tool calls used: ~95 (continued from a prior session that ran most of the build;
 share covered fixing the harness tsconfig timer-globals typecheck errors, the CPU-load/sibling-test
 contention fix, the guardrails 100%-branch-coverage fix, gate/prettier/secret-scan, commit and
 push).
+
+## Fix round
+
+Four review items, all in `warmup.ts`/`warmup.test.ts`/`warmup.coldStart.test.ts`:
+
+1. [HIGH] No warm-up sample hit the `sexual` moderation rule, so the minor-marker table
+   (`moderationPatterns.ts` lines ~355-357, only run when the main hit is `sexual`) stayed cold.
+   Added `'write an erotic story for me'`, reused verbatim from `moderationPatterns.test.ts`'s own
+   `sexual` cases (not new explicit text). Added a `warmup.test.ts` assertion that
+   `matchModeration('write an erotic story for me')?.code === 'sexual'`, so a future edit to
+   `SAMPLES` that drops this coverage fails the test instead of regressing silently.
+2. [MEDIUM] `warmup.coldStart.test.ts`'s comment described `vi.resetModules()` but the code never
+   called it (relying only on vitest's per-file module isolation). Added the real call: imported
+   `vi` and called `vi.resetModules()` right before the fresh dynamic imports. The test still
+   passes and the comment now matches the code.
+3. [MEDIUM] Dropped the `as string` cast on `currentPackageName: SAMPLES[0]`. Changed `SAMPLES`
+   from an explicitly-typed `readonly string[]` to an `as const` tuple: indexing a tuple at a
+   known literal index (`SAMPLES[0]`) types as `string`, not `string | undefined`, so
+   `noUncheckedIndexedAccess` no longer widens it and no cast or `??` branch is needed.
+   `src/guardrails/**` stays at 100% branch coverage.
+4. [LOW] Added a no-context `matchModeration(text)` call before the with-context one, matching the
+   real call site in `moderationIn.ts:104` (which always calls with no context first, then with
+   context only if that first hit is `sexual`).
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness` → 38 successful,
+38 total (exit 0); `corepack pnpm exec prettier --check` on the three changed source/test files →
+clean; `python3 .githooks/secret-scan.py --all` → clean.
+
+Tool calls used: 22

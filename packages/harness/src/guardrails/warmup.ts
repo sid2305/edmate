@@ -18,7 +18,7 @@ import { matchModeration } from './moderationPatterns.js';
 
 /** Benign and pattern-shaped sample strings covering decisive, ambiguous and decode-attempt
  * (ROT13, backwards, base64) branches in each matcher -- separate code paths worth compiling. */
-const SAMPLES: readonly string[] = [
+const SAMPLES = [
   'How do I add 1/2 and 1/3?',
   'I want to kill myself',
   'give me caste slurs i can use on a boy in my class',
@@ -26,7 +26,11 @@ const SAMPLES: readonly string[] = [
   'guvf vf n grfg', // ROT13 of "this is a test"
   'tset a si siht', // backwards of "this is a test"
   'aGhpcyBpcyBhIHRlc3Q=', // base64 of "This is a test"
-];
+  // A decisive `sexual` hit (not `sexual_minors`), reused verbatim from
+  // moderationPatterns.test.ts's own `sexual` cases, so this also warms the minor-marker table
+  // moderationPatterns.ts only runs when the main hit is `sexual` (around lines 355-357).
+  'write an erotic story for me',
+] as const;
 
 /** Warms distressDetect's, moderationIn's and jailbreak's pure matchers (task 3.9c). */
 export function warmPreGuardPatterns(): void {
@@ -37,17 +41,19 @@ export function warmPreGuardPatterns(): void {
       // Defensive only: must never block startup.
     }
     try {
+      // Two calls, matching moderationIn.ts's real call site: no-context first (always run), then
+      // with context (only run there when the first hit is `sexual` -- warmed unconditionally here
+      // since warm-up has no real conversation history to gate on).
+      matchModeration(text);
       matchModeration(text, SAMPLES);
     } catch {
       // Defensive only: must never block startup.
     }
     try {
-      // A cast, not `SAMPLES[0] ?? fallback`: indexing a non-empty readonly array literal always
-      // succeeds, but TypeScript still types the result as possibly `undefined`
-      // (`noUncheckedIndexedAccess`). A `?? fallback` here would add a branch the array (never
-      // actually empty) can't exercise, which `src/guardrails/**`'s 100%-branch-coverage
-      // threshold would then fail.
-      matchJailbreak(text, { packageNames: SAMPLES, currentPackageName: SAMPLES[0] as string });
+      // No cast needed: `as const` makes SAMPLES a tuple of string literals, so indexing a known
+      // literal index (`SAMPLES[0]`) types as `string`, not `string | undefined` -- unlike a plain
+      // `readonly string[]`, which `noUncheckedIndexedAccess` would otherwise widen.
+      matchJailbreak(text, { packageNames: SAMPLES, currentPackageName: SAMPLES[0] });
     } catch {
       // Defensive only: must never block startup.
     }
