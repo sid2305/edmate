@@ -8837,7 +8837,9 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: todo
+  status: running
+  branch: m13/3.9f-cli-db-retrieval
+  model: plan:sonnet build:sonnet
 - id: 3.9g
   milestone: M13
   title: '3.9a review LOWs: apps/cli/src/commands/chat.test.ts SIGINT test asserts process.listenerCount(''SIGINT'') is back to its baseline after the run; apps/cli/src/commands/chat.ts does not print a
@@ -8846,9 +8848,28 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: running
+  status: done
   branch: m13/3.9g-cli-sigint-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 16
+    tokens_in: 62
+    tokens_out: 1891
+    cache_read_tokens: 494614
+    wall_time_seconds: 502
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or

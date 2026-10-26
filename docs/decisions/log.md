@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 3.9g budget · decided by lead · risk: low
+- Decided: accept 26 tool calls against a plan budget of 20.
+- Why: a small overrun on setup and the gate runs; the diff is 13 lines in apps/cli and both reviewers approved with no findings.
+
+---
+
+### 25 Oct 2026 · 3.9g merge · decided by lead · risk: low
+- Decided: merge 3.9g; code-reviewer and typescript-reviewer approved with no findings.
+- Why: apps/cli only, no risky path; the gate passed.
+
+---
+
 ### 25 Oct 2026 · 3.9a SIGINT closes readline via its own cancelSource plus an interrupted flag · decided by builder · risk: low
 
 - Decided: on `SIGINT`, cancel the in-flight turn's own `cancelSource()` token, close the
