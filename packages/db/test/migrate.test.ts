@@ -74,7 +74,11 @@ describe('runPostMigrateSteps', () => {
   it('runs a concurrent-index step as its own statement when no index exists yet', async () => {
     const client = fakeClient([undefined]);
     const steps: PostMigrateStep[] = [
-      { kind: 'concurrentIndex', indexName: 'an_idx', sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")' },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'an_idx',
+        sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")',
+      },
     ];
     await runPostMigrateSteps(client as never, steps);
     expect(client.query).toHaveBeenCalledTimes(2);
@@ -87,7 +91,11 @@ describe('runPostMigrateSteps', () => {
   it('skips the drop when the index already exists and is valid', async () => {
     const client = fakeClient([true]);
     const steps: PostMigrateStep[] = [
-      { kind: 'concurrentIndex', indexName: 'an_idx', sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")' },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'an_idx',
+        sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")',
+      },
     ];
     await runPostMigrateSteps(client as never, steps);
     expect(client.query).toHaveBeenCalledTimes(2);
@@ -97,7 +105,11 @@ describe('runPostMigrateSteps', () => {
   it('qualifies the index lookup to the public schema with to_regclass(format(...)), not string concatenation', async () => {
     const client = fakeClient([true]);
     const steps: PostMigrateStep[] = [
-      { kind: 'concurrentIndex', indexName: 'an_idx', sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")' },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'an_idx',
+        sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")',
+      },
     ];
     await runPostMigrateSteps(client as never, steps);
     const lookup = String(client.query.mock.calls[0]?.[0]);
@@ -121,7 +133,11 @@ describe('runPostMigrateSteps', () => {
   it('drops and rebuilds an INVALID leftover index (a failed or killed earlier build)', async () => {
     const client = fakeClient([false]);
     const steps: PostMigrateStep[] = [
-      { kind: 'concurrentIndex', indexName: 'an_idx', sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")' },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'an_idx',
+        sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")',
+      },
     ];
     await runPostMigrateSteps(client as never, steps);
     expect(client.query).toHaveBeenCalledTimes(3);
@@ -178,6 +194,22 @@ describe('runPostMigrateSteps', () => {
           /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"ended_at" is null/,
         ),
       },
+      // Task 13.4a (13.4 review deferral): the three retention indexes.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'chunks_transcript_created_at_idx',
+        sql: expect.stringMatching(/CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*'transcript'/),
+      },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'sessions_created_at_idx',
+        sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
+      },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'turn_traces_created_at_idx',
+        sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
+      },
     ]);
   });
 });
@@ -222,7 +254,7 @@ describe('withMigrateLock', () => {
     expect(query.mock.calls[1]?.[1]).toEqual([1n]);
   });
 
-  it('unlocks even when fn throws, and still propagates fn\'s error', async () => {
+  it("unlocks even when fn throws, and still propagates fn's error", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ locked: true }] });
     const fn = vi.fn().mockRejectedValue(new Error('fn failed'));
     await expect(withMigrateLock({ query } as never, 1n, fn)).rejects.toThrow('fn failed');

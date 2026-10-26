@@ -13,7 +13,12 @@ import pg from 'pg';
 import { demoPackageFree } from '@edmate/contracts/fixtures';
 import { createDb } from '../src/client.js';
 import { runMigrateCli } from '../src/cli.js';
-import { migrateDatabase, runPostMigrateSteps, type PostMigrateStep } from '../src/migrate.js';
+import {
+  migrateDatabase,
+  POST_MIGRATE_STEPS,
+  runPostMigrateSteps,
+  type PostMigrateStep,
+} from '../src/migrate.js';
 import * as s from '../src/schema/index.js';
 import { DATA_MODEL_TABLES, latestSnapshot, migrationSql } from './helpers.js';
 import {
@@ -78,6 +83,25 @@ async function expectFullSchema() {
   }
   return got;
 }
+
+// Task 13.4a (13.4 review deferral): the three retention indexes (migration 0032) move from a
+// plain CREATE INDEX to the schema-only + post-migrate pattern, so this must hold regardless of
+// whether a test database is reachable.
+describe('POST_MIGRATE_STEPS (task 13.4a)', () => {
+  it('builds the three 13.4 retention indexes CONCURRENTLY', () => {
+    for (const indexName of [
+      'chunks_transcript_created_at_idx',
+      'sessions_created_at_idx',
+      'turn_traces_created_at_idx',
+    ]) {
+      const step = POST_MIGRATE_STEPS.find(
+        (s) => s.kind === 'concurrentIndex' && s.indexName === indexName,
+      );
+      expect(step, indexName).toBeDefined();
+      expect((step as { sql: string }).sql).toMatch(/CREATE INDEX CONCURRENTLY IF NOT EXISTS/);
+    }
+  });
+});
 
 describe.skipIf(!up)(
   `migrations against Postgres 16 + pgvector${up ? '' : ` (${SKIP_REASON})`}`,
@@ -268,6 +292,32 @@ describe.skipIf(!up)(
       }, TEST_URL);
     });
 
+    // Task 13.4a (13.4 review deferral): migration 0032's three retention indexes move to the
+    // schema-only + post-migrate pattern, so they must exist, valid and ready, after
+    // migrateDatabase() — not built by the migration file's own transaction.
+    it('builds the three 13.4 retention indexes outside the migration transaction', async () => {
+      await admin(async (c) => {
+        for (const indexName of [
+          'chunks_transcript_created_at_idx',
+          'sessions_created_at_idx',
+          'turn_traces_created_at_idx',
+        ]) {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index where indexrelid = $1::regclass`,
+            [indexName],
+          );
+          expect(idx.rows, indexName).toHaveLength(1);
+          expect(idx.rows[0], indexName).toMatchObject({ indisvalid: true, indisready: true });
+        }
+
+        const pred = await c.query<{ indpred: string }>(
+          `select pg_get_expr(indpred, indrelid) as indpred from pg_index
+             where indexrelid = 'chunks_transcript_created_at_idx'::regclass`,
+        );
+        expect(pred.rows[0]?.indpred).toMatch(/kind.*=.*transcript/i);
+      }, TEST_URL);
+    });
+
     it('rebuilds an index left INVALID by a failed or killed earlier CREATE INDEX CONCURRENTLY', async () => {
       // Simulates what a killed concurrent build leaves behind: the index exists, but
       // indisvalid = false. A later IF NOT EXISTS alone would keep it broken forever.
@@ -342,9 +392,7 @@ describe.skipIf(!up)(
         ).rejects.toThrow(/teacher_questions_open_dedup_key/);
         // … but once answered, the same (teacher, student, agent, text) can open again (the index
         // is partial, `WHERE status = 'open'`).
-        await c.query(
-          `update teacher_questions set status = 'answered' where id = 'tq_3_17_pre'`,
-        );
+        await c.query(`update teacher_questions set status = 'answered' where id = 'tq_3_17_pre'`);
         await c.query(
           `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
              values ('tq_3_17_reopen', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
