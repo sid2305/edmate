@@ -7919,9 +7919,30 @@ tasks:
   deps:
   - 11.4e
   risk: low
-  status: running
+  status: done
   branch: m13/11.4h-document-class-fk
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 292
+    tokens_in: 1000
+    tokens_out: 81336
+    cache_read_tokens: 38131263
+    wall_time_seconds: 2707
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7o
   milestone: M13
   title: '8.7m security review follow-up: the EMAIL regex in packages/db/src/repositories/redact-json.ts (unchanged since before 8.7m) is quadratic on adversarial input such as ''a1_''.repeat(N), about
@@ -8834,9 +8855,30 @@ tasks:
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/3.9a-cli-chat-followups
+  metrics:
+    tool_calls: 570
+    tokens_in: 2014
+    tokens_out: 166238
+    cache_read_tokens: 73252476
+    wall_time_seconds: 3255
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against

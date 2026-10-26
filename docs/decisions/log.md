@@ -10,6 +10,137 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 3.9a SIGINT closes readline via its own cancelSource plus an interrupted flag · decided by builder · risk: low
+
+- Decided: on `SIGINT`, cancel the in-flight turn's own `cancelSource()` token, close the
+  `readline.Interface`, and additionally set an `interrupted` boolean checked at the top of every
+  loop iteration.
+- Why: `rl.close()` alone stops future `for await` reads but does not retroactively drop a line
+  already sitting in readline's internal buffer when stdin data arrives all at once (e.g. piped
+  input in tests) — a second scripted line could still reach an in-flight iteration and send one
+  more turn after Ctrl+C. The flag is cheap, local to this function, and makes "no further turn is
+  sent after SIGINT" deterministic without depending on readline's internal buffering behaviour.
+
+---
+
+### 25 Oct 2026 · 3.9a logUnmetered extracted as its own exported function · decided by builder · risk: low
+
+- Decided: moved the unmetered-usage log line into an exported `logUnmetered(u, log?)` function in
+  `deps.ts` rather than inlining the string template directly in the `recordUnmetered` sink.
+- Why: lets `deps.test.ts` assert the exact line and the "never console.error" property directly,
+  with no real model call and no need to drive a full `recordUnmetered` call through
+  `buildChatDeps`'s gateway wiring.
+
+---
+
+### 25 Oct 2026 · 3.9a prettier non-idempotency on two pre-existing test blocks (deviation) · decided by builder · risk: low
+
+- Decided: rewrote two `it(...)` call sites this task's tests sit next to (not introduced by this
+  task) — `chat.test.ts`'s "streams a free-package reply..." test and `deps.test.ts`'s "runs one
+  teacher_preview turn..." test — moving their two-line leading comment from between the test name
+  and the callback into the callback's body, so prettier's own `--write` output is a stable fixed
+  point (verified: `--write` followed immediately by `--check` passes with no further changes).
+- Why: the project's installed prettier version non-idempotently reformats a `//` comment pair sitting
+  between an `it(...)`'s string-literal name and its arrow-function callback — confirmed on the
+  original, unmodified `HEAD` version of both files (pre-dates this task entirely, found only
+  because this task's gate runs `prettier --check` on these exact files). Rewriting the comment's
+  position was the smallest change that both keeps the comment's meaning and satisfies the gate;
+  no test behaviour changed (confirmed: same 157/157 tests pass, same coverage numbers before and
+  after).
+
+---
+
+### 25 Oct 2026 · 3.9a budget overrun · decided by lead · risk: low
+- Decided: accept 155 tool calls against a plan budget of 40.
+- Why: a `git checkout --` mistake wiped the uncommitted work and the builder rebuilt it; the final diff is in scope (apps/cli only) and both reviewers approved with no findings above LOW.
+
+---
+
+### 25 Oct 2026 · 3.9a deferred items · decided by lead · risk: low
+- Decided: the db retrieval index switch and the same-topic re-test move to board task 3.9f; the two TypeScript-review LOWs (apps/cli/src/commands/chat.test.ts listener count, apps/cli/src/commands/chat.ts stray prompt) move to 3.9g; the saved-help-state item was already done by 5.8a.
+- Why: the db index work needs packages/db, which another task held; the LOWs are deferred per the fix-only-blockers policy.
+
+---
+
+### 25 Oct 2026 · 3.9a merge · decided by lead · risk: low
+- Decided: merge 3.9a; code-reviewer and typescript-reviewer approved.
+- Why: no risky path is touched, tests use the scripted gateway only, and the gate passed.
+
+---
+
+### 25 Oct 2026 · 11.4h composite FK over trigger · decided by builder · risk: low
+- Decided: used a composite FK (`documents(teacher_id, live_class_id)` -> `live_classes(teacher_id,
+  id)`) rather than a trigger, per the plan's own recommendation.
+- Why: the repo has zero `CREATE TRIGGER`/`CREATE FUNCTION` in any migration; a composite FK is a
+  direct extension of the existing `NOT VALID` -> `VALIDATE` pattern and reuses the exact
+  precedent of migration 0009's `sessions_package_version_fk` referencing a plain unique index
+  (`package_versions_package_id_version_key`), not a named `UNIQUE` constraint.
+
+---
+
+### 25 Oct 2026 · 11.4h cross-teacher test rewritten to insert-is-refused · decided by builder · risk: low
+- Decided: replaced the old "insert then check the join excludes it" test with "the raw insert
+  is refused", asserting `rejects.toThrow(/foreign key/)` (same style as
+  `document-live-class-migration.int.test.ts:101-103`).
+- Why: once the FK exists, the insert itself throws, so the scenario the old test guarded
+  (a cross-teacher row existing but being excluded from the join) can no longer be constructed;
+  no row is ever created, so there is nothing left to check against teacher B's list.
+
+---
+
+### 25 Oct 2026 · 11.4h column-list ON DELETE SET NULL · decided by builder · risk: low
+- Decided: the migration's composite FK uses the Postgres 15+ column-list form, `ON DELETE SET
+  NULL ("live_class_id")`, instead of a plain `ON DELETE SET NULL`. `documents.teacherId`'s
+  schema-level `.onDelete('set null')` call stays as schema-only bookkeeping so `db:generate`
+  remains a no-op; the deployed clause lives only in the hand-edited migration SQL.
+- Why: a plain (non-column-list) `SET NULL` on a composite FK nulls every referencing column,
+  including `teacher_id` — which is `NOT NULL` on `documents` — so deleting a live class would
+  have failed with a not-null violation instead of unlinking the recording. This surfaced as a
+  real test failure (`document-live-class-migration.int.test.ts`'s "refuses a link to a missing
+  class, and unlinks (keeps) recordings when a class is deleted") when first run against the
+  plan's literal `ON DELETE set null` text, and is why the plan's SQL snippet needed this one
+  change. drizzle-orm's `foreignKey().onDelete()` type (`UpdateDeleteAction`) can't express a
+  column list, so this is unavoidably a hand-edit, same category as the existing `NOT VALID`
+  hand-edits in this file.
+
+---
+
+### 25 Oct 2026 · 11.4h schema.test.ts touched, not named in the plan · decided by builder · risk: low
+- Decided: added a `REVIEWED_CONSTRAINT_DROPS` allowlist and a new test in
+  `packages/db/test/schema.test.ts`, which the plan's "Files to modify" list didn't name.
+- Why: `schema.test.ts`'s "migrations are create-only" test flags any `DROP CONSTRAINT` as
+  destructive SQL by default (same `DESTRUCTIVE_SQL` regex `merge_gate.py` uses); the plan's own
+  migration SQL (dropping the old single-column FK) fails that check unless it is reviewed and
+  allowlisted by name, the same way `REVIEWED_INDEX_DROPS` already allowlists reviewed
+  `DROP INDEX` statements in other migrations. Without this, "db typecheck, lint and test green"
+  (the plan's acceptance) is unreachable, so this was a necessary, same-package, in-scope-by-
+  necessity addition rather than an open question.
+
+Also clears chunks for the documents it deletes in the cap test (not spelled out in the plan's
+exact SQL), since `chunks.document_id` -> `documents.id` has no `ON DELETE` action and
+`doc_rec_search` (deleted by the cap-test cleanup) has rows in `chunks` from an earlier test in
+the same block.
+
+---
+
+### 25 Oct 2026 · 11.4h budget overrun · decided by lead · risk: low
+- Decided: accept 88 tool calls against a plan budget of 40.
+- Why: the migration, snapshot, journal, post-migrate step and allowlist changes needed full db gate runs; the diff is in scope and both reviewers approved.
+
+---
+
+### 25 Oct 2026 · 11.4h pre-existing cross-teacher rows · decided by lead · risk: low
+- Decided: no data-fix step before `VALIDATE CONSTRAINT` in packages/db/migrations/0033_document_live_class_teacher.sql; a deployed database with a document linked to another teacher's live class would fail the post-migrate validate step.
+- Why: the documents.live_class_id link is new in M11 and no deployed database holds real data before the pilot; database-reviewer and code-reviewer both rated it acceptable pre-pilot.
+
+---
+
+### 25 Oct 2026 · 11.4h merge · decided by lead · risk: high
+- Decided: merge 11.4h; database-reviewer and code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings.
+- Why: packages/db/migrations/0033_document_live_class_teacher.sql drops the single-column documents.live_class_id foreign key and replaces it with a composite (teacher_id, live_class_id) key added NOT VALID and validated after migration; no rows are deleted, and database-reviewer checked the lock order, column order and the PG 16 support for ON DELETE SET NULL with a column list.
+
+---
+
 ### 25 Oct 2026 · 3.9c warm-up scope is preGuard's matchers only · decided by builder · risk: low
 - Decided: `warmPreGuardPatterns()` warms only `distressKeywordMatch`, `matchModeration` and
   `matchJailbreak` — not mathjs (used by `generate`'s tool-call code, step 8, never preGuard) and
