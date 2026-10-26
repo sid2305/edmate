@@ -69,9 +69,11 @@ const search = (q: string) =>
   repos.retrieval.search(A, { q, allowedModuleIds: [MOD.allowed], k: 50 });
 const chunkCount = async (docId: string) =>
   Number(
-    (await raw.query<{ n: string }>(`select count(*) as n from chunks where document_id = $1`, [
-      docId,
-    ])).rows[0]?.n,
+    (
+      await raw.query<{ n: string }>(`select count(*) as n from chunks where document_id = $1`, [
+        docId,
+      ])
+    ).rows[0]?.n,
   );
 
 /** Waits until some session of this database is blocked on a row lock (the raced insert). */
@@ -244,9 +246,9 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       expect((await rejection(repos.documents.updateStatus(B, id, 'processing'))).kind).toBe(
         'not_found',
       );
-      expect((await rejection(repos.documents.updateStatus(A, 'doc_nope', 'processing'))).kind).toBe(
-        'not_found',
-      );
+      expect(
+        (await rejection(repos.documents.updateStatus(A, 'doc_nope', 'processing'))).kind,
+      ).toBe('not_found');
       expect((await repos.documents.get(A, id))?.status).toBe('uploading');
     });
 
@@ -338,7 +340,10 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       await repos.documents.updateStatus(A, id, 'failed', 'parse_failed');
       const before = await repos.retrieval.revision(A);
 
-      const res = await repos.documents.startReplace(A, id, { storageKey: 'uploads/new.pdf', rightsDeclared: true });
+      const res = await repos.documents.startReplace(A, id, {
+        storageKey: 'uploads/new.pdf',
+        rightsDeclared: true,
+      });
 
       expect(res).toEqual({ previousStorageKey: 'uploads/old.pdf' });
       const row = await repos.documents.get(A, id);
@@ -362,7 +367,10 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         kind: 'transcript',
       });
       expect((await repos.documents.get(A, id))?.kind).toBe('transcript');
-      await repos.documents.startReplace(A, id, { storageKey: 'uploads/kind2.vtt', rightsDeclared: true });
+      await repos.documents.startReplace(A, id, {
+        storageKey: 'uploads/kind2.vtt',
+        rightsDeclared: true,
+      });
       expect((await repos.documents.get(A, id))?.kind).toBe('transcript');
       await repos.documents.startReplace(A, id, {
         storageKey: 'uploads/kind.pdf',
@@ -411,7 +419,10 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         [A, 'doc_nope'],
       ] as const) {
         const err = await rejection(
-          repos.documents.startReplace(scope, target, { storageKey: 'uploads/evil.pdf', rightsDeclared: true }),
+          repos.documents.startReplace(scope, target, {
+            storageKey: 'uploads/evil.pdf',
+            rightsDeclared: true,
+          }),
         );
         expect(err.kind).toBe('not_found');
       }
@@ -531,7 +542,10 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
 
     it('is stale and writes nothing once a replace changed the key', async () => {
       const id = await doc([], 'uploads/before.pdf');
-      await repos.documents.startReplace(A, id, { storageKey: 'uploads/after.pdf', rightsDeclared: true });
+      await repos.documents.startReplace(A, id, {
+        storageKey: 'uploads/after.pdf',
+        rightsDeclared: true,
+      });
       const before = await repos.retrieval.revision(A);
       const res = await repos.chunks.insertManyIfStorageKey(A, id, 'uploads/before.pdf', draft);
       expect(res).toEqual({ stale: true });
@@ -583,7 +597,9 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
     it('rejects a bad key before any SQL', async () => {
       const id = await doc([]);
       for (const key of ['', 'k'.repeat(1025), 7]) {
-        const err = await rejection(repos.chunks.insertManyIfStorageKey(A, id, key as never, draft));
+        const err = await rejection(
+          repos.chunks.insertManyIfStorageKey(A, id, key as never, draft),
+        );
         expect(err.kind).toBe('invalid');
       }
     });
@@ -660,7 +676,10 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
 
     it('startReplace keeps the link', async () => {
       await repos.documents.create(A, recording('doc_rec_replace', LC_PAST));
-      await repos.documents.startReplace(A, 'doc_rec_replace', { storageKey: 'uploads/v2.vtt', rightsDeclared: true });
+      await repos.documents.startReplace(A, 'doc_rec_replace', {
+        storageKey: 'uploads/v2.vtt',
+        rightsDeclared: true,
+      });
       expect(await linkOf('doc_rec_replace')).toBe(LC_PAST);
     });
 
@@ -758,14 +777,47 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
     });
 
     it('listRecordingsForTeacher rejects a bad scope before any SQL', async () => {
-      const err = await rejection(
-        repos.liveClasses.listRecordingsForTeacher({ teacherId: '' }),
-      );
+      const err = await rejection(repos.liveClasses.listRecordingsForTeacher({ teacherId: '' }));
       expect(err.kind).toBe('scope');
     });
 
-    it('caps listRecordingsForTeacher at RECORDING_LIST_MAX', () => {
-      expect(RECORDING_LIST_MAX).toBe(500);
+    it('caps listRecordingsForTeacher at RECORDING_LIST_MAX, dropping only the oldest', async () => {
+      await raw.query(
+        `insert into documents (id, teacher_id, module_id, kind, source_title, live_class_id, created_at)
+           select 'doc_cap_' || g, $1, $2, 'transcript', 'cap test', $3,
+                  now() + (g * interval '1 second')
+             from generate_series(1, $4) as g`,
+        [RA, MOD.allowed, LC_PAST, RECORDING_LIST_MAX + 1],
+      );
+      try {
+        const mine = await repos.liveClasses.listRecordingsForTeacher(A);
+        expect(mine).toHaveLength(RECORDING_LIST_MAX);
+        const ids = mine.map((r) => r.documentId);
+        expect(ids).not.toContain('doc_cap_1');
+        expect(ids).toContain(`doc_cap_${RECORDING_LIST_MAX + 1}`);
+      } finally {
+        await raw.query(`delete from documents where id like 'doc_cap_%'`);
+      }
+    });
+
+    it("listRecordingsForTeacher's join only matches the scope's own live class, not another teacher's", async () => {
+      await raw.query(
+        `insert into documents (id, teacher_id, module_id, kind, source_title, live_class_id)
+           values ('doc_rec_cross', $1, $2, 'transcript', 'Cross-teacher link', $3)`,
+        [RA, MOD.allowed, LC_B],
+      );
+      try {
+        const mineIds = (await repos.liveClasses.listRecordingsForTeacher(A)).map(
+          (r) => r.documentId,
+        );
+        expect(mineIds).not.toContain('doc_rec_cross');
+        const theirIds = (await repos.liveClasses.listRecordingsForTeacher(B)).map(
+          (r) => r.documentId,
+        );
+        expect(theirIds).not.toContain('doc_rec_cross');
+      } finally {
+        await raw.query(`delete from documents where id = 'doc_rec_cross'`);
+      }
     });
   });
 
