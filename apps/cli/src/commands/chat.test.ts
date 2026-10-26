@@ -5,7 +5,7 @@
 // error path, and asserts the message never echoes an environment value.
 import { randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
-import type { TurnEvent } from '@edmate/contracts';
+import type { ModelGateway, TurnEvent } from '@edmate/contracts';
 import {
   adviceJudgeGateway,
   CLEAN_ADVICE_VERDICT,
@@ -20,8 +20,7 @@ import { buildChatDeps, slackClock, type ChatDepsOptions } from './chat/deps.js'
 
 // Task 3.9b: on a loaded CI runner the cold first turn overran preGuard's 400 ms budget on the real
 // clock and ended in an `error` event. Tests widen every step budget 10x; production is unchanged.
-const slackBuildDeps = (opts: ChatDepsOptions) =>
-  buildChatDeps({ ...opts, clock: slackClock(10) });
+const slackBuildDeps = (opts: ChatDepsOptions) => buildChatDeps({ ...opts, clock: slackClock(10) });
 
 function capture() {
   const out: string[] = [];
@@ -40,7 +39,13 @@ function linesStream(lines: readonly string[]): Readable {
 const say = (text: string) => ({ type: 'text' as const, text });
 const used = {
   type: 'usage' as const,
-  usage: { model: 'claude-haiku-4-5', tier: 'main' as const, inputTokens: 10, outputTokens: 10, costMicroUsd: 1 },
+  usage: {
+    model: 'claude-haiku-4-5',
+    tier: 'main' as const,
+    inputTokens: 10,
+    outputTokens: 10,
+    costMicroUsd: 1,
+  },
 };
 
 /** Scripted enough for several turns: one classifier match per turn (never consumed twice). */
@@ -51,9 +56,20 @@ function scriptedChatGateway(
   const scripted = new ScriptedGateway(
     {
       generateObject: Array.from({ length: turns }, () => [
-        { match: (req: { system: string }) => req.system.includes('thoughts of suicide or self-harm'), value: { distress: false } },
-        { match: (req: { system: string }) => req.system.includes('self_harm (wants to hurt themselves)'), value: { category: 'none' } },
-        { match: (req: { system: string }) => req.system.includes('jailbreak_override'), value: { category: 'none' } },
+        {
+          match: (req: { system: string }) =>
+            req.system.includes('thoughts of suicide or self-harm'),
+          value: { distress: false },
+        },
+        {
+          match: (req: { system: string }) =>
+            req.system.includes('self_harm (wants to hurt themselves)'),
+          value: { category: 'none' },
+        },
+        {
+          match: (req: { system: string }) => req.system.includes('jailbreak_override'),
+          value: { category: 'none' },
+        },
       ]).flat(),
       stream: Array.from({ length: turns }, () => ({
         steps: [say(reply), used],
@@ -84,21 +100,36 @@ describe('edmate chat bad input', () => {
 
   it('rejects an unknown --package value', async () => {
     const rec = capture();
-    const code = await runChatCommand(['--package', 'bogus'], rec.io, { env: {}, cwd: '.' }, linesStream([]));
+    const code = await runChatCommand(
+      ['--package', 'bogus'],
+      rec.io,
+      { env: {}, cwd: '.' },
+      linesStream([]),
+    );
     expect(code).toBe(1);
     expect(rec.err.join('')).toContain("--package must be 'free' or 'paid'");
   });
 
   it('rejects an unknown --source value', async () => {
     const rec = capture();
-    const code = await runChatCommand(['--source', 'bogus'], rec.io, { env: {}, cwd: '.' }, linesStream([]));
+    const code = await runChatCommand(
+      ['--source', 'bogus'],
+      rec.io,
+      { env: {}, cwd: '.' },
+      linesStream([]),
+    );
     expect(code).toBe(1);
-    expect(rec.err.join('')).toContain("--source must be");
+    expect(rec.err.join('')).toContain('--source must be');
   });
 
   it('rejects an unknown --agent id (this demo has exactly one agent)', async () => {
     const rec = capture();
-    const code = await runChatCommand(['--agent', 'someone-else'], rec.io, { env: {}, cwd: '.' }, linesStream([]));
+    const code = await runChatCommand(
+      ['--agent', 'someone-else'],
+      rec.io,
+      { env: {}, cwd: '.' },
+      linesStream([]),
+    );
     expect(code).toBe(1);
     expect(rec.err.join('')).toContain('unknown agent');
   });
@@ -122,28 +153,24 @@ describe('edmate chat: missing key', () => {
 });
 
 describe('edmate chat: a scripted multi-turn session', () => {
-  it(
-    'streams a free-package reply with sources, then locks a module outside the free package',
+  it('streams a free-package reply with sources, then locks a module outside the free package', async () => {
     // Real demo-teacher content + a full harness turn; on CI the first-import cost of the
     // harness (mathjs, access) can eat most of the default 5000ms budget. See 5.5a follow-up.
-    async () => {
-      const rec = capture();
-      const code = await runChatCommand(
-        ['--package', 'free', '--source', 'teacher_preview'],
-        rec.io,
-        { env: {}, cwd: '.', gateway: scriptedChatGateway(2), buildDeps: slackBuildDeps },
-        linesStream(['What is a variable?', 'Teach me loops please', 'exit']),
-      );
-      expect(code).toBe(0);
-      const text = rec.out.join('');
-      expect(rec.err).toEqual([]);
-      expect(text).toContain('A variable stores a value');
-      expect(text).toContain('[sources:');
-      expect(text).toContain('[locked');
-      expect(text).toContain('bye');
-    },
-    20000,
-  );
+    const rec = capture();
+    const code = await runChatCommand(
+      ['--package', 'free', '--source', 'teacher_preview'],
+      rec.io,
+      { env: {}, cwd: '.', gateway: scriptedChatGateway(2), buildDeps: slackBuildDeps },
+      linesStream(['What is a variable?', 'Teach me loops please', 'exit']),
+    );
+    expect(code).toBe(0);
+    const text = rec.out.join('');
+    expect(rec.err).toEqual([]);
+    expect(text).toContain('A variable stores a value');
+    expect(text).toContain('[sources:');
+    expect(text).toContain('[locked');
+    expect(text).toContain('bye');
+  }, 20000);
 
   it('skips a blank line and keeps prompting', async () => {
     const rec = capture();
@@ -170,6 +197,63 @@ describe('edmate chat: a scripted multi-turn session', () => {
   });
 });
 
+/** Holds `inner`'s first `generateObject` call open until `until` resolves, and calls
+ * `firstCallReached` the moment that call starts -- so a test can wait for the exact point the
+ * turn pipeline reaches its first classifier call (no timing guess) before sending Ctrl+C. */
+function gatewayHeldUntil(
+  inner: ModelGateway,
+  firstCallReached: () => void,
+  until: Promise<void>,
+): ModelGateway {
+  let first = true;
+  return {
+    stream: (req) => inner.stream(req),
+    generateObject: async (req, schema) => {
+      if (first) {
+        first = false;
+        firstCallReached();
+        await until;
+      }
+      return inner.generateObject(req, schema);
+    },
+    embed: (texts) => inner.embed(texts),
+  };
+}
+
+describe('edmate chat: Ctrl+C (SIGINT)', () => {
+  it('mid-turn cancels the in-flight turn, closes readline and exits cleanly with bye, sending no further turns', async () => {
+    let markReached: () => void;
+    const reached = new Promise<void>((resolve) => {
+      markReached = resolve;
+    });
+    let release = () => {};
+    const until = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gateway = gatewayHeldUntil(scriptedChatGateway(2), () => markReached(), until);
+
+    const rec = capture();
+    const promise = runChatCommand(
+      ['--package', 'free'],
+      rec.io,
+      { env: {}, cwd: '.', gateway, buildDeps: slackBuildDeps },
+      linesStream(['What is a variable?', 'Teach me loops please', 'exit']),
+    );
+
+    await reached;
+    process.emit('SIGINT', 'SIGINT');
+    release();
+
+    const code = await promise;
+    expect(code).toBe(0);
+    const text = rec.out.join('');
+    expect(rec.err).toEqual([]);
+    expect(text).toContain('bye');
+    // The second line's turn never ran: readline was closed by the SIGINT handler.
+    expect(text).not.toContain('A variable stores a value');
+  }, 20000);
+});
+
 describe('renderEvent', () => {
   function render(e: TurnEvent): string {
     const out: string[] = [];
@@ -179,7 +263,9 @@ describe('renderEvent', () => {
 
   it('renders every event type without throwing', () => {
     expect(render({ type: 'token', text: 'hi' })).toBe('hi');
-    expect(render({ type: 'sources', items: [{ title: 'Notes', locator: '¶1', kind: 'material' }] })).toContain('Notes');
+    expect(
+      render({ type: 'sources', items: [{ title: 'Notes', locator: '¶1', kind: 'material' }] }),
+    ).toContain('Notes');
     expect(render({ type: 'hint_rung', rung: 2 })).toContain('2');
     expect(render({ type: 'locked', packageName: 'Paid plan' })).toContain('Paid plan');
     expect(render({ type: 'locked' })).toContain('locked');
@@ -188,7 +274,9 @@ describe('renderEvent', () => {
     expect(render({ type: 'safety', level: 'alert' })).toContain('alert');
     expect(render({ type: 'replace', text: '' })).toContain('withdrawn');
     expect(render({ type: 'replace', text: 'new text' })).toContain('new text');
-    expect(render({ type: 'error', code: 'provider_error', retryable: true })).toContain('provider_error');
+    expect(render({ type: 'error', code: 'provider_error', retryable: true })).toContain(
+      'provider_error',
+    );
     expect(render({ type: 'done', messageId: 'm_1', usage: [] })).toBe('\n');
   });
 });
@@ -214,23 +302,31 @@ describe('chatTurnInput (5.8a role-play mode)', () => {
     expect(out.notice).toBeUndefined();
   });
 
-  it.each(['/roleplay', '/roleplay   ', '/roleplay a b', '/roleplay job-interview@1.0.0', '/roleplay ../x'])(
-    'refuses %j locally with a usage line and sends no turn',
-    (line) => {
-      for (const state of [NORMAL, ROLEPLAY]) {
-        const out = chatTurnInput(state, line, IDS, now);
-        expect(out.input).toBeUndefined();
-        expect(out.state).toEqual(state);
-        expect(out.notice).toMatch(/usage: \/roleplay <persona-id>/u);
-      }
-    },
-  );
+  it.each([
+    '/roleplay',
+    '/roleplay   ',
+    '/roleplay a b',
+    '/roleplay job-interview@1.0.0',
+    '/roleplay ../x',
+  ])('refuses %j locally with a usage line and sends no turn', (line) => {
+    for (const state of [NORMAL, ROLEPLAY]) {
+      const out = chatTurnInput(state, line, IDS, now);
+      expect(out.input).toBeUndefined();
+      expect(out.state).toEqual(state);
+      expect(out.notice).toMatch(/usage: \/roleplay <persona-id>/u);
+    }
+  });
 
   it.each(['A variable names a value.', '/pause need help', 'stop', 'I would use a list.'])(
     'in role-play mode sends %j as a mock_interview message',
     (line) => {
       const out = chatTurnInput(ROLEPLAY, line, IDS, now);
-      expect(out.input).toStrictEqual({ ...base, kind: 'message', skill: 'mock_interview', text: line });
+      expect(out.input).toStrictEqual({
+        ...base,
+        kind: 'message',
+        skill: 'mock_interview',
+        text: line,
+      });
       expect(out.state).toEqual(ROLEPLAY);
     },
   );
@@ -246,7 +342,10 @@ describe('chatTurnInput (5.8a role-play mode)', () => {
 
   it('/leave now (trailing words) still leaves the role-play, matching on the first word', () => {
     const out = chatTurnInput(ROLEPLAY, '/leave now', IDS, now);
-    expect(out).toEqual({ state: { mode: 'normal' }, notice: 'left the role-play; back to normal chat' });
+    expect(out).toEqual({
+      state: { mode: 'normal' },
+      notice: 'left the role-play; back to normal chat',
+    });
   });
 
   it('/leave outside role-play only says so', () => {
@@ -265,42 +364,40 @@ describe('chatTurnInput (5.8a role-play mode)', () => {
 });
 
 describe('edmate chat: a scripted role-play session (5.8a)', () => {
-  it(
-    'sends every role-play line with the mock_interview skill until /leave',
-    async () => {
-      // No citation: a role-play start retrieves no material, so a cited reply would be rewritten.
-      const spy = spyGateway(scriptedChatGateway(5, 'Welcome. First question: what does a variable hold?'));
-      const rec = capture();
-      const code = await runChatCommand(
-        ['--package', 'paid'],
-        rec.io,
-        { env: {}, cwd: '.', gateway: spy, buildDeps: slackBuildDeps },
-        linesStream([
-          '/roleplay job-interview@1.0.0',
-          '/roleplay job-interview',
-          'A variable names a value.',
-          '/pause need help',
-          'stop',
-          '/leave',
-          'What is a variable?',
-          'exit',
-        ]),
-      );
-      expect(code).toBe(0);
-      expect(rec.err).toEqual([]);
-      const text = rec.out.join('');
-      expect(text).toContain('/roleplay <persona-id>');
-      expect(text).toContain('usage: /roleplay <persona-id>');
-      const mains = spy.requests.filter((r) => r.tier === 'main').map((r) => r.system);
-      expect(mains).toHaveLength(5);
-      for (const system of mains.slice(0, 4)) {
-        expect(system).toContain('Skill: mock interview');
-        expect(system).toContain('[[PERSONA]]');
-      }
-      expect(mains[4]).not.toContain('Skill: mock interview');
-    },
-    30000,
-  );
+  it('sends every role-play line with the mock_interview skill until /leave', async () => {
+    // No citation: a role-play start retrieves no material, so a cited reply would be rewritten.
+    const spy = spyGateway(
+      scriptedChatGateway(5, 'Welcome. First question: what does a variable hold?'),
+    );
+    const rec = capture();
+    const code = await runChatCommand(
+      ['--package', 'paid'],
+      rec.io,
+      { env: {}, cwd: '.', gateway: spy, buildDeps: slackBuildDeps },
+      linesStream([
+        '/roleplay job-interview@1.0.0',
+        '/roleplay job-interview',
+        'A variable names a value.',
+        '/pause need help',
+        'stop',
+        '/leave',
+        'What is a variable?',
+        'exit',
+      ]),
+    );
+    expect(code).toBe(0);
+    expect(rec.err).toEqual([]);
+    const text = rec.out.join('');
+    expect(text).toContain('/roleplay <persona-id>');
+    expect(text).toContain('usage: /roleplay <persona-id>');
+    const mains = spy.requests.filter((r) => r.tier === 'main').map((r) => r.system);
+    expect(mains).toHaveLength(5);
+    for (const system of mains.slice(0, 4)) {
+      expect(system).toContain('Skill: mock interview');
+      expect(system).toContain('[[PERSONA]]');
+    }
+    expect(mains[4]).not.toContain('Skill: mock interview');
+  }, 30000);
 
   it('says role-play is unavailable when no personas loaded', async () => {
     const rec = capture();
@@ -333,7 +430,11 @@ describe('edmate chat: a scripted role-play session (5.8a)', () => {
         gateway: scriptedChatGateway(1),
         buildDeps: async (opts) => {
           const setup = await slackBuildDeps(opts);
-          return { ...setup, personasSource: 'none', personasReason: '/no/such/dir: no such persona-template directory' };
+          return {
+            ...setup,
+            personasSource: 'none',
+            personasReason: '/no/such/dir: no such persona-template directory',
+          };
         },
       },
       linesStream(['exit']),
