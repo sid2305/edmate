@@ -43,6 +43,18 @@ No change to `packages/db/src/repositories/**` — no bug was found.
   (reviewer's MEDIUM and LOW) is fully addressed by the two tests added, and skipping kept the
   build inside its ~40 tool-call budget.
 
+### 25 Oct 2026 · 9.3d budget · decided by lead · risk: low
+- Decided: accept 73 tool calls (49 build plus 24 fix, harness counts) against a planned 60 (40 build plus 20 fix).
+- Why: the concurrency test needed a second connection holding a row lock and a bounded poll on pg_stat_activity, and the fix round re-ran the full db integration suite; the overrun is small and bought a test that proves the rejection race.
+
+### 25 Oct 2026 · 9.3d fix round alongside another packages/db builder · decided by lead · risk: low
+- Decided: run the 9.3d fix round (packages/db/test/repositories.int.test.ts only) while the 11.4e builder worked in packages/db/test/documents.int.test.ts.
+- Why: the one-builder-per-package rule exists to stop two builders editing shared files; these were different test files with unique fixture ids and per-file test databases, and waiting would have stalled 9.3d for a test-only cleanup fix.
+
+### 25 Oct 2026 · 9.3d merge · decided by lead · risk: low
+- Decided: merge 9.3d (a concurrent-rejection test proving subscriptions.start waits on the teacher row lock and writes nothing when the teacher is rejected meanwhile, plus a pending-teacher test) after one fix round.
+- Why: test-only change in packages/db/test, not a risky path; the typescript-reviewer HIGH (an abandoned start() could leak a subscriptions row if the poll assertion failed) is fixed and re-approved, and database-reviewer and code-reviewer approved.
+
 ## Gate
 
 - `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/db...`
@@ -92,4 +104,4 @@ Tool calls used: 14
 
 ## Budget
 
-Tool calls used: 32 (original build) + 14 (fix round)
+Tool calls used: 73 (harness count: 49 build + 24 fix; the builders reported 32 + 14)
