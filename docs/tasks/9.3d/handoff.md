@@ -60,6 +60,36 @@ No change to `packages/db/src/repositories/**` — no bug was found.
   files use Prettier code style (after one `--write` to fix pre-existing drift).
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
+## Fix round
+
+Fixed a HIGH raised by typescript-reviewer: in the concurrent-rejection test, if the bounded
+poll's `expect(waiting, ...).toBe(true)` (~line 4953) throws, control used to jump to `finally`
+while the unawaited `repos.subscriptions.start(...)` promise (`started`) was still in flight.
+`finally` rolled back `locker` before `started` had a chance to resolve, so an abandoned `start()`
+could insert a real `subscriptions` row for `stu_93d` that nothing cleaned up.
+
+Fix: `started` and a `startedSettled` flag are now declared outside the `try` block so `finally`
+can see them. `started.finally(() => { startedSettled = true; })` tracks completion without
+blocking. In `finally`, after releasing `locker` (`rollback` then `end`), if `started` never
+settled on its own we `await started.catch(() => {})` so it can't outlive the test, then delete
+any `subscriptions`/`audit_log` rows for `stu_93d` (a fixture id unique to this test) as a
+belt-and-suspenders cleanup for the abandoned-insert case. The happy path is unchanged: when the
+test reaches its own `await started`, `startedSettled` is already true by the time `finally`
+runs, so the extra `await` and deletes are no-ops.
+
+Also removed the dead `pg_stat_clear_snapshot()` call inside the poll loop (LOW, same reviewer).
+
+## Gate (fix round)
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/db...`
+  → `Tasks: 26 successful, 26 total`; int tests ran (not skipped) — coverage confirms
+  `subscriptions.ts` at 100/100/100/100 and `src/repositories` overall 100/98.45/100/100.
+- `corepack pnpm exec prettier --check packages/db/test/repositories.int.test.ts` → all matched
+  files use Prettier code style.
+- `python3 .githooks/secret-scan.py --all` → clean, no output.
+
+Tool calls used: 14
+
 ## Budget
 
-Tool calls used: 32
+Tool calls used: 32 (original build) + 14 (fix round)

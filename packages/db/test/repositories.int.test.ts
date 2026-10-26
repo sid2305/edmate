@@ -4909,6 +4909,8 @@ describe.skipIf(!up)(
 
       const locker = new pg.Client({ connectionString: TEST_URL });
       await locker.connect();
+      let started: Promise<unknown> | undefined;
+      let startedSettled = false;
       try {
         await locker.query('begin');
         await locker.query('select 1 from teacher_profiles where user_id = $1 for update', [
@@ -4920,7 +4922,7 @@ describe.skipIf(!up)(
         );
 
         const before = await snapshot();
-        const started = repos.subscriptions
+        started = repos.subscriptions
           .start(scope, {
             packageVersionId: 'pv_93d',
             status: 'active',
@@ -4930,12 +4932,14 @@ describe.skipIf(!up)(
             (r) => r,
             (e: unknown) => e,
           );
+        started.finally(() => {
+          startedSettled = true;
+        });
 
         // Bounded poll (up to 2s): start's `for share of teacherProfiles` must be waiting on
         // locker's uncommitted `for update`, not racing ahead on a stale read.
         let waiting = false;
         for (let i = 0; i < 200; i++) {
-          await raw.query('select pg_stat_clear_snapshot()');
           const n = await rawCount(
             `select count(*)::int as n from pg_stat_activity
                where datname = current_database() and wait_event_type = 'Lock'`,
@@ -4967,6 +4971,11 @@ describe.skipIf(!up)(
       } finally {
         await locker.query('rollback').catch(() => {});
         await locker.end();
+        if (started && !startedSettled) {
+          await started.catch(() => {});
+        }
+        await raw.query('delete from subscriptions where student_id = $1', ['stu_93d']);
+        await raw.query('delete from audit_log where student_id = $1', ['stu_93d']);
       }
     }, 10000);
 
