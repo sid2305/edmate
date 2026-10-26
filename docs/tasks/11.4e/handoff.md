@@ -39,6 +39,18 @@ unchanged); `git diff` against `packages/db/src/repositories/live-classes.ts` is
   blocks the cross-teacher row; it did not, so the real assertion (the join excludes the row)
   is the one that matters and is exercised.
 
+### 25 Oct 2026 · 11.4e deferred review findings · decided by lead · risk: low
+- Decided: defer the code-reviewer MEDIUM (no database guard stops documents.live_class_id pointing at another teacher's live class) and the typescript-reviewer LOWs (the cap test's arithmetic includes earlier linked documents; the teacher-B half of the cross-teacher test is only a sanity check) to new board task 11.4h.
+- Why: none is a defect in this test-only change; repository writes already refuse cross-teacher links (chunks.ts:337), so the database guard is defence in depth and needs its own migration and database review.
+
+### 25 Oct 2026 · 11.4e budget · decided by lead · risk: low
+- Decided: accept 164 tool calls (harness count) against a planned 30; future builder briefs say to run the db test suite in the foreground with a timeout and never poll a log file with repeated tail calls.
+- Why: about 150 of the calls were Bash, mostly repeated `tail` reads of a background test log while the suite ran; the work itself was small, and the change is correct, so re-running it would cost more than accepting it.
+
+### 25 Oct 2026 · 11.4e merge · decided by lead · risk: low
+- Decided: merge 11.4e (a recordings cap test that bulk-inserts RECORDING_LIST_MAX+1 linked documents and a cross-teacher join test, both in packages/db/test/documents.int.test.ts) with no fix round.
+- Why: test-only change, not a risky path; code-reviewer and typescript-reviewer approved, and the builder showed each test fails with the cap or the join's teacher clause removed.
+
 ## Gate
 
 - `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/db...`
@@ -52,4 +64,4 @@ unchanged); `git diff` against `packages/db/src/repositories/live-classes.ts` is
 
 ## Budget
 
-Tool calls used: 34
+Tool calls used: 164 (harness count; the builder reported 34)
