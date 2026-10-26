@@ -71,14 +71,25 @@ const NOT_A_PHONE = /^(?:\d{4}-\d{2}-\d{2}|\d+\.\d+)$/;
  * must not be redacted by PHONE_CANDIDATE; see 8.7h.
  */
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu;
+/**
+ * A `<prefix>_<rest>` id token (`rp_<hex40>`, `tch_93d`, `doc_cap_501`, `se_<hash>`): a run of
+ * `[A-Za-z0-9]` containing at least one `_`, bounded by characters outside the contracts id
+ * alphabet `[A-Za-z0-9_-]` (packages/contracts/src/formats.ts). A digit run inside such a token
+ * was never redacted before 8.7m either (the leading `_` or the preceding letter blocked it), so
+ * excluding the whole token here is not a regression, just the same result reached a different
+ * way now that a letter alone no longer blocks the match.
+ */
+const PREFIXED_ID = /(?<![A-Za-z0-9_-])[A-Za-z0-9]+_[A-Za-z0-9_-]*(?![A-Za-z0-9_-])/g;
+/** A bare hex digest (content hash), 32+ hex characters bounded by non-alphanumerics. */
+const HEX_DIGEST = /(?<![A-Za-z0-9])[0-9a-fA-F]{32,}(?![A-Za-z0-9])/g;
 
-/** Half-open [start, end) character spans covered by a UUID-shaped run in `s`. */
-function uuidSpans(s: string): Array<[number, number]> {
+/** Half-open [start, end) character spans covered by a match of `re` in `s`. */
+function matchSpans(re: RegExp, s: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   // `String.replace`'s callback gets the match offset as a plain `number` (no `| undefined`,
   // unlike `RegExpMatchArray.index`), so this collects spans without a cast; the string itself is
   // returned unchanged.
-  s.replace(UUID, (m: string, offset: number) => {
+  s.replace(re, (m: string, offset: number) => {
     spans.push([offset, offset + m.length]);
     return m;
   });
@@ -91,11 +102,15 @@ function coveredBy(start: number, end: number, spans: Array<[number, number]>): 
 }
 
 /** The string with every email-like and phone-like part replaced by REDACTED. UUID-shaped runs
- *  (whole value or embedded) are never treated as phone numbers, even when a group inside them is
- *  all digits. */
+ *  (whole value or embedded), prefixed id tokens and bare hex digests are never treated as phone
+ *  numbers, even when a digit run inside them is 7 or more digits long. */
 function redactString(s: string): string {
   const afterEmail = s.replace(EMAIL, REDACTED);
-  const spans = uuidSpans(afterEmail);
+  const spans = [
+    ...matchSpans(UUID, afterEmail),
+    ...matchSpans(PREFIXED_ID, afterEmail),
+    ...matchSpans(HEX_DIGEST, afterEmail),
+  ];
   return afterEmail.replace(PHONE_CANDIDATE, (m: string, offset: number) => {
     if (coveredBy(offset, offset + m.length, spans)) return m;
     const digits = m.replace(/\D/g, '').length;

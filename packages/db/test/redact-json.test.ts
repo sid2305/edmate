@@ -1,7 +1,12 @@
 // Unit (no database): redactPersonalData scrubs personal keys out of audit before/after payloads.
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from '../src/index.js';
+
+/** A fake `rp_<hex40>`-shaped id, same shape as reportRowId (packages/db/src/repositories/reports.ts). */
+function fakeReportRowId(): string {
+  return `rp_${randomBytes(20).toString('hex')}`;
+}
 
 describe('redactPersonalData', () => {
   it('replaces denylisted keys at the top level', () => {
@@ -329,11 +334,52 @@ describe('redactPersonalData', () => {
   // word boundary) and the whole run is treated as one phone-shaped candidate. Decision (8.7m):
   // this over-redacts the UUID along with the phone number rather than risk leaving any phone
   // digit behind; the phone digits must never survive, and here they do not.
+  // This case passes on the pre-8.7m code too (the merged run was already fully digit-and-dash,
+  // never glued to a letter): it guards the fail-closed invariant, not new 8.7m behaviour.
   it('redacts a UUID with a 10-digit phone number glued on with no separator', () => {
     const glued = '12345678-1234-4234-8234-1234567890125550100199';
     const out = redactPersonalData({ note: glued }) as { note: string };
     expect(out.note).toBe(REDACTED);
     expect(out.note).not.toMatch(/5550100199/);
+  });
+
+  // 8.7m follow-up (typescript-reviewer MEDIUM): a letter glued directly onto a UUID with no
+  // separator breaks the UUID regex's leading `\b` (letter-then-digit is not a word boundary), so
+  // PHONE_CANDIDATE's now-wider lookbehind treats the whole digit-and-dash run as one phone-shaped
+  // candidate and redacts it, even though there is no phone number here. This is an accepted
+  // trade-off (same reasoning as the glued-phone case above: over-redact rather than risk a real
+  // phone digit surviving), not a bug; flagged in the 8.7m handoff.
+  it('over-redacts a letter glued directly onto a UUID with no separator (accepted trade-off)', () => {
+    const glued = 'id12345678-1234-4234-8234-123456789012';
+    expect(redactPersonalData({ note: glued })).toEqual({ note: `id${REDACTED}` });
+  });
+
+  // 8.7m fix round: report row ids (rp_<hex40>, packages/db/src/repositories/reports.ts) and other
+  // <prefix>_<hash> ids must never be redacted, even when the hex digest has a letter followed by
+  // PHONE_MIN_DIGITS+ digits (about 3.65% of random 40-hex digests). Property test, same technique
+  // as the randomUUID one above; shown to fail on the pre-fix code (a letter-then-digit run inside
+  // the hash was redacted).
+  it('keeps 10,000 random report row ids unredacted (property test)', () => {
+    for (let i = 0; i < 10_000; i += 1) {
+      const id = fakeReportRowId();
+      expect(redactPersonalData(id)).toBe(id);
+      expect(
+        redactPersonalData({ reportId: id, before: { id, status: 'open' }, after: { id } }),
+      ).toEqual({ reportId: id, before: { id, status: 'open' }, after: { id } });
+    }
+  });
+
+  it('keeps a bare 64-character hex digest unredacted', () => {
+    const digest = randomBytes(32).toString('hex');
+    expect(redactPersonalData({ note: digest })).toEqual({ note: digest });
+    expect(redactPersonalData(digest)).toBe(digest);
+  });
+
+  it('still redacts a phone number that sits next to, not inside, a prefixed id', () => {
+    const id = 'rp_1234567890123456789012345678901234567890';
+    expect(redactPersonalData({ note: `${id} call 555-010-0199` })).toEqual({
+      note: `${id} call ${REDACTED}`,
+    });
   });
 
   it('keeps a __proto__ key as data, without touching the prototype', () => {

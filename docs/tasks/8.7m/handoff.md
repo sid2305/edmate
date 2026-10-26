@@ -71,3 +71,47 @@ Status: DONE
 ## Budget
 
 Tool calls used: 24
+
+## Fix round
+
+- `packages/db/src/repositories/redact-json.ts`
+  - Added `PREFIXED_ID` (`<prefix>_<rest>` tokens like `rp_<hex40>`, `tch_93d`, `doc_cap_501`,
+    bounded by characters outside the contracts id alphabet `[A-Za-z0-9_-]`) and `HEX_DIGEST`
+    (bare 32+ char hex digests bounded by non-alphanumerics) as additional exempt spans, same
+    technique as `uuidSpans`. Renamed `uuidSpans` to the generic `matchSpans(re, s)` and call it
+    for all three regexes; `redactString` unions their spans before scanning `PHONE_CANDIDATE`.
+    Fixes: `PHONE_CANDIDATE`'s widened lookbehind (8.7m) now redacts a digit run of
+    `PHONE_MIN_DIGITS`+ that follows a letter, which corrupted `rp_`-prefixed report row ids
+    (`reportRowId`, `reports.ts:63`) and other `<prefix>_<hash>` ids stored in audit `before`/
+    `after` JSON whenever the hex digest had a letter followed by 7+ digits (about 3.65% of
+    random 40-hex digests). The comment on `PREFIXED_ID` notes this is not a regression: a digit
+    run inside such a token was never redacted before 8.7m either (the `_` or the preceding
+    letter blocked it).
+- `packages/db/test/redact-json.test.ts`
+  - Added a 10,000-iteration property test for random `rp_`-shaped report row ids (whole value
+    and inside an audit-shaped object); verified by hand that it fails on the pre-fix code
+    (stashed the `.ts` change, ran just this test, saw the hash corrupted, restored the fix,
+    reran green).
+  - Added: a 64-hex bare digest survives; a phone next to (not inside) a prefixed id is still
+    redacted; an accepted-trade-off test for a letter glued directly onto a UUID with no
+    separator (typescript-reviewer MEDIUM); a one-line comment on the existing glued-UUID-and-
+    phone test noting it already passed pre-8.7m and guards the fail-closed invariant, not new
+    8.7m behaviour (typescript-reviewer LOW).
+
+### 25 Oct 2026 · 8.7m fix round: prefixed-id and hex-digest spans are exempt from PHONE_CANDIDATE · decided by builder · risk: low
+- Decided: treat whole `<prefix>_<rest>` id tokens and bare 32+ char hex digests as exempt spans,
+  the same way UUID-shaped runs already are, instead of narrowing `PHONE_CANDIDATE`'s lookbehind
+  further.
+- Why: narrowing the lookbehind back to block letters would undo the 8.7m fix (glued phone
+  numbers like `abc5551234567` would stop being redacted again); excluding the specific id/hash
+  shapes that need protecting keeps both behaviours and stays a single linear scan per regex (no
+  nested quantifiers).
+
+## Fix round gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` → 26/26 tasks successful;
+  `redact-json.ts` still at 100% statements/branches/functions/lines.
+- `corepack pnpm exec prettier --check packages/db/src/repositories/redact-json.ts packages/db/test/redact-json.test.ts` → "All matched files use Prettier code style!"
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+
+Tool calls used: 20
