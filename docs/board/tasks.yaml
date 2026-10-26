@@ -8757,8 +8757,9 @@ tasks:
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
-  status: planning
-  model: plan:sonnet
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/3.9a-cli-chat-followups
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against
