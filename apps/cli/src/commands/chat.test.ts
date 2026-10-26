@@ -186,6 +186,7 @@ describe('edmate chat: a scripted multi-turn session', () => {
 
   it('ends cleanly when stdin closes without "exit"', async () => {
     const rec = capture();
+    const before = process.listenerCount('SIGINT');
     const code = await runChatCommand(
       [],
       rec.io,
@@ -194,6 +195,8 @@ describe('edmate chat: a scripted multi-turn session', () => {
     );
     expect(code).toBe(0);
     expect(rec.out.join('')).toContain('bye');
+    // 3.9g (typescript-review LOW): the run's own SIGINT listener is removed on normal exit too.
+    expect(process.listenerCount('SIGINT')).toBe(before);
   });
 });
 
@@ -233,6 +236,7 @@ describe('edmate chat: Ctrl+C (SIGINT)', () => {
     const gateway = gatewayHeldUntil(scriptedChatGateway(2), () => markReached(), until);
 
     const rec = capture();
+    const before = process.listenerCount('SIGINT');
     const promise = runChatCommand(
       ['--package', 'free'],
       rec.io,
@@ -251,6 +255,12 @@ describe('edmate chat: Ctrl+C (SIGINT)', () => {
     expect(text).toContain('bye');
     // The second line's turn never ran: readline was closed by the SIGINT handler.
     expect(text).not.toContain('A variable stores a value');
+    // 3.9g (typescript-review LOW): the run's own SIGINT listener is removed, even on Ctrl+C.
+    expect(process.listenerCount('SIGINT')).toBe(before);
+    // 3.9g: the cancelled turn's own prompt is never printed; the loop goes straight to "bye".
+    const afterCancel = text.slice(text.indexOf('[error:'));
+    expect(afterCancel).not.toContain('> ');
+    expect(afterCancel).toContain('bye');
   }, 20000);
 });
 
