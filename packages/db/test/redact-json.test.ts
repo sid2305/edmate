@@ -2,6 +2,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from '../src/index.js';
+// EMAIL is not part of the public API; imported directly from the module for the 8.7o
+// differential test only (old vs new regex output), not re-exported from the package.
+import { EMAIL } from '../src/repositories/redact-json.js';
 
 /** A fake `rp_<hex40>`-shaped id, same shape as reportRowId (packages/db/src/repositories/reports.ts). */
 function fakeReportRowId(): string {
@@ -412,5 +415,96 @@ describe('redactPersonalData', () => {
     expect(JSON.parse(JSON.stringify(out))).toEqual(
       JSON.parse('{"__proto__":{"email":"[redacted]","polluted":true},"ok":1}'),
     );
+  });
+});
+
+// 8.7o: EMAIL ran in quadratic time on adversarial input, because its local-part alternation
+// `[\p{L}\p{N}._%+-]+` could start a match attempt at every position of a long run of local-part
+// characters. The fix adds a lookbehind so a match attempt can only start where the previous
+// character is not itself a local-part character, making the scan linear. These tests pin a loose
+// time bound (CI-safe) and check, with a differential property test against the old regex, that
+// no output changes.
+describe('EMAIL linear time (8.7o)', () => {
+  // The pre-8.7o regex, kept test-only so the differential test below can compare old vs new
+  // output. Do not use this constant outside tests.
+  const OLD_EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
+
+  /** A loose CI-safe bound: adversarial input must finish well under this, not be instant. */
+  const TIME_BOUND_MS = 100;
+
+  function timed(fn: () => void): number {
+    const start = performance.now();
+    fn();
+    return performance.now() - start;
+  }
+
+  it.each([
+    ['a long run with no @', 'a1_'.repeat(200_000)],
+    ['a long run with one trailing @', `${'a1_'.repeat(200_000)}@`],
+    ['a long dotted local-part run with no @', 'a.'.repeat(300_000)],
+    ['a long dotted local-part run with a trailing @', `${'a.'.repeat(300_000)}@`],
+    ['a long dotted domain after @', `x@${'a.'.repeat(300_000)}`],
+    ['a long dashed domain after @', `x@${'a-'.repeat(300_000)}`],
+  ])('redacts %s in under %dms'.replace('%dms', `${TIME_BOUND_MS}ms`), (_label, input) => {
+    let out = '';
+    const ms = timed(() => {
+      out = redactPersonalData(input) as string;
+    });
+    expect(ms).toBeLessThan(TIME_BOUND_MS);
+    // None of these inputs contains a full email (no valid domain follows the `@`, or there is no
+    // `@` at all), so nothing should be redacted: the timing test must not mask a correctness
+    // regression. Correctness on real email-shaped input is covered by the differential test below.
+    expect(out).toBe(input);
+  });
+
+  /** Seeded PRNG (mulberry32): deterministic, so a differential failure is reproducible. */
+  function mulberry32(seed: number): () => number {
+    let a = seed;
+    return () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const ALPHABET = 'abcABC012._%+-@ ';
+
+  function randomString(rand: () => number, maxLength: number): string {
+    const length = Math.floor(rand() * (maxLength + 1));
+    let s = '';
+    for (let i = 0; i < length; i += 1) {
+      s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
+    }
+    return s;
+  }
+
+  const EXISTING_EMAIL_STRINGS = [
+    'someone@example.com',
+    'write to someone.else+tag@example.com today',
+    'SOMEONE@EXAMPLE.ORG',
+    'a@example.com, b@example.org',
+    '@mention and a@b',
+    'the student reset their progress',
+    '12345678-1234-4234-8234-123456789012',
+    'abc5551234567',
+    'id12345678-1234-4234-8234-123456789012',
+  ];
+
+  it('matches the old (quadratic) regex output on every existing email test string', () => {
+    for (const s of EXISTING_EMAIL_STRINGS) {
+      expect(s.replace(EMAIL, REDACTED)).toBe(s.replace(OLD_EMAIL, REDACTED));
+    }
+  });
+
+  it('matches the old (quadratic) regex output on 2,000 seeded random strings', () => {
+    const rand = mulberry32(0xe4d7a7e);
+    for (let i = 0; i < 2000; i += 1) {
+      const s = randomString(rand, 60);
+      const oldOut = s.replace(OLD_EMAIL, REDACTED);
+      const newOut = s.replace(EMAIL, REDACTED);
+      expect(newOut).toBe(oldOut);
+    }
   });
 });

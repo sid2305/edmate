@@ -52,7 +52,31 @@ function isPersonalKey(key: string): boolean {
   );
 }
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
+/**
+ * An email-shaped run. Exported (test-only; not part of the package's public API, see
+ * `src/repositories/index.ts`) so the differential test in `redact-json.test.ts` can compare this
+ * regex's output against the pre-8.7o version on the same input.
+ *
+ * The local part has a leading lookbehind, `(?<![\p{L}\p{N}._%+-])`, so a match attempt can only
+ * start where the previous character is not itself a local-part character. Without it, a long run
+ * of local-part characters with no `@` made the engine retry the alternation from every position
+ * in the run when the match failed at the end: O(n^2) (8.7o, about 8s on 120k characters of
+ * `'a1_'.repeat(N)`). The lookbehind does not change any match: every character between a run's
+ * start and any later position inside that same run is itself a local-part character (that is what
+ * makes it "inside the run"), so if a match exists starting from inside the run, the leftmost match
+ * starting from the run's start consumes at least as much and ends at the same place (the local
+ * part is a maximal run of `+`-greedy local-part characters either way); `String.replace` already
+ * takes the leftmost-starting match among overlapping candidates, so dropping the inner start
+ * points changes no output, only how many start points the engine tries.
+ *
+ * The domain part (`[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}`) is not quadratic the same way:
+ * each `[\p{L}\p{N}-]+` group only retries from positions where the following `(?:\.[...])*\.` and
+ * trailing `\p{L}{2,}` could not complete, and a failed match there does not get retried from every
+ * character of a long `'a.'.repeat(N)` or `'a-'.repeat(N)` run either, because `@` must precede it
+ * and `@` only occurs once per candidate; verified by the step-1 timing tests on both shapes.
+ */
+export const EMAIL =
+  /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
 /**
  * A phone-shaped run: digits with spaces, dots, dashes or brackets between them. The run may
  * directly follow a letter (`abc5551234567`): only `\p{N}_.+-` before the start block the match,
