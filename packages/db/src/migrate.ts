@@ -116,7 +116,11 @@ export type PostMigrateStep =
  * existing duplicate open sessions in its own migration-file UPDATE (so the index build below
  * never sees a duplicate). Migration 0032 (task 13.4a, 13.4 review deferral) adds
  * `chunks_transcript_created_at_idx`, `sessions_created_at_idx` and `turn_traces_created_at_idx`
- * the same schema-only way. Append here, don't edit past entries: migrations are forward-only and
+ * the same schema-only way. Migration 0033 (task 11.4h, 11.4e review follow-up) adds
+ * `documents_teacher_id_live_class_id_live_classes_fk` as `NOT VALID` the same way, replacing
+ * `documents_live_class_id_live_classes_id_fk` (that entry above is left in place and is now a
+ * no-op, since `isConstraintValidated` treats "no such constraint" as nothing to validate).
+ * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
 export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
@@ -168,6 +172,13 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'turn_traces_created_at_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "turn_traces_created_at_idx" ON "turn_traces" USING btree ("created_at")`,
+  },
+  // Migration 0033 (task 11.4h): composite FK against live_classes(teacher_id, id), replacing
+  // the single-column FK above.
+  {
+    kind: 'validateConstraint',
+    table: 'documents',
+    constraint: 'documents_teacher_id_live_class_id_live_classes_fk',
   },
 ];
 

@@ -228,9 +228,13 @@ describe('constraints the Data model states', () => {
     expect(gin.map((i) => i.name).sort()).toEqual(
       ['teacher_profiles_search_idx', 'teacher_profiles_languages_idx'].sort(),
     );
-    expect(gin.find((i) => i.name === 'teacher_profiles_search_idx')?.columns.map((c) => c.expression)).toEqual(['search']);
     expect(
-      gin.find((i) => i.name === 'teacher_profiles_languages_idx')?.columns.map((c) => c.expression),
+      gin.find((i) => i.name === 'teacher_profiles_search_idx')?.columns.map((c) => c.expression),
+    ).toEqual(['search']);
+    expect(
+      gin
+        .find((i) => i.name === 'teacher_profiles_languages_idx')
+        ?.columns.map((c) => c.expression),
     ).toEqual(['languages']);
   });
 
@@ -412,6 +416,18 @@ const REVIEWED_INDEX_DROPS: Record<string, string[]> = {
 const DROP_INDEX = /DROP INDEX "(\w+)";/g;
 
 /**
+ * `ALTER TABLE "t" DROP CONSTRAINT "name";`: dropping a constraint by itself touches no row
+ * data. Task 11.4h: 0033 drops documents_live_class_id_live_classes_id_fk and replaces it with
+ * a composite FK, documents_teacher_id_live_class_id_live_classes_fk, that enforces a stronger
+ * version of the same rule (a linked class must belong to the same teacher) -- no row is
+ * touched or deleted by the drop.
+ */
+const REVIEWED_CONSTRAINT_DROPS: Record<string, string[]> = {
+  '0033_document_live_class_teacher.sql': ['documents_live_class_id_live_classes_id_fk'],
+};
+const DROP_CONSTRAINT = /ALTER TABLE "\w+" DROP CONSTRAINT "(\w+)";/g;
+
+/**
  * `UPDATE "t" SET`: the only data updates a migration may make, per file, each reviewed. Task 3.16
  * (lead answer and security plan review): 0009 backfills the package pin of open sessions from
  * their entitlement, or ends them and clears that pair's last summary. No row is deleted.
@@ -445,6 +461,7 @@ describe('migrations are create-only', () => {
       let rest = sql.replace(RELAX_NOT_NULL, '');
       if (file in REVIEWED_UPDATES) rest = rest.replace(UPDATE_SET, '');
       if (file in REVIEWED_INDEX_DROPS) rest = rest.replace(DROP_INDEX, '');
+      if (file in REVIEWED_CONSTRAINT_DROPS) rest = rest.replace(DROP_CONSTRAINT, '');
       expect(DESTRUCTIVE_SQL.test(rest), `${file} is destructive`).toBe(false);
     }
   });
@@ -456,6 +473,17 @@ describe('migrations are create-only', () => {
         .filter(([, names]) => names.length > 0),
     );
     expect(dropped).toEqual(REVIEWED_INDEX_DROPS);
+  });
+
+  it('drops only reviewed constraints, by name (task 11.4h)', () => {
+    const dropped = Object.fromEntries(
+      migrationSql()
+        .map(
+          ({ file, sql }) => [file, [...sql.matchAll(DROP_CONSTRAINT)].map((m) => m[1]!)] as const,
+        )
+        .filter(([, names]) => names.length > 0),
+    );
+    expect(dropped).toEqual(REVIEWED_CONSTRAINT_DROPS);
   });
 
   it('updates data only where a reviewed task did (task 3.16)', () => {
@@ -522,8 +550,12 @@ describe('safety_alerts: the staff alert inbox (task 12.5a)', () => {
     for (const kind of SafetyAlertSchema.shape.kind.options) {
       expect(value('safety_alerts_kind_check')).toContain(`'${kind}'`);
     }
-    expect(value('safety_alerts_ack_note_length')).toMatch(/char_length\("safety_alerts"\."ack_note"\) <= 500/);
-    expect(value('safety_alerts_ack_pair')).toMatch(/acknowledged_at" is null\) = \("safety_alerts"\."acknowledged_by" is null/);
+    expect(value('safety_alerts_ack_note_length')).toMatch(
+      /char_length\("safety_alerts"\."ack_note"\) <= 500/,
+    );
+    expect(value('safety_alerts_ack_pair')).toMatch(
+      /acknowledged_at" is null\) = \("safety_alerts"\."acknowledged_by" is null/,
+    );
     expect(value('safety_alerts_escalation_round_non_negative')).toMatch(/escalation_round" >= 0/);
   });
 
@@ -544,7 +576,13 @@ describe('safety_alerts: the staff alert inbox (task 12.5a)', () => {
     expect(ackBy?.where).toMatch(/acknowledged_by" is not null/);
     const fk = Object.values(t.foreignKeys).find((f) => f.columnsFrom.includes('acknowledged_by'));
     expect(fk?.tableTo).toBe('users');
-    for (const c of ['acknowledged_at', 'acknowledged_by', 'ack_note', 'escalated_at', 'last_paged_at']) {
+    for (const c of [
+      'acknowledged_at',
+      'acknowledged_by',
+      'ack_note',
+      'escalated_at',
+      'last_paged_at',
+    ]) {
       expect(t.columns[c]?.notNull, c).toBe(false);
     }
   });
@@ -554,5 +592,6 @@ describe('safety_alerts: the staff alert inbox (task 12.5a)', () => {
     expect(m).toHaveLength(1);
     expect(m[0]!.sql).not.toMatch(
       /\bDROP\b|\bDELETE FROM\b|^\s*UPDATE\b|\bTRUNCATE\b|ALTER TABLE "(?!safety_alerts")/m,
-    );  });
+    );
+  });
 });

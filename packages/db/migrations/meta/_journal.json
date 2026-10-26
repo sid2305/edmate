@@ -232,6 +232,13 @@
       "when": 1792961188532,
       "tag": "0032_retention_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792980393445,
+      "tag": "0033_document_live_class_teacher",
+      "breakpoints": true
     }
   ]
 }
