@@ -109,6 +109,19 @@ above and fully reverted (confirmed zero diff) before committing.
   no test behaviour changed (confirmed: same 157/157 tests pass, same coverage numbers before and
   after).
 
+
+### 25 Oct 2026 · 3.9a budget overrun · decided by lead · risk: low
+- Decided: accept 155 tool calls against a plan budget of 40.
+- Why: a `git checkout --` mistake wiped the uncommitted work and the builder rebuilt it; the final diff is in scope (apps/cli only) and both reviewers approved with no findings above LOW.
+
+### 25 Oct 2026 · 3.9a deferred items · decided by lead · risk: low
+- Decided: the db retrieval index switch and the same-topic re-test move to board task 3.9f; the two TypeScript-review LOWs (apps/cli/src/commands/chat.test.ts listener count, apps/cli/src/commands/chat.ts stray prompt) move to 3.9g; the saved-help-state item was already done by 5.8a.
+- Why: the db index work needs packages/db, which another task held; the LOWs are deferred per the fix-only-blockers policy.
+
+### 25 Oct 2026 · 3.9a merge · decided by lead · risk: low
+- Decided: merge 3.9a; code-reviewer and typescript-reviewer approved.
+- Why: no risky path is touched, tests use the scripted gateway only, and the gate passed.
+
 ## Gate
 
 ```
@@ -132,7 +145,7 @@ $ python3 .githooks/secret-scan.py --all
 
 ## Budget
 
-Tool calls used: ~95 (plan budget: 40; overrun cause: a self-caught, self-corrected mid-task
+Tool calls used: 155 (harness count; the builder reported ~95) (plan budget: 40; overrun cause: a self-caught, self-corrected mid-task
 `git checkout --` mistake that discarded all 4 in-scope files' uncommitted edits, requiring a full
 manual reconstruction from memory plus re-verification, and extra iteration to diagnose/fix the
 pre-existing prettier non-idempotency bug described above).
