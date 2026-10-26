@@ -105,9 +105,9 @@ the same block.
 - Decided: no data-fix step before `VALIDATE CONSTRAINT` in packages/db/migrations/0033_document_live_class_teacher.sql; a deployed database with a document linked to another teacher's live class would fail the post-migrate validate step.
 - Why: the documents.live_class_id link is new in M11 and no deployed database holds real data before the pilot; database-reviewer and code-reviewer both rated it acceptable pre-pilot.
 
-### 25 Oct 2026 · 11.4h merge · decided by lead · risk: low
+### 25 Oct 2026 · 11.4h merge · decided by lead · risk: high
 - Decided: merge 11.4h; database-reviewer and code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings.
-- Why: no risky path is touched and the migration adds a constraint as NOT VALID and then validates it, so database-reviewer covered the constraint change.
+- Why: packages/db/migrations/0033_document_live_class_teacher.sql drops the single-column documents.live_class_id foreign key and replaces it with a composite (teacher_id, live_class_id) key added NOT VALID and validated after migration; no rows are deleted, and database-reviewer checked the lock order, column order and the PG 16 support for ON DELETE SET NULL with a column list.
 
 ## Gate
 
