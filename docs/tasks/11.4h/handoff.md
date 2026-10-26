@@ -96,6 +96,19 @@ exact SQL), since `chunks.document_id` -> `documents.id` has no `ON DELETE` acti
 `doc_rec_search` (deleted by the cap-test cleanup) has rows in `chunks` from an earlier test in
 the same block.
 
+
+### 25 Oct 2026 · 11.4h budget overrun · decided by lead · risk: low
+- Decided: accept 88 tool calls against a plan budget of 40.
+- Why: the migration, snapshot, journal, post-migrate step and allowlist changes needed full db gate runs; the diff is in scope and both reviewers approved.
+
+### 25 Oct 2026 · 11.4h pre-existing cross-teacher rows · decided by lead · risk: low
+- Decided: no data-fix step before `VALIDATE CONSTRAINT` in packages/db/migrations/0033_document_live_class_teacher.sql; a deployed database with a document linked to another teacher's live class would fail the post-migrate validate step.
+- Why: the documents.live_class_id link is new in M11 and no deployed database holds real data before the pilot; database-reviewer and code-reviewer both rated it acceptable pre-pilot.
+
+### 25 Oct 2026 · 11.4h merge · decided by lead · risk: low
+- Decided: merge 11.4h; database-reviewer and code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings.
+- Why: no risky path is touched and the migration adds a constraint as NOT VALID and then validates it, so database-reviewer covered the constraint change.
+
 ## Gate
 
 ```
@@ -124,4 +137,4 @@ no-op check.
 
 ## Budget
 
-Tool calls used: 46
+Tool calls used: 88 (harness count; the builder reported 46)
