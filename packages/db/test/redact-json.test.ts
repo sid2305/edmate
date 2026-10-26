@@ -244,7 +244,6 @@ describe('redactPersonalData', () => {
   });
 
   it.each([
-    'runId',
     '00000000-0000-4000-8000-000000000000',
     '12345678-1234-4234-8234-123456789012',
     '99999999-9999-4999-8999-999999999999',
@@ -255,10 +254,9 @@ describe('redactPersonalData', () => {
   });
 
   it('keeps a UUID embedded in free text, case-insensitively', () => {
+    // The lower-case case is already covered by "still redacts a phone number that sits right
+    // next to a UUID" below; this test only needs to add the upper-case case.
     const upper = '12345678-1234-4234-8234-123456789012'.toUpperCase();
-    expect(redactPersonalData({ note: `run 12345678-1234-4234-8234-123456789012 failed` })).toEqual(
-      { note: 'run 12345678-1234-4234-8234-123456789012 failed' },
-    );
     expect(redactPersonalData({ note: `run ${upper} failed` })).toEqual({
       note: `run ${upper} failed`,
     });
@@ -275,6 +273,67 @@ describe('redactPersonalData', () => {
     expect(redactPersonalData({ note: 'call 5550100199 now' })).toEqual({
       note: `call ${REDACTED} now`,
     });
+  });
+
+  // 8.7h decided UUID-shaped values are exempt from the phone digit-run rule even when their
+  // digits look like a phone number (docs/decisions/log.md, "22 Oct 2026 - 8.7h UUID-shaped
+  // values are exempt from the phone digit-run rule"). This is that trade-off at its most
+  // phone-like: a value padded with hex characters so its digits read as a phone number but its
+  // shape is still a UUID. 8.7m keeps this as-is; it is an accepted trade-off, not a bug.
+  it('keeps a UUID-shaped value whose digits look like a phone number (8.7h trade-off)', () => {
+    const hexPaddedPhone = '5551234a-bcde-4f00-8000-000000000000';
+    expect(redactPersonalData({ note: hexPaddedPhone })).toEqual({ note: hexPaddedPhone });
+    expect(redactPersonalData(hexPaddedPhone)).toBe(hexPaddedPhone);
+  });
+
+  // 8.7m: a digit run of at least PHONE_MIN_DIGITS that directly follows a letter is now redacted
+  // (it used to be skipped entirely, because the lookbehind blocked a match starting anywhere in
+  // the run). The regex change only drops `\p{L}` from the lookbehind's negative set, so it stays
+  // a single linear scan with no nested quantifiers: redactString still makes one pass over the
+  // string per candidate regex.
+  it('redacts a phone-length digit run glued directly to a letter', () => {
+    expect(redactPersonalData({ note: 'abc5551234567' })).toEqual({ note: 'abc[redacted]' });
+  });
+
+  it.each(['tch_93d', 'doc_cap_501', 'stu_1234567'])(
+    'keeps an underscore-prefixed id unredacted: %s',
+    (id) => {
+      expect(redactPersonalData({ note: id })).toEqual({ note: id });
+    },
+  );
+
+  it('keeps a whole UUID and a UUID embedded in text unredacted (UUID span exemption)', () => {
+    const uuid = '12345678-1234-4234-8234-123456789012';
+    expect(redactPersonalData(uuid)).toBe(uuid);
+    expect(redactPersonalData({ note: `run ${uuid} failed` })).toEqual({
+      note: `run ${uuid} failed`,
+    });
+  });
+
+  it.each(['v2026-10-17', 'v0.123456789'])(
+    'keeps a date or decimal glued to a letter unredacted (NOT_A_PHONE): %s',
+    (value) => {
+      expect(redactPersonalData({ note: value })).toEqual({ note: value });
+    },
+  );
+
+  it.each(['v2', 'abc123456'])(
+    'keeps a glued digit run under PHONE_MIN_DIGITS unredacted: %s',
+    (value) => {
+      expect(redactPersonalData({ note: value })).toEqual({ note: value });
+    },
+  );
+
+  // A phone number glued to a UUID with no separator merges into the UUID's last hex group, so
+  // the UUID regex's trailing `\b` no longer matches (the next character is still a digit, not a
+  // word boundary) and the whole run is treated as one phone-shaped candidate. Decision (8.7m):
+  // this over-redacts the UUID along with the phone number rather than risk leaving any phone
+  // digit behind; the phone digits must never survive, and here they do not.
+  it('redacts a UUID with a 10-digit phone number glued on with no separator', () => {
+    const glued = '12345678-1234-4234-8234-1234567890125550100199';
+    const out = redactPersonalData({ note: glued }) as { note: string };
+    expect(out.note).toBe(REDACTED);
+    expect(out.note).not.toMatch(/5550100199/);
   });
 
   it('keeps a __proto__ key as data, without touching the prototype', () => {
