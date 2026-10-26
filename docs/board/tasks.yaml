@@ -5846,9 +5846,33 @@ tasks:
   deps:
   - 8.7h
   risk: high
-  status: running
+  status: done
   branch: m13/8.7m-redact-json-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet fix:sonnet x2 review:sonnet
+  metrics:
+    tool_calls: 188
+    tokens_in: 644
+    tokens_out: 43961
+    cache_read_tokens: 15146751
+    wall_time_seconds: 2942
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 4
+    findings:
+      total: 6
+      by_severity:
+        CRITICAL: 1
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.6g
   milestone: M9
   title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher
@@ -8733,7 +8757,8 @@ tasks:
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against
