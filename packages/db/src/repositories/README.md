@@ -355,6 +355,12 @@ is big and high-write. The migration itself ends (never deletes) any pre-existin
 sessions first, keeping the newest (most likely to hold live `help_state`) so the index build
 never sees a duplicate.
 
+`retentionRepo`'s three cutoff-scan indexes (`chunks_transcript_created_at_idx`,
+`sessions_created_at_idx`, `turn_traces_created_at_idx`; migration 0032, task 13.4a, 13.4 review
+deferral) are schema-only the same way, built by the post-migrate step with `CREATE INDEX
+CONCURRENTLY` instead of the migration file: `chunks`, `sessions` and `turn_traces` are all big,
+high-write tables.
+
 **`teacherQuestions.dismiss(scope, questionId)`** (task 8.9) closes the scope's own open question
 alone: a single scoped UPDATE (`status 'open' -> 'dismissed'`, `answer`/`answered_at` left null),
 never the group or the other members — unlike `answer`, dismissing one wording never silently
