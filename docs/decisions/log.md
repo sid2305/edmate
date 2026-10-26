@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 12.3e budget over cap · decided by lead · risk: low
+- Decided: accept 38 harness-counted builder tool calls against a cap of 15.
+- Why: the full @edmate/db gate needed a rerun after an unrelated harness timing flake (modelRequest.test.ts, a known flake); the change itself is small and both reviewers approved.
+
+---
+
+### 25 Oct 2026 · 12.3e merge · decided by lead · risk: high
+- Decided: merge 12.3e. It touches packages/db/src/repositories/chunks.ts (a risky path, security-reviewer group); code-reviewer and security-reviewer confirmed the change is whitespace-only reformatting, and the test guards keep the tests' meaning.
+- Why: no behaviour change, the gate passes, no findings.
+
+---
+
 ### 25 Oct 2026 · 8.7m hex-padded phone stays an accepted UUID trade-off · decided by builder · risk: low
 - Decided: no code change for the hex-padded-phone case; added a test
   (`keeps a UUID-shaped value whose digits look like a phone number (8.7h trade-off)`) that
