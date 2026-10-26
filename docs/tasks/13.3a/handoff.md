@@ -119,3 +119,54 @@ also why `proxy.test.ts` calls the functions directly instead of relying on a se
 ## Budget
 
 Tool calls used: 56
+
+## Fix round
+
+CRITICAL (raised by security-reviewer, typescript-reviewer, code-reviewer): `proxy.ts` set the
+CSP only on `response.headers`. Next 16.4.2 reads the nonce it stamps its own inline
+bootstrap/hydration `<script>` tags with from the *request's* `content-security-policy` header
+(next/dist/server/route-modules/app-page/parse-request-headers.js →
+get-script-nonce-from-header.js; matches Next's own doc at
+`node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`), not from the
+`x-nonce` convention this code had assumed. With no request-side CSP, Next's own inline scripts
+got no nonce and `'strict-dynamic'` silently blocked them — no page hydrates.
+
+Fix: `apps/web/proxy.ts` now does `requestHeaders.set('Content-Security-Policy', csp)` before
+`NextResponse.next({ request: { headers: requestHeaders } })`, in addition to the existing
+`response.headers.set(...)`. Dropped `x-nonce`: grepped the repo, no app code read it; keeping it
+alongside the correct header would have been dead code.
+
+Tests added:
+- `proxy.test.ts`: a new case confirms the request-side CSP matches the response-side CSP. Direct
+  inspection of `NextResponse.next({ request })`'s internal request isn't possible from a plain
+  unit test, so it asserts via the documented mechanism Next itself uses to carry middleware
+  request-header overrides to the server: `x-middleware-override-headers` and
+  `x-middleware-request-content-security-policy` response headers (confirmed in
+  `node_modules/next/dist/server/web/spec-extension/response.js`'s `handleMiddlewareField`).
+- `e2e/headers.spec.ts`: a new case loads `/` in a real Chromium page, listens for
+  `securitypolicyviolation` DOM events and console messages containing "Content Security
+  Policy", and asserts none fire; also asserts at least one `<script>` tag's IDL `.nonce`
+  property (not `getAttribute('nonce')`, which browsers blank for security) matches the nonce in
+  the response's CSP header.
+- Production proof (`next build --webpack` + `NODE_ENV=production next start`, no docker), `GET
+  /`:
+  ```
+  content-security-policy: default-src 'self'; script-src 'self' 'nonce-MGJkYTdmMjctMTNhNy00YTgzLWIzNTgtMTFhMTllYTE1MDhl' 'strict-dynamic'; ...
+  ```
+  and the page body contains:
+  ```
+  <script nonce="MGJkYTdmMjctMTNhNy00YTgzLWIzNTgtMTFhMTllYTE1MDhl">
+  ```
+  — Next's own inline script nonce matches the response CSP's nonce exactly, confirming
+  hydration is no longer blocked.
+
+### Gate
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web`: 10/10 tasks green.
+- `corepack pnpm --filter @edmate/web e2e`: 22 specs, 22 ran, 21 passed; the pre-existing
+  `full-flow.spec.ts` discovery-redis timeout recurred unchanged (unrelated to this fix, same
+  failure documented in the original handoff).
+- `corepack pnpm exec prettier --check` on the three changed files: clean (one formatting fix
+  applied to `proxy.test.ts`).
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
+Tool calls used: 26

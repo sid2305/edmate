@@ -104,4 +104,18 @@ describe('proxy', () => {
     const res = proxy(req());
     expect(res.headers.get('strict-transport-security')).not.toContain('preload');
   });
+
+  it('forwards the same Content-Security-Policy on the request Next sees, not just the response', () => {
+    // Next 16 reads the nonce for its own inline bootstrap/hydration scripts from the *request's*
+    // `content-security-policy` header. `NextResponse.next({ request: { headers } })` carries
+    // those overridden request headers to the Next server via the documented
+    // `x-middleware-request-<name>` response headers (next/dist/server/web/spec-extension/
+    // response.js: handleMiddlewareField); this is how to assert it from a plain unit test.
+    const res = proxy(req());
+    const responseCsp = res.headers.get('content-security-policy');
+    const forwardedRequestCsp = res.headers.get('x-middleware-request-content-security-policy');
+    expect(responseCsp).toBeTruthy();
+    expect(forwardedRequestCsp).toBe(responseCsp);
+    expect(res.headers.get('x-middleware-override-headers')).toContain('content-security-policy');
+  });
 });

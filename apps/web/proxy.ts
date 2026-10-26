@@ -76,10 +76,14 @@ export function proxy(request: NextRequest): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const csp = buildCsp(nonce);
 
-  // Next reads the per-request nonce it stamps its own inline scripts with from this request
-  // header (the documented nonce-propagation convention), then from the CSP response header.
+  // Next 16 reads the nonce it stamps its own inline bootstrap/hydration scripts with from the
+  // *request's* `content-security-policy` header, not from an `x-nonce` convention (Next's own
+  // doc: node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md). Setting the
+  // CSP only on the response leaves Next's inline scripts nonce-less, so `'strict-dynamic'`
+  // blocks them and no page hydrates. No app code reads `x-nonce` (grepped), so it is dropped
+  // rather than kept alongside this.
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', csp);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', csp);
