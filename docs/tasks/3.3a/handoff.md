@@ -69,6 +69,10 @@ Phase B — classify.ts dedup, index.ts dead code, labelled-set additions:
   no-hit), not just read as plausible; checking against the real rule function was the only way
   to confirm that without a real model call (rule 4).
 
+### 25 Oct 2026 · 3.3a merge · decided by lead · risk: high
+- Decided: merge 3.3a (a shared guarded model call in packages/harness/src/pipeline/guardedModelCall.ts used by routing/modelFallback.ts and guardrails/safetyClassifier.ts; answer-key dedupe in routing/classify.ts; the dead branch in routing/index.ts removed; 5 English soft/indirect distress rows in routing/labelledTurns.ts) with no findings.
+- Why: it touches packages/harness/src/guardrails/** (a risky path); code-reviewer, typescript-reviewer and silent-failure-hunter each verified the safety classifier keeps the same timeout, error types and fail-closed behaviour, with its existing tests passing unedited, and that the new distress rows reach the model fallback as labelled.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...` → green (125 test
@@ -84,7 +88,7 @@ Phase B — classify.ts dedup, index.ts dead code, labelled-set additions:
 
 ## Budget
 
-Tool calls used: 49
+Tool calls used: 81 (harness count; the builder reported 49)
 
 ## Left to do
 
