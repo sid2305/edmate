@@ -7888,11 +7888,11 @@ tasks:
   status: todo
 - id: 8.7p
   milestone: M13
-  title: '8.7m review follow-up: in packages/db/src/repositories/redact-json.ts a rp_<hex40> or other prefixed id, UUID or hex digest followed by one space and then a phone-shaped run is redacted
-    together with the phone (PHONE_CANDIDATE extends across the space into the exempt span), so the id''s tail is lost; stop a phone candidate at an exempt span''s boundary so the id survives and
-    the phone is still redacted'
-  accept: '"rp_<hex40> 555-010-0199" keeps the id and redacts the phone; same for a UUID and a hex digest; the differential tests against the old behaviour show no phone run survives; db typecheck,
-    lint and test green.'
+  title: '8.7m review follow-up: in packages/db/src/repositories/redact-json.ts a rp_<hex40> or other prefixed id, UUID or hex digest followed by one space and then a phone-shaped run is redacted together
+    with the phone (PHONE_CANDIDATE extends across the space into the exempt span), so the id''s tail is lost; stop a phone candidate at an exempt span''s boundary so the id survives and the phone is still
+    redacted'
+  accept: '"rp_<hex40> 555-010-0199" keeps the id and redacts the phone; same for a UUID and a hex digest; the differential tests against the old behaviour show no phone run survives; db typecheck, lint
+    and test green.'
   deps:
   - 8.7m
   risk: low
@@ -8666,10 +8666,10 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
@@ -8722,7 +8722,9 @@ tasks:
     decision
   deps:
   - 3.9b
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/3.9c-warm-preguard
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
