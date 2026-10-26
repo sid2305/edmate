@@ -7570,9 +7570,9 @@ tasks:
   deps:
   - 12.3b
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.3e-chunks-format
+  model: plan:lead build:sonnet
 - id: 11.4a
   milestone: M11
   title: 'Link a document to its live class: nullable documents.live_class_id, own started class only, listRecordingsForTeacher (11.4 Phase A)'
