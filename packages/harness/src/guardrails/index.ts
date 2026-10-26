@@ -158,4 +158,4 @@ export {
   type RegisterOptions,
 } from './registry.js';
 export { digitValue, type FoldedText, foldText, isDecimalDigit, isFormatChar } from './textFold.js';
-export { warmPreGuardPatterns } from './warmup.js';
+export { type WarmedMatcher, warmPreGuardPatterns } from './warmup.js';

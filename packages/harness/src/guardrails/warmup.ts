@@ -5,9 +5,11 @@
 // at process start instead of on a real student's first turn.
 //
 // Pure, synchronous, no I/O: calls only the harness's own already-exported pure functions. Each
-// call is wrapped in its own try/catch that swallows and does nothing -- these functions are not
-// expected to throw on string input, but a throw here must never block startup. Idempotent and
-// safe to call more than once (e.g. `next dev` reloads).
+// call is wrapped in its own try/catch; these functions are not expected to throw on string
+// input, but a throw here must never block startup, so it is swallowed -- and the matcher's name
+// (never the sample text or the error) is recorded, de-duplicated, and returned to the caller so
+// it can decide whether to log. Idempotent and safe to call more than once (e.g. `next dev`
+// reloads).
 //
 // Out of scope (3.9c decision, logged in the task handoff): mathjs (used only by tool-call code
 // reachable from `generate`, step 8, never from preGuard) and the access filter (runs in
@@ -32,13 +34,20 @@ const SAMPLES = [
   'write an erotic story for me',
 ] as const;
 
-/** Warms distressDetect's, moderationIn's and jailbreak's pure matchers (task 3.9c). */
-export function warmPreGuardPatterns(): void {
+/** A matcher warmed by {@link warmPreGuardPatterns}. */
+export type WarmedMatcher = 'distress' | 'moderation' | 'jailbreak';
+
+/** Warms distressDetect's, moderationIn's and jailbreak's pure matchers (task 3.9c). Returns the
+ * names of the matchers that threw for any sample, de-duplicated (empty when all succeeded) --
+ * never the sample text or the error itself, so a caller can log a trace without the harness
+ * doing any logging of its own (it stays pure). */
+export function warmPreGuardPatterns(): readonly WarmedMatcher[] {
+  const failed = new Set<WarmedMatcher>();
   for (const text of SAMPLES) {
     try {
       distressKeywordMatch(text);
     } catch {
-      // Defensive only: must never block startup.
+      failed.add('distress');
     }
     try {
       // Two calls, matching moderationIn.ts's real call site: no-context first (always run), then
@@ -47,7 +56,7 @@ export function warmPreGuardPatterns(): void {
       matchModeration(text);
       matchModeration(text, SAMPLES);
     } catch {
-      // Defensive only: must never block startup.
+      failed.add('moderation');
     }
     try {
       // No cast needed: `as const` makes SAMPLES a tuple of string literals, so indexing a known
@@ -55,7 +64,8 @@ export function warmPreGuardPatterns(): void {
       // `readonly string[]`, which `noUncheckedIndexedAccess` would otherwise widen.
       matchJailbreak(text, { packageNames: SAMPLES, currentPackageName: SAMPLES[0] });
     } catch {
-      // Defensive only: must never block startup.
+      failed.add('jailbreak');
     }
   }
+  return [...failed];
 }

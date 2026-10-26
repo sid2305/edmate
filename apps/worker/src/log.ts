@@ -31,3 +31,13 @@ export function describeError(error: unknown): { name: string; message: string }
   }
   return { name: typeof error, message: '' };
 }
+
+/** Task 3.9e (3.9c review LOW): `warmPreGuardPatterns()` never throws -- it returns the names of
+ * any matchers that failed instead, so a throw during guard warm-up no longer leaves no trace.
+ * Logs only the matcher names (never the sample text or an error); a no-op when the list is
+ * empty (every matcher warmed up cleanly). */
+export function logGuardWarmupFailures(matchers: readonly string[], log: Log): void {
+  if (matchers.length > 0) {
+    log({ level: 'error', event: 'guard_warmup.matcher_failed', matchers: [...matchers] });
+  }
+}

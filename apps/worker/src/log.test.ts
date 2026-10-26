@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeError, ERROR_MESSAGE_MAX, jsonLog } from './log.js';
+import { describeError, ERROR_MESSAGE_MAX, jsonLog, logGuardWarmupFailures } from './log.js';
+import type { LogLine } from './log.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,5 +30,25 @@ describe('describeError', () => {
     expect(describeError(new TypeError('bad'))).toEqual({ name: 'TypeError', message: 'bad' });
     expect(describeError(new Error('x'.repeat(500))).message).toHaveLength(ERROR_MESSAGE_MAX);
     expect(describeError('oops')).toEqual({ name: 'string', message: '' });
+  });
+});
+
+describe('logGuardWarmupFailures (task 3.9e)', () => {
+  it('logs the matcher names when the list is non-empty', () => {
+    const lines: LogLine[] = [];
+    logGuardWarmupFailures(['moderation', 'jailbreak'], (line) => lines.push(line));
+    expect(lines).toEqual([
+      {
+        level: 'error',
+        event: 'guard_warmup.matcher_failed',
+        matchers: ['moderation', 'jailbreak'],
+      },
+    ]);
+  });
+
+  it('does nothing when every matcher warmed up cleanly (empty list)', () => {
+    const lines: LogLine[] = [];
+    logGuardWarmupFailures([], (line) => lines.push(line));
+    expect(lines).toEqual([]);
   });
 });
