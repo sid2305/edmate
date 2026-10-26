@@ -14,7 +14,15 @@ Fixed the two 12.3b review LOWs:
   test behaviour is unchanged.
 
 ## Decisions
-None — the plan's steps were followed exactly, no open decisions.
+The builder made no decisions (the plan was followed exactly).
+
+### 25 Oct 2026 · 12.3e budget over cap · decided by lead · risk: low
+- Decided: accept 38 harness-counted builder tool calls against a cap of 15.
+- Why: the full @edmate/db gate needed a rerun after an unrelated harness timing flake (modelRequest.test.ts, a known flake); the change itself is small and both reviewers approved.
+
+### 25 Oct 2026 · 12.3e merge · decided by lead · risk: high
+- Decided: merge 12.3e. It touches packages/db/src/repositories/chunks.ts (a risky path, security-reviewer group); code-reviewer and security-reviewer confirmed the change is whitespace-only reformatting, and the test guards keep the tests' meaning.
+- Why: no behaviour change, the gate passes, no findings.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` → all 26 tasks
@@ -26,4 +34,4 @@ None — the plan's steps were followed exactly, no open decisions.
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
 ## Budget
-Tool calls used: 22
+Tool calls used: 38 (harness count; the builder reported 22)
