@@ -8846,7 +8846,9 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: todo
+  status: running
+  branch: m13/3.9g-cli-sigint-lows
+  model: plan:lead build:sonnet
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
