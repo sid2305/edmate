@@ -29,9 +29,12 @@ export async function classifyTurn(env: StepEnv, s: Entitled): Promise<RouteResu
   const { text, kind } = env.input;
   const attempt = classifyAttempt({ text, kind }, s.helpState);
   const rule = classifyIntentByRules(text, kind);
-  const intent =
-    rule.confident || text === undefined
-      ? rule.intent
-      : await askIntentModel(env, s.pkg.name, text);
+  if (rule.confident) return { intent: rule.intent, attempt, usage: [] };
+  if (text === undefined) {
+    // classifyIntentByRules returns confident: true whenever `text` is undefined (its own
+    // early return), so this branch is unreachable; kept only to satisfy the type checker.
+    return { intent: rule.intent, attempt, usage: [] };
+  }
+  const intent = await askIntentModel(env, s.pkg.name, text);
   return { intent, attempt, usage: [] };
 }

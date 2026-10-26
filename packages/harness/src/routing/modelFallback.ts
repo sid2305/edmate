@@ -9,7 +9,7 @@
 // returns `usage: []`, and the composition root's metered gateway bills the call itself.
 import { type Intent, IntentSchema, type ModelRequest } from '@edmate/contracts';
 import { z } from 'zod';
-import { runWithTimeout } from '../pipeline/timeout.js';
+import { callGuarded } from '../pipeline/guardedModelCall.js';
 import type { StepEnv } from '../pipeline/types.js';
 
 /** Inside route's 400 ms budget, leaving room for the rules and the runner's checks. */
@@ -63,21 +63,19 @@ export class RouteModelInvalidError extends Error {
 
 /** The model's intent for `text`. Throws on anything but a valid answer in time. */
 export async function askIntentModel(env: StepEnv, course: string, text: string): Promise<Intent> {
-  if (env.cancel.cancelled) throw new RouteCancelledError();
   const req = buildRouteIntentRequest(text, course);
-  const r = await runWithTimeout(
-    () =>
-      new Promise<unknown>((resolve, reject) => {
-        // generateObject takes no cancel token (contracts): route stops waiting instead.
-        env.cancel.onCancel(() => reject(new RouteCancelledError()));
-        env.gateway.generateObject(req, RouteIntentVerdictSchema).then(resolve, reject);
-      }),
-    ROUTE_MODEL_TIMEOUT_MS,
+  // generateObject takes no cancel token (contracts): callGuarded's race stops waiting instead.
+  const verdict = await callGuarded(
+    env.cancel,
     env.deps.clock,
+    () => env.gateway.generateObject(req, RouteIntentVerdictSchema),
+    RouteIntentVerdictSchema,
+    ROUTE_MODEL_TIMEOUT_MS,
+    {
+      cancelled: () => new RouteCancelledError(),
+      timedOut: (ms) => new RouteModelTimeoutError(ms),
+      invalid: () => new RouteModelInvalidError(),
+    },
   );
-  if (r.status === 'timeout') throw new RouteModelTimeoutError(ROUTE_MODEL_TIMEOUT_MS);
-  if (r.status === 'error') throw r.error;
-  const parsed = RouteIntentVerdictSchema.safeParse(r.value);
-  if (!parsed.success) throw new RouteModelInvalidError();
-  return parsed.data.intent;
+  return verdict.intent;
 }

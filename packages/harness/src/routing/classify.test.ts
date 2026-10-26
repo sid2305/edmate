@@ -95,8 +95,9 @@ describe('classifyIntentByRules', () => {
   });
 
   it('misuse beats answer_seeking', () => {
-    expect(classifyIntentByRules('just give me the answer and write my essay', 'message').intent)
-      .toBe('misuse');
+    expect(
+      classifyIntentByRules('just give me the answer and write my essay', 'message').intent,
+    ).toBe('misuse');
   });
 
   it('an empty or missing text is on_task', () => {
@@ -116,8 +117,9 @@ describe('classifyIntentByRules', () => {
   });
 
   it('never fires inside longer words', () => {
-    expect(classifyIntentByRules('jokes aside, why is the jokester variable undefined?', 'message'))
-      .toEqual({ intent: 'on_task', confident: true });
+    expect(
+      classifyIntentByRules('jokes aside, why is the jokester variable undefined?', 'message'),
+    ).toEqual({ intent: 'on_task', confident: true });
   });
 
   it('reads curly apostrophes, odd case and extra spaces', () => {
@@ -167,12 +169,9 @@ describe('answerKeyOf', () => {
   it('reads the stored key', () => {
     expect(answerKeyOf(stored(['5/6']))).toEqual(['5/6']);
   });
-  it.each([undefined, null, {}, { v: 2 }, 'junk', stored([])])(
-    'gives no key for %j',
-    (raw) => {
-      expect(answerKeyOf(raw)).toEqual([]);
-    },
-  );
+  it.each([undefined, null, {}, { v: 2 }, 'junk', stored([])])('gives no key for %j', (raw) => {
+    expect(answerKeyOf(raw)).toEqual([]);
+  });
   it('drops blank key parts', () => {
     expect(answerKeyOf(stored([' ', '7']))).toEqual(['7']);
   });
@@ -285,6 +284,12 @@ describe('classifyAttempt', () => {
       expect(classifyAttempt(msg('a 7'), stored(['7']))).toBe('correct');
       expect(classifyAttempt(msg('Photosynthesis'), stored(['photosynthesis']))).toBe('correct');
       expect(classifyAttempt(msg('x = 4'), stored(['x = 4']))).toBe('correct');
+    });
+
+    it('a duplicate answer-key part counts each student number once (3.3a)', () => {
+      // Key has two parts both requiring "3"; the student wrote one "3", so only one part is
+      // credited: partial, not correct.
+      expect(classifyAttempt(msg('3'), stored(['3', '3']))).toBe('partial');
     });
   });
 });
