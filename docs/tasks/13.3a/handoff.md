@@ -116,9 +116,25 @@ also why `proxy.test.ts` calls the functions directly instead of relying on a se
   Omitting it would leave those untyped resource kinds unrestricted by default, which the plan's
   intent (a strict allowlist CSP) clearly does not want.
 
+### 25 Oct 2026 · 13.3a HSTS without preload · decided by lead · risk: low
+- Decided: HSTS is `max-age=63072000; includeSubDomains` with no `preload`, sent only when NODE_ENV is production (lead amendment to the plan).
+- Why: a preload-list entry is hard to undo and commits every subdomain to HTTPS before the production domain is settled; the docker stack runs NODE_ENV=production over plain HTTP, so preload would also break local runs if a browser ever cached it.
+
+### 25 Oct 2026 · 13.3a stale proxy.test.ts title · decided by lead · risk: low
+- Decided: wontfix the security re-review LOW on apps/web/proxy.test.ts:75 (the test title still says "CSP + x-nonce" after x-nonce was dropped); the next task that edits apps/web/proxy.test.ts rewords it.
+- Why: a title-only cosmetic issue with no behaviour change; a fix round for it costs more than it is worth during the MVP push.
+
+### 25 Oct 2026 · 13.3a budget · decided by lead · risk: low
+- Decided: accept 121 tool calls (79 build plus 42 fix, harness counts) against a planned 95 (60 build plus 35 fix).
+- Why: the build captured real response headers from a production build and the e2e stack, and the fix round had to prove the nonce in a production build; both checks were needed to catch and confirm the hydration-breaking CRITICAL.
+
+### 25 Oct 2026 · 13.3a merge · decided by lead · risk: low
+- Decided: merge 13.3a (static security headers in next.config.ts, a per-request nonce CSP and production-only HSTS in proxy.ts) after one fix round; security-reviewer, typescript-reviewer and code-reviewer re-approved the CRITICAL fix.
+- Why: apps/web/next.config.ts and apps/web/proxy.ts are not risky paths; the one CRITICAL (CSP not forwarded on the request, so no nonce reached Next's scripts) is fixed and proven by a unit test, an e2e no-violation check and a production build check.
+
 ## Budget
 
-Tool calls used: 56
+Tool calls used: 79 (harness count; the builder reported 56)
 
 ## Fix round
 
@@ -169,4 +185,4 @@ Tests added:
   applied to `proxy.test.ts`).
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
-Tool calls used: 26
+Tool calls used: 42 (harness count; the fixer reported 26)
