@@ -63,6 +63,24 @@ notice never throws regardless of `production`. `index.ts` needs no new test (it
 read already covered by existing `index.test.ts`/build-smoke patterns; note it in the handoff instead
 of adding a redundant test).
 
+### Lead amendment (25 Oct 2026): keep the local try-it stack working
+The local stack in `docker/compose.yaml` runs with `NODE_ENV: production` (line 16), and
+`apps/web/e2e/stack/try-it.spec.ts` signs a learner up through `/welcome/age`. Refusing every
+unsigned notice in production would break the try-it guide (task 9.0) until a notice is signed.
+Follow the `S3_ALLOW_HTTP` precedent (`apps/web/src/storage/presign.ts:79`, `docker/compose.yaml:112`):
+- The production refusal applies unless `AGE_NOTICE_ALLOW_UNSIGNED === 'true'` (exact string; any
+  other value, or unset, refuses). When the flag lets an unsigned notice through in production, log
+  one line through the existing `log` helper (code-only, e.g. `age_notice_unsigned_allowed`, plus
+  the market code; no user data).
+- Read the flag where `production` is computed today (`apps/web/src/auth/index.ts`), and pass it into
+  `loadAgeContent` as an explicit argument (no `process.env` read inside `age.ts`).
+- `docker/compose.yaml`: set `AGE_NOTICE_ALLOW_UNSIGNED: 'true'` for the web service, next to
+  `S3_ALLOW_HTTP`, with a one-line comment that it is for the local stack only.
+- `docker/env.example`: one comment line, like line 45's, that a real deployment never sets it.
+- Tests: production + unsigned + flag unset refuses; production + unsigned + flag `'true'` allows
+  and logs the code; production + unsigned + flag `'1'` refuses.
+Files added to the list below: `docker/compose.yaml`, `docker/env.example`.
+
 ### Item 3: `requireRole`'s default clearance — coverage test (not a behaviour change)
 Recommendation: extend the existing scan, not change the default. `apps/web/src/chat/clearance-scan.test.ts`
 already fails the build on a bare `requireRole(['student'])` with no `clearance: 'agent'`, but only
@@ -124,7 +142,7 @@ no-op." The same pattern already exists for CHECK constraints (migration `0023`,
   deferral)...". This is an append, matching the array's own "append here, don't edit past entries"
   rule for itself (the migration **file** is the thing being edited here, not this list).
 - `packages/db/test/migrate.test.ts`: the count assertion
-  (`POST_MIGRATE_STEPS.filter(s => s.kind === 'validateConstraint')).toHaveLength(7)`) becomes `9`,
+  (`POST_MIGRATE_STEPS.filter(s => s.kind === 'validateConstraint')).toHaveLength(7)`) becomes `9` (lead note: once 11.4h is merged the count on main is 8, so it becomes `10`; use whatever main has plus 2),
   plus a new block asserting the two new entries, following the existing `documents`/`agents` blocks
   exactly.
 - `packages/db/test/age-consent-migration.int.test.ts`: change `migrateWith(MIGRATIONS_DIR)` in
@@ -143,6 +161,7 @@ no-op." The same pattern already exists for CHECK constraints (migration `0023`,
 - `apps/web/src/auth/age.ts`, `apps/web/src/auth/age.test.ts`, `apps/web/src/auth/index.ts` (items 2, 4)
 - `apps/web/src/chat/clearance-scan.test.ts` (item 3)
 - `packages/db/src/identity/age.ts` — **read only**, no diff (item 5)
+- `docker/compose.yaml`, `docker/env.example` (lead amendment to item 2)
 - `packages/db/migrations/0014_age_consent.sql`, `packages/db/src/migrate.ts`,
   `packages/db/test/migrate.test.ts`, `packages/db/test/age-consent-migration.int.test.ts` (item 6)
 
