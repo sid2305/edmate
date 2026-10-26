@@ -60,6 +60,14 @@ Status: DONE
   change does not affect — see the embedded-UUID test), and the plan does not ask for it; flagged
   here in case a future value hits it.
 
+### 25 Oct 2026 · 8.7m fix round 2: HEX_DIGEST requires at least one a-f letter · decided by builder · risk: low
+- Decided: add a lookahead to `HEX_DIGEST` requiring at least one a-f letter in the run, instead
+  of any other way to exclude pure-digit runs.
+- Why: a bare 32+ digit run is exactly the shape `PHONE_CANDIDATE` must redact (it is itself a
+  phone-length digit run); only an actual hex digest (one with a letter) needs the exemption.
+  Requiring a letter is the minimal fix and keeps the single linear pass per regex, no nested
+  quantifiers.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` → 26/26 tasks successful;
@@ -115,3 +123,41 @@ Tool calls used: 24
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 Tool calls used: 20
+
+## Fix round 2
+
+- `packages/db/src/repositories/redact-json.ts`
+  - `HEX_DIGEST` now requires at least one a-f letter via a lookahead,
+    `(?<![A-Za-z0-9])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{32,}(?![A-Za-z0-9])`, so a pure-digit run
+    of 32+ characters no longer matches it and is no longer exempted from `PHONE_CANDIDATE`
+    (typescript-reviewer HIGH: the old regex matched pure-digit runs too, so they survived
+    unredacted where origin/main redacts them — fail-open). Checked `PREFIXED_ID`: it requires an
+    `_`, so it never exempts a bare pure-digit run either (security-reviewer's earlier finding
+    still holds).
+  - Verified by hand that the lookahead stays linear: a 600,000-character all-digit string,
+    all-letter string, and a repeating hex-ish string each redact in a few milliseconds, no
+    quadratic blowup.
+- `packages/db/test/redact-json.test.ts`
+  - Added: pure-digit runs of 32, 33 and 40 characters are still redacted, bare and inside an
+    audit-shaped object (shown to fail on the pre-fix code: all three asserted `[redacted]` but
+    got the raw digit run back).
+  - Added: a 32-char hex digest with exactly one letter (31 digits + `a`) still survives
+    unredacted; reran the existing `rp_<hex40>` property test and the 64-char hex digest test,
+    both still pass.
+
+### 25 Oct 2026 · 8.7m fix round 2: HEX_DIGEST requires at least one a-f letter · decided by builder · risk: low
+- Decided: add a lookahead to `HEX_DIGEST` requiring at least one a-f letter in the run, instead
+  of any other way to exclude pure-digit runs.
+- Why: a bare 32+ digit run is exactly the shape `PHONE_CANDIDATE` must redact (it is itself a
+  phone-length digit run); only an actual hex digest (one with a letter) needs the exemption.
+  Requiring a letter is the minimal fix and keeps the single linear pass per regex, no nested
+  quantifiers.
+
+## Fix round 2 gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` → 26/26 tasks successful;
+  `redact-json.ts` still at 100% statements/branches/functions/lines.
+- `corepack pnpm exec prettier --check packages/db/src/repositories/redact-json.ts packages/db/test/redact-json.test.ts` → "All matched files use Prettier code style!"
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+
+Tool calls used: 19

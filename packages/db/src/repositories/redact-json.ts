@@ -80,8 +80,16 @@ const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g
  * way now that a letter alone no longer blocks the match.
  */
 const PREFIXED_ID = /(?<![A-Za-z0-9_-])[A-Za-z0-9]+_[A-Za-z0-9_-]*(?![A-Za-z0-9_-])/g;
-/** A bare hex digest (content hash), 32+ hex characters bounded by non-alphanumerics. */
-const HEX_DIGEST = /(?<![A-Za-z0-9])[0-9a-fA-F]{32,}(?![A-Za-z0-9])/g;
+/**
+ * A bare hex digest (content hash), 32+ hex characters bounded by non-alphanumerics. The
+ * lookahead `(?=[0-9a-fA-F]*[a-fA-F])` requires at least one a-f letter in the run: without it, a
+ * pure-digit run of 32+ characters also matched, exempting it from PHONE_CANDIDATE so it survived
+ * unredacted where main redacts it (fail-open regression, 8.7m fix round 2). The lookahead is a
+ * single bounded scan to the next letter (or end of string) from the current position, so this
+ * stays linear overall: verified by hand on a 600k-character all-digit, all-letter and hex-ish
+ * input (no quadratic blowup).
+ */
+const HEX_DIGEST = /(?<![A-Za-z0-9])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{32,}(?![A-Za-z0-9])/g;
 
 /** Half-open [start, end) character spans covered by a match of `re` in `s`. */
 function matchSpans(re: RegExp, s: string): Array<[number, number]> {

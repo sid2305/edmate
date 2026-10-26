@@ -375,6 +375,28 @@ describe('redactPersonalData', () => {
     expect(redactPersonalData(digest)).toBe(digest);
   });
 
+  // Fix round 2 (typescript-reviewer HIGH): HEX_DIGEST's `[0-9a-fA-F]{32,}` also matched a
+  // pure-digit run of 32+ characters, exempting it from PHONE_CANDIDATE and leaving it
+  // unredacted where main redacts it (fail-open). HEX_DIGEST must require at least one a-f
+  // letter to exempt a run, so a pure-digit run of this length is still redacted.
+  it.each([32, 33, 40])('still redacts a pure-digit run of %d digits', (length) => {
+    const run = '1'.repeat(length);
+    expect(redactPersonalData(run)).toBe(REDACTED);
+    expect(
+      redactPersonalData({ reportId: 'rp_1', before: { id: run }, after: { id: run } }),
+    ).toEqual({
+      reportId: 'rp_1',
+      before: { id: REDACTED },
+      after: { id: REDACTED },
+    });
+  });
+
+  it('still keeps a 32-char hex digest with exactly one letter unredacted', () => {
+    const digest = `${'1'.repeat(31)}a`;
+    expect(redactPersonalData({ note: digest })).toEqual({ note: digest });
+    expect(redactPersonalData(digest)).toBe(digest);
+  });
+
   it('still redacts a phone number that sits next to, not inside, a prefixed id', () => {
     const id = 'rp_1234567890123456789012345678901234567890';
     expect(redactPersonalData({ note: `${id} call 555-010-0199` })).toEqual({
