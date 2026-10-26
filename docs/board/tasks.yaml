@@ -7820,6 +7820,14 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 11.4h
+  milestone: M13
+  title: '11.4e review follow-ups: a database guard (composite FK or trigger, added NOT VALID then VALIDATE) so documents.live_class_id can only point at a live class of the same teacher (today only repository writes check it, e.g. chunks.ts:337); in packages/db/test/documents.int.test.ts the recordings cap test clears the teacher''s earlier linked documents first (or its name stops saying it drops only the oldest), and a comment marks the teacher-B half of the cross-teacher test as a sanity check, not the join regression'
+  accept: a raw insert of a cross-teacher document/live class link fails; the cap test's arithmetic matches its name; db typecheck, lint and test green.
+  deps:
+  - 11.4e
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
