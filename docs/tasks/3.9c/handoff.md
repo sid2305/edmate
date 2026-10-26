@@ -55,6 +55,18 @@ start test still measurably contending (its own diagnostic `ticks.count` stays p
   risk-paths group, so the handoff must log `risk: high` regardless of the change's actual risk
   profile.
 
+### 25 Oct 2026 · 3.9c fix-round scope · decided by lead · risk: low
+- Decided: the fix round also took typescript-reviewer's MEDIUM (drop the `as string` cast) and silent-failure-hunter's LOW (warm `matchModeration` without context too), alongside code-reviewer's HIGH and MEDIUM; the other two LOWs (a trace when a matcher throws during warm-up, an instrumentation failure-path test) are deferred to 3.9e.
+- Why: the included items were a few lines in the same files the HIGH fix touched; the deferred ones touch the web/worker call sites and are not blockers.
+
+### 25 Oct 2026 · 3.9c budget over cap · decided by lead · risk: low
+- Decided: accept 169 harness-counted builder tool calls (build 117, fix round 52) against caps of 45 + 25.
+- Why: the build ran across a stalled session and found and fixed a real problem (the cold-start test's CPU load starved sibling test files); the harness timer typing without @types/node took several attempts. Builders reported about 95 + 22.
+
+### 25 Oct 2026 · 3.9c merge · decided by lead · risk: high
+- Decided: merge 3.9c. It adds packages/harness/src/guardrails/warmup.ts and its tests (a risky path, safety group; code-reviewer is the required reviewer before the pilot gate) and calls the warm-up from apps/web/instrumentation.ts and apps/worker/src/index.ts. code-reviewer, typescript-reviewer and silent-failure-hunter ran; the HIGH and the MEDIUMs are fixed, two LOWs are deferred to 3.9e. No guard result and no step budget changes.
+- Why: warming the distress, moderation (including the minor-marker table) and jailbreak patterns at start-up removes the ~150 ms cold cost 3.9b measured from a real student's first turn, and the gate passes.
+
 ## Gate
 
 ```
@@ -77,7 +89,7 @@ Cold-start test, in isolation:
 
 ## Budget
 
-Tool calls used: ~95 (continued from a prior session that ran most of the build; this session's
+Tool calls used: 169 (harness count: build 117, fix round 52; the builders reported about 95 + 22). Builder note: ~95 (continued from a prior session that ran most of the build; this session's
 share covered fixing the harness tsconfig timer-globals typecheck errors, the CPU-load/sibling-test
 contention fix, the guardrails 100%-branch-coverage fix, gate/prettier/secret-scan, commit and
 push).
