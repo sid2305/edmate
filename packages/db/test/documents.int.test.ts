@@ -468,10 +468,9 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       await repos.documents.create(A, input('doc_rd_yes', { rightsDeclared: true }));
       const at = await declaredAt('doc_rd_yes');
       expect(at).not.toBeNull();
-      expect(at!.getTime()).toBeGreaterThanOrEqual(t0 - 5_000);
-      expect((await repos.documents.get(A, 'doc_rd_yes'))?.rightsDeclaredAt).toBe(
-        at!.toISOString(),
-      );
+      if (at === null) throw new Error('expected rights_declared_at');
+      expect(at.getTime()).toBeGreaterThanOrEqual(t0 - 5_000);
+      expect((await repos.documents.get(A, 'doc_rd_yes'))?.rightsDeclaredAt).toBe(at.toISOString());
     });
 
     it('12.3f: a create or replace without rightsDeclared is invalid and writes nothing', async () => {
@@ -521,9 +520,11 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         rightsDeclared: true,
       });
       const fresh = await declaredAt('doc_rd_rep');
-      expect(fresh!.getTime()).toBeGreaterThan(Date.parse('2020-01-02T00:00:00Z'));
+      expect(fresh).not.toBeNull();
+      if (fresh === null) throw new Error('expected rights_declared_at');
+      expect(fresh.getTime()).toBeGreaterThan(Date.parse('2020-01-02T00:00:00Z'));
       expect((await repos.documents.get(A, 'doc_rd_rep'))?.rightsDeclaredAt).toBe(
-        fresh!.toISOString(),
+        fresh.toISOString(),
       );
     });
   });

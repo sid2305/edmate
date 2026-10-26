@@ -462,7 +462,10 @@ export function documentsRepo(db: Db) {
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
           const locked = await lockDocument(tx, teacherId, docId, method);
-          if (locked.kind === 'teacher_note' || (locked.liveClassId !== null && r.kind === 'material')) {
+          if (
+            locked.kind === 'teacher_note' ||
+            (locked.liveClassId !== null && r.kind === 'material')
+          ) {
             throw new RepositoryError('invalid', method);
           }
           const previousStorageKey = locked.storageKey;
@@ -499,7 +502,11 @@ async function lockDocument(
   method: string,
 ): Promise<{ storageKey: string | null; kind: string; liveClassId: string | null }> {
   const [row] = await tx
-    .select({ storageKey: documents.storageKey, kind: documents.kind, liveClassId: documents.liveClassId })
+    .select({
+      storageKey: documents.storageKey,
+      kind: documents.kind,
+      liveClassId: documents.liveClassId,
+    })
     .from(documents)
     .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)))
     .for('update');

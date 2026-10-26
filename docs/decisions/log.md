@@ -10,6 +10,95 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 12.3e budget over cap · decided by lead · risk: low
+- Decided: accept 38 harness-counted builder tool calls against a cap of 15.
+- Why: the full @edmate/db gate needed a rerun after an unrelated harness timing flake (modelRequest.test.ts, a known flake); the change itself is small and both reviewers approved.
+
+---
+
+### 25 Oct 2026 · 12.3e merge · decided by lead · risk: high
+- Decided: merge 12.3e. It touches packages/db/src/repositories/chunks.ts (a risky path, security-reviewer group); code-reviewer and security-reviewer confirmed the change is whitespace-only reformatting, and the test guards keep the tests' meaning.
+- Why: no behaviour change, the gate passes, no findings.
+
+---
+
+### 25 Oct 2026 · 8.7m hex-padded phone stays an accepted UUID trade-off · decided by builder · risk: low
+- Decided: no code change for the hex-padded-phone case; added a test
+  (`keeps a UUID-shaped value whose digits look like a phone number (8.7h trade-off)`) that
+  documents and locks in the existing 8.7h behaviour (UUID-shaped values are exempt from the
+  phone digit-run rule, even when padded so the digits read as a phone number).
+- Why: the plan asked for a test, not a fix; the 8.7h decision already accepted this trade-off at
+  `risk: high`, and this value is still UUID-shaped by the same regex.
+
+---
+
+### 25 Oct 2026 · 8.7m a UUID glued to a phone number with no separator redacts the whole run · decided by builder · risk: low
+- Decided: when a phone-length digit run is glued onto a UUID's last hex group with no
+  separator, the merged run no longer matches the `UUID` regex (its trailing `\b` needs a
+  non-word character right after the 12th hex character, but the next character is still a
+  digit), so `PHONE_CANDIDATE` treats the whole digit-and-hyphen run as one phone-shaped
+  candidate and redacts it entirely — the UUID-looking prefix is lost along with the phone
+  digits. Added a test asserting the phone digits never survive
+  (`redacts a UUID with a 10-digit phone number glued on with no separator`).
+- Why: the plan requires the phone digits must never survive; over-redacting the glued UUID
+  prefix too is the safe side (fail closed), and a UUID is already recoverable from context
+  (callers keep real ids outside these audit payloads per README rule 9), whereas a phone number
+  surviving would not be. Also noted: dropping `\p{L}` from the lookbehind only affects the start
+  of a match; a letter glued directly to a UUID with *no* phone number appended and *no*
+  separator (e.g. `id12345678-1234-4234-8234-123456789012`, no space or punctuation before the
+  UUID) now also gets fully redacted for the same `\b`-boundary reason, since letter-then-digit
+  is not a word boundary either. This is not covered by a test because it is not a realistic
+  shape (ids and UUIDs are written with a separator such as a space or colon in text, which this
+  change does not affect — see the embedded-UUID test), and the plan does not ask for it; flagged
+  here in case a future value hits it.
+
+---
+
+### 25 Oct 2026 · 8.7m fix round: prefixed-id and hex-digest spans are exempt from PHONE_CANDIDATE · decided by builder · risk: low
+- Decided: treat whole `<prefix>_<rest>` id tokens and bare 32+ char hex digests as exempt spans,
+  the same way UUID-shaped runs already are, instead of narrowing `PHONE_CANDIDATE`'s lookbehind
+  further.
+- Why: narrowing the lookbehind back to block letters would undo the 8.7m fix (glued phone
+  numbers like `abc5551234567` would stop being redacted again); excluding the specific id/hash
+  shapes that need protecting keeps both behaviours and stays a single linear scan per regex (no
+  nested quantifiers).
+
+---
+
+### 25 Oct 2026 · 8.7m fix round 2: HEX_DIGEST requires at least one a-f letter · decided by builder · risk: low
+- Decided: add a lookahead to `HEX_DIGEST` requiring at least one a-f letter in the run, instead
+  of any other way to exclude pure-digit runs.
+- Why: a bare 32+ digit run is exactly the shape `PHONE_CANDIDATE` must redact (it is itself a
+  phone-length digit run); only an actual hex digest (one with a letter) needs the exemption.
+  Requiring a letter is the minimal fix and keeps the single linear pass per regex, no nested
+  quantifiers.
+
+---
+
+### 25 Oct 2026 · 8.7m two fix rounds, not a failed round · decided by lead · risk: low
+- Decided: run a second fix round without asking the human. Round 1 fixed the CRITICAL (report ids corrupted) and both typescript-reviewer findings; its new HEX_DIGEST exemption introduced a separate HIGH (pure-digit 32+ runs escaped redaction), which round 2 fixed. Both reviewers approved round 2.
+- Why: the two-failed-rounds rule is for a finding that a fix round fails to fix; here every finding was fixed in the round that targeted it.
+
+---
+
+### 25 Oct 2026 · 8.7m id followed by a space and a phone number deferred · decided by lead · risk: low
+- Decided: defer typescript-reviewer's round-2 MEDIUM to board task 8.7p: in packages/db/src/repositories/redact-json.ts a `rp_<hex40>`, prefixed id or hex digest followed by one space and then a phone-shaped run is redacted together with the phone, so the id's tail is lost. The builder decision above that says a separator protects ids holds for a word separator, not a bare space.
+- Why: the phone number is still redacted (no personal data leaks), audit ids are stored as whole values rather than next to phone numbers, and the fix-only-blockers rule defers MEDIUM findings.
+
+---
+
+### 25 Oct 2026 · 8.7m budget over cap · decided by lead · risk: low
+- Decided: accept 128 harness-counted builder tool calls (build 35, fix round 1 46, fix round 2 47) against caps of 30 + 25 + 20.
+- Why: the two fix rounds came from a CRITICAL and a HIGH on a security-sensitive redaction path; the fixers wrote differential and linearity probes that the reviewers then confirmed. Builders reported 24 + 20 + 19; briefs keep the foreground-tests rule.
+
+---
+
+### 25 Oct 2026 · 8.7m merge · decided by lead · risk: high
+- Decided: merge 8.7m. It touches packages/db/src/repositories/redact-json.ts (a risky path, security-reviewer group). code-reviewer, typescript-reviewer and security-reviewer ran; the CRITICAL, the HIGH, the MEDIUM and the LOW were fixed, and a new MEDIUM is deferred to 8.7p. The pre-existing EMAIL regex slowness found by security-reviewer is board task 8.7o.
+- Why: glued phone numbers are now redacted, report ids, UUIDs and hex digests survive, a 200k-case differential fuzz found nothing redacted on main that survives on the branch, and the gate passes.
+
+---
+
 ### 25 Oct 2026 · 11.4e join check reachability · decided by builder · risk: low
 - Decided: Treated the cross-teacher join test as a live, reachable regression test (not a
   "defence in depth behind a DB constraint" case), because inserting a document for teacher A

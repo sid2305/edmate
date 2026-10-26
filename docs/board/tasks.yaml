@@ -5846,9 +5846,33 @@ tasks:
   deps:
   - 8.7h
   risk: high
-  status: running
+  status: done
   branch: m13/8.7m-redact-json-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet fix:sonnet x2 review:sonnet
+  metrics:
+    tool_calls: 188
+    tokens_in: 644
+    tokens_out: 43961
+    cache_read_tokens: 15146751
+    wall_time_seconds: 2942
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 4
+    findings:
+      total: 6
+      by_severity:
+        CRITICAL: 1
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.6g
   milestone: M9
   title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher
@@ -7546,9 +7570,29 @@ tasks:
   deps:
   - 12.3b
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/12.3e-chunks-format
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 269
+    tokens_in: 962
+    tokens_out: 73796
+    cache_read_tokens: 34834099
+    wall_time_seconds: 1758
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 11.4a
   milestone: M11
   title: 'Link a document to its live class: nullable documents.live_class_id, own started class only, listRecordingsForTeacher (11.4 Phase A)'
@@ -7875,7 +7919,9 @@ tasks:
   deps:
   - 11.4e
   risk: low
-  status: todo
+  status: running
+  branch: m13/11.4h-document-class-fk
+  model: plan:sonnet build:sonnet
 - id: 8.7o
   milestone: M13
   title: '8.7m security review follow-up: the EMAIL regex in packages/db/src/repositories/redact-json.ts (unchanged since before 8.7m) is quadratic on adversarial input such as ''a1_''.repeat(N), about
@@ -8725,6 +8771,16 @@ tasks:
   status: running
   model: plan:sonnet build:sonnet
   branch: m13/3.9c-warm-preguard
+- id: 3.9e
+  milestone: M13
+  title: '3.9c review LOWs: packages/harness/src/guardrails/warmup.ts swallows a matcher throw with no trace at all (return a count of failed matchers, or similar, that the web and worker call sites log by matcher
+    name only, no text); apps/web/instrumentation.test.ts gains a case where the harness import or warmPreGuardPatterns throws, asserting console.error logs the error name and register() does not throw,
+    like the warmPool failure tests'
+  accept: a throwing matcher during warm-up is visible in the web and worker logs (no student text); the instrumentation failure test passes; harness 100% branch coverage on src/guardrails/** holds.
+  deps:
+  - 3.9c
+  risk: low
+  status: todo
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
@@ -8733,7 +8789,9 @@ tasks:
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/3.9a-cli-chat-followups
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against
