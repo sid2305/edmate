@@ -53,8 +53,13 @@ function isPersonalKey(key: string): boolean {
 }
 
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
-/** A phone-shaped run: digits with spaces, dots, dashes or brackets between them. */
-const PHONE_CANDIDATE = /(?<![\p{L}\p{N}_.+-])\+?\(?\d[\d\s().-]{4,}\d(?![\p{L}\p{N}_])/gu;
+/**
+ * A phone-shaped run: digits with spaces, dots, dashes or brackets between them. The run may
+ * directly follow a letter (`abc5551234567`): only `\p{N}_.+-` before the start block the match,
+ * so a run glued to an id prefix (`_`, a digit or `.`/`+`/`-`) still stays unredacted, while a run
+ * glued to a plain letter is now redacted (8.7m).
+ */
+const PHONE_CANDIDATE = /(?<![\p{N}_.+-])\+?\(?\d[\d\s().-]{4,}\d(?![\p{L}\p{N}_])/gu;
 /** At least this many digits make a candidate a phone number. */
 const PHONE_MIN_DIGITS = 7;
 /** Candidates that are dates or decimals, not phones. */
@@ -66,16 +71,36 @@ const NOT_A_PHONE = /^(?:\d{4}-\d{2}-\d{2}|\d+\.\d+)$/;
  * must not be redacted by PHONE_CANDIDATE; see 8.7h.
  */
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu;
+/**
+ * A `<prefix>_<rest>` id token (`rp_<hex40>`, `tch_93d`, `doc_cap_501`, `se_<hash>`): a run of
+ * `[A-Za-z0-9]` containing at least one `_`, bounded by characters outside the contracts id
+ * alphabet `[A-Za-z0-9_-]` (packages/contracts/src/formats.ts). A digit run inside such a token
+ * was never redacted before 8.7m either (the leading `_` or the preceding letter blocked it), so
+ * excluding the whole token here is not a regression, just the same result reached a different
+ * way now that a letter alone no longer blocks the match.
+ */
+const PREFIXED_ID = /(?<![A-Za-z0-9_-])[A-Za-z0-9]+_[A-Za-z0-9_-]*(?![A-Za-z0-9_-])/g;
+/**
+ * A bare hex digest (content hash), 32+ hex characters bounded by non-alphanumerics. The
+ * lookahead `(?=[0-9a-fA-F]*[a-fA-F])` requires at least one a-f letter in the run: without it, a
+ * pure-digit run of 32+ characters also matched, exempting it from PHONE_CANDIDATE so it survived
+ * unredacted where main redacts it (fail-open regression, 8.7m fix round 2). The lookahead is a
+ * single bounded scan to the next letter (or end of string) from the current position, so this
+ * stays linear overall: verified by hand on a 600k-character all-digit, all-letter and hex-ish
+ * input (no quadratic blowup).
+ */
+const HEX_DIGEST = /(?<![A-Za-z0-9])(?=[0-9a-fA-F]*[a-fA-F])[0-9a-fA-F]{32,}(?![A-Za-z0-9])/g;
 
-/** Half-open [start, end) character spans covered by a UUID-shaped run in `s`. */
-function uuidSpans(s: string): Array<[number, number]> {
+/** Half-open [start, end) character spans covered by a match of `re` in `s`. */
+function matchSpans(re: RegExp, s: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
-  for (const m of s.matchAll(UUID)) {
-    // matchAll always sets `index` (it iterates a global regex over `s`), so this is never
-    // undefined; the array type just allows for optional-chaining regexes.
-    const start = m.index as number;
-    spans.push([start, start + m[0].length]);
-  }
+  // `String.replace`'s callback gets the match offset as a plain `number` (no `| undefined`,
+  // unlike `RegExpMatchArray.index`), so this collects spans without a cast; the string itself is
+  // returned unchanged.
+  s.replace(re, (m: string, offset: number) => {
+    spans.push([offset, offset + m.length]);
+    return m;
+  });
   return spans;
 }
 
@@ -85,15 +110,16 @@ function coveredBy(start: number, end: number, spans: Array<[number, number]>): 
 }
 
 /** The string with every email-like and phone-like part replaced by REDACTED. UUID-shaped runs
- *  (whole value or embedded) are never treated as phone numbers, even when a group inside them is
- *  all digits. */
+ *  (whole value or embedded), prefixed id tokens and bare hex digests are never treated as phone
+ *  numbers, even when a digit run inside them is 7 or more digits long. */
 function redactString(s: string): string {
   const afterEmail = s.replace(EMAIL, REDACTED);
-  const spans = uuidSpans(afterEmail);
-  return afterEmail.replace(PHONE_CANDIDATE, (m, ...rest) => {
-    // String.replace passes (match, ...captureGroups, offset, fullString) for a global regex with
-    // no capture groups: rest[0] is the offset.
-    const offset = rest[0] as number;
+  const spans = [
+    ...matchSpans(UUID, afterEmail),
+    ...matchSpans(PREFIXED_ID, afterEmail),
+    ...matchSpans(HEX_DIGEST, afterEmail),
+  ];
+  return afterEmail.replace(PHONE_CANDIDATE, (m: string, offset: number) => {
     if (coveredBy(offset, offset + m.length, spans)) return m;
     const digits = m.replace(/\D/g, '').length;
     return digits >= PHONE_MIN_DIGITS && !NOT_A_PHONE.test(m) ? REDACTED : m;
