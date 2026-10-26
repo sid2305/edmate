@@ -10,6 +10,35 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 11.4e join check reachability · decided by builder · risk: low
+- Decided: Treated the cross-teacher join test as a live, reachable regression test (not a
+  "defence in depth behind a DB constraint" case), because inserting a document for teacher A
+  with `live_class_id` pointing at teacher B's live class succeeded with no constraint or
+  trigger violation.
+- Why: The plan's fallback path (asserting a DB refusal) only applies if the database itself
+  blocks the cross-teacher row; it did not, so the real assertion (the join excludes the row)
+  is the one that matters and is exercised.
+
+---
+
+### 25 Oct 2026 · 11.4e deferred review findings · decided by lead · risk: low
+- Decided: defer the code-reviewer MEDIUM (no database guard stops documents.live_class_id pointing at another teacher's live class) and the typescript-reviewer LOWs (the cap test's arithmetic includes earlier linked documents; the teacher-B half of the cross-teacher test is only a sanity check) to new board task 11.4h.
+- Why: none is a defect in this test-only change; repository writes already refuse cross-teacher links (chunks.ts:337), so the database guard is defence in depth and needs its own migration and database review.
+
+---
+
+### 25 Oct 2026 · 11.4e budget · decided by lead · risk: low
+- Decided: accept 164 tool calls (harness count) against a planned 30; future builder briefs say to run the db test suite in the foreground with a timeout and never poll a log file with repeated tail calls.
+- Why: about 150 of the calls were Bash, mostly repeated `tail` reads of a background test log while the suite ran; the work itself was small, and the change is correct, so re-running it would cost more than accepting it.
+
+---
+
+### 25 Oct 2026 · 11.4e merge · decided by lead · risk: low
+- Decided: merge 11.4e (a recordings cap test that bulk-inserts RECORDING_LIST_MAX+1 linked documents and a cross-teacher join test, both in packages/db/test/documents.int.test.ts) with no fix round.
+- Why: test-only change, not a risky path; code-reviewer and typescript-reviewer approved, and the builder showed each test fails with the cap or the join's teacher clause removed.
+
+---
+
 ### 25 Oct 2026 · 9.3d skip the optional pending→verified mirror case · decided by builder · risk: low
 - Decided: implemented only the required concurrent-reject case and the pending-teacher case;
   skipped the plan's optional "mirror case" (a concurrent verify committed while start waits →

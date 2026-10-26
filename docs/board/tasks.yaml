@@ -7778,9 +7778,31 @@ tasks:
   deps:
   - 11.4a
   risk: low
-  status: running
+  status: done
   branch: m13/11.4e-recordings-tests
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 165
+    tokens_in: 524
+    tokens_out: 10958
+    cache_read_tokens: 21843270
+    wall_time_seconds: 765
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 11.4f
   milestone: M13
   title: '11.4b review follow-ups: UploadType carries a splittable flag and newFile picks the 413 message from it, not from maxBytes equal to 24 MB (apps/web/src/studio/routes.ts:208); media() takes an
