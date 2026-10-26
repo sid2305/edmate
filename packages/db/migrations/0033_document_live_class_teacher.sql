@@ -1,0 +1,34 @@
+-- Hand-edited (task 11.4h, 11.4e review follow-up): a raw insert of a document linked to
+-- another teacher's live class should fail at the database, not rely on the repository's join
+-- predicate alone. A composite FK is a direct extension of the repo's existing NOT VALID ->
+-- VALIDATE pattern (migrations 0009, 0023, 0024; packages/db/src/migrate.ts
+-- POST_MIGRATE_STEPS), and the repo already has the exact precedent for a composite FK
+-- referencing a composite *unique index* (not a named UNIQUE constraint) on a second table:
+-- migration 0009's sessions_package_version_fk references package_versions(package_id,
+-- version), which is only a uniqueIndex in schema/agents.ts
+-- (package_versions_package_id_version_key) -- Postgres accepts a plain unique btree index as
+-- an FK target.
+--
+-- live_classes is small (a teacher's own scheduled classes, same order of magnitude as
+-- documents, which migration 0024 already built a plain, non-concurrent partial index on with
+-- the same "table is small" reasoning), so the new unique index and the FK's NOT VALID add both
+-- run as plain statements inside this migration's transaction; only VALIDATE CONSTRAINT (the
+-- scan) runs as an autocommit post-migrate step, same as every other NOT VALID constraint here.
+--
+-- The old single-column FK documents_live_class_id_live_classes_id_fk is dropped and replaced by
+-- documents_teacher_id_live_class_id_live_classes_fk (teacher_id, live_class_id) ->
+-- live_classes(teacher_id, id). The old FK's POST_MIGRATE_STEPS entry (packages/db/src/
+-- migrate.ts) is left in place (the list is append-only) and becomes a no-op once the constraint
+-- it names no longer exists -- isConstraintValidated already treats "no such constraint" as
+-- nothing to validate.
+-- Hand-edited: ON DELETE SET NULL ("live_class_id") -- the column-list form (Postgres 15+) -- so
+-- deleting a live class nulls only live_class_id, not teacher_id (a plain, column-list-less
+-- SET NULL on a composite FK nulls every referencing column, which would violate documents.
+-- teacher_id's NOT NULL). `documents.references()`/`foreignKey().onDelete()` in schema/
+-- content.ts can't express a column list (drizzle-orm's UpdateDeleteAction is a plain string),
+-- so this diverges from what `db:generate` would re-emit; that's fine, db:generate compares
+-- against the TS schema/snapshot, not this runtime clause, and stays a no-op (same as every
+-- other hand-edited NOT VALID clause in this repo).
+CREATE UNIQUE INDEX "live_classes_teacher_id_id_key" ON "live_classes" USING btree ("teacher_id","id");--> statement-breakpoint
+ALTER TABLE "documents" DROP CONSTRAINT "documents_live_class_id_live_classes_id_fk";--> statement-breakpoint
+ALTER TABLE "documents" ADD CONSTRAINT "documents_teacher_id_live_class_id_live_classes_fk" FOREIGN KEY ("teacher_id","live_class_id") REFERENCES "public"."live_classes"("teacher_id","id") ON DELETE SET NULL ("live_class_id") ON UPDATE no action NOT VALID;

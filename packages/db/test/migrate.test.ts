@@ -148,8 +148,8 @@ describe('runPostMigrateSteps', () => {
     );
   });
 
-  it('the default step list runs the three 0009 VALIDATEs, the three 0023 VALIDATEs, the 0024 VALIDATE and the package-pin and open-session indexes', () => {
-    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(7);
+  it('the default step list runs the three 0009 VALIDATEs, the three 0023 VALIDATEs, the 0024 VALIDATE, the 0033 VALIDATE and the package-pin and open-session indexes', () => {
+    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(8);
     expect(
       POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint' && s.table === 'documents'),
     ).toEqual([
@@ -157,6 +157,11 @@ describe('runPostMigrateSteps', () => {
         kind: 'validateConstraint',
         table: 'documents',
         constraint: 'documents_live_class_id_live_classes_id_fk',
+      },
+      {
+        kind: 'validateConstraint',
+        table: 'documents',
+        constraint: 'documents_teacher_id_live_class_id_live_classes_fk',
       },
     ]);
     expect(

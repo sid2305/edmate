@@ -783,6 +783,19 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
     });
 
     it('caps listRecordingsForTeacher at RECORDING_LIST_MAX, dropping only the oldest', async () => {
+      // Clear teacher A's earlier linked documents from this block (doc_rec_own,
+      // doc_rec_replace, doc_rec_nomat, doc_rec_search, doc_rec_list1) so the rows inserted
+      // below are the only linked documents teacher A has, making "dropping only the oldest"
+      // literally true against RECORDING_LIST_MAX (task 11.4h). doc_rec_search has chunks
+      // (no ON DELETE on chunks.document_id), so those are cleared first.
+      await raw.query(
+        `delete from chunks where document_id in
+           (select id from documents where teacher_id = $1 and live_class_id is not null)`,
+        [RA],
+      );
+      await raw.query(`delete from documents where teacher_id = $1 and live_class_id is not null`, [
+        RA,
+      ]);
       await raw.query(
         `insert into documents (id, teacher_id, module_id, kind, source_title, live_class_id, created_at)
            select 'doc_cap_' || g, $1, $2, 'transcript', 'cap test', $3,
@@ -801,24 +814,18 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       }
     });
 
-    it("listRecordingsForTeacher's join only matches the scope's own live class, not another teacher's", async () => {
-      await raw.query(
-        `insert into documents (id, teacher_id, module_id, kind, source_title, live_class_id)
-           values ('doc_rec_cross', $1, $2, 'transcript', 'Cross-teacher link', $3)`,
-        [RA, MOD.allowed, LC_B],
-      );
-      try {
-        const mineIds = (await repos.liveClasses.listRecordingsForTeacher(A)).map(
-          (r) => r.documentId,
-        );
-        expect(mineIds).not.toContain('doc_rec_cross');
-        const theirIds = (await repos.liveClasses.listRecordingsForTeacher(B)).map(
-          (r) => r.documentId,
-        );
-        expect(theirIds).not.toContain('doc_rec_cross');
-      } finally {
-        await raw.query(`delete from documents where id = 'doc_rec_cross'`);
-      }
+    it('a raw insert of a cross-teacher document/live class link is refused by the database (task 11.4h)', async () => {
+      // The composite FK documents_teacher_id_live_class_id_live_classes_fk now refuses this
+      // insert outright (teacher A's document can only link to teacher A's own live class), so
+      // there is no row left to check a join against; this replaces the previous
+      // insert-then-check-the-join shape (task 11.4h plan).
+      await expect(
+        raw.query(
+          `insert into documents (id, teacher_id, module_id, kind, source_title, live_class_id)
+             values ('doc_rec_cross', $1, $2, 'transcript', 'Cross-teacher link', $3)`,
+          [RA, MOD.allowed, LC_B],
+        ),
+      ).rejects.toThrow(/foreign key/);
     });
   });
 

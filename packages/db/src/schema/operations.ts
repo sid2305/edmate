@@ -100,6 +100,9 @@ export const liveClasses = pgTable(
   (t) => [
     index('live_classes_teacher_id_starts_at_idx').on(t.teacherId, t.startsAt),
     check('live_classes_status_check', sql`${t.status} in ('scheduled', 'cancelled')`),
+    // Exists only as the target of documents' composite FK (task 11.4h): a plain unique
+    // btree index is a valid Postgres FK target, same as package_versions' precedent (0009).
+    uniqueIndex('live_classes_teacher_id_id_key').on(t.teacherId, t.id),
   ],
 );
 
@@ -121,11 +124,7 @@ export const classQuestions = pgTable(
     // the teacher queue scan's cross-class ORDER BY (that scan still sorts a bounded set, capped
     // at QUEUE_SCAN_MAX, across all of the teacher's upcoming classes). This index replaces the
     // old live_class_id-only index (a strict prefix of this one, so dropping it loses nothing).
-    index('class_questions_live_class_id_created_at_id_idx').on(
-      t.liveClassId,
-      t.createdAt,
-      t.id,
-    ),
+    index('class_questions_live_class_id_created_at_id_idx').on(t.liveClassId, t.createdAt, t.id),
   ],
 );
 

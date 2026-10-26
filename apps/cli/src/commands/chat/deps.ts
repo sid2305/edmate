@@ -26,7 +26,11 @@ import {
   type IdSource,
   type PipelineDeps,
 } from '@edmate/harness';
-import type { AccessWorld, MemorySessionStateStore, MemoryUsageMeter } from '@edmate/harness/testing';
+import type {
+  AccessWorld,
+  MemorySessionStateStore,
+  MemoryUsageMeter,
+} from '@edmate/harness/testing';
 import {
   memoryAlertSink,
   memorySafetyEventSink,
@@ -86,10 +90,28 @@ export function systemIds(): IdSource {
 }
 
 /**
+ * The loud line for an unpriced/unknown-model usage row (task 3.9a follow-up): routed through an
+ * injected `log` (`ChatDepsOptions.log`), never a raw `console.error`, so a caller can capture or
+ * silence it instead of this module writing to the real console directly. Exported for
+ * `deps.test.ts`'s direct test (no real model call needed to reach it).
+ */
+export function logUnmetered(
+  u: Parameters<MeterSink['recordUnmetered']>[0],
+  log?: (text: string) => void,
+): void {
+  log?.(
+    `edmate chat: unmetered usage (${u.reason}) model=${u.model} tier=${u.tier} turn=${u.turnId}`,
+  );
+}
+
+/**
  * The simplest in-memory `ProfileStore` (contracts port): starts every student x teacher pair at
  * empty defaults and never moves mastery (no BKT here, same scope as the harness's own
  * `memoryProfileStore` test double, which the harness package does not publish from its `testing`
- * barrel — see the handoff's Decisions).
+ * barrel — see the handoff's Decisions). `applyEvidence` is a deliberate no-op for mastery: it
+ * only echoes the first event's student/teacher back as their still-empty profile, so a CLI run
+ * never grows mastery and nothing here is lost or inconsistent across runs -- there is simply no
+ * persistence to begin with, by design (the CLI has no database, task 3.9 Phase A).
  */
 export function memoryProfileStore(): ProfileStore {
   const profiles = new Map<string, LearnerProfile>();
@@ -176,6 +198,14 @@ export interface ChatDepsOptions extends ChatWorldOptions {
    * never calls `createChatGateway`).
    */
   baseURL?: string;
+  /**
+   * Receives the unmetered-usage loud line in place of a raw `console.error` (task 3.9a
+   * follow-up; see `logUnmetered`). Absent: the line is simply not written anywhere (no
+   * `console.error` fallback) -- same as `apps/cli/src/commands/eval/liveAgent.ts`'s existing
+   * calls, which keep relying on their own `onUnmetered` counter instead. Ignored when
+   * `opts.gateway` is given (test injection never meters).
+   */
+  log?: (text: string) => void;
 }
 
 export interface ChatSetup {
@@ -221,9 +251,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
       record: (u, ctx) => usage.record(u, ctx),
       recordUnmetered: (u) => {
         // Ids, model and reason only, never request content (ADR-0006-style discipline).
-        console.error(
-          `edmate chat: unmetered usage (${u.reason}) model=${u.model} tier=${u.tier} turn=${u.turnId}`,
-        );
+        logUnmetered(u, opts.log);
         opts.onUnmetered?.(u);
         return Promise.resolve();
       },

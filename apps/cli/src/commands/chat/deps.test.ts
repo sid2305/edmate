@@ -15,8 +15,8 @@ import {
   ScriptedGateway,
 } from '@edmate/harness/testing';
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { buildChatDeps, memoryProfileStore, slackClock } from './deps.js';
+import { describe, expect, it, vi } from 'vitest';
+import { buildChatDeps, logUnmetered, memoryProfileStore, slackClock } from './deps.js';
 
 // Task 3.9b: on a loaded CI runner the cold first turn overran preGuard's 400 ms budget on the real
 // clock and ended in an `error` event. Tests widen every step budget 10x; production is unchanged.
@@ -25,7 +25,13 @@ const STEP_BUDGET_SLACK = 10;
 const say = (text: string) => ({ type: 'text' as const, text });
 const used = {
   type: 'usage' as const,
-  usage: { model: 'claude-haiku-4-5', tier: 'main' as const, inputTokens: 10, outputTokens: 10, costMicroUsd: 1 },
+  usage: {
+    model: 'claude-haiku-4-5',
+    tier: 'main' as const,
+    inputTokens: 10,
+    outputTokens: 10,
+    costMicroUsd: 1,
+  },
 };
 
 function scriptedChatGateway() {
@@ -45,7 +51,9 @@ function scriptedChatGateway() {
           value: { category: 'none' },
         },
       ],
-      stream: [{ steps: [say('A variable stores a value so your program can use it later.'), used] }],
+      stream: [
+        { steps: [say('A variable stores a value so your program can use it later.'), used] },
+      ],
     },
     { sleep: () => Promise.resolve() },
   );
@@ -78,46 +86,42 @@ describe('buildChatDeps personas (5.8a)', () => {
 });
 
 describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
-  it(
-    'runs one teacher_preview turn over the real demo-teacher content to done',
+  it('runs one teacher_preview turn over the real demo-teacher content to done', async () => {
     // Real demo-teacher content + a full harness turn; on CI the first-import cost of the
     // harness (mathjs, access) can eat most of the default 5000ms budget. See 5.5a follow-up.
-    async () => {
-      const gateway = scriptedChatGateway();
-      const setup = await buildChatDeps({
-        env: {},
-        market: 'global',
-        packageId: 'free',
-        source: 'teacher_preview',
-        gateway,
-        clock: slackClock(STEP_BUDGET_SLACK),
-      });
+    const gateway = scriptedChatGateway();
+    const setup = await buildChatDeps({
+      env: {},
+      market: 'global',
+      packageId: 'free',
+      source: 'teacher_preview',
+      gateway,
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
 
-      const input: TurnInput = {
-        agentId: setup.agentId,
-        sessionId: setup.sessionId,
-        studentId: setup.studentId,
-        kind: 'message',
-        text: 'What is a variable?',
-        lang: 'en',
-        clientTs: new Date().toISOString(),
-      };
+    const input: TurnInput = {
+      agentId: setup.agentId,
+      sessionId: setup.sessionId,
+      studentId: setup.studentId,
+      kind: 'message',
+      text: 'What is a variable?',
+      lang: 'en',
+      clientTs: new Date().toISOString(),
+    };
 
-      const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
-      const events = await collect(run.events);
-      const result = await run.finished;
+    const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
+    const events = await collect(run.events);
+    const result = await run.finished;
 
-      // On failure, print the error event (code, retryable) and the trace's step outcomes (3.9b).
-      expect(
-        events.filter((e) => e.type === 'error'),
-        JSON.stringify(result.trace?.steps),
-      ).toEqual([]);
-      expect(events.at(-1)?.type).toBe('done');
-      expect(result.background).toEqual([]);
-      expect(result.trace?.steps.some((s) => s.name === 'generate' && s.outcome === 'ok')).toBe(true);
-    },
-    20000,
-  );
+    // On failure, print the error event (code, retryable) and the trace's step outcomes (3.9b).
+    expect(
+      events.filter((e) => e.type === 'error'),
+      JSON.stringify(result.trace?.steps),
+    ).toEqual([]);
+    expect(events.at(-1)?.type).toBe('done');
+    expect(result.background).toEqual([]);
+    expect(result.trace?.steps.some((s) => s.name === 'generate' && s.outcome === 'ok')).toBe(true);
+  }, 20000);
 
   it('locks a module outside the free package (no model call reaches generate)', async () => {
     const gateway = scriptedChatGateway();
@@ -157,8 +161,19 @@ describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
       source: 'teacher_preview',
     });
     const tg = setup.deps.gatewayFor({
-      policy: { tiers: { small: { provider: 'anthropic', model: 'm1' }, main: { provider: 'anthropic', model: 'm2' } } },
-      billing: { teacherId: setup.teacherId, packageId: 'p', studentId: setup.studentId, turnId: 'turn_1', source: 'teacher_preview' },
+      policy: {
+        tiers: {
+          small: { provider: 'anthropic', model: 'm1' },
+          main: { provider: 'anthropic', model: 'm2' },
+        },
+      },
+      billing: {
+        teacherId: setup.teacherId,
+        packageId: 'p',
+        studentId: setup.studentId,
+        turnId: 'turn_1',
+        source: 'teacher_preview',
+      },
     });
     expect(tg.metered).toBe(true);
     expect(typeof tg.gateway.stream).toBe('function');
@@ -189,6 +204,56 @@ describe('slackClock (3.9b)', () => {
     source.cancel();
     await slept;
     expect(Date.now() - t1).toBeLessThan(1000);
+  });
+});
+
+describe('logUnmetered (task 3.9a follow-up: never a raw console.error)', () => {
+  it('writes the usage line only through the injected log, never console.error', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const lines: string[] = [];
+      logUnmetered(
+        {
+          reason: 'no_usage_reported',
+          model: 'm1',
+          tier: 'main',
+          turnId: 'turn_1',
+          teacherId: 't1',
+          packageId: 'p1',
+          studentId: 's1',
+          source: 'teacher_preview',
+        },
+        (text) => lines.push(text),
+      );
+      expect(spy).not.toHaveBeenCalled();
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('no_usage_reported');
+      expect(lines[0]).toContain('model=m1');
+      expect(lines[0]).toContain('turn=turn_1');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does nothing (and never throws) when no log is given', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        logUnmetered({
+          reason: 'no_usage_reported',
+          model: 'm1',
+          tier: 'main',
+          turnId: 'turn_1',
+          teacherId: 't1',
+          packageId: 'p1',
+          studentId: 's1',
+          source: 'teacher_preview',
+        }),
+      ).not.toThrow();
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
