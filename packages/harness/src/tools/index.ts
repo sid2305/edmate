@@ -1,5 +1,5 @@
-// The harness's tools (task 5.5; 5.6 adds practice). `restrictedMath` and `toResultString` stay
-// internal.
+// The harness's tools (task 5.5; 5.6 adds practice). `getRestrictedMath` and `toResultString`
+// stay internal.
 export { calculatorTool } from './calculator.js';
 export { defaultToolRegistry } from './registry.js';
 export {
