@@ -29,6 +29,12 @@ export function register(): void {
   // `warmPool` never rejects (it catches internally); `void` just makes the "not awaited" intent
   // explicit to readers and lint.
   void warmPool();
+  // Task 3.9c (found by 3.9b): a fresh process's first preGuard call pays to lazily compile its
+  // guard pattern tables (~150 ms cold vs 1-8 ms warm) against preGuard's 300 ms-per-guard / step
+  // 3's 400 ms budget. Synchronous CPU work, no network: runs directly, not `void`-fired. A
+  // separate, independently-failing block from `warmPool` above -- a throw here must never block
+  // `register()` or `/api/health`, same as a DB outage must not.
+  warmGuardPatterns();
 }
 
 async function warmPool(): Promise<void> {
@@ -41,4 +47,12 @@ async function warmPool(): Promise<void> {
   } catch (error) {
     console.error(`[instrumentation] warm-up failed: ${errorName(error)}`);
   }
+}
+
+function warmGuardPatterns(): void {
+  import('@edmate/harness')
+    .then(({ warmPreGuardPatterns }) => warmPreGuardPatterns())
+    .catch((error: unknown) => {
+      console.error(`[instrumentation] guard warm-up failed: ${errorName(error)}`);
+    });
 }
