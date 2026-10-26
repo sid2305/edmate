@@ -1,3 +1,8 @@
-CREATE INDEX "chunks_transcript_created_at_idx" ON "chunks" USING btree ("kind","created_at") WHERE "chunks"."kind" = 'transcript';--> statement-breakpoint
-CREATE INDEX "sessions_created_at_idx" ON "sessions" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "turn_traces_created_at_idx" ON "turn_traces" USING btree ("created_at");
+-- Task 13.4a (13.4 review deferral): the three retention indexes this migration originally
+-- declared with a plain CREATE INDEX are built by the post-migrate step instead (the same
+-- schema-only + post-migrate pattern as 0009, 0010 and 0028), with CREATE INDEX CONCURRENTLY:
+-- drizzle 0.45 runs every pending migration file in one transaction, so a plain CREATE INDEX here
+-- would hold chunks', sessions' or turn_traces' table lock for the whole build. Declared in
+-- src/schema/content.ts and src/schema/learning.ts so `db:generate` stays a no-op. A database
+-- that already applied the old version of this file keeps its indexes; the post-migrate steps'
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS and valid-index check are then no-ops.

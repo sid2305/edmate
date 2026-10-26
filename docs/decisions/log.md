@@ -10,6 +10,47 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 5.5a gcd/lcm overflow fix · decided by builder · risk: low
+- Decided: Refuse any `gcd`/`lcm` argument outside `Number.isSafeInteger` range (reported as
+  `evaluation_failed`) rather than dropping the functions from the allow-list.
+- Why: `turn.integration.test.ts` (outside this plan's file list) uses `lcm(2,3)` as its example
+  tool call, and 5.5's own handoff/decision log names both functions as part of the calculator's
+  declared scope; dropping them would widen this task's blast radius beyond `sandbox.ts` and its
+  own tests for no safety gain, since the overflow case is just as well handled by refusing the
+  unsafe input.
+
+---
+
+### 25 Oct 2026 · 5.5a merge · decided by lead · risk: low
+- Decided: merge 5.5a. code-reviewer and typescript-reviewer both raised one HIGH (packages/harness/src/tools/sandbox.ts: lcm checked its inputs but not its result, so two large safe-integer arguments returned a wrong float above 2^53); one fix round made lcm refuse an unsafe result, and both reviewers re-reviewed and approved. Keeping gcd and lcm with safe-integer guards (the builder's decision) is accepted.
+- Why: every implicit-multiplication form in the plan is refused with tests, gcd and lcm can no longer return a silently wrong answer, and src/tools keeps 100% coverage.
+
+---
+
+### 25 Oct 2026 · 5.5a budget · decided by lead · risk: low
+- Decided: accept 82 harness tool calls (build 50, fix round 32) against a planned 60.
+- Why: the overrun is the fix round for a real HIGH; the build itself stayed under its cap.
+
+---
+
+### 25 Oct 2026 · 13.4a merge · decided by lead · risk: high
+- Decided: merge 13.4a. The diff touches packages/db/src/repositories/README.md (a risky path group), so security-reviewer ran alongside database-reviewer, code-reviewer and typescript-reviewer; all four approved with no CRITICAL or HIGH. Rewriting the committed migration 0032 to comment-only is accepted: drizzle-orm 0.45.4 never re-checks the hash of an applied migration (builder finding, independently confirmed by typescript-reviewer), the post-migrate steps use IF NOT EXISTS, and no production database exists yet.
+- Why: the retention indexes now build CONCURRENTLY outside drizzle's migration transaction, as the 13.4 database review asked, before sessions, turn_traces or chunks grow large.
+
+---
+
+### 25 Oct 2026 · 13.4a wontfix LOW · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW on packages/db/test/migrate.int.test.ts (the INVALID-index rebuild test still forces INVALID on sessions_package_id_package_version_idx rather than one of the three new indexes).
+- Why: the rebuild path in runPostMigrateSteps is generic over every concurrentIndex step, so the existing test already covers the three new ones; a duplicate test adds runtime without new coverage.
+
+---
+
+### 25 Oct 2026 · 13.4a budget · decided by lead · risk: low
+- Decided: accept 69 harness tool calls against a planned 40 (the builder reported 46).
+- Why: the builder read drizzle-orm's migrator source to clear the hash question before editing a committed migration, and updated an exact-list unit test the plan didn't name; the work stayed in scope.
+
+---
+
 ### 25 Oct 2026 · 13.3 nodemailer type dependency · decided by builder · risk: low
 - Decided: Remove `@types/nodemailer` instead of bumping it.
 - Why: `@types/nodemailer` has no release past 8.0.2 (nodemailer 8); nodemailer 9+ bundles its

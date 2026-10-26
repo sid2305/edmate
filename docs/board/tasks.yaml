@@ -5623,7 +5623,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.3d-start-concurrent-verification
+  model: plan:lead build:sonnet
 - id: 9.7c
   milestone: M13
   title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
@@ -7013,9 +7015,30 @@ tasks:
   deps:
   - '13.4'
   risk: low
-  status: running
+  status: done
   branch: m13/13.4a-concurrent-retention-indexes
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 270
+    tokens_in: 926
+    tokens_out: 64995
+    cache_read_tokens: 30904218
+    wall_time_seconds: 1598
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 13.4b
   milestone: M13
   title: '13.4 Phase C (split out by the lead, 25 Oct 2026): apps/web account-wide export (GET /api/me/export) and account delete (DELETE /api/me calling identity.anonymise for the signed-in student only,
@@ -7731,7 +7754,9 @@ tasks:
   deps:
   - 11.4a
   risk: low
-  status: todo
+  status: running
+  branch: m13/11.4e-recordings-tests
+  model: plan:lead build:sonnet
 - id: 11.4f
   milestone: M13
   title: '11.4b review follow-ups: UploadType carries a splittable flag and newFile picks the 413 message from it, not from maxBytes equal to 24 MB (apps/web/src/studio/routes.ts:208); media() takes an
@@ -8470,9 +8495,30 @@ tasks:
   accept: each listed form is refused with a tested reason; gcd/lcm never return a wrong answer; harness tests pass with 100% coverage on src/tools
   deps:
   - '5.5'
-  status: running
+  status: done
   branch: m13/5.5a-calculator-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 284
+    tokens_in: 998
+    tokens_out: 72729
+    cache_read_tokens: 31467551
+    wall_time_seconds: 1598
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 1
+      by_severity:
+        HIGH: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 3.3a
   milestone: M13
   title: 'Route follow-ups (3.3 review MEDIUM/LOW): count each student number once when matching answer-key parts (duplicate parts); share one cancel/timeout/validate helper between routing/modelFallback.ts
@@ -8480,7 +8526,9 @@ tasks:
   accept: a duplicate-part key with one matching number scores partial; both callers use the shared helper; route accuracy stays at or above 90%
   deps:
   - '3.3'
-  status: todo
+  status: running
+  branch: m13/3.3a-route-followups
+  model: plan:sonnet build:sonnet
 - id: 3.4c
   milestone: M13
   title: 'Same-topic turns degrade to locked (3.9 report): retrievalQuery.ts appends the last agent reply, diluting overlap below the 0.5 coverage threshold while probe() counts any locked score > 0 as
