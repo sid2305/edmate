@@ -33,12 +33,15 @@ export async function acquireMigrateLock(
 ): Promise<void> {
   const deadline = Date.now() + maxWaitMs;
   for (;;) {
-    const { rows } = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) as locked', [
-      key,
-    ]);
+    const { rows } = await client.query<{ locked: boolean }>(
+      'select pg_try_advisory_lock($1) as locked',
+      [key],
+    );
     if (rows[0]?.locked) return;
     if (Date.now() >= deadline) {
-      throw new Error(`migrateDatabase: timed out after ${maxWaitMs}ms waiting for the migration lock`);
+      throw new Error(
+        `migrateDatabase: timed out after ${maxWaitMs}ms waiting for the migration lock`,
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
   }
@@ -111,7 +114,9 @@ export type PostMigrateStep =
  * constraints valid and the indexes built, outside any transaction. Migration 0028 (task 5.10d)
  * adds `sessions_open_teacher_student_agent_key` the same schema-only way, after first ending any
  * existing duplicate open sessions in its own migration-file UPDATE (so the index build below
- * never sees a duplicate). Append here, don't edit past entries: migrations are forward-only and
+ * never sees a duplicate). Migration 0032 (task 13.4a, 13.4 review deferral) adds
+ * `chunks_transcript_created_at_idx`, `sessions_created_at_idx` and `turn_traces_created_at_idx`
+ * the same schema-only way. Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
 export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
@@ -147,6 +152,22 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'sessions_open_teacher_student_agent_key',
     sql: `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "sessions_open_teacher_student_agent_key" ON "sessions" USING btree ("teacher_id","student_id","agent_id") WHERE "sessions"."ended_at" is null`,
+  },
+  // Migration 0032 (task 13.4a, 13.4 review deferral): retentionRepo's cutoff scans.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'chunks_transcript_created_at_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "chunks_transcript_created_at_idx" ON "chunks" USING btree ("kind","created_at") WHERE "chunks"."kind" = 'transcript'`,
+  },
+  {
+    kind: 'concurrentIndex',
+    indexName: 'sessions_created_at_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "sessions_created_at_idx" ON "sessions" USING btree ("created_at")`,
+  },
+  {
+    kind: 'concurrentIndex',
+    indexName: 'turn_traces_created_at_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "turn_traces_created_at_idx" ON "turn_traces" USING btree ("created_at")`,
   },
 ];
 
@@ -211,9 +232,7 @@ export async function runPostMigrateSteps(
   for (const step of steps) {
     if (step.kind === 'validateConstraint') {
       if (await isConstraintValidated(client, step.table, step.constraint)) continue;
-      await client.query(
-        `ALTER TABLE "${step.table}" VALIDATE CONSTRAINT "${step.constraint}"`,
-      );
+      await client.query(`ALTER TABLE "${step.table}" VALIDATE CONSTRAINT "${step.constraint}"`);
     } else {
       if (await isIndexInvalid(client, step.indexName)) {
         await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${step.indexName}"`);
