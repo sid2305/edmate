@@ -10,6 +10,52 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 13.3a Referrer-Policy value · decided by builder · risk: low
+- Decided: `Referrer-Policy: strict-origin-when-cross-origin` (browsers' current safe default),
+  since the plan named the header but not its exact value.
+- Why: keeps the full origin on same-origin navigation (useful for the app's own analytics-free
+  logging) while sending no path/query cross-origin; a stricter `no-referrer` was considered but
+  not needed since nothing cross-origin is linked to from this app today (checked — no external
+  `<a href>`/`<Link>` targets).
+
+---
+
+### 25 Oct 2026 · 13.3a default-src added to the CSP · decided by builder · risk: low
+- Decided: added `default-src 'self'` to the CSP, in addition to the plan's named directives
+  (script-src, style-src, connect-src, img-src, font-src, frame-ancestors, base-uri, form-action,
+  object-src).
+- Why: `default-src` is the CSP fallback for any resource type not explicitly covered (media-src,
+  worker-src, manifest-src, etc.); Next's own documented nonce-CSP example (checked in
+  `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`) always includes it.
+  Omitting it would leave those untyped resource kinds unrestricted by default, which the plan's
+  intent (a strict allowlist CSP) clearly does not want.
+
+---
+
+### 25 Oct 2026 · 13.3a HSTS without preload · decided by lead · risk: low
+- Decided: HSTS is `max-age=63072000; includeSubDomains` with no `preload`, sent only when NODE_ENV is production (lead amendment to the plan).
+- Why: a preload-list entry is hard to undo and commits every subdomain to HTTPS before the production domain is settled; the docker stack runs NODE_ENV=production over plain HTTP, so preload would also break local runs if a browser ever cached it.
+
+---
+
+### 25 Oct 2026 · 13.3a stale proxy.test.ts title · decided by lead · risk: low
+- Decided: wontfix the security re-review LOW on apps/web/proxy.test.ts:75 (the test title still says "CSP + x-nonce" after x-nonce was dropped); the next task that edits apps/web/proxy.test.ts rewords it.
+- Why: a title-only cosmetic issue with no behaviour change; a fix round for it costs more than it is worth during the MVP push.
+
+---
+
+### 25 Oct 2026 · 13.3a budget · decided by lead · risk: low
+- Decided: accept 121 tool calls (79 build plus 42 fix, harness counts) against a planned 95 (60 build plus 35 fix).
+- Why: the build captured real response headers from a production build and the e2e stack, and the fix round had to prove the nonce in a production build; both checks were needed to catch and confirm the hydration-breaking CRITICAL.
+
+---
+
+### 25 Oct 2026 · 13.3a merge · decided by lead · risk: low
+- Decided: merge 13.3a (static security headers in next.config.ts, a per-request nonce CSP and production-only HSTS in proxy.ts) after one fix round; security-reviewer, typescript-reviewer and code-reviewer re-approved the CRITICAL fix.
+- Why: apps/web/next.config.ts and apps/web/proxy.ts are not risky paths; the one CRITICAL (CSP not forwarded on the request, so no nonce reached Next's scripts) is fixed and proven by a unit test, an e2e no-violation check and a production build check.
+
+---
+
 ### 25 Oct 2026 · 5.5a gcd/lcm overflow fix · decided by builder · risk: low
 - Decided: Refuse any `gcd`/`lcm` argument outside `Number.isSafeInteger` range (reported as
   `evaluation_failed`) rather than dropping the functions from the allow-list.

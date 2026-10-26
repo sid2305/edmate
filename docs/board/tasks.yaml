@@ -7822,7 +7822,9 @@ tasks:
     human_questions: 0
 - id: 11.4h
   milestone: M13
-  title: '11.4e review follow-ups: a database guard (composite FK or trigger, added NOT VALID then VALIDATE) so documents.live_class_id can only point at a live class of the same teacher (today only repository writes check it, e.g. chunks.ts:337); in packages/db/test/documents.int.test.ts the recordings cap test clears the teacher''s earlier linked documents first (or its name stops saying it drops only the oldest), and a comment marks the teacher-B half of the cross-teacher test as a sanity check, not the join regression'
+  title: '11.4e review follow-ups: a database guard (composite FK or trigger, added NOT VALID then VALIDATE) so documents.live_class_id can only point at a live class of the same teacher (today only repository
+    writes check it, e.g. chunks.ts:337); in packages/db/test/documents.int.test.ts the recordings cap test clears the teacher''s earlier linked documents first (or its name stops saying it drops only the
+    oldest), and a comment marks the teacher-B half of the cross-teacher test as a sanity check, not the join regression'
   accept: a raw insert of a cross-teacher document/live class link fails; the cap test's arithmetic matches its name; db typecheck, lint and test green.
   deps:
   - 11.4e
@@ -9061,9 +9063,31 @@ tasks:
   deps:
   - '13.3'
   risk: low
-  status: running
+  status: done
   branch: m13/13.3a-security-headers
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 627
+    tokens_in: 2098
+    tokens_out: 141355
+    cache_read_tokens: 68287015
+    wall_time_seconds: 2863
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        CRITICAL: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 13.3b
   milestone: M13
   title: '13.3 review LOWs: packages/db/src/repositories/chunks.ts insertTopicLinks and topicSources go through teacherScope() or join the scope.test.ts grid; apps/web/src/turn/routes.ts uses a dedicated
