@@ -5623,9 +5623,31 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: running
+  status: done
   branch: m13/9.3d-start-concurrent-verification
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 298
+    tokens_in: 1056
+    tokens_out: 64631
+    cache_read_tokens: 35053950
+    wall_time_seconds: 2223
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7c
   milestone: M13
   title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
@@ -7756,9 +7778,31 @@ tasks:
   deps:
   - 11.4a
   risk: low
-  status: running
+  status: done
   branch: m13/11.4e-recordings-tests
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 165
+    tokens_in: 524
+    tokens_out: 10958
+    cache_read_tokens: 21843270
+    wall_time_seconds: 765
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 11.4f
   milestone: M13
   title: '11.4b review follow-ups: UploadType carries a splittable flag and newFile picks the 413 message from it, not from maxBytes equal to 24 MB (apps/web/src/studio/routes.ts:208); media() takes an
@@ -7830,6 +7874,27 @@ tasks:
   accept: a raw insert of a cross-teacher document/live class link fails; the cap test's arithmetic matches its name; db typecheck, lint and test green.
   deps:
   - 11.4e
+  risk: low
+  status: todo
+- id: 8.7o
+  milestone: M13
+  title: '8.7m security review follow-up: the EMAIL regex in packages/db/src/repositories/redact-json.ts (unchanged since before 8.7m) is quadratic on adversarial input such as ''a1_''.repeat(N), about
+    8 s at 120k characters; redactString runs on audit before/after JSON, so a large free-text value could stall the audit write path. Make EMAIL linear (or cap the input length scanned) without letting
+    an email address through'
+  accept: a 600k-character adversarial string redacts in under 100 ms; the existing email redaction tests still pass; db typecheck, lint and test green.
+  deps:
+  - 8.7m
+  risk: low
+  status: todo
+- id: 8.7p
+  milestone: M13
+  title: '8.7m review follow-up: in packages/db/src/repositories/redact-json.ts a rp_<hex40> or other prefixed id, UUID or hex digest followed by one space and then a phone-shaped run is redacted
+    together with the phone (PHONE_CANDIDATE extends across the space into the exempt span), so the id''s tail is lost; stop a phone candidate at an exempt span''s boundary so the id survives and
+    the phone is still redacted'
+  accept: '"rp_<hex40> 555-010-0199" keeps the id and redacts the phone; same for a UUID and a hex digest; the differential tests against the old behaviour show no phone run survives; db typecheck,
+    lint and test green.'
+  deps:
+  - 8.7m
   risk: low
   status: todo
 - id: 9.4c
@@ -8538,9 +8603,29 @@ tasks:
   accept: a duplicate-part key with one matching number scores partial; both callers use the shared helper; route accuracy stays at or above 90%
   deps:
   - '3.3'
-  status: running
+  status: done
   branch: m13/3.3a-route-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 253
+    tokens_in: 864
+    tokens_out: 66482
+    cache_read_tokens: 23224872
+    wall_time_seconds: 1366
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 3.4c
   milestone: M13
   title: 'Same-topic turns degrade to locked (3.9 report): retrievalQuery.ts appends the last agent reply, diluting overlap below the 0.5 coverage threshold while probe() counts any locked score > 0 as

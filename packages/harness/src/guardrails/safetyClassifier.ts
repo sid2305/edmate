@@ -7,7 +7,7 @@
 import type { ModelRequest } from '@edmate/contracts';
 import { z } from 'zod';
 import type { CancelToken } from '../pipeline/clock.js';
-import { runWithTimeout } from '../pipeline/timeout.js';
+import { callGuarded } from '../pipeline/guardedModelCall.js';
 import { JAILBREAK_CODES } from './jailbreakPatterns.js';
 import { MODERATION_CODES } from './moderationPatterns.js';
 import type { PreGuardCtx } from './preGuardCtx.js';
@@ -157,20 +157,18 @@ export async function askClassifier<T>(
   schema: z.ZodType<T>,
   timeoutMs = SAFETY_CLASSIFIER_TIMEOUT_MS,
 ): Promise<T> {
-  if (cancel.cancelled) throw new SafetyGuardCancelledError(guard);
-  const r = await runWithTimeout(
-    () =>
-      new Promise<unknown>((resolve, reject) => {
-        // ModelGateway.generateObject takes no cancel token (contracts); the guard stops waiting.
-        cancel.onCancel(() => reject(new SafetyGuardCancelledError(guard)));
-        ctx.gateway.generateObject(req, schema).then(resolve, reject);
-      }),
-    timeoutMs,
+  // ModelGateway.generateObject takes no cancel token (contracts); callGuarded's race stops
+  // waiting instead.
+  return callGuarded(
+    cancel,
     ctx.clock,
+    () => ctx.gateway.generateObject(req, schema),
+    schema,
+    timeoutMs,
+    {
+      cancelled: () => new SafetyGuardCancelledError(guard),
+      timedOut: (ms) => new SafetyClassifierTimeoutError(guard, ms),
+      invalid: () => new SafetyClassifierInvalidError(guard),
+    },
   );
-  if (r.status === 'timeout') throw new SafetyClassifierTimeoutError(guard, timeoutMs);
-  if (r.status === 'error') throw r.error;
-  const parsed = schema.safeParse(r.value);
-  if (!parsed.success) throw new SafetyClassifierInvalidError(guard);
-  return parsed.data;
 }

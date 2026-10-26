@@ -56,10 +56,12 @@ const MISUSE: readonly RegExp[] = [
 
 const ANSWER_SEEKING: readonly RegExp[] = [
   words(
-    "(?:tell|give|show|send) me (?:the |your )?(?:final |full |whole |correct |right )?(?:answers?|solutions?)",
+    '(?:tell|give|show|send) me (?:the |your )?(?:final |full |whole |correct |right )?(?:answers?|solutions?)',
   ),
   words("what(?:'s| is) the (?:final |correct |right )?answer"),
-  words("skip (?:the )?hints?|no (?:more )?hints|(?:don't|dont|do not) want (?:any )?(?:more )?hints"),
+  words(
+    "skip (?:the )?hints?|no (?:more )?hints|(?:don't|dont|do not) want (?:any )?(?:more )?hints",
+  ),
   words('(?:show|give) (?:me )?the (?:full |whole |complete )?(?:solution|working)'),
   words('solve (?:it|this|that)(?: question| problem| one)? for me'),
   words('answer (?:bata|batao|de) ?(?:do|de|dijiye)?'),
@@ -97,9 +99,7 @@ const ON_TASK: readonly RegExp[] = [
       'chapter|lesson|concept|solve|calculate|derive|prove|help me|teach me|show me how',
   ),
   words('(?:question|problem|exercise|q) ?\\d+'),
-  words(
-    'how (?:do|does|can|to|is|are|would|should|did) (?:i|we|you|it|this|that|the|a|an|my)',
-  ),
+  words('how (?:do|does|can|to|is|are|would|should|did) (?:i|we|you|it|this|that|the|a|an|my)'),
   words('what (?:is|are|does|do) (?:a|an|the)'),
   words('can you (?:explain|help|check|show)|check my|did i'),
   words('is (?:it|this|that) (?:right|correct)'),
@@ -130,11 +130,55 @@ export function classifyIntentByRules(text: string | undefined, kind: Kind): Rul
 
 /** Words that make a short reply a request or a feeling, not an answer. */
 const NOT_ANSWER = new Set([
-  'i', "i'm", 'im', 'can', 'could', 'what', "what's", 'why', 'how', 'when', 'where', 'who',
-  'which', 'please', 'pls', 'just', 'tell', 'give', 'show', 'explain', 'help', 'hint', 'stuck',
-  'confused', 'lost', 'hard', 'easy', 'confusing', 'difficult', 'boring', 'fine', 'done', 'too',
-  'very', 'really', 'not', 'right', 'correct', 'wrong', 'this', 'that', 'it', 'impossible',
-  'nothing', 'idea', 'answer', 'solution', 'again', 'more',
+  'i',
+  "i'm",
+  'im',
+  'can',
+  'could',
+  'what',
+  "what's",
+  'why',
+  'how',
+  'when',
+  'where',
+  'who',
+  'which',
+  'please',
+  'pls',
+  'just',
+  'tell',
+  'give',
+  'show',
+  'explain',
+  'help',
+  'hint',
+  'stuck',
+  'confused',
+  'lost',
+  'hard',
+  'easy',
+  'confusing',
+  'difficult',
+  'boring',
+  'fine',
+  'done',
+  'too',
+  'very',
+  'really',
+  'not',
+  'right',
+  'correct',
+  'wrong',
+  'this',
+  'that',
+  'it',
+  'impossible',
+  'nothing',
+  'idea',
+  'answer',
+  'solution',
+  'again',
+  'more',
 ]);
 
 const LEAD_IN = new RegExp(
@@ -221,7 +265,9 @@ function numbersIn(t: string): Num[] {
 function sameNumber(student: Num, key: number): boolean {
   if (Math.abs(student.value - key) <= 1e-9 * Math.max(1, Math.abs(key))) return true;
   // A rounded decimal (two places or more) counts: 0.83 for 5/6.
-  return student.places >= 2 && Math.abs(student.value - key) <= 0.5 * 10 ** -student.places + 1e-12;
+  return (
+    student.places >= 2 && Math.abs(student.value - key) <= 0.5 * 10 ** -student.places + 1e-12
+  );
 }
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -243,14 +289,22 @@ function labelsNamed(t: string): Set<string> {
     const letter = m[1] as string;
     if (letter > 'f') continue;
     const next = m[2];
-    const article =
-      letter === 'a' && m.index > 0 && next !== undefined && !NOT_ORDINARY.has(next);
+    const article = letter === 'a' && m.index > 0 && next !== undefined && !NOT_ORDINARY.has(next);
     if (!article) out.add(letter);
   }
   return out;
 }
 
-function partMatched(t: string, nums: readonly Num[], part: string): boolean {
+/**
+ * `usedNums` holds the indices into `nums` already credited to an earlier key part (3.3a review:
+ * a duplicate part, e.g. `['3', '3']`, must not let one student number match twice).
+ */
+function partMatched(
+  t: string,
+  nums: readonly Num[],
+  part: string,
+  usedNums: Set<number>,
+): boolean {
   const label = LABEL_PART.exec(part)?.[1];
   if (label !== undefined) {
     // A label answer counts only when it is the one label the message names.
@@ -260,7 +314,11 @@ function partMatched(t: string, nums: readonly Num[], part: string): boolean {
   const bare = part.replace(/^[a-z] ?= ?/u, '').replace(/[.!]+$/u, '');
   if (FULL_NUMBER.test(dropThousands(bare))) {
     const key = toNum(dropThousands(bare));
-    return key !== undefined && nums.some((n) => sameNumber(n, key.value));
+    if (key === undefined) return false;
+    const idx = nums.findIndex((n, i) => !usedNums.has(i) && sameNumber(n, key.value));
+    if (idx === -1) return false;
+    usedNums.add(idx);
+    return true;
   }
   return words(escapeRe(bare)).test(t);
 }
@@ -276,7 +334,8 @@ export function classifyAttempt(
   const key = answerKeyOf(helpState);
   if (key.length === 0) return 'wrong';
   const nums = numbersIn(t);
-  const matched = key.filter((part) => partMatched(t, nums, part)).length;
+  const usedNums = new Set<number>();
+  const matched = key.filter((part) => partMatched(t, nums, part, usedNums)).length;
   if (matched === key.length) return 'correct';
   return matched > 0 ? 'partial' : 'wrong';
 }

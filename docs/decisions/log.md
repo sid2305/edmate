@@ -10,6 +10,92 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 11.4e join check reachability · decided by builder · risk: low
+- Decided: Treated the cross-teacher join test as a live, reachable regression test (not a
+  "defence in depth behind a DB constraint" case), because inserting a document for teacher A
+  with `live_class_id` pointing at teacher B's live class succeeded with no constraint or
+  trigger violation.
+- Why: The plan's fallback path (asserting a DB refusal) only applies if the database itself
+  blocks the cross-teacher row; it did not, so the real assertion (the join excludes the row)
+  is the one that matters and is exercised.
+
+---
+
+### 25 Oct 2026 · 11.4e deferred review findings · decided by lead · risk: low
+- Decided: defer the code-reviewer MEDIUM (no database guard stops documents.live_class_id pointing at another teacher's live class) and the typescript-reviewer LOWs (the cap test's arithmetic includes earlier linked documents; the teacher-B half of the cross-teacher test is only a sanity check) to new board task 11.4h.
+- Why: none is a defect in this test-only change; repository writes already refuse cross-teacher links (chunks.ts:337), so the database guard is defence in depth and needs its own migration and database review.
+
+---
+
+### 25 Oct 2026 · 11.4e budget · decided by lead · risk: low
+- Decided: accept 164 tool calls (harness count) against a planned 30; future builder briefs say to run the db test suite in the foreground with a timeout and never poll a log file with repeated tail calls.
+- Why: about 150 of the calls were Bash, mostly repeated `tail` reads of a background test log while the suite ran; the work itself was small, and the change is correct, so re-running it would cost more than accepting it.
+
+---
+
+### 25 Oct 2026 · 11.4e merge · decided by lead · risk: low
+- Decided: merge 11.4e (a recordings cap test that bulk-inserts RECORDING_LIST_MAX+1 linked documents and a cross-teacher join test, both in packages/db/test/documents.int.test.ts) with no fix round.
+- Why: test-only change, not a risky path; code-reviewer and typescript-reviewer approved, and the builder showed each test fails with the cap or the join's teacher clause removed.
+
+---
+
+### 25 Oct 2026 · 9.3d skip the optional pending→verified mirror case · decided by builder · risk: low
+- Decided: implemented only the required concurrent-reject case and the pending-teacher case;
+  skipped the plan's optional "mirror case" (a concurrent verify committed while start waits →
+  start succeeds).
+- Why: the plan marked it explicitly optional ("Add ... only if cheap"), the required coverage
+  (reviewer's MEDIUM and LOW) is fully addressed by the two tests added, and skipping kept the
+  build inside its ~40 tool-call budget.
+
+---
+
+### 25 Oct 2026 · 9.3d budget · decided by lead · risk: low
+- Decided: accept 73 tool calls (49 build plus 24 fix, harness counts) against a planned 60 (40 build plus 20 fix).
+- Why: the concurrency test needed a second connection holding a row lock and a bounded poll on pg_stat_activity, and the fix round re-ran the full db integration suite; the overrun is small and bought a test that proves the rejection race.
+
+---
+
+### 25 Oct 2026 · 9.3d fix round alongside another packages/db builder · decided by lead · risk: low
+- Decided: run the 9.3d fix round (packages/db/test/repositories.int.test.ts only) while the 11.4e builder worked in packages/db/test/documents.int.test.ts.
+- Why: the one-builder-per-package rule exists to stop two builders editing shared files; these were different test files with unique fixture ids and per-file test databases, and waiting would have stalled 9.3d for a test-only cleanup fix.
+
+---
+
+### 25 Oct 2026 · 9.3d merge · decided by lead · risk: low
+- Decided: merge 9.3d (a concurrent-rejection test proving subscriptions.start waits on the teacher row lock and writes nothing when the teacher is rejected meanwhile, plus a pending-teacher test) after one fix round.
+- Why: test-only change in packages/db/test, not a risky path; the typescript-reviewer HIGH (an abandoned start() could leak a subscriptions row if the poll assertion failed) is fixed and re-approved, and database-reviewer and code-reviewer approved.
+
+---
+
+### 25 Oct 2026 · 3.3a index.ts narrowing without a non-null assertion · decided by builder · risk: low
+- Decided: Rewrote `classifyTurn`'s intent ternary as explicit branches (an early return for
+  `rule.confident`, then an `if (text === undefined)` guard kept only to satisfy the type
+  checker, then the model-fallback call) instead of a `text!` non-null assertion or a `satisfies`
+  cast.
+- Why: the plan allowed either "a local narrowing check or an explicit non-null assertion with a
+  one-line comment"; no behaviour change either way since the guard branch is unreachable
+  (`classifyIntentByRules` returns `confident: true` for undefined text), but the explicit branch
+  reads clearer than a bare assertion and needs no suppression comment.
+
+---
+
+### 25 Oct 2026 · 3.3a new distress rows' wording · decided by builder · risk: low
+- Decided: Picked plain, generic distress phrasing ("I feel so hopeless about everything these
+  days", "nothing I do matters anymore, I give up trying", etc.) with no helpline numbers,
+  contacts or personal details, verified individually against `classifyIntentByRules` via a
+  scratch test (written, run, then deleted before commit) rather than assumed.
+- Why: the plan required each row to genuinely exercise the model-fallback path (soft or
+  no-hit), not just read as plausible; checking against the real rule function was the only way
+  to confirm that without a real model call (rule 4).
+
+---
+
+### 25 Oct 2026 · 3.3a merge · decided by lead · risk: high
+- Decided: merge 3.3a (a shared guarded model call in packages/harness/src/pipeline/guardedModelCall.ts used by routing/modelFallback.ts and guardrails/safetyClassifier.ts; answer-key dedupe in routing/classify.ts; the dead branch in routing/index.ts removed; 5 English soft/indirect distress rows in routing/labelledTurns.ts) with no findings.
+- Why: it touches packages/harness/src/guardrails/** (a risky path); code-reviewer, typescript-reviewer and silent-failure-hunter each verified the safety classifier keeps the same timeout, error types and fail-closed behaviour, with its existing tests passing unedited, and that the new distress rows reach the model fallback as labelled.
+
+---
+
 ### 25 Oct 2026 · 13.3a Referrer-Policy value · decided by builder · risk: low
 - Decided: `Referrer-Policy: strict-origin-when-cross-origin` (browsers' current safe default),
   since the plan named the header but not its exact value.
