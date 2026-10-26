@@ -263,6 +263,9 @@ export async function runChatCommand(
       for await (const event of run.events) renderEvent(event, io);
       await run.finished;
       currentCancel = undefined;
+      // 3.9g (typescript-review LOW): a turn cancelled by SIGINT goes straight to "bye" below,
+      // with no "> " prompt for a turn that was never really finished.
+      if (interrupted) break;
       io.stdout('\n> ');
     }
   } finally {
