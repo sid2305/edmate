@@ -93,6 +93,26 @@ python3 .githooks/secret-scan.py --all
 ```
 Clean (no output).
 
+## Fix round
+
+Fixed one HIGH finding (typescript-reviewer): `buildDbRetrieval` opened the pool via
+`openDatabase(env)` and then called `repos.documents.listForTeacher` and (conditionally)
+`seedChatChunks` outside any try/catch, so a throw from either leaked the pool (`close` never
+called), letting the CLI process hang.
+
+- `apps/cli/src/commands/chat/dbRetrieval.ts` — `buildDbRetrieval` now wraps the read + seed in a
+  try/catch: on error it calls `await close()`, swallowing only a close failure
+  (`.catch(() => undefined)`), then rethrows the original error. Added a minimal injectable `open`
+  seam (`open: (env: Env) => { repos: Repositories; close: () => Promise<void> } = openDatabase`)
+  so the leak paths can be tested without a real Postgres pool; the production call site in
+  `apps/cli/src/commands/chat/deps.ts` is unchanged (still calls `buildDbRetrieval(opts.env,
+  teacherId, content)` with the default `open`).
+- `apps/cli/test/dbRetrieval.test.ts` (new) — unit tests via a fake `open`: (1) the read throws →
+  `close` is called once and the original error propagates; (2) the seed throws (via
+  `repos.documents.create`) → same; (3) the read throws and `close` itself also throws → the
+  close failure is swallowed and the original (read) error still propagates.
+
 ## Budget
 
 Tool calls used: 34
+Fix round tool calls: 11

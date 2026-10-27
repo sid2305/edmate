@@ -68,9 +68,15 @@ export async function buildDbRetrieval(
   env: Env,
   teacherId: string,
   content: DemoTeacherContent,
+  open: (env: Env) => { repos: Repositories; close: () => Promise<void> } = openDatabase,
 ): Promise<{ index: RetrievalIndex; close: () => Promise<void> }> {
-  const { repos, close } = openDatabase(env);
-  const existing = await repos.documents.listForTeacher({ teacherId });
-  if (existing.length === 0) await seedChatChunks(repos, content, teacherId);
-  return { index: retrievalIndexFor(repos), close };
+  const { repos, close } = open(env);
+  try {
+    const existing = await repos.documents.listForTeacher({ teacherId });
+    if (existing.length === 0) await seedChatChunks(repos, content, teacherId);
+    return { index: retrievalIndexFor(repos), close };
+  } catch (err) {
+    await close().catch(() => undefined);
+    throw err;
+  }
 }
