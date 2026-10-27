@@ -10,6 +10,10 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 9.6f follow-up task renamed 9.6g → 9.6j · decided by lead · risk: low
+- Decided: the M13 board task holding 9.6f's deferred EXPLAIN MEDIUM and LOW is now 9.6j, its plan is docs/tasks/9.6j/plan.md, and docs/tasks/9.6f/review.md cites `deferred 9.6j`. The 9.6f decision above that says "9.6g" means this task.
+- Why: 9.6g was already the id of a done M9 task (m9/9.6g-export-fixes), whose task folder the new plan had landed in.
+
 ### 26 Oct 2026 · 9.4e risky paths merge · decided by lead · risk: high
 - Decided: merge 9.4e's changes on risky paths: packages/harness/src/guardrails/** (adviceGuard.ts, grounding.ts, index.ts export the existing verdict schemas; no behaviour change), apps/web/src/auth/errors.ts (apiError gains an optional headers param; cache-control no-store always wins) and packages/db/src/repositories/README.md (doc only).
 - Why: code-reviewer, security-reviewer and typescript-reviewer approved with LOWs only; the only headers caller passes a server-computed Retry-After constant.

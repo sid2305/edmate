@@ -1,8 +1,6 @@
-# 9.6g plan: EXPLAIN the repositories' real SQL instead of hand-written copies
+# 9.6j plan: EXPLAIN the repositories' real SQL instead of hand-written copies
 
-**Board id note:** `9.6g` is reused (a stale, already-`done` M9 task under the same id —
-`m9/9.6g-export-fixes`, "notes PDF bullet"/"answeredPairs" — is unrelated; this plan is for the
-M13 entry, deps `9.6f`, title "9.6f database-review follow-ups").
+**Board id (lead, 26 Oct 2026):** this task was first filed as `9.6g`, which an older, done M9 task already uses; it is now `9.6j`.
 
 ## Acceptance (verbatim)
 > the EXPLAIN tests run the repositories' own SQL and assert the index seek for both the lateral
