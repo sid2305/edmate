@@ -8869,10 +8869,10 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: planning
+  status: running
   risk: risky
-  branch: null
-  model: plan:sonnet
+  branch: m13/1.7a-age-consent-followups
+  model: plan:sonnet build:sonnet
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
