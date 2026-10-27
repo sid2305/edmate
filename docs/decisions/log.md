@@ -10,6 +10,80 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.2a merge of db/repositories/learner.ts · decided by lead · risk: high
+- Decided: merge the keyset-paged `rebuildMastery` in `packages/db/src/repositories/learner.ts` (a risky path) with migration 0039's concurrent index.
+- Why: security-reviewer, code-reviewer, database-reviewer and typescript-reviewer all approved with no findings above LOW; every page stays scoped to teacher and student under the same row lock, and the index is built with `CREATE INDEX CONCURRENTLY` like 0036 and 0038.
+
+---
+
+### 27 Oct 2026 · 6.2a budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (134 harness tool calls against a budget of 50; the builder reported 95).
+- Why: the extra calls went to a real cursor-precision bug the new multi-page test caught, the hand-made migration snapshot and re-runs of the shared-Postgres flake; the diff stayed on scope.
+
+---
+
+### 27 Oct 2026 · 6.2a same-ts tie-break test not added · decided by lead · risk: low
+- Decided: wontfix the LOW gap that `packages/db/test/profile-store.int.test.ts` never puts two rows with the same `ts` across a page boundary.
+- Why: the `(ts, id)` row comparison handles ties by inspection, and evidence rows are stamped per event; a test can be added if same-`ts` rows show up in practice.
+
+---
+
+### 27 Oct 2026 · 6.2a hand-crafted migration snapshot (0039_snapshot.json, _journal.json) · decided by builder · risk: low
+- Decided: added `packages/db/migrations/meta/0039_snapshot.json` and a new `_journal.json` entry,
+  mirroring the new index into the prior snapshot by hand (same mechanism 13.regatea used for
+  0038), rather than running `drizzle-kit generate`.
+- Why: the plan's files-to-modify list didn't mention `migrations/meta/`, but
+  `test/schema.test.ts` (which diffs `src/schema`'s declared indexes against the latest migration
+  snapshot) failed once the new index was declared in `learning.ts` without a matching snapshot
+  entry. 13.regatea's 0038 precedent (same situation, same fix) confirms this is expected, not a
+  scope change; no human decision needed.
+
+---
+
+### 27 Oct 2026 · 6.2a keyset cursor precision (Date vs. raw text) · decided by builder · risk: low
+- Decided: the keyset cursor for `rebuildMastery`'s paged replay carries `ts` as a raw
+  `::text`-cast string (full microsecond precision), not the `Date` object drizzle returns by
+  default, and the WHERE clause casts it back with explicit `::timestamptz`/`::text`.
+- Why: the plan flagged the explicit casts as optional ("if they turn out unnecessary... the
+  builder may drop them"); testing showed they're necessary together with the raw-text selection
+  to avoid `Date`'s millisecond truncation duplicating the boundary row across pages (see bug
+  writeup above). Caught by the plan's own prescribed test, not a new scope item.
+
+---
+
+### 27 Oct 2026 · 6.2a full monorepo gate flakiness under parallel load · decided by builder · risk: low
+- Decided: treated repeated, non-reproducible single-test timeouts in `@edmate/cli` (
+  `test/chatDbRetrieval.int.test.ts`, a `beforeAll` hook timeout) and one `@edmate/web` run (a
+  `page.test.tsx` test timeout) as pre-existing environment flakiness under heavy parallel
+  Postgres-connection load, not failures caused by this task.
+- Why: neither file is touched by this task; both pass cleanly every time they're run in
+  isolation (confirmed twice for the cli one, once for web); `@edmate/db`'s own full
+  typecheck/lint/test (86 files, 1806 tests) is green on every run, including after the fixes
+  above.
+
+---
+
+### 27 Oct 2026 · 5.8f merge of pedagogy/skills.ts and policy.ts · decided by lead · risk: high
+- Decided: merge the `SkillInput.rolePlayStepFor` change in `packages/harness/src/pedagogy/` (a risky path).
+- Why: code-reviewer and typescript-reviewer both approved with no findings; the change is type-only, keeps the same run-time persona check and message, and nothing different reaches the model.
+
+---
+
+### 27 Oct 2026 · 5.8f budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (30 harness tool calls against a budget of 20; the builder reported 17-21).
+- Why: the extra calls went to the full dependents gate and a re-run of the known apps/cli chatDbRetrieval flake; the diff stayed on scope.
+
+---
+
+### 27 Oct 2026 · 5.8f one field for a passed-in role-play step · decided by builder · risk: low
+- Decided: merged `rolePlayStep`/`rolePlayStepPersonaId` into one `rolePlayStepFor: { step,
+  personaId }` field, matching the shape already built in `policy.ts`, with `readonly` members.
+- Why: the acceptance criterion requires a caller to be unable to pass one without the other;
+  one object field with both members required is the simplest way to make that a compile-time
+  guarantee, and it matches the object already constructed at the call site.
+
+---
+
 ### 27 Oct 2026 · 12.2h merge of reports.ts · decided by lead · risk: high
 - Decided: merge the change to `packages/db/src/repositories/reports.ts` (a risky path): `listOpenForStaff` now rethrows any per-row error that is not a `RepositoryError('integrity', ...)` and logs only a skipped-row count through the opt-in `debuglog('edmate:db')`.
 - Why: security-reviewer, code-reviewer, typescript-reviewer and silent-failure-hunter all approved with no CRITICAL, HIGH or MEDIUM findings; the change narrows a swallowed-error path and the log line holds no row ids, text or reasons.

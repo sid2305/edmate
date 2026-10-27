@@ -2960,9 +2960,30 @@ tasks:
   deps:
   - '6.2'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.2a-rebuild-batching
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 605
+    tokens_in: 2138
+    tokens_out: 140554
+    cache_read_tokens: 79204918
+    wall_time_seconds: 5816
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 5.8b
   milestone: M13
   title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
@@ -10560,9 +10581,29 @@ tasks:
   deps:
   - 5.8b
   risk: low
-  status: running
+  status: done
   branch: m13/5.8f-roleplay-step-field
-  model: plan:lead build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 141
+    tokens_in: 474
+    tokens_out: 39361
+    cache_read_tokens: 9554502
+    wall_time_seconds: 477303
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.2i
   milestone: M13
   title: '12.2h review LOWs: (1) break the import cycle between packages/db/src/repositories/chunks.ts and takedowns.ts (chunks.ts calls notTakenDown at module load; importing reports.ts or takedowns.ts
@@ -10578,7 +10619,8 @@ tasks:
   model: null
 - id: 8.2p
   milestone: M13
-  title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first) has no supporting index, so each 15-minute run seq-scans documents; add a partial index on documents (updated_at, id) WHERE status = ''processing'' when the table grows past pilot scale'
+  title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first)
+    has no supporting index, so each 15-minute run seq-scans documents; add a partial index on documents (updated_at, id) WHERE status = ''processing'' when the table grows past pilot scale'
   accept: an EXPLAIN in an int test (or the migration test) shows the sweep query uses the new index; db typecheck, lint and test green
   deps:
   - 8.2i
