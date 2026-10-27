@@ -2974,9 +2974,9 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.8b-roleplay-gate-followups
+  model: plan:sonnet build:sonnet
 - id: 6.3b
   milestone: M13
   title: '6.3 review follow-ups: a concurrent applyMistakes test (Promise.all on one tag, assert the summed count, like 6.2''s race test); cap the patch length and the stored mistakes array; applyMistakes
