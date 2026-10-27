@@ -129,6 +129,14 @@ the same 80% bar the original Phase A handoff reported, after the new code added
 
 No other decision the plan didn't already make was needed in Phase A.
 
+### 27 Oct 2026 · 11.4d approve ADR-0016 and merge · decided by lead · risk: high
+- Decided: ADR-0016 (ffmpeg in the worker image, protocol whitelist `file`, forced demuxer from a fixed mime table, SIGTERM then SIGKILL on timeout) is Accepted and 11.4d merges. Fix round 1 closed the security CRITICAL, the architect HIGH and MEDIUM and the typescript HIGH; security-reviewer, architect and typescript-reviewer each re-verified and approved.
+- Why: the chunker is what lets MP4, WebM and M4A recordings of any length be transcribed, and the fix round shuts the one real attack path (ffmpeg following HLS or concat references inside an upload). The remaining MEDIUM/LOW items are hardening, not blockers, and go to board task 11.4j.
+
+### 27 Oct 2026 · 11.4d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 224 tool calls against the plan's 100 (Phase A 91, Phase B 44, fix round 89, by the harness count; the handoff's self-counts are lower).
+- Why: the fix round had to prove the ffmpeg rejection against real ffmpeg and a real SIGTERM-ignoring child, which is where the overrun came from; the result is the security property the task needed. Future briefs that ask for real-process tests should budget for them.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker...` — **green.** (First attempt hit two small lint errors — an unused `err` binding and a stray duplicate expression statement in the test file — fixed, then the full filtered run passed: 38/38 tasks successful, including `@edmate/db:test` at 99%+ coverage and `@edmate/worker:test`.)

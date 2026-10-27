@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (27 Oct 2026). Task 11.4d Phase A (board 11.4d). Reviewed by architect, security-reviewer and typescript-reviewer; the lead approves it with a `risk: high` decision once that review lands.
+Accepted (27 Oct 2026). Task 11.4d (board 11.4d). Reviewed by architect, security-reviewer and typescript-reviewer (one fix round, re-verified by all three); the lead approved it with a `risk: high` decision.
 
 ## Date
 
