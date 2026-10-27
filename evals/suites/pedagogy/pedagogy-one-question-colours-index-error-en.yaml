@@ -1,0 +1,19 @@
+id: pedagogy-one-question-colours-index-error-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply, never states the
+  answer below rung 4) and line 560; content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/lists-dicts.yaml#ld-q2
+turns:
+  - skill: coach
+    student: coach me through why colours[3] breaks on my 3-item list, one bit at a time
+    expect:
+      max_words: 80
+      must_not_contain:
+        - indexes start at 0, so there's no index 3
+        - there's no index 3
+        - colours only has indexes 0 1 and 2
+      judge:
+        - The reply asks the student exactly one question.

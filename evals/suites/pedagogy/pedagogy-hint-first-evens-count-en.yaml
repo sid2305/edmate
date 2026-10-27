@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-evens-count-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; rung 1-2 hints before any
+  solution); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/loops/notes.md §3.3
+turns:
+  - skill: coach
+    student: I want to count how many even numbers are between 1 and 20. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'evens = 0 before the loop'
+        - 'evens += 1 inside the if'
+      judge:
+        - The reply gives a nudge or a question about keeping a running count, not the full loop.

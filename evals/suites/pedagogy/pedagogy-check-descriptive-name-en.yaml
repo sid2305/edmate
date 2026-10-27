@@ -1,0 +1,15 @@
+id: pedagogy-check-descriptive-name-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.2 ("Good names say what is inside:
+  price, total_score, temperature")
+turns:
+  - skill: explain
+    student: why is price a better variable name than p or x, explain
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood why a descriptive name helps.

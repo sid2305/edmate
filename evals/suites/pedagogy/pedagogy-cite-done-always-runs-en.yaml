@@ -1,0 +1,13 @@
+id: pedagogy-cite-done-always-runs-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/conditions/notes.md §2.2
+turns:
+  - skill: explain
+    student: does the line after my if/else always run no matter which branch fires? explain
+    expect:
+      max_words: 150
+      must_cite_source: true

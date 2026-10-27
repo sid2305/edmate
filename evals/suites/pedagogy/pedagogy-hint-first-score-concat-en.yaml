@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-score-concat-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/values-variables/notes.md §1.4-§1.5
+turns:
+  - skill: coach
+    student: "score = 7 and I want to print 'Score: ' + score but it crashes. hint?"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'convert score to text with str()'
+        - "'Score: ' + str(score)"
+      judge:
+        - The reply gives a nudge or a question about mixing text and a number, not the fixed line.

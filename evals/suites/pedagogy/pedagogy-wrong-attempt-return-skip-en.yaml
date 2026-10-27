@@ -1,0 +1,26 @@
+id: pedagogy-wrong-attempt-return-skip-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/functions/notes.md §4.3
+turns:
+  - skill: coach
+    student: |-
+      def check(n):
+          if n > 0:
+              return "positive"
+          print("checked")
+          return "not positive"
+      print(check(5))
+      I expected it to print checked too but it skipped straight to returning, bug?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return ends the function so print never runs
+        - move the print before return
+        - put print above return
+      judge:
+        - The reply points to what return does to the rest of the function without rewriting the code.

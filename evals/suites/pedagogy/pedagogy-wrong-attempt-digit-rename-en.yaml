@@ -1,0 +1,18 @@
+id: pedagogy-wrong-attempt-digit-rename-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/values-variables/notes.md §1.2
+turns:
+  - skill: coach
+    student: "I renamed 2nd_place to 2ndPlace to fix the SyntaxError but it's still broken"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - "names can't start with a digit"
+        - 'start with a letter or underscore, like place_2'
+      judge:
+        - The reply points to what a variable name is allowed to start with, without writing the fixed name.

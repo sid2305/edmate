@@ -1,0 +1,15 @@
+id: pedagogy-one-question-elif-or-ifs-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
+  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/modules/conditions/notes.md §2.3
+  ("elif or a new if?")
+turns:
+  - skill: coach
+    student: coach me through whether I need elif or two separate ifs for checking someone's 13+ AND has a ticket, one step, don't just answer it
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

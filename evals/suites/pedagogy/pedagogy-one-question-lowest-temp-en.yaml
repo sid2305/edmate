@@ -1,0 +1,14 @@
+id: pedagogy-one-question-lowest-temp-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
+  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/modules/lists-dicts/notes.md §5.3
+turns:
+  - skill: coach
+    student: 'coach me through finding the lowest number in temps = [68, 72, 65] without writing a loop, one step'
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

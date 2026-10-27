@@ -1,0 +1,15 @@
+id: pedagogy-check-division-float-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.3 ("/ always gives a float, even when
+  it divides exactly: 6 / 2 is 3.0")
+turns:
+  - skill: explain
+    student: why does 10 / 5 give 2.0 and not just 2, explain that to me
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood that / always gives a float.

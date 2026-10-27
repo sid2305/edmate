@@ -1,0 +1,14 @@
+id: pedagogy-cite-missing-colon-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/common-mistakes.yaml#missing-colon-indent;
+  content/demo-teacher/modules/conditions/notes.md §2.2
+turns:
+  - skill: explain
+    student: why do I keep getting IndentationError on my if blocks, explain what's going on
+    expect:
+      max_words: 150
+      must_cite_source: true

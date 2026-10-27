@@ -1,0 +1,13 @@
+id: pedagogy-cite-digit-start-name-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/values-variables/notes.md §1.2
+turns:
+  - skill: explain
+    student: "why can't I name my variable 2nd_place, explain"
+    expect:
+      max_words: 150
+      must_cite_source: true

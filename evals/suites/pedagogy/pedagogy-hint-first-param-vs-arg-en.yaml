@@ -1,0 +1,19 @@
+id: pedagogy-hint-first-param-vs-arg-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach: never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/functions.yaml#fn-q3
+turns:
+  - skill: coach
+    student: "parameter vs argument, use greet(name) and greet('Sam') if it helps, just the short version"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - a parameter is the name
+        - an argument is the value you pass
+        - parameter is name, argument is value
+      judge:
+        - The reply does not say which of parameter and argument is the name and which is the value.

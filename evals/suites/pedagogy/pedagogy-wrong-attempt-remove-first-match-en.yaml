@@ -1,0 +1,24 @@
+id: pedagogy-wrong-attempt-remove-first-match-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/lists-dicts/notes.md §5.2
+turns:
+  - skill: coach
+    student: |-
+      pets = ["cat", "dog", "cat"]
+      pets.remove("cat")
+      print(pets)
+      # ['dog', 'cat']
+      I thought remove() would get rid of both cats, why is one still there
+    expect:
+      max_words: 80
+      must_not_contain:
+        - remove() only removes the first match
+        - it only deletes the first matching cat
+        - remove() stops after the first one
+      judge:
+        - The reply helps the student see that remove() takes out only one matching item, without rewriting the code.

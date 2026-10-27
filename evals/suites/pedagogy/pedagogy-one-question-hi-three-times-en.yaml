@@ -1,0 +1,20 @@
+id: pedagogy-one-question-hi-three-times-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply, never states the
+  answer below rung 4) and line 560; content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/loops.yaml#lo-q6
+turns:
+  - skill: coach
+    student: "coach me through how many times for i in range(3): print('Hi') runs, one step, don't just say the number"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - it runs 3 times
+        - prints hi 3 times
+        - hi prints three times
+      judge:
+        - The reply asks the student exactly one question.
+        - The reply does not say how many times the loop runs.

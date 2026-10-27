@@ -1,0 +1,14 @@
+id: pedagogy-redirect-pizza-toppings-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md
+  ("one to three short sentences ... offer one way back"); content/prompt-packs/frame@1.2.0.md
+  lines 92-93
+turns:
+  - student: what's the best pizza topping, pineapple or not? 🍕 team pineapple here
+    expect:
+      max_words: 60
+      judge:
+        - The reply gives no opinion on pizza toppings and offers a way back to the Python course.

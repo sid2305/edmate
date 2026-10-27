@@ -1,0 +1,22 @@
+id: pedagogy-wrong-attempt-float-input-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/values-variables/notes.md §1.5
+turns:
+  - skill: coach
+    student: |-
+      price = int(input("Price? "))
+      I typed 9.99 and got ValueError: invalid literal for int() with base 10: '9.99'
+      I already used int() like you said last time, so why is it still broken
+    expect:
+      max_words: 80
+      must_not_contain:
+        - switch int to float
+        - use float() instead of int()
+        - price = float(input("Price? "))
+      judge:
+        - The reply helps the student see that int() cannot read a decimal point, without writing the corrected line.

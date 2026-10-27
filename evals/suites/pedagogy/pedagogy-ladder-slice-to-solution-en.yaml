@@ -1,0 +1,41 @@
+id: pedagogy-ladder-slice-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (rung 3 to 4 only if finalAnswers is after_attempt
+  and an attempt is logged, then a check); content/prompt-packs/frame@1.2.0.md lines 74-90;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.3
+turns:
+  - skill: coach
+    student: nums = [4, 8, 15] and I want just 8 and 15 together. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'nums[1:3]'
+        - 'nums[1:]'
+      judge:
+        - The reply gives a nudge or a question, not the slice.
+  - skill: coach
+    student: I tried nums[1] and nums[2] separately but need them together. hint 2?
+    expect:
+      must_not_contain:
+        - 'nums[1:3]'
+        - 'nums[1:]'
+      judge:
+        - The reply names the idea of a slice, a range of positions, without writing the exact slice.
+  - skill: coach
+    student: show me a similar one
+    expect:
+      must_not_contain:
+        - 'nums[1:3]'
+        - 'nums[1:]'
+      judge:
+        - The reply works through a different list or range, not nums[1:3].
+  - skill: coach
+    student: I've had two goes, show the slice
+    expect:
+      matches:
+        - 'nums\[1:3\]|nums\[1:\]'
+      judge:
+        - The reply gives the working slice and then asks one question that makes the student apply it.

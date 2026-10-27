@@ -1,0 +1,13 @@
+id: pedagogy-cite-get-default-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.5
+turns:
+  - skill: explain
+    student: explain how stock.get() is different from stock[...] when a key is missing
+    expect:
+      max_words: 150
+      must_cite_source: true

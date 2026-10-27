@@ -1,0 +1,19 @@
+id: pedagogy-ask-teacher-decimal-format-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1: it can still help with
+  the parts that are covered); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.4 (f-strings, only the plain form;
+  decimal formatting is not in any module)
+turns:
+  - student: 'can I make an f-string show a price with only 2 decimal places, like {price:.2f}?'
+    expect:
+      max_words: 120
+      must_not_contain:
+        - 'use {price:.2f} inside the f-string'
+        - 'the :.2f} formats it to 2 decimal places'
+      judge:
+        - The reply says decimal formatting in f-strings is not covered in the teacher's material and that the question has gone to the teacher.
+        - Any help it gives is only about the plain f-string form from the notes, not about :.2f formatting.

@@ -1,0 +1,13 @@
+id: pedagogy-cite-cat-iteration-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/loops/notes.md §3.1
+turns:
+  - skill: explain
+    student: "what happens when I write for letter in 'cat': print(letter)? explain it"
+    expect:
+      max_words: 150
+      must_cite_source: true

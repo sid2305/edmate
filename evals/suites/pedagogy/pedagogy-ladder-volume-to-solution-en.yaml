@@ -1,0 +1,38 @@
+id: pedagogy-ladder-volume-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (rung 3 to 4 only if finalAnswers is after_attempt
+  and an attempt is logged, then a check); content/prompt-packs/frame@1.2.0.md lines 74-90;
+  content/demo-teacher/modules/functions/notes.md §4.7
+turns:
+  - skill: coach
+    student: 'Here is my function so far, def volume(x, y, z): and I need it to return the product of x, y and z. Can you give a hint?'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'return x * y * z'
+        - 'x * y * z'
+      judge:
+        - The reply gives a nudge or a question, not the full line.
+  - skill: coach
+    student: I used return x + y + z instead of multiplying them, and now my volumes come out way too small
+    expect:
+      must_not_contain:
+        - 'return x * y * z'
+        - 'x * y * z'
+      judge:
+        - The reply names that combining three side lengths into a volume needs a different operator than the one used, without writing the fixed line.
+  - skill: coach
+    student: give me a different one, not about volume
+    expect:
+      judge:
+        - The reply works through a different function, not volume.
+  - skill: coach
+    student: "that's two goes, just give me the return line"
+    expect:
+      matches:
+        - "x\\s*\\*\\s*y\\s*\\*\\s*z"
+      judge:
+        - The reply shows the fixed return line and then asks one question that makes the student apply it.

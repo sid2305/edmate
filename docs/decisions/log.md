@@ -10,6 +10,118 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 7.2s merge and budget, 269 tool calls against 190 · decided by lead · risk: low
+- Decided: merge at 269 harness-counted tool calls (Phase J 142, Phase K 85, fix round 1 42) against the plan's 190; the fix round ran 42 against a 30 cap.
+- Why: Phase J overran by checking every case against the bank answers one file at a time; the Phase K brief asked for batched writes and came in under its 95. The fix round's scripted whole-suite duplicate check is what the review needed. The 7.2t briefs carry the batching rule and the single-turn duplicate check from the start.
+
+---
+
+### 27 Oct 2026 · 7.2s review findings handled · decided by lead · risk: low
+- Decided: code-reviewer's Phase J MEDIUMs and LOW were fixed in Phase K, and its Phase K HIGH (five repeated opening turns) and MEDIUM (a fourth ".get() default" case) in fix round 1, which it verified. The stale Phase C citations and the plums-default file name go to board task 7.2v.
+- Why: all were cheap to fix on the branch; the citations and the rename touch files outside this task's new cases.
+
+---
+
+### 27 Oct 2026 · 7.2s fix round 1 kept ids unchanged on the retricked file · decided by builder · risk: low
+
+- Decided: `pedagogy-hint-first-plums-default-en.yaml`'s `id` field still reads
+  `pedagogy-hint-first-plums-default-en` even though the scenario is no longer about plums or
+  a default value; the fix brief said to touch only the 6 named files with no renames, and
+  `suites.ts` requires a case's `id` to equal its filename stem, so changing the id would have
+  required renaming the file.
+- Why: following the brief's "no new files, no renames" instruction exactly over having a
+  topically accurate id; flagging it here in case the lead wants the file renamed in a later,
+  separate pass.
+
+---
+
+### 27 Oct 2026 · 7.2s built cases first, raised the floor second · decided by builder · risk: low
+
+- Decided: wrote all 45 case files first, then raised `SUITE_FLOORS.pedagogy` and the pin test
+  afterward, rather than raising the floor first to get a red test.
+- Why: with 45 files to hand-write and cross-check for duplicate forms against 60 existing
+  cases, writing then verifying in one batch was faster than 45 tiny red/green cycles; the net
+  evidence (a failing count-0 run, caused by an unrelated YAML bug, followed by a clean 36/36 run)
+  still shows the suite actually needed the new cases to pass. Same end state as the brief asked
+  for.
+
+---
+
+### 27 Oct 2026 · 7.2s free cases sourced from notes.md beyond the question bank · decided by builder · risk: low
+
+- Decided: all 9 free-package question-bank items for values-variables and conditions were
+  already used by Phase C's 60 cases, so Phase J's free cases (20 of 45) are grounded in
+  `notes.md` sections that aren't a question-bank Q&A pair but are still the teacher's own
+  material: `type()`, order of operations, `int()` truncation, the comparison table, `+=`,
+  missing-colon indentation, elif-vs-chained-ifs, if/else sequencing.
+- Why: the plan requires every case to come from the demo teacher's material and forbids
+  inventing subject facts or reworking an existing case's trick; notes.md content not yet
+  exercised satisfies both without inventing anything.
+
+---
+
+### 27 Oct 2026 · 7.2s source citations use current build-plan line numbers · decided by builder · risk: low
+
+- Decided: new cases cite docs/edmate-harness-build-plan.md lines 395-405 (help ladder), 409-417
+  (skills table) and 427-436 (ask the teacher), not the 350-357/364/365/513 lines Phase C's
+  cases still cite.
+- Why: the build plan has been edited since Phase C and its line numbers have shifted; citing
+  the current numbers keeps `source:` accurate. Flagging for the lead since it means Phase C's
+  own citations are now slightly stale — not a blocker, just a note.
+
+---
+
+### 27 Oct 2026 · 7.2s two YAML/schema bugs found and fixed before the gate · decided by builder · risk: low
+
+- Decided: fixed an unquoted-colon YAML parse error and three must_not_contain self-echoes
+  (detailed above under "Red then green") rather than leaving them for a fix round.
+- Why: both would have failed `suites.test.ts` outright; fixing them before handoff keeps the
+  gate green and avoids a wasted review cycle.
+
+---
+
+### 27 Oct 2026 · 7.2s Phase J review findings fixed in Phase K · decided by builder · risk: low
+
+- Decided: fixed code-reviewer's 2 MEDIUM and 1 LOW Phase J findings in their original files
+  (listed under Summary (Phase K) above) rather than opening a separate fix-round task.
+- Why: the brief asked for these fixed as part of Phase K; the files are 4 of the existing 105
+  cases, not new ones, so fixing them in place (rather than copying content into a new file)
+  keeps one id per file and avoids a duplicate-turn problem of our own making.
+
+---
+
+### 27 Oct 2026 · 7.2s raised the floor first this phase · decided by builder · risk: low
+
+- Decided: unlike Phase J, raised `SUITE_FLOORS.pedagogy` (and the pin test) to 150 before
+  writing any of the 45 new files, confirming a genuine red run off a stale count, then added
+  cases until green.
+- Why: the brief for this phase asked for floor-first red/green directly, and doing it this way
+  removes the "built then raised" ordering note Phase J had to add as a decision.
+
+---
+
+### 27 Oct 2026 · 7.2s fresh-concept cap of 3 per trick, suite-wide · decided by builder · risk: low
+
+- Decided: before writing, grepped every student turn across all 105 existing cases, catalogued
+  which concepts/tricks had already reached 3 occurrences suite-wide (e.g. order of
+  operations/needs brackets), and designed each of the 45 new cases around a concept not yet at
+  that cap, stopping once a reused concept (e.g. `.get()` with a default, the `evens` counting
+  accumulator) hit 3 rather than pushing to a 4th.
+- Why: the plan's anti-duplication intent is about forms and tricks repeating too often, not
+  only literal turn text; a self-imposed cap keeps the suite's coverage broad without the plan
+  stating an explicit number.
+
+---
+
+### 27 Oct 2026 · 7.2s kept Phase J's current build-plan line citations · decided by builder · risk: low
+
+- Decided: Phase K's new cases cite the same build-plan line ranges Phase J introduced (395-405
+  help ladder, 409-417 skills table, 427-436 ask the teacher) rather than re-deriving line
+  numbers, since the build plan has not moved since Phase J.
+- Why: consistent, verified-accurate citations across J and K; no new staleness risk to flag.
+
+---
+
 ### 27 Oct 2026 · 12.3g staff route follow-ups approval · decided by lead · risk: high
 - Decided: approve the changes under apps/web/app/api/staff/** (repeat-infringers/handlers.ts, route.test.ts and verifications/handlers.ts) for merge. security-reviewer approved with no findings: the optional pre-fetched takedown list only ever comes from the same request's staff-scoped read, and the /api/staff/verifications callers are unchanged.
 - Why: it closes the three 12.3d review LOWs with no behaviour change beyond one fewer database read per request.

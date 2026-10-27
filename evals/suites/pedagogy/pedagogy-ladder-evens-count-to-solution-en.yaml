@@ -1,0 +1,38 @@
+id: pedagogy-ladder-evens-count-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (rung 3 to 4 only if finalAnswers is after_attempt
+  and an attempt is logged, then a check); content/prompt-packs/frame@1.2.0.md lines 74-90;
+  content/demo-teacher/modules/loops/notes.md §3.3
+turns:
+  - skill: coach
+    student: Between 1 and 30, I need to count how many numbers are even, keeping a running total called count. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'count = 0 before the loop'
+        - 'count += 1 inside the if'
+      judge:
+        - The reply gives a nudge or a question, not the full loop.
+  - skill: coach
+    student: I set count += 1 on every loop pass, not just when the number is even, so my total count is way too high
+    expect:
+      must_not_contain:
+        - 'count = 0 before the loop'
+        - 'count += 1 inside the if'
+      judge:
+        - The reply names that the count should only increase inside the even check, without writing the fixed loop.
+  - skill: coach
+    student: "can I see one that's not about even numbers?"
+    expect:
+      judge:
+        - The reply works through a different range or condition, not evens between 1 and 30.
+  - skill: coach
+    student: "I've tried twice, show me the working code"
+    expect:
+      matches:
+        - "count\\s*\\+=\\s*1"
+      judge:
+        - The reply shows the full working loop and then asks one question that makes the student apply it.

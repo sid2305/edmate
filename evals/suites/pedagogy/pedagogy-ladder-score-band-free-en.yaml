@@ -1,0 +1,36 @@
+id: pedagogy-ladder-score-band-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/conditions/notes.md §2.4
+turns:
+  - skill: coach
+    student: how do I check that my score is between 50 and 100, including both ends? hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'score >= 50 and score <= 100'
+        - '50 <= score <= 100'
+      judge:
+        - The reply gives a nudge or a question, not the fixed condition.
+  - skill: coach
+    student: I wrote score > 50 and score < 100 but it misses someone who scores exactly 50
+    expect:
+      must_not_contain:
+        - 'score >= 50 and score <= 100'
+        - '50 <= score <= 100'
+      judge:
+        - The reply names that the edges need >= and <= instead of > and <, without writing the fixed condition.
+  - skill: coach
+    student: "try one that's not about scores this time"
+    expect:
+      judge:
+        - The reply works through a different variable, not score.
+  - skill: coach
+    student: "nothing's worked, what's the actual condition"
+    expect:
+      judge:
+        - The reply still does not give the fixed condition.
