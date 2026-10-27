@@ -496,6 +496,42 @@ describe('submitAgeAnswer', () => {
     expect(t.log).toEqual(['[auth] age gate: record failed Error']);
   });
 
+  it('with no log field, a throwing resolve goes to console.error by name only', async () => {
+    const t = await setup();
+    const noLogDeps: AgeGateDeps = { ...t.deps };
+    delete noLogDeps.log;
+    noLogDeps.resolve = async () => {
+      throw new Error('db down: postgres://u:p@host/x');
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, noLogDeps)).toMatchObject({
+        error: { code: 'provider_error', retryable: true },
+      });
+      expect(spy).toHaveBeenCalledWith('[auth] age gate: resolve failed Error');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('with no log field, an unexpected record failure goes to console.error by name only', async () => {
+    const t = await setup();
+    t.identity.recordAgeAnswer = async () => {
+      throw new Error('db down: postgres://u:p@host/x');
+    };
+    const noLogDeps: AgeGateDeps = { ...t.deps };
+    delete noLogDeps.log;
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, noLogDeps)).toMatchObject({
+        error: { code: 'provider_error', retryable: true },
+      });
+      expect(spy).toHaveBeenCalledWith('[auth] age gate: record failed Error');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('uses the __Host- names over https', () => {
     expect(ageBlockCookieName(true)).toBe('__Host-edmate.age-block');
     expect(ageBlockCookieName(false)).toBe('edmate.age-block');
