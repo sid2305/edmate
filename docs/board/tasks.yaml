@@ -8561,9 +8561,9 @@ tasks:
   accept: web and db typecheck, lint and test green; each item fixed or given a logged wontfix.
   deps:
   - 9.4e
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/9.4f-followups
+  model: plan:sonnet build:sonnet
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
