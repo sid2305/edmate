@@ -604,12 +604,8 @@ describe.skipIf(!up)(
         });
 
         const rows = await repos.usageLedger.costByPackageSince({ since, until });
-        const a = rows.find(
-          (r) => r.teacherId === teacherId('A') && r.packageId === PKG_A,
-        );
-        const b = rows.find(
-          (r) => r.teacherId === teacherId('B') && r.packageId === PKG_B,
-        );
+        const a = rows.find((r) => r.teacherId === teacherId('A') && r.packageId === PKG_A);
+        const b = rows.find((r) => r.teacherId === teacherId('B') && r.packageId === PKG_B);
         expect(a).toEqual({
           teacherId: teacherId('A'),
           packageId: PKG_A,
@@ -630,13 +626,45 @@ describe.skipIf(!up)(
           costMicroUsd: 50,
           distinctTurns: 1,
         });
+
+        // task 13.5a finding 2: cross-check teacher B / PKG_B's row directly off the table,
+        // the same way cost-alarm.int.test.ts's activeCountByPackage test checks teacher A.
+        const hand = await raw.query<{
+          calls: string;
+          recorded: string;
+          unknown: string;
+          unpriced: string;
+          cost: string;
+          turns: string;
+        }>(
+          `select count(*)::text as calls,
+                  count(*) filter (where status = 'recorded')::text as recorded,
+                  count(*) filter (where status = 'unknown')::text as unknown,
+                  count(*) filter (where status = 'unpriced')::text as unpriced,
+                  coalesce(sum(cost_micro_usd) filter (where status = 'recorded'), 0)::text as cost,
+                  count(distinct turn_id)::text as turns
+             from usage_ledger
+            where teacher_id = $1 and package_id = $2
+              and created_at >= $3 and created_at < $4
+              and source <> 'eval'`,
+          [teacherId('B'), PKG_B, since, until],
+        );
+        const row = hand.rows[0]!;
+        expect(b).toEqual({
+          teacherId: teacherId('B'),
+          packageId: PKG_B,
+          calls: Number(row.calls),
+          recorded: Number(row.recorded),
+          unknown: Number(row.unknown),
+          unpriced: Number(row.unpriced),
+          costMicroUsd: Number(row.cost),
+          distinctTurns: Number(row.turns),
+        });
       });
 
       it('an unbounded window (no until) still excludes rows before since', async () => {
         const rows = await repos.usageLedger.costByPackageSince({ since });
-        const a = rows.find(
-          (r) => r.teacherId === teacherId('A') && r.packageId === PKG_A,
-        );
+        const a = rows.find((r) => r.teacherId === teacherId('A') && r.packageId === PKG_A);
         // From the previous test: 4 calls in-window, not the 999_999-cost row before `since`.
         expect(a?.calls).toBe(4);
         expect(a?.costMicroUsd).toBe(300);
@@ -646,6 +674,18 @@ describe.skipIf(!up)(
         await expect(
           repos.usageLedger.costByPackageSince({ since: 'not-a-date' } as never),
         ).rejects.toMatchObject({ kind: 'scope' });
+      });
+
+      it('rejects a swapped window (until before since)', async () => {
+        await expect(
+          repos.usageLedger.costByPackageSince({ since: until, until: since }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+      });
+
+      it('rejects a zero-width window (until equal to since)', async () => {
+        await expect(
+          repos.usageLedger.costByPackageSince({ since, until: since }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
       });
 
       it('a row exactly at `since` is included, a row exactly at `until` is excluded', async () => {

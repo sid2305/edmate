@@ -16,6 +16,9 @@ import { apiError } from '../../../../src/auth/errors';
 import type { RoleContext } from '../../../../src/auth/guard';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+/** 13.5a finding 3: a staff dashboard reasonably needs up to about a year; 366 covers a leap year
+ * so a caller isn't punished for picking Feb 29 as an endpoint. */
+const MAX_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
 
 const IsoDate = z.iso.datetime();
 const Query = z.strictObject({ since: IsoDate, until: IsoDate });
@@ -58,22 +61,50 @@ export async function loadCostRows(
     repos.subscriptions.activeCountByPackage(),
   ]);
 
-  const activeByKey = new Map(activeRows.map((r) => [key(r.teacherId, r.packageId), r.activeStudents]));
+  const activeByKey = new Map(
+    activeRows.map((r) => [key(r.teacherId, r.packageId), r.activeStudents]),
+  );
   const refs = new Map<string, { teacherId: string; packageId: string }>();
   for (const r of costRows) refs.set(key(r.teacherId, r.packageId), r);
   for (const r of activeRows) refs.set(key(r.teacherId, r.packageId), r);
   const costByKey = new Map(costRows.map((r) => [key(r.teacherId, r.packageId), r]));
 
   // One `packages.listForTeacher` call per distinct teacher appearing in either result -- a
-  // handful of teachers at pilot scale, not one call per package.
+  // handful of teachers at pilot scale, not one call per package. Read in parallel (13.5a
+  // finding 4): build the list of lookups first, await them all together, then build rows
+  // synchronously from the maps (no `await` left inside the row-building loop).
   const teacherIds = [...new Set([...refs.values()].map((r) => r.teacherId))];
   const packagesByTeacher = new Map<
     string,
     Awaited<ReturnType<Repositories['packages']['listForTeacher']>>
   >();
-  for (const teacherId of teacherIds) {
-    packagesByTeacher.set(teacherId, await repos.packages.listForTeacher({ teacherId }));
+  await Promise.all(
+    teacherIds.map(async (teacherId) => {
+      packagesByTeacher.set(teacherId, await repos.packages.listForTeacher({ teacherId }));
+    }),
+  );
+
+  const liveRefs: Array<{ teacherId: string; packageId: string; version: number }> = [];
+  for (const ref of refs.values()) {
+    const pkg = packagesByTeacher.get(ref.teacherId)?.find((p) => p.packageId === ref.packageId);
+    if (pkg && pkg.liveVersion !== null) {
+      liveRefs.push({
+        teacherId: ref.teacherId,
+        packageId: ref.packageId,
+        version: pkg.liveVersion,
+      });
+    }
   }
+  const liveByKey = new Map<string, Awaited<ReturnType<Repositories['packageVersions']['get']>>>();
+  await Promise.all(
+    liveRefs.map(async (ref) => {
+      const live = await repos.packageVersions.get(
+        { teacherId: ref.teacherId },
+        { packageId: ref.packageId, version: ref.version },
+      );
+      liveByKey.set(key(ref.teacherId, ref.packageId), live);
+    }),
+  );
 
   const rows: CostRow[] = [];
   for (const ref of refs.values()) {
@@ -84,15 +115,10 @@ export async function loadCostRows(
     const pkg = teacherPackages.find((p) => p.packageId === ref.packageId);
     let packageName = pkg?.config.name ?? ref.packageId;
     let pricePerMonth: Money | null = null;
-    if (pkg && pkg.liveVersion !== null) {
-      const live = await repos.packageVersions.get(
-        { teacherId: ref.teacherId },
-        { packageId: ref.packageId, version: pkg.liveVersion },
-      );
-      if (live) {
-        packageName = live.name;
-        pricePerMonth = live.pricePerMonth;
-      }
+    const live = liveByKey.get(k);
+    if (live) {
+      packageName = live.name;
+      pricePerMonth = live.pricePerMonth;
     }
     const costMicroUsd = cost?.costMicroUsd ?? 0;
     const distinctTurns = cost?.distinctTurns ?? 0;
@@ -100,7 +126,7 @@ export async function loadCostRows(
     const costPerActiveStudentMicroUsd = activeStudents > 0 ? costMicroUsd / activeStudents : null;
     const costAsPctOfPrice =
       pricePerMonth !== null && pricePerMonth.amountMinor > 0
-        ? ((costMicroUsd / 1_000_000) / (pricePerMonth.amountMinor / 100)) * 100
+        ? (costMicroUsd / 1_000_000 / (pricePerMonth.amountMinor / 100)) * 100
         : null;
     rows.push({
       teacherId: ref.teacherId,
@@ -117,13 +143,18 @@ export async function loadCostRows(
       costAsPctOfPrice,
     });
   }
-  rows.sort((a, b) => a.teacherId.localeCompare(b.teacherId) || a.packageId.localeCompare(b.packageId));
+  rows.sort(
+    (a, b) => a.teacherId.localeCompare(b.teacherId) || a.packageId.localeCompare(b.packageId),
+  );
   return rows;
 }
 
 /** The default 30-day window ending now, ISO; the page and the route's query defaults share it. */
 export function defaultWindow(nowMs: number): { since: string; until: string } {
-  return { since: new Date(nowMs - THIRTY_DAYS_MS).toISOString(), until: new Date(nowMs).toISOString() };
+  return {
+    since: new Date(nowMs - THIRTY_DAYS_MS).toISOString(),
+    until: new Date(nowMs).toISOString(),
+  };
 }
 
 const MSG = {
@@ -157,13 +188,15 @@ export function createStaffCostHandlers(backend: StaffCostBackend): { list: Hand
       const until = untilRaw ?? fallback.until;
       const parsed = Query.safeParse({ since, until });
       if (!parsed.success) return validation();
+      const spanMs = new Date(parsed.data.until).getTime() - new Date(parsed.data.since).getTime();
+      if (spanMs > MAX_SPAN_MS) return validation();
 
       try {
         const rows = await loadCostRows(backend.repos(), parsed.data);
         return ok({ rows });
       } catch (error) {
         if (error instanceof RepositoryError) {
-          if (error.kind === 'invalid' || error.kind === 'scope') return validation();
+          if (error.kind === 'invalid') return validation();
         }
         return failed('list', error);
       }

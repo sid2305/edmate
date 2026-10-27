@@ -199,3 +199,39 @@ assertion only `repositories.int.test.ts` can host (say so, don't edit that file
   The index and the sessions path can merge without it.
 - Reviewers: code-reviewer and typescript-reviewer both run (one doesn't stand in for the other),
   plus security-reviewer, and database-reviewer for Phase A.
+
+## Lead amendment 2 (26 Oct 2026): Phase A review fixes go into Phase B
+The Phase A reviews (security, database, code, typescript) found two HIGHs. Phase B now fixes them
+together with its own items. Phase B starts after 13.4d merges, because 13.4d also edits
+`packages/db/src/repositories/subscriptions.ts`. The fresh builder merges main into the branch first.
+
+Fix first, test first:
+1. **[HIGH, database-reviewer] The seek is not an index seek on page 2 and later.** The per-session
+   cursor condition `or(gt(createdAt, at), and(eq(createdAt, at), gt(id, afterId)))` makes Postgres
+   use `Index Cond: session_id` plus a `Filter`, scanning every earlier row in the session. Replace
+   it with a row-value compare, `(created_at, id) > (${at}, ${afterId})`, through drizzle's `sql`
+   template with bound parameters. Make the same change to the cursor in
+   `packages/db/src/repositories/sessions.ts` (it has the same weakness, and this task already touches it). Add an
+   EXPLAIN test with a **mid-range cursor** (page 2 or later). Assert that the cursor columns appear
+   in the `Index Cond` and that no `Filter` holds the OR.
+2. **[HIGH, typescript-reviewer; MEDIUM, security-reviewer and database-reviewer] Unbounded fan-out
+   (N+1).** `messages.listForStudent` sends one concurrent query per session, with no cap. Replace
+   it with **one query**: the pair's sessions, `CROSS JOIN LATERAL` with the per-session
+   `ORDER BY created_at, id LIMIT limit+1` seek, then a global `ORDER BY created_at, id LIMIT limit+1`. Use
+   drizzle's lateral join if the installed version has one; otherwise use a `sql` template with
+   bound parameters only, mapping the rows through the existing row shape. The scope filter
+   (student_id and teacher_id on sessions) must stay in the SQL. If a single query is not workable
+   within about 25 tool calls, fall back to chunks of at most 4 sessions in flight, and log that
+   as a decision.
+3. **[MEDIUM, code-reviewer]** Add a test with a `created_at` tie between messages in **two
+   different sessions** that falls on a page boundary. Assert no row is dropped or duplicated
+   across the two pages.
+4. **[LOW, code-reviewer]** Update the stale doc comment on `messages.listForStudent` (it still
+   says "joins sessions").
+
+Then Phase B's own items, as above.
+
+- Budget: 60 tool calls. Past 80, commit and push first, then stop with `Status: PARTIAL`.
+- Gate: `turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web`.
+- Re-review: database-reviewer and typescript-reviewer (they raised the HIGHs), security-reviewer
+  (subscriptions.ts is a risk path) and code-reviewer.
