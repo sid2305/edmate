@@ -19,6 +19,15 @@ import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js'
 /** Largest page `evidenceEvents.list` returns; a bigger `limit` is `invalid`. */
 export const EVIDENCE_LIST_MAX = 10_000;
 
+/** Rows per page in `rebuildMastery`'s keyset-paged replay (task 6.2a, 6.2 review deferral):
+ * bounds memory and per-query cost for a long evidence_events history. The whole loop still runs
+ * inside rebuildMastery's one transaction, under the same profile-row lock applyEvidenceMastery/
+ * appendAndFold already take for the same scope - paging bounds memory and query size, not the
+ * lock's duration, which must still span the whole replay for correctness (a concurrent writer
+ * must never observe a partial read, same serialisation this file's other methods already rely
+ * on). */
+export const REBUILD_PAGE_SIZE = 1_000;
+
 const debug = debuglog('edmate:db');
 
 const sameScope = (x: { studentId: string; teacherId: string }, scope: StudentScope) =>
@@ -259,7 +268,9 @@ export function learnerProfilesRepo(db: Db) {
             )
             .for('update');
 
-          const next = foldMastery(locked!.mastery, events);
+          /* v8 ignore next */
+          if (!locked) throw new RepositoryError('scope', method);
+          const next = foldMastery(locked.mastery, events);
 
           await tx
             .update(learnerProfiles)
@@ -285,6 +296,16 @@ export function learnerProfilesRepo(db: Db) {
      * `applyEvidenceMastery`: a concurrent `applyEvidence` and a rebuild for the same scope can
      * never interleave a partial read. Always uses `BKT_DEFAULTS` (no `BktParams` override — see
      * docs/tasks/6.2/plan.md Q3). Returns the rebuilt profile, same shape `get()` returns.
+     *
+     * Task 6.2a (6.2 review deferral): a rebuild is a snapshot as of lock acquisition: it replays
+     * whatever `evidence_events` rows existed at the moment the profile row's `FOR UPDATE` lock
+     * was taken — a concurrent `append`/`appendAndFold` for the same scope is either fully visible
+     * (if it committed first) or not visible at all (if it is still waiting on this lock) — never
+     * partially, same serialisation this method's existing doc comment already argues from the
+     * other side. The replay itself is paged (`REBUILD_PAGE_SIZE` rows at a time, in increasing
+     * `(ts, id)` order) so a long history doesn't load unbounded rows into memory or run one
+     * unbounded query, but the whole loop still runs inside this one transaction, under the same
+     * row lock, so correctness is unaffected.
      */
     async rebuildMastery(scope: StudentScope): Promise<LearnerProfile> {
       const method = 'learnerProfiles.rebuildMastery';
@@ -326,25 +347,47 @@ export function learnerProfilesRepo(db: Db) {
           /* v8 ignore next */
           if (!locked) throw new RepositoryError('scope', method);
 
-          const rows = await tx
-            .select({
-              topicId: evidenceEvents.topicId,
-              correct: evidenceEvents.correct,
-              ts: evidenceEvents.ts,
-            })
-            .from(evidenceEvents)
-            .where(
-              and(
-                eq(evidenceEvents.teacherId, sc.teacherId),
-                eq(evidenceEvents.studentId, sc.studentId),
-              ),
-            )
-            .orderBy(asc(evidenceEvents.ts), asc(evidenceEvents.id));
+          let next: LearnerProfile['mastery'] = {};
+          // `ts` (full microsecond precision, as text) is kept raw, not parsed into a JS `Date`
+          // (which only has millisecond precision): rounding a cursor through `Date` could make
+          // `(ts, id) > (cursor.ts, cursor.id)` re-match the cursor's own row (its true ts is a
+          // few microseconds after the rounded value), duplicating it into the next page.
+          let cursor: { ts: string; id: string } | undefined;
+          for (;;) {
+            const rows = await tx
+              .select({
+                topicId: evidenceEvents.topicId,
+                correct: evidenceEvents.correct,
+                ts: evidenceEvents.ts,
+                tsRaw: sql<string>`${evidenceEvents.ts}::text`,
+                id: evidenceEvents.id,
+              })
+              .from(evidenceEvents)
+              .where(
+                and(
+                  eq(evidenceEvents.teacherId, sc.teacherId),
+                  eq(evidenceEvents.studentId, sc.studentId),
+                  ...(cursor
+                    ? [
+                        sql`(${evidenceEvents.ts}, ${evidenceEvents.id}) > (${cursor.ts}::timestamptz, ${cursor.id}::text)`,
+                      ]
+                    : []),
+                ),
+              )
+              .orderBy(asc(evidenceEvents.ts), asc(evidenceEvents.id))
+              .limit(REBUILD_PAGE_SIZE);
 
-          const next = foldMastery(
-            {},
-            rows.map((r) => ({ topicId: r.topicId, correct: r.correct, ts: r.ts.toISOString() })),
-          );
+            if (rows.length === 0) break;
+            next = foldMastery(
+              next,
+              rows.map((r) => ({ topicId: r.topicId, correct: r.correct, ts: r.ts.toISOString() })),
+            );
+            const last = rows[rows.length - 1];
+            /* v8 ignore next */
+            if (!last) break; // unreachable: rows.length > 0 just checked; an explicit guard, not `!`.
+            cursor = { ts: last.tsRaw, id: last.id };
+            if (rows.length < REBUILD_PAGE_SIZE) break;
+          }
 
           await tx
             .update(learnerProfiles)

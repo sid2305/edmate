@@ -75,6 +75,19 @@ export function rolePlayControl(
   return bare === 'stop' || bare === '/stop' ? 'stop' : undefined;
 }
 
+/**
+ * Whether a `/pause` carried text after the command (5.8b, B-37 q8). `false` on anything but a
+ * `/pause` turn, including a bare one. Decide's caller (`decide.ts`) reads this alongside
+ * `rolePlayControl`, so the policy itself never sees the text.
+ */
+export function pauseHasExtraText(input: Pick<TurnInput, 'kind' | 'text'>): boolean {
+  if (input.kind === 'skill_action') return false;
+  const text = (input.text ?? '').trim().toLowerCase();
+  if (!text.startsWith('/pause')) return false;
+  const bare = text.replace(/[.!\s]+$/u, '');
+  return bare.slice('/pause'.length).trim().length > 0;
+}
+
 export interface SkillInput {
   ctx: TurnContext;
   turn: Pick<TurnInput, 'kind' | 'skill'>;
@@ -84,10 +97,13 @@ export interface SkillInput {
   control?: RolePlayControl;
   /**
    * `rolePlayStep`'s result when the caller already ran it (decidePolicy runs it before the
-   * coverage gate, 5.8). It must come from the same persona, help and control; absent, it is
-   * computed here.
+   * coverage gate, 5.8), with the persona id it was computed for (5.8b, defence in depth, like
+   * `compose.ts`'s role-play bug check; 5.8f, one field so a caller cannot pass one without the
+   * other). It must come from the same persona, help and control; absent, it is computed here.
+   * `skillStep` throws on a mismatch with `ctx.persona.id` rather than silently teaching the
+   * wrong persona.
    */
-  rolePlayStep?: RolePlayStep;
+  readonly rolePlayStepFor?: { readonly step: RolePlayStep; readonly personaId: string };
 }
 
 /**
@@ -105,8 +121,14 @@ export function skillStep(i: SkillInput): SkillStep {
   if (s.reason !== 'mock_interview' || persona === undefined) {
     return { ...s, next: withPersonaCount(s.next, i.help) };
   }
+  // A bug, never a content error (5.8b, defence in depth, like compose.ts's role-play check): a
+  // passed-in rolePlayStep must have been computed for this persona, or the student would be
+  // taught with another persona's state.
+  if (i.rolePlayStepFor !== undefined && i.rolePlayStepFor.personaId !== persona.id) {
+    throw new Error('skillStep: rolePlayStep was computed for a different persona');
+  }
   const r =
-    i.rolePlayStep ??
+    i.rolePlayStepFor?.step ??
     rolePlayStep({
       persona,
       help: i.help,

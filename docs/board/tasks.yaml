@@ -2960,9 +2960,30 @@ tasks:
   deps:
   - '6.2'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.2a-rebuild-batching
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 605
+    tokens_in: 2138
+    tokens_out: 140554
+    cache_read_tokens: 79204918
+    wall_time_seconds: 5816
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 5.8b
   milestone: M13
   title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
@@ -2974,9 +2995,32 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: running
+  status: done
   branch: m13/5.8b-roleplay-gate-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 963
+    tokens_in: 3272
+    tokens_out: 212207
+    cache_read_tokens: 115235109
+    wall_time_seconds: 479265
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 2
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 1
 - id: 6.3b
   milestone: M13
   title: '6.3 review follow-ups: a concurrent applyMistakes test (Promise.all on one tag, assert the summed count, like 6.2''s race test); cap the patch length and the stored mistakes array; applyMistakes
@@ -2985,9 +3029,9 @@ tasks:
   deps:
   - '6.3'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.3b-mistakes-caps
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 6.4a
   milestone: M13
   title: 'Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end'
@@ -7244,9 +7288,32 @@ tasks:
   deps:
   - 8.2h
   risk: high
-  status: running
+  status: done
   branch: m13/8.2i-ingest-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1471
+    tokens_in: 5126
+    tokens_out: 363520
+    cache_read_tokens: 158481275
+    wall_time_seconds: 412668
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 3
+        LOW: 1
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 11.2c
   milestone: M13
   title: '11.2a review LOW: a composite index on class_questions (live_class_id, created_at, id) for the teacher queue scan once volumes grow'
@@ -10504,9 +10571,31 @@ tasks:
   deps:
   - 12.2f
   risk: risky
-  status: running
+  status: done
   branch: m13/12.2h-report-signal
-  model: plan:lead build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 704
+    tokens_in: 2480
+    tokens_out: 170669
+    cache_read_tokens: 87716121
+    wall_time_seconds: 6495
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        LOW: 3
+        INFO: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 2
+    human_questions: 0
 - id: 5.8f
   milestone: M13
   title: '5.8b review LOW (typescript-reviewer): packages/harness/src/pedagogy/skills.ts SkillInput has two independent optional fields, rolePlayStep and rolePlayStepPersonaId, so a caller that sets one
@@ -10515,9 +10604,29 @@ tasks:
   deps:
   - 5.8b
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/5.8f-roleplay-step-field
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 141
+    tokens_in: 474
+    tokens_out: 39361
+    cache_read_tokens: 9554502
+    wall_time_seconds: 477303
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.2i
   milestone: M13
   title: '12.2h review LOWs: (1) break the import cycle between packages/db/src/repositories/chunks.ts and takedowns.ts (chunks.ts calls notTakenDown at module load; importing reports.ts or takedowns.ts
@@ -10531,3 +10640,14 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.2p
+  milestone: M13
+  title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first)
+    has no supporting index, so each 15-minute run seq-scans documents; add a partial index on documents (updated_at, id) WHERE status = ''processing'' when the table grows past pilot scale'
+  accept: an EXPLAIN in an int test (or the migration test) shows the sweep query uses the new index; db typecheck, lint and test green
+  deps:
+  - 8.2i
+  risk: risky
+  status: running
+  branch: m13/8.2p-sweep-index
+  model: plan:lead build:sonnet review:sonnet

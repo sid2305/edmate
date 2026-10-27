@@ -137,6 +137,18 @@ describe('POST: file a report', () => {
     );
   });
 
+  it.each([
+    ['harmful', 'A student reported a harmful reply.'],
+    ['inappropriate', 'A student reported an inappropriate reply.'],
+    ['wrong_information', 'A student reported a reply with wrong information.'],
+    ['copyright', 'A student reported a reply that may break copyright.'],
+    ['other', 'A student reported a reply for another reason.'],
+  ])('a %s report pages the trust inbox with "%s"', async (category, excerpt) => {
+    const m = memory();
+    await m.h.file(post({ ...VALID, category }), ctx());
+    expect(m.record).toHaveBeenCalledWith(expect.objectContaining({ excerptRedacted: excerpt }));
+  });
+
   it('a duplicate report does not page the trust inbox a second time', async () => {
     const m = memory();
     await m.h.file(post(VALID), ctx());

@@ -134,6 +134,10 @@ export type PostMigrateStep =
  * review deferral) adds `eval_runs_gate_passed_agent_id_published_at_id_idx` the same schema-only
  * way: `regateRepo`'s `last` CTE's `suite = 'gate' and status = 'passed' and published_at is not
  * null` filter plus its `order by agent_id, published_at desc, id desc`, in one partial index.
+ * Migration 0039 (task 6.2a, 6.2 review deferral) adds
+ * `evidence_events_teacher_id_student_id_ts_id_idx` the same schema-only way:
+ * learnerProfiles.rebuildMastery's keyset-paged replay and evidenceEvents.list's export read share
+ * the same teacher_id/student_id filter plus (ts, id) order.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -221,6 +225,13 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'eval_runs_gate_passed_agent_id_published_at_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "eval_runs_gate_passed_agent_id_published_at_id_idx" ON "eval_runs" USING btree ("agent_id","published_at" DESC NULLS FIRST,"id" DESC NULLS FIRST) WHERE "eval_runs"."suite" = 'gate' and "eval_runs"."status" = 'passed' and "eval_runs"."published_at" is not null`,
+  },
+  // Migration 0039 (task 6.2a, 6.2 review deferral): learnerProfiles.rebuildMastery's keyset-paged
+  // replay and evidenceEvents.list's export read.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'evidence_events_teacher_id_student_id_ts_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "evidence_events_teacher_id_student_id_ts_id_idx" ON "evidence_events" USING btree ("teacher_id","student_id","ts","id")`,
   },
 ];
 

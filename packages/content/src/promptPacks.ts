@@ -20,7 +20,7 @@ import {
 } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { z } from 'zod';
-import { compareSemver } from './semver.js';
+import { compareSemver, isPrerelease } from './semver.js';
 import { isSignedOff } from './signOff.js';
 import type { ValidationResult } from './validate.js';
 
@@ -221,13 +221,14 @@ export function isSignedSet(set: Readonly<PromptPackSet>): boolean {
 
 /**
  * The highest-precedence signed set (semver; build metadata ignored, a release above its
- * prereleases), or `undefined` when none is signed. The CLI and the seed pin this at run time,
- * so a newly signed set goes live with no code change.
+ * prereleases), or `undefined` when none is signed. A signed prerelease never outranks a signed
+ * release, even one from an older major (B-37 follow-up, 5.8b): a prerelease never ships. The CLI
+ * and the seed pin this at run time, so a newly signed set goes live with no code change.
  */
 export function newestSignedSet(library: PromptPackLibrary): PromptPackSet | undefined {
   let best: PromptPackSet | undefined;
   for (const set of library.values()) {
-    if (!isSignedSet(set)) continue;
+    if (!isSignedSet(set) || isPrerelease(set.version)) continue;
     if (best === undefined || compareSemver(set.version, best.version) > 0) best = set;
   }
   return best;

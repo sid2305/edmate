@@ -10,6 +10,237 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2i merge of db repositories and ADR-0014 · decided by lead · risk: high
+- Decided: merge the `failIfStorageKey` compare-and-set (`packages/db/src/repositories/chunks.ts`), the new `ingestSweep` repository (`packages/db/src/repositories/ingestSweep.ts`, `index.ts`), the worker's stuck-ingest sweep and pinned-transport Host header, and the ADR-0014 wording change (`docs/adr/0014-web-link-egress.md`), all risky paths.
+- Why: security-reviewer, architect, typescript-reviewer, code-reviewer and database-reviewer reviewed the branch; both HIGHs were fixed in one round and the reviewers who raised them approved the fix; the index MEDIUM is deferred to 8.2p.
+
+---
+
+### 27 Oct 2026 · 8.2i sweep checks the ingest job before failing a row · decided by lead · risk: high
+- Decided: before failing a stuck `processing` row, `apps/worker/src/ingest/sweep.ts` looks up the BullMQ job `jobId.ingest(documentId, storageKey)`; waiting, delayed, prioritized, waiting-children or active skips the row (logged `ingest_sweep.still_queued`); a missing, completed or failed job fails the row as before.
+- Why: `documents.updated_at` is set once on entering `processing`, so without this a slow or backlogged job past 30 minutes was failed and then finished into a `failed` row with indexed chunks (database-reviewer HIGH, typescript-reviewer MEDIUM). A job lookup fixes it without a heartbeat column or a migration.
+
+---
+
+### 27 Oct 2026 · 8.2i IPv6 Host header keeps its brackets · decided by lead · risk: low
+- Decided: `apps/worker/src/webLink/pinnedTransport.ts` sends `Host: [addr]` for an IPv6 literal, plus `:port` only for a non-default port; names and IPv4 are unchanged.
+- Why: a bare IPv6 Host header is malformed (RFC 7230/3986) and was a regression from this branch (code-reviewer and typescript-reviewer HIGH, security-reviewer MEDIUM, architect LOW).
+
+---
+
+### 27 Oct 2026 · 8.2i budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (308 harness tool calls across three phases and one fix round, against a budget of 130; the builders reported 150).
+- Why: Phase B carried the sweep, a new repository and the worker wiring, and the fix round added the job-state lookup; each phase stayed on scope.
+
+---
+
+### 27 Oct 2026 · 8.2i isolation case for a method that never throws · decided by builder · risk: low
+- Decided: `documents.failIfStorageKey`'s `CASES` entry uses `owns: () => true` to skip the shared
+  cross-actor grid (which calls `expectFailsClosed`, always expecting a throw) and instead asserts
+  cross-teacher isolation directly inside `verify` (one teacher's call against another's document,
+  checked to be `{ updated: false }` with the row left unchanged).
+- Why: the plan itself calls out that this method "returns `{ updated: boolean }` instead of
+  throwing `not_found`", which is exactly what the generic grid's `expectFailsClosed` cannot
+  express (it asserts a `RepositoryError` was thrown and nothing was written). `owns: () => true`
+  is the existing pattern this file already uses for every other case whose cross-actor behaviour
+  doesn't fit that generic throw-and-check-nothing-written shape (e.g. `courses.ensureDefault`,
+  `styleCards.create`).
+
+### 27 Oct 2026 · 8.2i Host header carries the request's port when non-default · decided by builder · risk: low
+- Decided: `pinnedRequestOptions` sets `headers.host` to `bareHostName(host)`, with
+  `:${req.url.port}` appended only when `req.url.port` is non-empty (i.e. not the URL's default
+  port), rather than the plan's literal `headers: { ...req.headers, host }` (bare host, no port
+  logic at all).
+- Why: the plan's suggested one-line fix drops the port entirely, which would have broken two
+  passing 8.2h tests that depend on `req(port)` building an explicit non-default port into the URL
+  (`http://teacher-site.test:${port}/...`) and asserting the `Host` header still carries it — real
+  HTTP semantics require `Host` to carry a non-default port, and SNI's `servername` never carries
+  a port either way (TLS has no notion of one), so this doesn't put SNI and `Host` out of sync.
+
+### 27 Oct 2026 · 8.2i two pre-existing Host-header test assertions updated · decided by builder · risk: low
+- Decided: updated `'lands on the pinned address for a host that is not in DNS...'` and `'fetches
+  a page end to end, pinned to the checked address'` to expect `Host: teacher-site.test` (no port)
+  instead of the previous `teacher-site.test:<local test server port>`.
+- Why: before this fix, Node derived `Host` from whatever target it actually connected to; in the
+  `toLocalServer` test helper that target is a locally-redirected port even when the real teacher
+  URL (default https, no explicit port) carries none. `Host` should reflect the real request URL's
+  authority, not an artifact of the test harness's local-port redirect, so the old assertion was
+  testing the previous bug's exact byproduct. The other 8.2h test (`req(port)`, explicit port in
+  the URL itself) is unaffected and still expects the port, which the new port-aware fix preserves.
+
+### 27 Oct 2026 · 8.2i openDatabase's exact-keys test updated for the new `ingestSweep` key · decided by builder · risk: low
+- Decided: `packages/db/test/repositories.int.test.ts`'s `openDatabase gives repositories, ...`
+  test (not in Phase B's file list) gets `'ingestSweep'` added to its exact, sorted
+  `Object.keys(opened)` expectation and its title extended to name the ingest sweep, instead of
+  leaving that test red.
+- Why: the plan's lead answer to Q4 explicitly asks `openDatabase()` to attach `ingestSweep` the
+  same way it attaches `retention`/`regate`; that one-line addition is exactly what this
+  pre-existing test asserts the full key list of, so it fails the moment the new key is added. The
+  plan's own exit condition is each phase's gate green; fixing this one assertion is the minimal,
+  direct consequence of the file the plan did ask for, not new scope.
+
+### 27 Oct 2026 · 6.2a merge of db/repositories/learner.ts · decided by lead · risk: high
+- Decided: merge the keyset-paged `rebuildMastery` in `packages/db/src/repositories/learner.ts` (a risky path) with migration 0039's concurrent index.
+- Why: security-reviewer, code-reviewer, database-reviewer and typescript-reviewer all approved with no findings above LOW; every page stays scoped to teacher and student under the same row lock, and the index is built with `CREATE INDEX CONCURRENTLY` like 0036 and 0038.
+
+---
+
+### 27 Oct 2026 · 6.2a budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (134 harness tool calls against a budget of 50; the builder reported 95).
+- Why: the extra calls went to a real cursor-precision bug the new multi-page test caught, the hand-made migration snapshot and re-runs of the shared-Postgres flake; the diff stayed on scope.
+
+---
+
+### 27 Oct 2026 · 6.2a same-ts tie-break test not added · decided by lead · risk: low
+- Decided: wontfix the LOW gap that `packages/db/test/profile-store.int.test.ts` never puts two rows with the same `ts` across a page boundary.
+- Why: the `(ts, id)` row comparison handles ties by inspection, and evidence rows are stamped per event; a test can be added if same-`ts` rows show up in practice.
+
+---
+
+### 27 Oct 2026 · 6.2a hand-crafted migration snapshot (0039_snapshot.json, _journal.json) · decided by builder · risk: low
+- Decided: added `packages/db/migrations/meta/0039_snapshot.json` and a new `_journal.json` entry,
+  mirroring the new index into the prior snapshot by hand (same mechanism 13.regatea used for
+  0038), rather than running `drizzle-kit generate`.
+- Why: the plan's files-to-modify list didn't mention `migrations/meta/`, but
+  `test/schema.test.ts` (which diffs `src/schema`'s declared indexes against the latest migration
+  snapshot) failed once the new index was declared in `learning.ts` without a matching snapshot
+  entry. 13.regatea's 0038 precedent (same situation, same fix) confirms this is expected, not a
+  scope change; no human decision needed.
+
+---
+
+### 27 Oct 2026 · 6.2a keyset cursor precision (Date vs. raw text) · decided by builder · risk: low
+- Decided: the keyset cursor for `rebuildMastery`'s paged replay carries `ts` as a raw
+  `::text`-cast string (full microsecond precision), not the `Date` object drizzle returns by
+  default, and the WHERE clause casts it back with explicit `::timestamptz`/`::text`.
+- Why: the plan flagged the explicit casts as optional ("if they turn out unnecessary... the
+  builder may drop them"); testing showed they're necessary together with the raw-text selection
+  to avoid `Date`'s millisecond truncation duplicating the boundary row across pages (see bug
+  writeup above). Caught by the plan's own prescribed test, not a new scope item.
+
+---
+
+### 27 Oct 2026 · 6.2a full monorepo gate flakiness under parallel load · decided by builder · risk: low
+- Decided: treated repeated, non-reproducible single-test timeouts in `@edmate/cli` (
+  `test/chatDbRetrieval.int.test.ts`, a `beforeAll` hook timeout) and one `@edmate/web` run (a
+  `page.test.tsx` test timeout) as pre-existing environment flakiness under heavy parallel
+  Postgres-connection load, not failures caused by this task.
+- Why: neither file is touched by this task; both pass cleanly every time they're run in
+  isolation (confirmed twice for the cli one, once for web); `@edmate/db`'s own full
+  typecheck/lint/test (86 files, 1806 tests) is green on every run, including after the fixes
+  above.
+
+---
+
+### 27 Oct 2026 · 5.8f merge of pedagogy/skills.ts and policy.ts · decided by lead · risk: high
+- Decided: merge the `SkillInput.rolePlayStepFor` change in `packages/harness/src/pedagogy/` (a risky path).
+- Why: code-reviewer and typescript-reviewer both approved with no findings; the change is type-only, keeps the same run-time persona check and message, and nothing different reaches the model.
+
+---
+
+### 27 Oct 2026 · 5.8f budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (30 harness tool calls against a budget of 20; the builder reported 17-21).
+- Why: the extra calls went to the full dependents gate and a re-run of the known apps/cli chatDbRetrieval flake; the diff stayed on scope.
+
+---
+
+### 27 Oct 2026 · 5.8f one field for a passed-in role-play step · decided by builder · risk: low
+- Decided: merged `rolePlayStep`/`rolePlayStepPersonaId` into one `rolePlayStepFor: { step,
+  personaId }` field, matching the shape already built in `policy.ts`, with `readonly` members.
+- Why: the acceptance criterion requires a caller to be unable to pass one without the other;
+  one object field with both members required is the simplest way to make that a compile-time
+  guarantee, and it matches the object already constructed at the call site.
+
+---
+
+### 27 Oct 2026 · 12.2h merge of reports.ts · decided by lead · risk: high
+- Decided: merge the change to `packages/db/src/repositories/reports.ts` (a risky path): `listOpenForStaff` now rethrows any per-row error that is not a `RepositoryError('integrity', ...)` and logs only a skipped-row count through the opt-in `debuglog('edmate:db')`.
+- Why: security-reviewer, code-reviewer, typescript-reviewer and silent-failure-hunter all approved with no CRITICAL, HIGH or MEDIUM findings; the change narrows a swallowed-error path and the log line holds no row ids, text or reasons.
+
+---
+
+### 27 Oct 2026 · 12.2h budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (92 harness tool calls against a budget of 35; the builder reported 53).
+- Why: the extra calls went to installing eslint binaries in the worktree and re-running the gate after an unrelated apps/cli flake (chatDbRetrieval.int.test.ts); the diff stayed small and on scope.
+
+---
+
+### 27 Oct 2026 · 12.2h isSkippableReportRowError exported for testing · decided by builder · risk: low
+- Decided: export the catch's rethrow predicate (`isSkippableReportRowError`) from
+  `packages/db/src/repositories/reports.ts` instead of leaving it inline, so a unit test can call
+  it directly. Not re-exported through `packages/db/src/index.ts` (no product reason to grow the
+  public surface); the test imports it from the module file directly, the pattern already used by
+  other unit tests in this package (e.g. `errors.test.ts`, `redact-json.test.ts`).
+- Why: the plan's fallback test ("a unit test of the catch's rethrow rule") needs something
+  callable; `listOpenForStaff`'s real mapping path can only ever throw `integrity`, so there is no
+  way to exercise the rethrow branch end to end without changing production code.
+
+---
+
+### 27 Oct 2026 · 12.2h test import order avoids a latent circular-import hazard · decided by builder · risk: low
+- Decided: in `packages/db/test/reports.test.ts`, the new
+  `import { isSkippableReportRowError } from '../src/repositories/reports.js'` is placed after the
+  `../src/index.js` barrel import, not before it.
+- Why: `packages/db/src/repositories/chunks.ts` and `takedowns.ts` import each other at the top
+  level (`chunks.ts` calls `notTakenDown` from `takedowns.ts` inside a module-level object
+  literal; `takedowns.ts` imports `bumpRevision` from `chunks.ts`). This is already true on
+  `origin/m13/12.2h-report-signal` before any change in this task (verified against commit
+  `20ef81a0`) — but it only actually breaks module evaluation (`ReferenceError: Cannot access
+  'qualified' before initialization`) when something imports `reports.ts` directly *before* the
+  `index.ts` barrel has run (which first imports `chunks.ts`, settling the order safely). My first
+  draft had the direct import first, which newly triggered it in this one file; reordering fixes
+  it without touching `chunks.ts` or `takedowns.ts` (out of this task's scope: not in the plan's
+  file list, and risky-path review for `packages/db/src/repositories/**` wasn't scoped for a
+  change there). This is a real latent fragility in those two files — worth a follow-up task to
+  break the cycle (e.g. a shared predicate module) so import order can't matter — flagged here for
+  the lead rather than fixed in this task.
+
+---
+
+### 27 Oct 2026 · 5.8b ADR-0013 and role-play gate merge · decided by lead · risk: high
+- Decided: merge the ADR-0013 rewrite (docs/adr/0013-roleplay-state.md, Status Accepted with the B-37 answers) and the role-play coverage-gate code in packages/harness/src/pedagogy (roleplay.ts, policy.ts, skills.ts, compose.ts) and packages/content (promptPacks.ts, personaTemplates.ts). architect, security-reviewer, typescript-reviewer and code-reviewer reviewed it; fix round 1 fixed the two HIGH ADR wording findings and the MEDIUM `/pause.` punctuation finding, and all four re-reviews approved.
+- Why: it carries out the human's B-37 answers (q8: an ended role-play and a `/pause` with text meet the coverage gate; q9: every answer turn skips it), and a signed prerelease prompt pack or persona library can no longer outrank a signed release. No packages/contracts change.
+
+---
+
+### 27 Oct 2026 · 5.8b budget overrun · decided by lead · risk: low
+- Decided: accept 204 tool calls (harness count: Phase A 102, Phase B 59, fix round 43) against the plan's 70.
+- Why: Phase A rewrote the B-37 rule across policy, skills, compose and the ADR with a test per table row, which the plan under-counted at 45; the fix round was needed for review findings. Later role-play plans budget Phase A at about 90.
+
+---
+
+### 27 Oct 2026 · 5.8b coverage-gate row tests live in policy.test.ts · decided by lead · risk: low
+- Decided: accept the builder's choice to test every B-37 table row through decidePolicy in packages/harness/src/pedagogy/policy.test.ts rather than in roleplay.test.ts as the plan listed.
+- Why: the rows depend on the policy wiring (the control, pauseHasExtraText and the gate together), so testing them through decidePolicy covers more; code-reviewer confirmed every row is covered (review LOW).
+
+---
+
+### 27 Oct 2026 · 5.8b PersonaTemplateError: one throw, not two · decided by builder · risk: low
+- Decided: converted the single `throw new Error(...)` in `readPersonaLibrary` to
+  `PersonaTemplateError`, and did not add a second conversion in `readPersonaTemplateDir` or
+  anywhere else.
+- Why: the plan's file note says "use it ... in place of the bare `throw new Error(...)` at line
+  197 (and the directory-read throw above it)", but `readPersonaTemplateDir` has no throw — a
+  missing/non-directory input already returns `{ templates: [], issues: [...] }`, matching
+  `promptPacks.ts`'s precedent of never throwing from the directory-read step. `readPersonaLibrary`
+  has exactly one throw, which is now `PersonaTemplateError`. Read as a plan reference to the
+  single throw at that line, not a second site; flagging here since the file only has one.
+
+---
+
+### 27 Oct 2026 · 5.8b ADR-0013 rewrite · decided by builder · risk: high
+- Decided: rewrote ADR-0013 §1 "Rule order" to the final B-37 rule (two gate-meeting exceptions:
+  `ended` phase, and `/pause` with extra text; every other role-play turn skips the gate,
+  including N > 1 answers), set `Status: Accepted`, and updated the one stale Consequences bullet
+  that restated the old (now-reversed) rule so the ADR does not contradict itself.
+- Why: the plan scoped the edit to §1 and Status/Context, but left a "Coverage gate" bullet in
+  Consequences that quoted the Phase B draft's rule verbatim; leaving it would make the ADR
+  internally inconsistent once Status became Accepted. The edit is a restatement of the same
+  decision this task makes in §1, not new scope. Reviewers: architect, security-reviewer,
+  typescript-reviewer (risky path `docs/adr/**`, per the plan and lead answer).
+
+---
+
 ### 27 Oct 2026 · 13.3b scope checks on chunks.ts helpers · decided by lead · risk: high
 - Decided: merge the change to packages/db/src/repositories/chunks.ts and outline.ts (risky path packages/db/src/repositories/**): insertTopicLinks and topicSources take a TeacherScope and check it before their empty-input early returns. security-reviewer, code-reviewer and typescript-reviewer all approved with no findings.
 - Why: it closes the 13.3 review's LOW findings that these two helpers sat outside the scope test grid; every query already used the scoped teacher id, and a bad scope now throws instead of returning an empty result.

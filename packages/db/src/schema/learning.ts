@@ -254,6 +254,17 @@ export const evidenceEvents = pgTable(
     index('evidence_events_teacher_id_student_id_idx').on(t.teacherId, t.studentId),
     index('evidence_events_student_id_idx').on(t.studentId),
     index('evidence_events_topic_id_idx').on(t.topicId),
+    // Task 6.2a (6.2 review deferral; board title also names evidenceEvents.list's ORDER BY ts, id):
+    // rebuildMastery's keyset-paged replay and evidenceEvents.list's export read share this same
+    // teacher_id/student_id filter plus (ts, id) order; one index covers both. Declared here so
+    // `db:generate` stays a no-op; built by the post-migrate step (migrate.ts, migration 0039) with
+    // CREATE INDEX CONCURRENTLY (evidence_events is append-only but grows unbounded over a pilot).
+    index('evidence_events_teacher_id_student_id_ts_id_idx').on(
+      t.teacherId,
+      t.studentId,
+      t.ts,
+      t.id,
+    ),
   ],
 );
 
