@@ -3391,9 +3391,29 @@ tasks:
   deps:
   - 6.5a
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/6.5c-evidence-fold
+  metrics:
+    tool_calls: 383
+    tokens_in: 1328
+    tokens_out: 101651
+    cache_read_tokens: 48771877
+    wall_time_seconds: 2186
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
