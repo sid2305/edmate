@@ -16,6 +16,7 @@
 //     each issued item's key up through `issuedItem` the moment the tool returns.
 import type { Tool, TurnContext } from '@edmate/contracts';
 import { z } from 'zod';
+import type { TopicMap } from '../memory/topicMap.js';
 import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.js';
 import { HarnessError } from '../pipeline/errors.js';
 import { compileAnswerKeys, revealsAnswerKey } from '../pipeline/generate/answerKey.js';
@@ -117,6 +118,13 @@ export interface PracticeToolOptions {
   heldKeys?: readonly string[];
   /** Keys issued this turn so far, read live: the union with a new item's key is capped. */
   issuedKeys?: readonly string[];
+  /**
+   * The teacher's topic map (6.1a), passed straight through to `pickItem`'s own `topicMap`
+   * parameter (6.4c). No caller passes one today (no DB-backed bank exists yet); when given, a
+   * bank item whose topic was deleted (or sits under another module) is skipped and the generator
+   * steps in instead of serving a stale topic id.
+   */
+  topicMap?: TopicMap;
 }
 
 /** The text an item shows: its prompt and options (the answer-key checks read only this). */
@@ -174,7 +182,15 @@ export function practiceNextItemTool(
         const m = compileAnswerKeys(contextAnswerKeys(answerKey));
         return m.empty || !ctx.retrieved.some((c) => chunkLeaks(c, m));
       };
-      const picked = pickItem(bank, narrowed, level, opts.exclude ?? [], profileOf(ctx), accept);
+      const picked = pickItem(
+        bank,
+        narrowed,
+        level,
+        opts.exclude ?? [],
+        profileOf(ctx),
+        accept,
+        opts.topicMap,
+      );
       if (picked === undefined) return Promise.reject(new NoPracticeItemError());
       return Promise.resolve(toOutput(picked.item));
     },

@@ -72,6 +72,7 @@ const MSG = {
   tooLarge: 'The request is too large.',
   notFound: 'This chat is not available any more.',
   forbidden: "You can't end this chat.",
+  limit: 'Something went wrong. Try again.',
   failed: 'Something went wrong. Try again.',
 } as const;
 
@@ -163,8 +164,15 @@ export function createSessionEndHandlers(backend: SessionEndBackend): { end: Han
               return validation();
             case 'scope':
               return apiError('forbidden', MSG.forbidden, 403);
+            case 'limit':
+              return apiError('limit_reached', MSG.limit, 409);
             case 'failed':
               break;
+            default: {
+              // Exhaustive: a future RepositoryErrorKind fails typecheck here, not silently 500s.
+              const unreachable: never = error.kind;
+              return unreachable;
+            }
           }
         }
         return failed(error);
