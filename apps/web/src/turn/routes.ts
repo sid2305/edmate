@@ -5,7 +5,12 @@
 //
 // The handlers take a `TurnBackend` factory, so tests run them over memory ports and the scripted
 // gateway, and production over the database, Redis and the real gateway (runtime.ts).
-import type { EntitlementStore, Entitlement, TurnEvent } from '@edmate/contracts';
+import {
+  TurnInputSchema,
+  type EntitlementStore,
+  type Entitlement,
+  type TurnEvent,
+} from '@edmate/contracts';
 import type { StudentScope } from '@edmate/db';
 import {
   formatSseEvent,
@@ -83,7 +88,9 @@ const SSE_HEADERS = {
 /** The last net for a throw after headers are sent: one retryable error event. */
 const STREAM_FAILED: TurnEvent = { type: 'error', code: 'provider_error', retryable: true };
 
-const ParamsSchema = z.object({ id: StartSessionSchema.shape.agentId });
+// The session id's own field from the contracts turn schema, not borrowed from `agentId`'s.
+const SessionIdSchema = TurnInputSchema.shape.sessionId;
+const ParamsSchema = z.object({ id: SessionIdSchema });
 
 const MSG = {
   validation: 'Check the request and try again.',

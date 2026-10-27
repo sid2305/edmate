@@ -75,6 +75,19 @@ export function rolePlayControl(
   return bare === 'stop' || bare === '/stop' ? 'stop' : undefined;
 }
 
+/**
+ * Whether a `/pause` carried text after the command (5.8b, B-37 q8). `false` on anything but a
+ * `/pause` turn, including a bare one. Decide's caller (`decide.ts`) reads this alongside
+ * `rolePlayControl`, so the policy itself never sees the text.
+ */
+export function pauseHasExtraText(input: Pick<TurnInput, 'kind' | 'text'>): boolean {
+  if (input.kind === 'skill_action') return false;
+  const text = (input.text ?? '').trim().toLowerCase();
+  if (!text.startsWith('/pause')) return false;
+  const bare = text.replace(/[.!\s]+$/u, '');
+  return bare.slice('/pause'.length).trim().length > 0;
+}
+
 export interface SkillInput {
   ctx: TurnContext;
   turn: Pick<TurnInput, 'kind' | 'skill'>;
@@ -88,6 +101,12 @@ export interface SkillInput {
    * computed here.
    */
   rolePlayStep?: RolePlayStep;
+  /**
+   * The persona id `rolePlayStep` above was computed for (5.8b, defence in depth, like
+   * `compose.ts`'s role-play bug check). Required alongside `rolePlayStep`; `skillStep` throws on
+   * a mismatch with `ctx.persona.id` rather than silently teaching the wrong persona.
+   */
+  rolePlayStepPersonaId?: string;
 }
 
 /**
@@ -104,6 +123,12 @@ export function skillStep(i: SkillInput): SkillStep {
   const persona = i.ctx.persona;
   if (s.reason !== 'mock_interview' || persona === undefined) {
     return { ...s, next: withPersonaCount(s.next, i.help) };
+  }
+  // A bug, never a content error (5.8b, defence in depth, like compose.ts's role-play check): a
+  // passed-in rolePlayStep must have been computed for this persona, or the student would be
+  // taught with another persona's state.
+  if (i.rolePlayStep !== undefined && i.rolePlayStepPersonaId !== persona.id) {
+    throw new Error('skillStep: rolePlayStep was computed for a different persona');
   }
   const r =
     i.rolePlayStep ??

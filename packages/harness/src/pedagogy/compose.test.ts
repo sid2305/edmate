@@ -780,13 +780,28 @@ describe('the role-play frame form (5.8, ADR-0013 §3)', () => {
   });
 
   it.each([
-    ['off_topic', rpCtx({ intent: 'off_topic' }), 'redirect'],
-    ['not_covered', rpCtx({ retrieved: [] }), 'ask_teacher'],
-    ['locked', rpCtx({ retrieved: [], lockedHit: true }), 'locked'],
+    [
+      'off_topic',
+      rpCtx({ intent: 'off_topic' }),
+      'redirect',
+      { personaQuestionsAsked: 2, personaId: id },
+    ],
+    [
+      'not_covered',
+      rpCtx({ retrieved: [] }),
+      'ask_teacher',
+      { personaQuestionsAsked: 2, personaId: id, personaPhase: 'ended' as const },
+    ],
+    [
+      'locked',
+      rpCtx({ retrieved: [], lockedHit: true }),
+      'locked',
+      { personaQuestionsAsked: 2, personaId: id, personaPhase: 'ended' as const },
+    ],
   ] as const)(
     'a closed move (%s) on a persona turn composes without the role or a throw',
-    (_n, c, mode) => {
-      const p = decide({ personaQuestionsAsked: 2, personaId: id }, undefined, c);
+    (_n, c, mode, help) => {
+      const p = decide(help, undefined, c);
       expect(p.move).toBe(mode);
       expect(p).not.toHaveProperty('rolePlay');
       const out = composeSystemPrompt({ ctx: c, policy: p, lang: 'en', set: rpSet });
@@ -796,6 +811,31 @@ describe('the role-play frame form (5.8, ADR-0013 §3)', () => {
       expect(out.systemPrompt).not.toContain('[[MOVE-ROLEPLAY]]');
     },
   );
+
+  it('drops a sub-threshold chunk on a gate-skipped role-play turn, keeps it on a gated one', () => {
+    const subThreshold = { ...demoChunkScored, score: 0.1 };
+    const c = rpCtx({ retrieved: [demoChunk, subThreshold] });
+    // Question N > 1 now skips the gate (5.8b, B-37 reversal): the sub-threshold chunk was never
+    // screened, so compose drops it rather than show it as if it were in-course material.
+    const skipped = decide({ personaQuestionsAsked: 2, personaId: id }, undefined, c);
+    expect(skipped.rolePlayGateSkipped).toBe(true);
+    const skippedText = rpPrompt(c, skipped);
+    expect(skippedText).toContain(demoChunk.source.title);
+    expect(skippedText).not.toContain(subThreshold.source.title);
+
+    // An `ended` turn still meets the gate: the chunk was already screened by `coverageGate`
+    // (demoChunk itself has no score, so it never counts toward coverage; the gate still passes
+    // because that turn's own material is covered elsewhere), and compose keeps every chunk.
+    const gated = decide(
+      { personaQuestionsAsked: 2, personaId: id, personaPhase: 'ended' },
+      undefined,
+      rpCtx({ retrieved: [demoChunk, demoChunkScored] }),
+    );
+    expect(gated.rolePlayGateSkipped).toBe(false);
+    const gatedText = rpPrompt(rpCtx({ retrieved: [demoChunk, demoChunkScored] }), gated);
+    expect(gatedText).toContain(demoChunk.source.title);
+    expect(gatedText).toContain(demoChunkScored.source.title);
+  });
 
   it('the coach fallback (no persona) composes as coach under the new form', () => {
     const c = ctxWith({ agent: rpAgent, entitlement: { skills } });

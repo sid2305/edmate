@@ -16,7 +16,7 @@ import { AgentConfigSchema, type Persona, PersonaSchema } from '@edmate/contract
 import { createPersonaLibrary, type PersonaLibrary } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { z } from 'zod';
-import { compareSemver } from './semver.js';
+import { compareSemver, isPrerelease } from './semver.js';
 import { isSignedOff } from './signOff.js';
 import type { ValidationResult } from './validate.js';
 
@@ -29,6 +29,22 @@ export const PersonaTemplateSchema = PersonaSchema.extend({
   reviewedBy: z.string().min(1),
 });
 export type PersonaTemplate = z.infer<typeof PersonaTemplateSchema>;
+
+/**
+ * Thrown by `readPersonaLibrary` listing every issue in the directory or the selection, instead
+ * of a bare `Error` (5.8b, mirrors harness's `PromptPackError`): a typed error lets a caller tell
+ * "this content is invalid" apart from a programming bug.
+ */
+export class PersonaTemplateError extends Error {
+  override readonly name = 'PersonaTemplateError';
+
+  constructor(
+    dir: string,
+    readonly issues: readonly string[],
+  ) {
+    super(`invalid persona templates in ${dir}:\n${issues.join('\n')}`);
+  }
+}
 
 /**
  * What's on disk: snake_case, plus the file-naming `version`/`kind`/`reviewed_by` triad.
@@ -150,9 +166,11 @@ function asPersona(t: Readonly<PersonaTemplate>): Persona {
 
 /**
  * Picks, for each id, the highest signed version (5.8, ADR-0013): an unsigned template never goes
- * live, and a later version replaces the older one only once it is signed. Two templates with the
- * same id and version precedence (signed or not) are an issue. `chosen` maps id to the version
- * picked; `personas` is sorted by id.
+ * live, and a later version replaces the older one only once it is signed. A signed prerelease
+ * never outranks a signed release, even one from an older major (B-37 follow-up, 5.8b), the same
+ * rule `newestSignedSet` applies to prompt-pack sets. Two templates with the same id and version
+ * precedence (signed or not) are an issue. `chosen` maps id to the version picked; `personas` is
+ * sorted by id.
  */
 export function selectPersonaLibrary(templates: readonly Readonly<PersonaTemplate>[]): {
   personas: Persona[];
@@ -170,7 +188,7 @@ export function selectPersonaLibrary(templates: readonly Readonly<PersonaTemplat
     }
     versions.push(t.version);
     seen.set(t.id, versions);
-    if (!isSigned(t)) continue;
+    if (!isSigned(t) || isPrerelease(t.version)) continue;
     const current = best.get(t.id);
     if (current === undefined || compareSemver(t.version, current.version) > 0) {
       best.set(t.id, t);
@@ -194,7 +212,7 @@ export function readPersonaLibrary(dir: string): PersonaLibrary {
   const selected = selectPersonaLibrary(read.templates);
   const issues = [...read.issues, ...selected.issues].sort();
   if (issues.length > 0) {
-    throw new Error(`invalid persona templates in ${dir}:\n${issues.join('\n')}`);
+    throw new PersonaTemplateError(dir, issues);
   }
   return createPersonaLibrary(selected.personas.map((p) => [p.id, p] as const));
 }

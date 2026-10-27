@@ -61,9 +61,10 @@ export interface TopicLinkInput {
  */
 export async function insertTopicLinks(
   tx: Tx,
-  teacherId: string,
+  scope: TeacherScope,
   links: readonly TopicLinkInput[],
 ): Promise<number> {
+  const { teacherId } = teacherScope(scope, 'chunks.insertTopicLinks');
   if (links.length === 0) return 0;
   const res = await tx.execute(
     insertSelect(
@@ -99,9 +100,10 @@ export interface TopicSourceRow {
  */
 export async function topicSources(
   db: Pick<Db, 'select'>,
-  teacherId: string,
+  scope: TeacherScope,
   topicIds: readonly string[],
 ): Promise<TopicSourceRow[]> {
+  const { teacherId } = teacherScope(scope, 'chunks.topicSources');
   if (topicIds.length === 0) return [];
   return db
     .select({

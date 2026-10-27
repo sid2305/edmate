@@ -10,6 +10,104 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 12.2h merge of reports.ts · decided by lead · risk: high
+- Decided: merge the change to `packages/db/src/repositories/reports.ts` (a risky path): `listOpenForStaff` now rethrows any per-row error that is not a `RepositoryError('integrity', ...)` and logs only a skipped-row count through the opt-in `debuglog('edmate:db')`.
+- Why: security-reviewer, code-reviewer, typescript-reviewer and silent-failure-hunter all approved with no CRITICAL, HIGH or MEDIUM findings; the change narrows a swallowed-error path and the log line holds no row ids, text or reasons.
+
+---
+
+### 27 Oct 2026 · 12.2h budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (92 harness tool calls against a budget of 35; the builder reported 53).
+- Why: the extra calls went to installing eslint binaries in the worktree and re-running the gate after an unrelated apps/cli flake (chatDbRetrieval.int.test.ts); the diff stayed small and on scope.
+
+---
+
+### 27 Oct 2026 · 12.2h isSkippableReportRowError exported for testing · decided by builder · risk: low
+- Decided: export the catch's rethrow predicate (`isSkippableReportRowError`) from
+  `packages/db/src/repositories/reports.ts` instead of leaving it inline, so a unit test can call
+  it directly. Not re-exported through `packages/db/src/index.ts` (no product reason to grow the
+  public surface); the test imports it from the module file directly, the pattern already used by
+  other unit tests in this package (e.g. `errors.test.ts`, `redact-json.test.ts`).
+- Why: the plan's fallback test ("a unit test of the catch's rethrow rule") needs something
+  callable; `listOpenForStaff`'s real mapping path can only ever throw `integrity`, so there is no
+  way to exercise the rethrow branch end to end without changing production code.
+
+---
+
+### 27 Oct 2026 · 12.2h test import order avoids a latent circular-import hazard · decided by builder · risk: low
+- Decided: in `packages/db/test/reports.test.ts`, the new
+  `import { isSkippableReportRowError } from '../src/repositories/reports.js'` is placed after the
+  `../src/index.js` barrel import, not before it.
+- Why: `packages/db/src/repositories/chunks.ts` and `takedowns.ts` import each other at the top
+  level (`chunks.ts` calls `notTakenDown` from `takedowns.ts` inside a module-level object
+  literal; `takedowns.ts` imports `bumpRevision` from `chunks.ts`). This is already true on
+  `origin/m13/12.2h-report-signal` before any change in this task (verified against commit
+  `20ef81a0`) — but it only actually breaks module evaluation (`ReferenceError: Cannot access
+  'qualified' before initialization`) when something imports `reports.ts` directly *before* the
+  `index.ts` barrel has run (which first imports `chunks.ts`, settling the order safely). My first
+  draft had the direct import first, which newly triggered it in this one file; reordering fixes
+  it without touching `chunks.ts` or `takedowns.ts` (out of this task's scope: not in the plan's
+  file list, and risky-path review for `packages/db/src/repositories/**` wasn't scoped for a
+  change there). This is a real latent fragility in those two files — worth a follow-up task to
+  break the cycle (e.g. a shared predicate module) so import order can't matter — flagged here for
+  the lead rather than fixed in this task.
+
+---
+
+### 27 Oct 2026 · 5.8b ADR-0013 and role-play gate merge · decided by lead · risk: high
+- Decided: merge the ADR-0013 rewrite (docs/adr/0013-roleplay-state.md, Status Accepted with the B-37 answers) and the role-play coverage-gate code in packages/harness/src/pedagogy (roleplay.ts, policy.ts, skills.ts, compose.ts) and packages/content (promptPacks.ts, personaTemplates.ts). architect, security-reviewer, typescript-reviewer and code-reviewer reviewed it; fix round 1 fixed the two HIGH ADR wording findings and the MEDIUM `/pause.` punctuation finding, and all four re-reviews approved.
+- Why: it carries out the human's B-37 answers (q8: an ended role-play and a `/pause` with text meet the coverage gate; q9: every answer turn skips it), and a signed prerelease prompt pack or persona library can no longer outrank a signed release. No packages/contracts change.
+
+---
+
+### 27 Oct 2026 · 5.8b budget overrun · decided by lead · risk: low
+- Decided: accept 204 tool calls (harness count: Phase A 102, Phase B 59, fix round 43) against the plan's 70.
+- Why: Phase A rewrote the B-37 rule across policy, skills, compose and the ADR with a test per table row, which the plan under-counted at 45; the fix round was needed for review findings. Later role-play plans budget Phase A at about 90.
+
+---
+
+### 27 Oct 2026 · 5.8b coverage-gate row tests live in policy.test.ts · decided by lead · risk: low
+- Decided: accept the builder's choice to test every B-37 table row through decidePolicy in packages/harness/src/pedagogy/policy.test.ts rather than in roleplay.test.ts as the plan listed.
+- Why: the rows depend on the policy wiring (the control, pauseHasExtraText and the gate together), so testing them through decidePolicy covers more; code-reviewer confirmed every row is covered (review LOW).
+
+---
+
+### 27 Oct 2026 · 5.8b PersonaTemplateError: one throw, not two · decided by builder · risk: low
+- Decided: converted the single `throw new Error(...)` in `readPersonaLibrary` to
+  `PersonaTemplateError`, and did not add a second conversion in `readPersonaTemplateDir` or
+  anywhere else.
+- Why: the plan's file note says "use it ... in place of the bare `throw new Error(...)` at line
+  197 (and the directory-read throw above it)", but `readPersonaTemplateDir` has no throw — a
+  missing/non-directory input already returns `{ templates: [], issues: [...] }`, matching
+  `promptPacks.ts`'s precedent of never throwing from the directory-read step. `readPersonaLibrary`
+  has exactly one throw, which is now `PersonaTemplateError`. Read as a plan reference to the
+  single throw at that line, not a second site; flagging here since the file only has one.
+
+---
+
+### 27 Oct 2026 · 5.8b ADR-0013 rewrite · decided by builder · risk: high
+- Decided: rewrote ADR-0013 §1 "Rule order" to the final B-37 rule (two gate-meeting exceptions:
+  `ended` phase, and `/pause` with extra text; every other role-play turn skips the gate,
+  including N > 1 answers), set `Status: Accepted`, and updated the one stale Consequences bullet
+  that restated the old (now-reversed) rule so the ADR does not contradict itself.
+- Why: the plan scoped the edit to §1 and Status/Context, but left a "Coverage gate" bullet in
+  Consequences that quoted the Phase B draft's rule verbatim; leaving it would make the ADR
+  internally inconsistent once Status became Accepted. The edit is a restatement of the same
+  decision this task makes in §1, not new scope. Reviewers: architect, security-reviewer,
+  typescript-reviewer (risky path `docs/adr/**`, per the plan and lead answer).
+
+---
+
+### 27 Oct 2026 · 13.3b scope checks on chunks.ts helpers · decided by lead · risk: high
+- Decided: merge the change to packages/db/src/repositories/chunks.ts and outline.ts (risky path packages/db/src/repositories/**): insertTopicLinks and topicSources take a TeacherScope and check it before their empty-input early returns. security-reviewer, code-reviewer and typescript-reviewer all approved with no findings.
+- Why: it closes the 13.3 review's LOW findings that these two helpers sat outside the scope test grid; every query already used the scoped teacher id, and a bad scope now throws instead of returning an empty result.
+
+Builder: None — both code changes are the mechanical fixes already specified by the 13.3 review findings;
+the only open item is the `config.ts` `maxAge` question above, which is explicitly left to the
+human as B-60 rather than decided here.
+
+---
+
 ### 27 Oct 2026 · 13.regatea EXPLAIN test proves the index fits, not the live plan · decided by lead · risk: low
 - Decided: wontfix the database-reviewer LOW on packages/db/test/eval-runs-gate-passed-index.int.test.ts: the test reaches "no Sort" only with local work_mem and random_page_cost settings, so it shows the index matches the regate sweep's query, not that the live planner picks it today.
 - Why: the index matches the query column for column; at pilot table sizes a Sort is cheap, and the sweep runs every 15 minutes off any request path.

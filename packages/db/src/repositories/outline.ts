@@ -184,7 +184,7 @@ export function outlineRepo(db: Db) {
         .orderBy(asc(topics.order), asc(topics.id));
       const sources = await topicSources(
         db,
-        teacherId,
+        { teacherId },
         tops.map((t) => t.id),
       );
       return toOutline(
@@ -328,7 +328,7 @@ export function outlineRepo(db: Db) {
               t.chunkIds.forEach((chunkId, order) => links.push({ topicId, chunkId, order }));
             }
           }
-          if ((await insertTopicLinks(tx, teacherId, links)) !== links.length) {
+          if ((await insertTopicLinks(tx, { teacherId }, links)) !== links.length) {
             throw new RepositoryError('invalid', method);
           }
 
