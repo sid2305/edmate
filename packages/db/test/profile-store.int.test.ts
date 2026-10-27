@@ -838,5 +838,24 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       await expect(store.applyMistakes!(scope, [], [])).resolves.toBeUndefined();
       expect(await repos.learnerProfiles.get(scope)).toBeNull();
     }, 15_000);
+
+    // 6.3e: the adapter's third parameter (`proposed`) is accepted but ignored -- it does not
+    // persist proposed tags yet (6.3a lands that; `recordProposedMistakes` is the separate port).
+    it('a non-empty proposed array is ignored when known is empty', async () => {
+      const scope = { studentId: 'stu_mistakes_adapter_proposedignored', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'Proposed Ignored', 'en', 'test', 'student')`,
+      );
+      const store = profileStoreFor(repos, scope);
+      await expect(
+        store.applyMistakes!(
+          scope,
+          [],
+          [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+        ),
+      ).resolves.toBeUndefined();
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
   });
 });
