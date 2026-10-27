@@ -54,6 +54,19 @@ export const evalRuns = pgTable(
     index('eval_runs_teacher_id_idx').on(t.teacherId),
     index('eval_runs_agent_version_id_suite_idx').on(t.agentVersionId, t.suite),
     index('eval_runs_agent_id_created_at_idx').on(t.agentId, t.createdAt),
+    // Task 13.regatea (13.regate review deferral): regateRepo(db).liveAgentsWithMaterialChange's
+    // `last` CTE scan (newest passed, published gate run per agent). Partial on exactly the CTE's
+    // filter; agent_id ascending with published_at/id descending matches its
+    // `order by agent_id, published_at desc, id desc` so the DISTINCT ON can use the index without
+    // a Sort. `.nullsFirst()` on the descending columns matches that raw-SQL `order by`'s
+    // un-annotated default (Postgres defaults DESC to NULLS FIRST) -- without it drizzle's default
+    // `DESC NULLS LAST` wouldn't syntactically match the query's implied NULLS FIRST, and the
+    // planner falls back to a bitmap scan plus an explicit Sort instead of using this index to
+    // avoid one (confirmed against this task's own int test). Built CONCURRENTLY by the
+    // post-migrate step (migrate.ts), not this file -- see migration 0038's comment.
+    index('eval_runs_gate_passed_agent_id_published_at_id_idx')
+      .on(t.agentId, t.publishedAt.desc().nullsFirst(), t.id.desc().nullsFirst())
+      .where(sql`${t.suite} = 'gate' and ${t.status} = 'passed' and ${t.publishedAt} is not null`),
     // One open publish run per agent.
     uniqueIndex('eval_runs_agent_id_open_key')
       .on(t.agentId)
