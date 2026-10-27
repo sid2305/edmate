@@ -2,6 +2,36 @@
 
 Status: DONE
 
+## Decisions
+
+### 26 Oct 2026 · 9.4e risky paths merge · decided by lead · risk: high
+- Decided: merge 9.4e's changes on risky paths: packages/harness/src/guardrails/** (adviceGuard.ts, grounding.ts, index.ts export the existing verdict schemas; no behaviour change), apps/web/src/auth/errors.ts (apiError gains an optional headers param; cache-control no-store always wins) and packages/db/src/repositories/README.md (doc only).
+- Why: code-reviewer, security-reviewer and typescript-reviewer approved with LOWs only; the only headers caller passes a server-computed Retry-After constant.
+
+### 26 Oct 2026 · 9.4e deferred items and review LOWs to 9.4f · decided by lead · risk: low
+- Decided: plan items 1 (Playwright --webpack), 4 (ports.ts reads users.market twice) and 6 (listLiveForStudent grid case order), plus the review LOWs (apiError headers type, layout.test.tsx loose props, README sentence wording), go to board task 9.4f.
+- Why: MVP-first; none is a bug, and items 4 and 6 touch busy packages/db files.
+
+### 26 Oct 2026 · 9.4e liveChats teacherIds/liveIds derivation · decided by builder · risk: low
+- Decided: `homeLinks` computes `liveIds` and `teacherIds` from `classifyHomeLinks`'s own
+  `chats`/`paused` output (`new Set([...chats, ...paused])`, then filtering `live` rows by that
+  set), not from a fresh `live.filter((row) => row.status !== 'ended')`.
+- Why: the plan's item 10 asks to drop the duplicate `ended` filter and rely on
+  `classifyHomeLinks`'s own check, but `liveIds`/`teacherIds` also need an `ended` row excluded
+  (the existing `an ended subscription leaves its agent startable again` test requires it) and
+  `classifyHomeLinks` only returns agent ids split into `chats`/`paused`, not a filtered row list.
+  Deriving `liveIds`/`teacherIds` from its output keeps exactly one place that excludes `ended`
+  (`classifyHomeLinks`) while leaving every existing test's expected output unchanged.
+
+### 26 Oct 2026 · 9.4e turn-backend NaN guard scope · decided by builder · risk: low
+- Decided: guard only `Number.isNaN(ms)` (clamp to 0), not every non-finite value via
+  `Number.isFinite`.
+- Why: `Infinity`/`-Infinity` already clamp correctly through the existing
+  `Math.min(Math.max(ms, 0), MAX_REAL_SLEEP_MS)` (neither breaks `Math.min`/`Math.max`'s
+  ordering); only `NaN` is neither greater than nor less than any number, so it is the one value
+  that needs an explicit guard. Treating `Infinity` as `0` instead of `MAX_REAL_SLEEP_MS` would
+  be a behaviour change beyond the plan's "sleep clamps NaN" item.
+
 ## Phase A
 
 Status: PHASE A DONE
@@ -34,9 +64,6 @@ Summary: exported the harness's internal classifier/verdict schemas so `apps/web
 Did not touch `moderationPatterns.ts`, `moderationIn.ts`, any `packages/db` file, or
 `packages/harness/src/guardrails/moderation*`.
 
-## Decisions
-
-None — every change is the additive export the plan named; no new decision was needed.
 
 ## Gate
 
@@ -59,7 +86,7 @@ None — every change is the additive export the plan named; no new decision was
 
 ## Budget
 
-Tool calls used: 24
+Tool calls used: 40 (harness count; the builder reported 24)
 
 ## Phase B
 
@@ -116,27 +143,8 @@ Did not touch `packages/db/src/repositories/{publish,messages,sessions,notes,sub
 any migration, `packages/db/test/repositories.int.test.ts`, `ports.ts`, `identity/store.ts`,
 `apps/web/src/export/**`, `playwright.config.ts`, `next.config.ts`, or `packages/queue/**`.
 
-## Decisions
-
-### 26 Oct 2026 · 9.4e liveChats teacherIds/liveIds derivation · decided by builder · risk: low
-- Decided: `homeLinks` computes `liveIds` and `teacherIds` from `classifyHomeLinks`'s own
-  `chats`/`paused` output (`new Set([...chats, ...paused])`, then filtering `live` rows by that
-  set), not from a fresh `live.filter((row) => row.status !== 'ended')`.
-- Why: the plan's item 10 asks to drop the duplicate `ended` filter and rely on
-  `classifyHomeLinks`'s own check, but `liveIds`/`teacherIds` also need an `ended` row excluded
-  (the existing `an ended subscription leaves its agent startable again` test requires it) and
-  `classifyHomeLinks` only returns agent ids split into `chats`/`paused`, not a filtered row list.
-  Deriving `liveIds`/`teacherIds` from its output keeps exactly one place that excludes `ended`
-  (`classifyHomeLinks`) while leaving every existing test's expected output unchanged.
-
-### 26 Oct 2026 · 9.4e turn-backend NaN guard scope · decided by builder · risk: low
-- Decided: guard only `Number.isNaN(ms)` (clamp to 0), not every non-finite value via
-  `Number.isFinite`.
-- Why: `Infinity`/`-Infinity` already clamp correctly through the existing
-  `Math.min(Math.max(ms, 0), MAX_REAL_SLEEP_MS)` (neither breaks `Math.min`/`Math.max`'s
-  ordering); only `NaN` is neither greater than nor less than any number, so it is the one value
-  that needs an explicit guard. Treating `Infinity` as `0` instead of `MAX_REAL_SLEEP_MS` would
-  be a behaviour change beyond the plan's "sleep clamps NaN" item.
+### Decisions (Phase B)
+Moved under the top `## Decisions` by the lead.
 
 ## Gate
 
@@ -155,4 +163,4 @@ any migration, `packages/db/test/repositories.int.test.ts`, `ports.ts`, `identit
 
 ## Budget
 
-Phase B tool calls used: 44
+Phase B tool calls used: 86 (harness count; the builder reported 44). Both phases: 126 of the 130 budget.
