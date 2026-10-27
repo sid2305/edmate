@@ -43,6 +43,14 @@ input'`, which are fast on this machine). Well under the 120 s test timeout in a
   test correct if the pair count ever changes, and it's the exact mechanism the plan suggested
   (a first pass that records call count, then a second pass with the burst).
 
+### 26 Oct 2026 · 0.20d budget · decided by lead · risk: low
+- Decided: Accept 30 tool calls (harness count) against the plan's 20. That is the plan's stop line, and the work finished green.
+- Why: The plan asked for a load-burst self-test that fails on the old sampling and passes on the new. Proving that took extra test runs.
+
+### 26 Oct 2026 · 0.20d merge · decided by lead · risk: high
+- Decided: Merge 0.20d. It touches packages/harness/src/pedagogy/**, a risky path, but it changes only modelRequest.test.ts: how the linear-time check samples its timings (5 interleaved small/large pairs) and a new fake-clock self-test. modelRequest.ts, prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it with no findings. The bounds (16x, ratio < 64, 10 s cap, 0.5 ms floor) are unchanged.
+- Why: The test kept flaking in CI (PR #325) because a load burst could land on all the large runs. With interleaving, a burst has to cover most of one size's five samples to change its minimum.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` -- all 4 tasks
   (typecheck, lint, test x2) passed; 86 tests passed in `modelRequest.test.ts`.
@@ -54,4 +62,4 @@ input'`, which are fast on this machine). Well under the 120 s test timeout in a
 - `python3 .githooks/secret-scan.py --all` -- clean, no output.
 
 ## Budget
-Tool calls used: 12
+Tool calls used: 30 (harness count; the builder reported 19)
