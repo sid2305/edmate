@@ -31,6 +31,15 @@ Status: DONE
   `inappropriate` gave "a inappropriate reply"); after, all five pass.
 
 ## Decisions
+
+### 27 Oct 2026 · 12.2h merge of reports.ts · decided by lead · risk: high
+- Decided: merge the change to `packages/db/src/repositories/reports.ts` (a risky path): `listOpenForStaff` now rethrows any per-row error that is not a `RepositoryError('integrity', ...)` and logs only a skipped-row count through the opt-in `debuglog('edmate:db')`.
+- Why: security-reviewer, code-reviewer, typescript-reviewer and silent-failure-hunter all approved with no CRITICAL, HIGH or MEDIUM findings; the change narrows a swallowed-error path and the log line holds no row ids, text or reasons.
+
+### 27 Oct 2026 · 12.2h budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (92 harness tool calls against a budget of 35; the builder reported 53).
+- Why: the extra calls went to installing eslint binaries in the worktree and re-running the gate after an unrelated apps/cli flake (chatDbRetrieval.int.test.ts); the diff stayed small and on scope.
+
 ### 27 Oct 2026 · 12.2h isSkippableReportRowError exported for testing · decided by builder · risk: low
 - Decided: export the catch's rethrow predicate (`isSkippableReportRowError`) from
   `packages/db/src/repositories/reports.ts` instead of leaving it inline, so a unit test can call
@@ -71,4 +80,4 @@ Status: DONE
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
 ## Budget
-Tool calls used: 53
+Tool calls used: 92 (harness count; the builder reported 53)
