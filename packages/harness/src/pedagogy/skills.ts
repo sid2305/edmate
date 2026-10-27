@@ -84,7 +84,8 @@ export function pauseHasExtraText(input: Pick<TurnInput, 'kind' | 'text'>): bool
   if (input.kind === 'skill_action') return false;
   const text = (input.text ?? '').trim().toLowerCase();
   if (!text.startsWith('/pause')) return false;
-  return text.slice('/pause'.length).trim().length > 0;
+  const bare = text.replace(/[.!\s]+$/u, '');
+  return bare.slice('/pause'.length).trim().length > 0;
 }
 
 export interface SkillInput {

@@ -391,8 +391,12 @@ describe('pauseHasExtraText (5.8b, B-37 q8)', () => {
   it.each([
     [{ kind: 'message' as const, text: '/pause' }, false],
     [{ kind: 'message' as const, text: '  /PAUSE  ' }, false],
+    [{ kind: 'message' as const, text: '/pause.' }, false],
+    [{ kind: 'message' as const, text: '/pause!' }, false],
+    [{ kind: 'message' as const, text: '/pause ' }, false],
     [{ kind: 'message' as const, text: '/pause explain fractions' }, true],
     [{ kind: 'message' as const, text: '/PAUSE please' }, true],
+    [{ kind: 'message' as const, text: '/pause what is x?' }, true],
     [{ kind: 'message' as const, text: 'stop' }, false],
     [{ kind: 'message' as const }, false],
     [{ kind: 'skill_action' as const, text: '/pause please' }, false],

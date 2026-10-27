@@ -151,3 +151,47 @@ selectors; the throw was a bare `Error`, not an instance of the not-yet-existing
 ### Budget
 
 Phase B tool calls used: 26
+
+## Fix round 1
+
+1. [HIGH] `docs/adr/0013-roleplay-state.md:171` (code-reviewer, typescript-reviewer, architect): the
+   Consequences "Coverage gate" bullet listed "ended" among the turns that skip the gate, then said
+   an `ended` turn meets it — contradicting itself and §1 "Rule order" (line 65) and
+   `rolePlaySkipsCoverageGate` in `roleplay.ts`. Dropped "ended" from the skip list so line 171 now
+   reads "a bare role-play control, resume, debrief and every answer turn (question N ≥ 1) skip the
+   coverage gate ... only a turn whose stored phase is `ended` and a `/pause` with extra text still
+   meet it", matching line 65 and the code.
+2. [HIGH] `docs/adr/0013-roleplay-state.md:66, 82, 85, 140` (architect): these still said "lead
+   default(s), pending human answer B-37" after the human answered B-37 (21 Oct 2026, every
+   recommended default) and q8/q9 (27 Oct 2026, task 5.8b). Reworded each to say the human chose it:
+   line 66 → "**Human answers, B-37 (21 Oct 2026):**"; lines 82, 85 and 140 →
+   "(B-37 answer, 21 Oct 2026)". Line 152's "Not chosen (B-37 default)" → "Not chosen (B-37 answer
+   3a)". Prose only; no rule changed. `grep -n -i pending docs/adr/0013-roleplay-state.md` now shows
+   only the two `reviewed_by: pending` lines (84, 112), nothing about B-37.
+3. [MEDIUM] `packages/harness/src/pedagogy/skills.ts:83-87` (code-reviewer, security-reviewer):
+   `pauseHasExtraText` treated trailing punctuation as extra text, so `/pause.` or `/pause!` was not
+   a bare pause, unlike `rolePlayControl`'s stop parsing (which strips `[.!\s]+$` first). Added
+   `/pause.`, `/pause!`, `/pause ` (false) and `/pause what is x?` (true) to the
+   `pauseHasExtraText` table in `skills.test.ts` (~lines 390-399); ran
+   `vitest run src/pedagogy/skills.test.ts -t pauseHasExtraText` and saw the two punctuation cases
+   fail (`expected true to be false`, red). Fixed `pauseHasExtraText` to strip the same
+   `[.!\s]+$` suffix before slicing off `/pause` and checking for remaining text; re-ran the same
+   command: 11/11 pass (green). Full `skills.test.ts`: 87/87 pass.
+
+### Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` → 4/4 tasks green
+  (typecheck, lint, test with coverage).
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness` (harness plus its
+  dependencies) → all harness-related tasks green; two unrelated pre-existing flaky tests surfaced
+  in dependency packages under load: `@edmate/content`'s `safeRegex.test.ts` timing probe (5000ms
+  timeout, passed standalone on retry) and `@edmate/queue`'s `turnLimits.int.test.ts` Redis timing
+  assertion. Neither touches a file this fix round changed.
+- `corepack pnpm exec prettier --check` on `docs/adr/0013-roleplay-state.md`,
+  `packages/harness/src/pedagogy/skills.ts` and `packages/harness/src/pedagogy/skills.test.ts` →
+  all matched files use Prettier code style, clean.
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+
+### Budget
+
+Fix round tool calls used: 21
