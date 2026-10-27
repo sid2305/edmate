@@ -1,5 +1,5 @@
 {
-  "id": "e5f5ee0b-7943-4bee-9469-126136a94647",
+  "id": "f8c34394-f33c-4411-8ac3-83a28402c7dd",
   "prevId": "0e50f877-922b-41d6-acdc-3d634f730a22",
   "version": "7",
   "dialect": "postgresql",
@@ -1527,8 +1527,8 @@
           "method": "btree",
           "with": {}
         },
-        "documents_processing_updated_at_id_idx": {
-          "name": "documents_processing_updated_at_id_idx",
+        "documents_sweep_updated_at_id_idx": {
+          "name": "documents_sweep_updated_at_id_idx",
           "columns": [
             {
               "expression": "updated_at",
@@ -1544,7 +1544,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"documents\".\"status\" = 'processing'",
+          "where": "\"documents\".\"status\" in ('processing', 'uploading')",
           "concurrently": false,
           "method": "btree",
           "with": {}

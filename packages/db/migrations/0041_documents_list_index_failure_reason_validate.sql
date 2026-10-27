@@ -1,4 +1,5 @@
--- Hand-edited (task 8.2r, 8.2a review deferral): two LOW hygiene items, no new runtime behaviour.
+-- Hand-edited (task 8.2r, 8.2a review deferral; sweep-index widening added at the 8.2q review's
+-- request): three LOW hygiene items, no new runtime behaviour.
 --
 -- 1. documents_teacher_id_created_at_id_idx: a composite index backing documents.listForTeacher's
 -- `WHERE teacher_id = $1 ORDER BY created_at DESC, id DESC LIMIT 500` (packages/db/src/
@@ -24,5 +25,17 @@
 -- is ever not covered by the constraint for longer than the drop-and-reinstate pair below takes,
 -- and no data is read, written or lost. Exact template: migration 0033's drop-the-old-constraint
 -- then add-the-replacement-as-NOT-VALID shape, CHECK instead of FOREIGN KEY.
+--
+-- 3. documents_sweep_updated_at_id_idx (added at the 8.2q review's request): task 8.2q widens
+-- ingestSweep.staleProcessing's query from `status = 'processing'` to
+-- `status IN ('processing', 'uploading')`, so migration 0040's `documents_processing_updated_at_
+-- id_idx` (partial on `status = 'processing'` only) can no longer back the widened scan. This
+-- migration replaces it with a wider partial index on the same `(updated_at, id)` columns,
+-- `WHERE status IN ('processing', 'uploading')` -- a predicate implied by both the original and
+-- the widened query, so this is safe whichever of 8.2q/8.2r merges first. The plain create and
+-- removal statements `db:generate` would otherwise emit for this swap are both deleted here: the
+-- new index is built CONCURRENTLY by a post-migrate step, and the old one is removed
+-- CONCURRENTLY by a post-migrate step ordered right after it, so the sweep is never left without
+-- a usable index between the two (packages/db/src/migrate.ts's POST_MIGRATE_STEPS).
 ALTER TABLE "documents" DROP CONSTRAINT "documents_failure_reason_only_when_failed";--> statement-breakpoint
 ALTER TABLE "documents" ADD CONSTRAINT "documents_failure_reason_only_when_failed" CHECK ("documents"."failure_reason" is null or "documents"."status" = 'failed') NOT VALID;

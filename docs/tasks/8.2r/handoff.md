@@ -22,6 +22,16 @@ Two LOW items, no new runtime behaviour, `packages/db` only:
    entry validates it. The constraint is re-added in the very next statement, so no row is ever
    unenforced, and no data is read, written or lost — same drop-and-reinstate shape as migration
    0033 (FK instead of CHECK).
+3. **Sweep index widened for 8.2q (mid-task scope addition from the lead).** Task 8.2q's review
+   widens `ingestSweep.staleProcessing`'s query to `status IN ('processing', 'uploading')`, which
+   the original `documents_processing_updated_at_id_idx` (`status = 'processing'` only) could not
+   serve for the `uploading` branch. Replaced it, in the same migration 0041, with
+   `documents_sweep_updated_at_id_idx` on `documents(updated_at, id) WHERE status IN
+   ('processing', 'uploading')` — a wider predicate that still covers the narrower, original
+   `status = 'processing'` query shape, so the change is safe regardless of which of 8.2q/8.2r
+   merges first. Built CONCURRENTLY via a new `POST_MIGRATE_STEPS` entry; the old index is then
+   dropped CONCURRENTLY/`IF EXISTS` via a new `dropIndexConcurrently` step kind, ordered after its
+   replacement so the sweep query is never left without a usable index mid-migration.
 
 Migration number: **0041** (`packages/db/migrations/0041_documents_list_index_failure_reason_validate.sql`),
 confirmed free both before and right before generating (`ls packages/db/migrations/*.sql | sort -V
@@ -100,6 +110,20 @@ budget.
   `POST_MIGRATE_STEPS` comment), not a behaviour change. `database-reviewer` should confirm this
   reading before merge.
 
+### 27 Oct 2026 · 8.2r sweep index widened for 8.2q · decided by lead · risk: high
+- Decided: within the same migration 0041, `packages/db/src/schema/content.ts` and
+  `packages/db/src/migrate.ts` replace `documents_processing_updated_at_id_idx` with
+  `documents_sweep_updated_at_id_idx` ON `documents (updated_at, id) WHERE status IN
+  ('processing', 'uploading')`, built CONCURRENTLY, with the old index then dropped
+  CONCURRENTLY/`IF EXISTS` once the new one exists.
+- Why: task 8.2q's review widens `ingestSweep.staleProcessing` to also sweep `uploading` rows;
+  the original partial index (`status = 'processing'` only) could not serve that query shape. The
+  new predicate is a superset of the old one, so it covers both the pre- and post-8.2q query
+  shapes regardless of merge order, and the old index is only dropped after the replacement is
+  built, so the sweep job is never left without a usable index. Confirmed by the new
+  `documents-sweep-index.int.test.ts` (EXPLAIN shows Index Scan, no Sort, for both query shapes)
+  and by `ingest-sweep.int.test.ts`'s own EXPLAIN assertion (updated to the new index name).
+
 ## Gate
 - `corepack pnpm --filter @edmate/db exec tsc --noEmit -p .` — pre-existing unrelated errors in
   other test files (missing built `@edmate/contracts`/`@edmate/harness` types when run directly,
@@ -120,6 +144,17 @@ budget.
   (expected — allowlisted it in `REVIEWED_CONSTRAINT_DROPS`, see Summary) and a comment-text false
   positive (reworded, see Summary); both fixed and re-verified green
   (`vitest run test/schema.test.ts` — 51/51 passed).
+- `packages/db/test/documents-sweep-index.int.test.ts` (new) — item 3: asserts the new index's
+  columns/predicate, that the old index is gone, and that EXPLAIN uses the new index (Index Scan,
+  no Sort) for both the original `status = 'processing'` query shape and the widened `status IN
+  ('processing', 'uploading')` shape.
+- `packages/db/test/migrate.test.ts` and `packages/db/test/ingest-sweep.int.test.ts` — collateral
+  fixes for item 3 (not in the original file list, but required to keep the gate green): updated
+  `migrate.test.ts`'s exact-shape assertions on `POST_MIGRATE_STEPS` (new `validateConstraint`
+  count, two new `concurrentIndex` entries, a new test for the `dropIndexConcurrently` entry);
+  updated `ingest-sweep.int.test.ts`'s EXPLAIN-plan test to expect the new index name. Both
+  verified green after the fix (`vitest run test/migrate.test.ts test/ingest-sweep.int.test.ts` —
+  2 files, 27 tests, all passed).
 - `corepack pnpm exec prettier --check` on every changed file — clean after `--write` on the two
   JSON/TS files prettier's generator/edit left unformatted (`meta/0041_snapshot.json`,
   `test/documents-failure-reason-validate-migration.int.test.ts`); the hand-edited `.sql` file has
@@ -129,6 +164,11 @@ budget.
   commit yet, so no branch diff; `handoff.md`/`review.md` not yet written from the gate's point of
   view when it ran). Expected to pass once this handoff is committed and pushed and
   `database-reviewer` has reviewed (risky PR, see Decisions).
+- After the lead's mid-task sweep-index scope addition: `corepack pnpm turbo run typecheck lint
+  test --filter=@edmate/db` — one combined full-package run, all 8 tasks successful (typecheck,
+  lint, test), all tests passing including the new `documents-sweep-index.int.test.ts` and the two
+  collateral fixes (`migrate.test.ts`, `ingest-sweep.int.test.ts`).
+- `python3 .githooks/secret-scan.py --all` — re-run clean after the addition.
 
 ## Budget
-Tool calls used: 46
+Tool calls used: 46 (original) + 17 (sweep-index addition) = 63
