@@ -5864,6 +5864,16 @@ tasks:
   status: running
   branch: m13/9.6f-export-cursor-index
   model: plan:sonnet build:sonnet
+- id: 9.6g
+  milestone: M13
+  title: '9.6f database-review follow-ups: packages/db/test/export-cursor-paging.int.test.ts EXPLAINs the real cross join lateral statement messages.listForStudent sends (outer scan stays on the sessions (teacher_id, student_id) index, no per-noise-session
+    lateral), not a hand-written copy (MEDIUM); the mid-range cursor EXPLAIN tests run the SQL the repositories build instead of parallel hand-written SQL, so a future query edit cannot pass them while losing the index seek (LOW).'
+  accept: the EXPLAIN tests run the repositories' own SQL and assert the index seek for both the lateral messages query and the sessions cursor.
+  deps:
+  - 9.6f
+  status: todo
+  branch: null
+  model: null
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
