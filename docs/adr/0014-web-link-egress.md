@@ -20,7 +20,7 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 1. **Resolve once per hop and connect only to the checked address.**
    - Each hop looks the host up once and gets every A and AAAA address. If one family fails transiently while the other answers, the answers that came back are judged and one is pinned (the connection is still pinned, so this is safe). The hop is refused if any address is not public. Otherwise one checked address (the first) is pinned.
    - A transport port (`PinnedTransport`) gets the URL and the pinned address and connects to exactly that address, with no second lookup. In production it is `node:https.request` with a `lookup` that always returns the pinned address (both the single-address and the `all: true` forms), `autoSelectFamily: false` and `agent: false`.
-   - TLS SNI and the certificate check use the URL's host name. Certificate checks are never turned off.
+   - TLS SNI and the certificate check use the URL's host name with every trailing dot stripped; a host ending in an empty label (`example.org..`) is refused as an invalid URL. Certificate checks are never turned off. The wire's `Host` header uses the same stripped name (`apps/worker/src/webLink/pinnedTransport.ts`'s `pinnedRequestOptions`), so SNI and `Host` always agree.
    - An IP-literal host is checked after every trailing dot is stripped (so `127.0.0.1..` is judged as `127.0.0.1`) and, if public, connected to directly with no lookup. It sends no SNI (RFC 6066 forbids an IP address there); the certificate is still checked.
 2. **Refused addresses.** Only public unicast passes.
    - IPv4: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, and 224/4 and everything above it.
@@ -37,7 +37,7 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
    - Any other encoding is refused.
    - A declared `content-length` over the cap is refused before the body is read.
    - The 20 MB cap for uploaded files is unchanged.
-6. **Time.** 15 s in total across all hops, DNS lookups included. The resolver allows 5 s per query and 2 tries, inside that 15 s. Each hop also has 5 s to connect and send its response headers.
+6. **Time.** 15 s in total across all hops, DNS lookups included. The resolver allows 2 s per query and 2 tries (at most 6 s per family, inside that 15 s); once one family answers with addresses, the other gets 500 ms before the lookup is cancelled and its answers are treated as missing. Each hop also has 5 s to connect and send its response headers.
 7. **Content types.** Only `text/html` and `application/xhtml+xml`. Anything else, including a linked PDF, fails as `unsupported`.
 8. **No cookies or credentials.**
    - Request headers are a fixed list: `user-agent: EdmateBot/0.1`, `accept` and `accept-encoding: identity`.
@@ -48,6 +48,7 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
    - The full URL travels only in the ingest job payload in Redis, and only while the job is queued and retried. A link job is removed from Redis when it fails for the last time, so the URL doesn't sit in BullMQ's failed set for `FAILED_JOB_TTL_SECONDS` (7 days); the document row keeps only the fixed failure reason (built in Phase B, 8.2e).
    - It never appears in a log line, trace, error message, dead-letter entry or database column. Errors carry fixed words and codes only.
    - When the teacher gives no title, the document's title is the host only, never the path, query string or fragment: a path can carry a share token (built in Phase C, 8.2f).
+   - A link job gets 2 attempts (file jobs keep 5), so a slow site can hold the one ingest slot for at most two fetch deadlines.
 10. **Allow-list modes** (`EDMATE_WEB_LINK_HOSTS`, worker env):
     - unset or empty: every link is refused (fail closed);
     - a comma list: exact host match only;
