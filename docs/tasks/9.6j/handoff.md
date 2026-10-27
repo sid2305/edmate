@@ -39,6 +39,15 @@ code was touched.
 
 ## Decisions
 
+### 26 Oct 2026 · 9.6j budget overrun (87 vs 30) · decided by lead · risk: low
+- Decided: accept 87 harness-counted tool calls (build 40, fix round 47) against a 30-call budget (2.9x); no rework.
+- Why: the build had to trace drizzle's node-postgres call path to spy on the real statements, and the fix round re-ran the db int suite against dev Postgres. The scope stayed to one test file. The fix round was needed because the first version did not pin the outer sessions seek, which was the whole point of the task.
+
+### 26 Oct 2026 · 9.6j review LOWs wontfix (test-only cast and generic) · decided by lead · risk: low
+- Decided: wontfix two typescript-reviewer findings in packages/db/test/export-cursor-paging.int.test.ts: the `as unknown as` double-cast on the spied pool.query, and the unused result generic on captureAndExplain.
+- Why: both are test-only typing, with no effect on what the EXPLAIN assertions check; a follow-up task for them would cost more than the cleanup is worth.
+
+
 ### 26 Oct 2026 · 9.6j findIndexScan relation filter · decided by builder · risk: low
 - Decided: added an optional `relation` parameter to the existing `findIndexScan` helper (matches
   `Relation Name` on the plan node) rather than writing a second helper, so the messages
@@ -85,5 +94,5 @@ annotation); `prettier --check` now passes.
 
 ## Budget
 
-Tool calls used: 21
-Fix round tool calls used: 19
+Tool calls used: 40 (harness count; the builder reported 21)
+Fix round tool calls used: 47 (harness count; the fixer reported 19)
