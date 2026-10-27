@@ -4,6 +4,7 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as contentPkg from '@edmate/content';
 import { RepositoryError } from '@edmate/db';
 import { describe, expect, it, vi } from 'vitest';
 import { memoryIdentity } from '../../test/memory-identity';
@@ -251,6 +252,35 @@ describe('loadAgeContent (real content/)', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('1.7d: strips C1 controls and U+2028/U+2029 from the file name and the reason, too', () => {
+    // `loadLocalePacks` mocked (not a real refused file): the real loader's own inputs are
+    // constrained (a real file name matches the pack-file pattern; `readLocalePacksDir` never
+    // produces these characters), so this proves the strip itself, not that the real loader can
+    // trigger it -- matching the fix's own reasoning (age.ts) that `r.file` gets the same strip
+    // regardless of what callers today actually hand it.
+    const nasty = 'x\u0085y\u2028z\u2029w\u0090v';
+    const spy = vi.spyOn(contentPkg, 'loadLocalePacks').mockReturnValue({
+      packs: new Map(),
+      refused: [{ file: `ZZ${nasty}.yaml`, reasons: [`bad${nasty}pattern`] }],
+      droppedHelplines: [],
+    });
+    const log: string[] = [];
+    try {
+      loadAgeContent(CONTENT, (line) => log.push(line));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(log).toHaveLength(1);
+    const line = log[0] ?? '';
+    expect(line.split('\n')).toHaveLength(1); // one line: no raw newline either
+    for (const ch of ['\u0085', '\u2028', '\u2029', '\u0090']) {
+      expect(line).not.toContain(ch);
+    }
+    expect(line).toContain('ZZ');
+    expect(line).toContain('bad');
+    expect(line).toContain('pattern');
   });
 });
 

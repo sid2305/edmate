@@ -116,134 +116,199 @@ if (!up && process.env.CI === 'true') {
 const SKIP = 'SKIPPED: no Postgres at TEST_DATABASE_URL; see the header';
 if (!up) process.stderr.write(`[@edmate/web] build-smoke ${SKIP}\n`);
 
-describe.skipIf(!up)(`build smoke: the age gate on a real, relocated build${up ? '' : ` (${SKIP})`}`, () => {
-  let child: ChildProcessWithoutNullStreams | undefined;
-  let origin: string;
-  const stderrChunks: string[] = [];
-  let dbClose: (() => Promise<void>) | undefined;
-  let tmpRoot: string | undefined;
-  let hidBuildTreeDist = false;
+describe.skipIf(!up)(
+  `build smoke: the age gate on a real, relocated build${up ? '' : ` (${SKIP})`}`,
+  () => {
+    let child: ChildProcessWithoutNullStreams | undefined;
+    let origin: string;
+    const stderrChunks: string[] = [];
+    let dbClose: (() => Promise<void>) | undefined;
+    let eraseStudent: (() => Promise<void>) | undefined;
+    let tmpRoot: string | undefined;
+    let hidBuildTreeDist = false;
 
-  beforeAll(async () => {
-    if (!existsSync(BUILD_SERVER_JS)) {
-      throw new Error(
-        `${BUILD_SERVER_JS} is missing: run \`next build --webpack\` (this package's own build task) before build-smoke`,
+    beforeAll(async () => {
+      if (!existsSync(BUILD_SERVER_JS)) {
+        throw new Error(
+          `${BUILD_SERVER_JS} is missing: run \`next build --webpack\` (this package's own build task) before build-smoke`,
+        );
+      }
+
+      // Relocate: copy the standalone output to a throwaway directory, away from this checkout, and
+      // hide this checkout's own compiled `@edmate/content` for the duration of the test. The build
+      // machine's absolute path a bundled chunk may have inlined (see the header) points inside this
+      // checkout; with both the copy elsewhere and the original hidden, the only `dist` the spawned
+      // server can possibly find is the one that travelled inside the copy itself.
+      // A stale `.build-smoke-hidden` dir means an earlier run crashed between hiding the build
+      // tree's own `dist` and restoring it (1.7d): with `dist` also present, the stale copy is
+      // leftover garbage from before that crash and is discarded; with `dist` missing, this run's
+      // own hide step below never got a chance to run last time, so the earlier run's hide is
+      // restored first -- otherwise this run would hide a `dist` that both never existed and the
+      // stale rename has already claimed the name of, and the final `renameSync` back would throw.
+      if (existsSync(HIDDEN_CONTENT_DIST)) {
+        if (existsSync(BUILD_TREE_CONTENT_DIST)) {
+          rmSync(HIDDEN_CONTENT_DIST, { recursive: true, force: true });
+        } else {
+          renameSync(HIDDEN_CONTENT_DIST, BUILD_TREE_CONTENT_DIST);
+        }
+      }
+
+      tmpRoot = mkdtempSync(join(tmpdir(), 'edmate-build-smoke-'));
+      // `verbatimSymlinks`: a symlink inside `.next/standalone` (pnpm's own workspace links) is
+      // copied as-is, still relative to its new parent directory, rather than resolved against the
+      // tree being copied -- resolving it here would make it absolute and point back at this
+      // checkout, defeating the relocation the rest of this test depends on.
+      cpSync(BUILD_STANDALONE, tmpRoot, { recursive: true, verbatimSymlinks: true });
+      const serverJs = join(tmpRoot, 'apps', 'web', 'server.js');
+      if (existsSync(BUILD_TREE_CONTENT_DIST)) {
+        renameSync(BUILD_TREE_CONTENT_DIST, HIDDEN_CONTENT_DIST);
+        hidBuildTreeDist = true;
+      }
+
+      // Real Postgres, real identity store, from the *built* @edmate/db (workspace dependency,
+      // resolved the same way the running app resolves it) -- a real, DB-backed sign-in session is
+      // the only way to reach the age gate's market list through a real HTTP request.
+      const { migrateDatabase, openDatabase } = await import('@edmate/db');
+      await migrateDatabase(TEST_DATABASE_URL);
+      const { identity, close } = openDatabase({ DATABASE_URL: TEST_DATABASE_URL });
+      dbClose = close;
+      const user = await identity.createStudent({
+        email: `build-smoke-${randomBytes(4).toString('hex')}@example.test`,
+        emailVerifiedAt: null,
+        name: 'Build Smoke',
+      });
+      await identity.createSession(SID, user.id, new Date(Date.now() + 86_400_000));
+      // 1.7d: deletes the student and session rows this test created, through the same identity
+      // API that created them -- never a raw SQL delete. `recordAgeAnswer`'s `under_age` branch
+      // (age.ts) erases the sign-in rows and the user row in one transaction; this store was opened
+      // with no `noticeVersion` option (above), so that check is skipped and any value here works.
+      // A birth year a few years old is under every market's minimum age, `global` included.
+      eraseStudent = async () => {
+        await identity.recordAgeAnswer({
+          userId: user.id,
+          market: 'global',
+          birthYear: new Date().getUTCFullYear() - 3,
+          noticeVersion: 'build-smoke-cleanup',
+        });
+      };
+
+      const port = await freePort();
+      origin = `http://127.0.0.1:${port}`;
+      child = spawn(process.execPath, [serverJs], {
+        // Not REPO_ROOT: the relocated copy's own root, matching `apps/web/Dockerfile`'s
+        // `WORKDIR /app` -- the server's cwd is part of what proves the worker resolved from the
+        // copy, not from this checkout. `packages/content/src/safeRegexGuard.ts` tries its own
+        // directory first (`bySibling`) and only falls back to `EDMATE_CONTENT_WORKER_DIR` (set
+        // below) when that does not exist; it never derives anything from `process.cwd()`.
+        cwd: tmpRoot,
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          PORT: String(port),
+          HOSTNAME: '127.0.0.1',
+          DATABASE_URL: TEST_DATABASE_URL,
+          AUTH_SECRET,
+          AUTH_URL: origin,
+          // Never used: no OAuth call is made (a real DB session bypasses sign-in entirely). Only
+          // present because readAuthEnv requires at least one configured sign-in provider to start.
+          AUTH_GOOGLE_ID: 'build-smoke-unused',
+          AUTH_GOOGLE_SECRET: 'build-smoke-unused',
+          EDMATE_CONTENT_DIR: FIXTURE_CONTENT,
+          // Matches `apps/web/Dockerfile`: the bundled server chunk cannot locate the safe-regex
+          // worker through its own baked (and here, deliberately hidden) build-machine path, and
+          // `process.cwd()` is no help either -- the standalone `server.js` chdirs to its own
+          // directory before anything else runs (`safeRegexGuard.ts`). Point it at the copy.
+          EDMATE_CONTENT_WORKER_DIR: join(tmpRoot, 'packages', 'content', 'dist'),
+        },
+      });
+      // A spawn failure (ENOENT, EACCES, ...) fires an 'error' event; with no listener Node treats
+      // it as an uncaught exception and crashes the whole vitest process instead of failing this
+      // test cleanly (typescript-reviewer, fix round). `waitForHealth` already times out and fails
+      // the test on its own if the process never comes up for any other reason.
+      let spawnError: Error | undefined;
+      child.on('error', (err) => {
+        spawnError = err;
+      });
+      child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString('utf8')));
+      child.stdout.on('data', () => undefined); // drained, not asserted on
+      try {
+        await waitForHealth(origin, 20_000);
+      } catch (error) {
+        throw spawnError ?? error;
+      }
+      if (spawnError) throw spawnError;
+    });
+
+    afterAll(async () => {
+      // Every step below is in its own try/finally, nested so that a failure in an earlier step
+      // (the server did not exit, the erase or the close threw) still reaches the last two steps:
+      // restoring `HIDDEN_CONTENT_DIST` and removing `tmpRoot`. Without that, one crashed run would
+      // leave the build tree's own `@edmate/content` hidden for every run after it (the `beforeAll`
+      // recovery above exists only because of exactly that failure mode, 1.7d).
+      try {
+        if (child && !child.killed) {
+          child.kill();
+          // A server that already exited (it crashed on its own before this ran) never fires
+          // another 'exit' event; waiting for one here would hang until vitest's own timeout.
+          if (child.exitCode === null && child.signalCode === null) {
+            await new Promise((resolve) => child?.once('exit', resolve));
+          }
+        }
+      } finally {
+        try {
+          if (eraseStudent) await eraseStudent();
+        } finally {
+          try {
+            if (dbClose) await dbClose();
+          } finally {
+            if (hidBuildTreeDist) renameSync(HIDDEN_CONTENT_DIST, BUILD_TREE_CONTENT_DIST);
+            if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
+          }
+        }
+      }
+    });
+
+    it('from the relocated copy: serves IN (safe patterns), refuses ZZ (one unsafe pattern), logs it once', async () => {
+      const res = await fetch(`${origin}/welcome/age`, {
+        headers: { cookie: `${SESSION_COOKIE}=${SID}` },
+        redirect: 'manual',
+      });
+      expect(res.status).toBe(200); // a redirect here would mean the session, not the content, broke
+      const body = await res.text();
+      // 'IN' only appears if the worker loaded *from the relocated copy* and reported its real
+      // patterns safe. If relocation had broken the worker (the bug this test guards against), the
+      // production fail-closed path (safeRegexGuard.ts) would report every pattern unsafe, 'IN'
+      // included, and this would fail here -- not just on the 'ZZ' assertions below.
+      expect(body).toContain('value="IN"');
+      expect(body).not.toContain('value="ZZ"');
+
+      // The refusal is logged once the first request loads content (lazy init, src/auth/index.ts);
+      // give the child process's stdio pipe a moment to flush before reading it back.
+      const until = Date.now() + 5_000;
+      let log = stderrChunks.join('');
+      while (!log.includes('ZZ.yaml') && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, 100));
+        log = stderrChunks.join('');
+      }
+      const lines = log.split('\n').filter((l) => l.includes('refused locale pack'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('ZZ.yaml');
+      expect(lines[0]).toContain('nests a quantifier inside a repeated group');
+      // Not the generic ceiling message, and not the production fail-closed message: proves the
+      // worker answered from the relocated copy, rather than every check timing out, or the worker
+      // file being missing altogether, and reporting everything unsafe alike (this bug's symptom,
+      // and the relocation bug's symptom, look the same from here).
+      expect(lines[0]).not.toContain('exceeded the');
+      expect(lines[0]).not.toContain('failing closed');
+      // 1.7d: the ZZ-only check above only looks at the one refusal line; the production-missing-
+      // worker message (safeRegexGuard.ts's `unsafeInProduction`) is logged on its own line, once,
+      // the first time any pattern is checked with no worker file reachable -- the unit test
+      // (safeRegexGuard.test.ts) already covers it in isolation, but only this relocated,
+      // `NODE_ENV=production` run can prove the worker genuinely loaded here, not merely that the
+      // one ZZ line looks right. The exact message the code logs today; this test must not change it.
+      expect(log).not.toContain(
+        'the compiled safe-regex worker is missing in production (failing closed)',
       );
-    }
-
-    // Relocate: copy the standalone output to a throwaway directory, away from this checkout, and
-    // hide this checkout's own compiled `@edmate/content` for the duration of the test. The build
-    // machine's absolute path a bundled chunk may have inlined (see the header) points inside this
-    // checkout; with both the copy elsewhere and the original hidden, the only `dist` the spawned
-    // server can possibly find is the one that travelled inside the copy itself.
-    tmpRoot = mkdtempSync(join(tmpdir(), 'edmate-build-smoke-'));
-    cpSync(BUILD_STANDALONE, tmpRoot, { recursive: true });
-    const serverJs = join(tmpRoot, 'apps', 'web', 'server.js');
-    if (existsSync(BUILD_TREE_CONTENT_DIST)) {
-      renameSync(BUILD_TREE_CONTENT_DIST, HIDDEN_CONTENT_DIST);
-      hidBuildTreeDist = true;
-    }
-
-    // Real Postgres, real identity store, from the *built* @edmate/db (workspace dependency,
-    // resolved the same way the running app resolves it) -- a real, DB-backed sign-in session is
-    // the only way to reach the age gate's market list through a real HTTP request.
-    const { migrateDatabase, openDatabase } = await import('@edmate/db');
-    await migrateDatabase(TEST_DATABASE_URL);
-    const { identity, close } = openDatabase({ DATABASE_URL: TEST_DATABASE_URL });
-    dbClose = close;
-    const user = await identity.createStudent({
-      email: `build-smoke-${randomBytes(4).toString('hex')}@example.test`,
-      emailVerifiedAt: null,
-      name: 'Build Smoke',
     });
-    await identity.createSession(SID, user.id, new Date(Date.now() + 86_400_000));
-
-    const port = await freePort();
-    origin = `http://127.0.0.1:${port}`;
-    child = spawn(process.execPath, [serverJs], {
-      // Not REPO_ROOT: the relocated copy's own root, matching `apps/web/Dockerfile`'s
-      // `WORKDIR /app` -- the server's cwd is part of what proves the worker resolved from the
-      // copy, not from this checkout (see `packages/content/src/safeRegexGuard.ts`'s `byCwd`).
-      cwd: tmpRoot,
-      env: {
-        ...process.env,
-        NODE_ENV: 'production',
-        PORT: String(port),
-        HOSTNAME: '127.0.0.1',
-        DATABASE_URL: TEST_DATABASE_URL,
-        AUTH_SECRET,
-        AUTH_URL: origin,
-        // Never used: no OAuth call is made (a real DB session bypasses sign-in entirely). Only
-        // present because readAuthEnv requires at least one configured sign-in provider to start.
-        AUTH_GOOGLE_ID: 'build-smoke-unused',
-        AUTH_GOOGLE_SECRET: 'build-smoke-unused',
-        EDMATE_CONTENT_DIR: FIXTURE_CONTENT,
-        // Matches `apps/web/Dockerfile`: the bundled server chunk cannot locate the safe-regex
-        // worker through its own baked (and here, deliberately hidden) build-machine path, and
-        // `process.cwd()` is no help either -- the standalone `server.js` chdirs to its own
-        // directory before anything else runs (`safeRegexGuard.ts`). Point it at the copy.
-        EDMATE_CONTENT_WORKER_DIR: join(tmpRoot, 'packages', 'content', 'dist'),
-      },
-    });
-    // A spawn failure (ENOENT, EACCES, ...) fires an 'error' event; with no listener Node treats
-    // it as an uncaught exception and crashes the whole vitest process instead of failing this
-    // test cleanly (typescript-reviewer, fix round). `waitForHealth` already times out and fails
-    // the test on its own if the process never comes up for any other reason.
-    let spawnError: Error | undefined;
-    child.on('error', (err) => {
-      spawnError = err;
-    });
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk.toString('utf8')));
-    child.stdout.on('data', () => undefined); // drained, not asserted on
-    try {
-      await waitForHealth(origin, 20_000);
-    } catch (error) {
-      throw spawnError ?? error;
-    }
-    if (spawnError) throw spawnError;
-  });
-
-  afterAll(async () => {
-    if (child && !child.killed) {
-      child.kill();
-      await new Promise((resolve) => child?.once('exit', resolve));
-    }
-    if (dbClose) await dbClose();
-    if (hidBuildTreeDist) renameSync(HIDDEN_CONTENT_DIST, BUILD_TREE_CONTENT_DIST);
-    if (tmpRoot) rmSync(tmpRoot, { recursive: true, force: true });
-  });
-
-  it('from the relocated copy: serves IN (safe patterns), refuses ZZ (one unsafe pattern), logs it once', async () => {
-    const res = await fetch(`${origin}/welcome/age`, {
-      headers: { cookie: `${SESSION_COOKIE}=${SID}` },
-      redirect: 'manual',
-    });
-    expect(res.status).toBe(200); // a redirect here would mean the session, not the content, broke
-    const body = await res.text();
-    // 'IN' only appears if the worker loaded *from the relocated copy* and reported its real
-    // patterns safe. If relocation had broken the worker (the bug this test guards against), the
-    // production fail-closed path (safeRegexGuard.ts) would report every pattern unsafe, 'IN'
-    // included, and this would fail here -- not just on the 'ZZ' assertions below.
-    expect(body).toContain('value="IN"');
-    expect(body).not.toContain('value="ZZ"');
-
-    // The refusal is logged once the first request loads content (lazy init, src/auth/index.ts);
-    // give the child process's stdio pipe a moment to flush before reading it back.
-    const until = Date.now() + 5_000;
-    let log = stderrChunks.join('');
-    while (!log.includes('ZZ.yaml') && Date.now() < until) {
-      await new Promise((r) => setTimeout(r, 100));
-      log = stderrChunks.join('');
-    }
-    const lines = log.split('\n').filter((l) => l.includes('refused locale pack'));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('ZZ.yaml');
-    expect(lines[0]).toContain('nests a quantifier inside a repeated group');
-    // Not the generic ceiling message, and not the production fail-closed message: proves the
-    // worker answered from the relocated copy, rather than every check timing out, or the worker
-    // file being missing altogether, and reporting everything unsafe alike (this bug's symptom,
-    // and the relocation bug's symptom, look the same from here).
-    expect(lines[0]).not.toContain('exceeded the');
-    expect(lines[0]).not.toContain('failing closed');
-  });
-});
+  },
+);
