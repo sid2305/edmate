@@ -80,7 +80,10 @@ human (blockers.md)**. It does not block this PR: the cap lift is safe to merge 
 licence the built image turns out to have.
 
 ## Decisions
-None.
+
+### 27 Oct 2026 · 11.4i keep the unreachable mediaTooLarge arm · decided by lead · risk: low
+- Decided: leave the `!type.splittable` arm and `MSG.mediaTooLarge` in routes.ts (apps/web/src/studio/routes.ts) as they are, although no current upload type reaches them.
+- Why: the plan keeps them so a future media type the worker cannot split still gets the right refusal. Removing them now saves a few lines but loses that guard.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` -- green (34/34 tasks
