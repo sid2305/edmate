@@ -130,3 +130,6 @@ Status: DONE when both phases are green (typecheck/lint/test for `@edmate/db` an
 the new leak case and EXPLAIN test pass, and the risk-paths.txt line is in place. Status: PARTIAL
 past ~60 tool calls in a phase with work still open, if 9.6f hasn't merged yet when Phase A would
 start, or if the cleanup fix turns up a table this plan didn't account for.
+
+## Lead decision (26 Oct 2026)
+The lead accepts the planner's recommendation: no pending-only guard on the staff POST. Shipped, tested behaviour (8.1, 9.3e) already lets staff reject a verified teacher and re-verify, and a review LOW's default does not override it. Reverting a decision to `pending` (revoke) stays a future task. The builder logs this in the handoff `## Decisions` as `decided by lead · risk: high`. Start Phase A only after 9.6f merges (migration 0035).
