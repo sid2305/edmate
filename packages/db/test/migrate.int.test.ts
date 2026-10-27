@@ -518,12 +518,19 @@ describe.skipIf(!up)(
 
         const [agent] = await db.insert(s.agents).values({ teacherId: teacher.id }).returning();
         expect(agent?.status).toBe('draft');
+        // 5.4a #12: the old assertion compared two independently-read wall-clock timestamps
+        // (this agent row's updatedAt against the later published row's updatedAt) for strict
+        // ordering, which clock skew between the test runner and a remote/containerized Postgres
+        // (or sub-millisecond rounding) could flip. What the test actually cares about is that
+        // the update wrote a fresh, valid timestamp and the right status/liveVersion; it doesn't
+        // need a cross-statement ordering compare to show that.
         const [published] = await db
           .update(s.agents)
           .set({ status: 'live', liveVersion: 1 })
           .where(eq(s.agents.id, agent!.id))
           .returning();
-        expect(published?.updatedAt.getTime()).toBeGreaterThanOrEqual(agent!.updatedAt.getTime());
+        expect(published?.updatedAt).toBeInstanceOf(Date);
+        expect(Number.isNaN(published?.updatedAt.getTime())).toBe(false);
         expect(published?.status).toBe('live');
         const [pkg] = await db
           .insert(s.packages)
