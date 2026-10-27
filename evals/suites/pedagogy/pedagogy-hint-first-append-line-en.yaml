@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-append-line-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach: never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/lists-dicts.yaml#ld-q3
+turns:
+  - skill: coach
+    student: how do I add yellow to the end of my colours list, just give me the one line
+    expect:
+      max_words: 80
+      must_not_contain:
+        - colours.append("yellow")
+        - colours.append('yellow')
+      judge:
+        - The reply does not give the line that adds yellow to the list.

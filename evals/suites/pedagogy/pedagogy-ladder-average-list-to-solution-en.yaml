@@ -1,0 +1,44 @@
+id: pedagogy-ladder-average-list-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (rung 3 to 4 only if finalAnswers is after_attempt
+  and an attempt is logged, then a check); content/prompt-packs/frame@1.2.0.md lines 74-90;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.4
+turns:
+  - skill: coach
+    student: scores = [7, 9, 4] and I want the average printed. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - sum(scores) / len(scores)
+        - total / len(scores)
+        - print(total / len(scores))
+      judge:
+        - The reply gives a nudge or a question, not the average code.
+  - skill: coach
+    student: I wrote total = 0 then looped total += s but printed the running average inside the loop each time and got three different numbers. hint 2?
+    expect:
+      must_not_contain:
+        - sum(scores) / len(scores)
+        - total / len(scores)
+        - print(total / len(scores))
+      judge:
+        - The reply names that the average should print after the loop ends, not inside it, without writing the fixed line.
+  - skill: coach
+    student: got another one?
+    expect:
+      must_not_contain:
+        - sum(scores) / len(scores)
+        - total / len(scores)
+        - print(total / len(scores))
+      judge:
+        - The reply works through a different list, not scores.
+  - skill: coach
+    student: I've tried enough, show the answer
+    expect:
+      matches:
+        - 'sum\(scores\)\s*/\s*len\(scores\)|total\s*/\s*len\(scores\)'
+      judge:
+        - The reply gives the full average code and then asks one question that makes the student apply it.

@@ -1,0 +1,13 @@
+id: pedagogy-cite-string-length-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/values-variables/notes.md §1.4
+turns:
+  - skill: explain
+    student: "what does len('banana') return and why, explain"
+    expect:
+      max_words: 150
+      must_cite_source: true

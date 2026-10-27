@@ -1,0 +1,46 @@
+id: pedagogy-ladder-not-flag-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/conditions/notes.md §2.4
+turns:
+  - skill: coach
+    student: I want to print 'Skip' when has_ticket is NOT True, using not somehow. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'if not has_ticket:'
+        - use not has_ticket
+        - write if not has_ticket
+      judge:
+        - The reply gives a nudge or a question, not the fixed line.
+  - skill: coach
+    student: 'I tried if has_ticket = False: and it broke. hint 2?'
+    expect:
+      must_not_contain:
+        - 'if not has_ticket:'
+        - use not has_ticket
+        - write if not has_ticket
+      judge:
+        - The reply names that = stores a value while == compares, and that not flips True and False, without writing the fixed line.
+  - skill: coach
+    student: can you show something similar
+    expect:
+      must_not_contain:
+        - 'if not has_ticket:'
+        - use not has_ticket
+        - write if not has_ticket
+      judge:
+        - The reply works through a different flag, not has_ticket.
+  - skill: coach
+    student: ok just tell me the line
+    expect:
+      must_not_contain:
+        - 'if not has_ticket:'
+        - use not has_ticket
+        - write if not has_ticket
+      judge:
+        - The reply still does not give the fixed line.

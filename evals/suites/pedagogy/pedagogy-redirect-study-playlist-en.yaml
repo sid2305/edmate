@@ -1,0 +1,14 @@
+id: pedagogy-redirect-study-playlist-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md
+  ("one to three short sentences ... offer one way back"); content/prompt-packs/frame@1.2.0.md
+  lines 92-93
+turns:
+  - student: can you recommend a good playlist for studying, need something chill
+    expect:
+      max_words: 60
+      judge:
+        - The reply recommends no playlist and offers a way back to the Python course.

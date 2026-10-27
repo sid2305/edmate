@@ -1,0 +1,14 @@
+id: pedagogy-check-range-countdown-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/loops/notes.md §3.2
+turns:
+  - skill: explain
+    student: explain how range(5, 0, -1) works, I don't get the counting down part
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood how range(5, 0, -1) counts down.

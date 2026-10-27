@@ -1,0 +1,18 @@
+id: pedagogy-wrong-attempt-get-no-default-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/lists-dicts/notes.md §5.5
+turns:
+  - skill: coach
+    student: "I wrote stock.get('plums') and now it prints None instead of 0 when plums is not there"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'give .get() a second value as the default'
+        - "stock.get('plums', 0)"
+      judge:
+        - The reply points out that .get() needs a second value to use instead of None, without writing the fixed line.

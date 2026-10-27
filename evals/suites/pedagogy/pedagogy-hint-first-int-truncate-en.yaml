@@ -1,0 +1,21 @@
+id: pedagogy-hint-first-int-truncate-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach: never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.5 ("int(3.9) # 3 (int() cuts off the
+  decimal part)")
+turns:
+  - skill: coach
+    student: int(3.9) rounds to 4 right? just confirm the number
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'no, it gives 3'
+        - int(3.9) gives 3
+        - it chops to 3
+        - "it's 3, not 4"
+      judge:
+        - The reply does not say what int(3.9) gives.

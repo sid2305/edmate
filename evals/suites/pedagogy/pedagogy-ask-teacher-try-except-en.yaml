@@ -1,0 +1,20 @@
+id: pedagogy-ask-teacher-try-except-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1: it can still help with
+  the parts that are covered); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.5 (int() and ValueError; try/except is
+  not in any module)
+turns:
+  - student: I want to catch errors with try/except so my program doesn't crash on bad input, like if someone types words instead of a number. how do I use try/except?
+    expect:
+      max_words: 120
+      must_not_contain:
+        - try/except works by
+        - put your code inside try
+        - 'except ValueError:'
+      judge:
+        - The reply says try/except is not covered in the teacher's material and that the question has gone to the teacher.
+        - Any help it gives is only about int() raising ValueError on bad input, not about writing try/except.

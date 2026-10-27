@@ -1,0 +1,15 @@
+id: pedagogy-one-question-concat-len-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560
+  (pedagogy suite: one question at a time); content/prompt-packs/coach@1.0.0.md (under 80 words);
+  content/demo-teacher/modules/values-variables/notes.md §1.4
+turns:
+  - skill: coach
+    student: "coach me through building 'Hello' + ' ' + 'world' and then counting its letters with len(), one step at a time"
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

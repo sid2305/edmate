@@ -1,0 +1,18 @@
+id: pedagogy-wrong-attempt-len-plus-one-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/values-variables/notes.md §1.4
+turns:
+  - skill: coach
+    student: "I wrote len('kiwi' + 1) trying to count the letters then add one, but it crashes"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'len() only takes one thing, the text itself'
+        - "len('kiwi') + 1"
+      judge:
+        - The reply points out that len() should be called on the text alone, without writing the fixed line.

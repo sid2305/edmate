@@ -1,0 +1,14 @@
+id: pedagogy-cite-plus-equals-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/values-variables/notes.md §1.2 ("x += 3 means the same as
+  x = x + 3")
+turns:
+  - skill: explain
+    student: is x += 3 really the exact same as x = x + 3? explain
+    expect:
+      max_words: 150
+      must_cite_source: true

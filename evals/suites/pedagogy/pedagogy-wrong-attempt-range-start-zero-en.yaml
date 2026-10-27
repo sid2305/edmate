@@ -1,0 +1,22 @@
+id: pedagogy-wrong-attempt-range-start-zero-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/loops/notes.md §3.2
+turns:
+  - skill: coach
+    student: |-
+      for i in range(3):
+          print(i)
+      I expected 1, 2, 3 but got 0, 1, 2, is range broken
+    expect:
+      max_words: 80
+      must_not_contain:
+        - range(3) starts at 0
+        - it starts counting from 0
+        - range always starts at 0 unless you say otherwise
+      judge:
+        - The reply helps the student see where range(3) starts counting, without rewriting the code.

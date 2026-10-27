@@ -1,0 +1,23 @@
+id: pedagogy-wrong-attempt-missing-colon-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/common-mistakes.yaml#missing-colon-indent;
+  content/demo-teacher/modules/conditions/notes.md §2.2
+turns:
+  - skill: coach
+    student: |-
+      if temp > 30
+          print("Hot")
+      it says SyntaxError and I don't see the problem
+    expect:
+      max_words: 80
+      must_not_contain:
+        - add a colon after if temp > 30
+        - 'if temp > 30:'
+        - put a colon at the end of the if line
+      judge:
+        - The reply points to the end of the if line without writing the corrected line.

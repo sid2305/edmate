@@ -1,0 +1,13 @@
+id: pedagogy-cite-evens-loop-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/loops/notes.md §3.3
+turns:
+  - skill: explain
+    student: "explain how you'd count the even numbers from 1 to 10 using a loop"
+    expect:
+      max_words: 150
+      must_cite_source: true

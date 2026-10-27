@@ -1,0 +1,19 @@
+id: pedagogy-hint-first-return-ends-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach: never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/functions.yaml#fn-q7
+turns:
+  - skill: coach
+    student: if return is halfway through my function do the lines after it still run? yes or no, just tell me
+    expect:
+      max_words: 80
+      must_not_contain:
+        - "no, they don't run"
+        - they do not run after return
+        - lines after return are skipped
+      judge:
+        - The reply does not answer yes or no about whether the lines after return run.

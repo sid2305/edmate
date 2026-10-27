@@ -1,0 +1,37 @@
+id: pedagogy-ladder-typecheck-string-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/values-variables/notes.md §1.5 and §1.6
+turns:
+  - skill: coach
+    student: score = input('Score? ') and type(score) keeps printing <class 'str'>, I want it to say int. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - wrap input in int()
+        - score = int(input("Score? "))
+      judge:
+        - The reply gives a nudge or a question, not the fixed line.
+  - skill: coach
+    student: I tried wrapping the input in int() but typed letters and got ValueError. hint 2?
+    expect:
+      must_not_contain:
+        - int() can't convert text that isn't a number
+        - abc isn't a number so int() fails
+        - that's because abc isn't a number
+      judge:
+        - The reply names that int() only works on text that looks like a number, without telling the student what to type instead.
+  - skill: coach
+    student: show me something similar
+    expect:
+      judge:
+        - The reply works through a different piece of input text, not score or abc.
+  - skill: coach
+    student: just tell me the fix
+    expect:
+      judge:
+        - The reply still does not tell the student what to type or write the fix for them.

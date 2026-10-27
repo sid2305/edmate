@@ -1,0 +1,19 @@
+id: pedagogy-ask-teacher-split-words-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1: it can still help with
+  the parts that are covered); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.4 (strings and len(); .split() is not
+  in any module)
+turns:
+  - student: how do I break a sentence into separate words, like sentence.split() or something?
+    expect:
+      max_words: 120
+      must_not_contain:
+        - 'sentence.split() breaks text into a list of words'
+        - 'use .split() to break it into words'
+      judge:
+        - The reply says .split() is not covered in the teacher's material and that the question has gone to the teacher.
+        - Any help it gives is only about strings or len(), not about writing .split().
