@@ -14,7 +14,9 @@
 //    - `self_harm` escalates with a distress alert, never blocks (lead answer 1); no safety event.
 //    - anything else records a safety event (awaited: a throw fails the chain, still refused),
 //      leaves the code for preGuard's reply, and blocks with the code as the reason (no text).
-//      `harm_to_others` also leaves a misuse alert for the runner to raise (lead answer 2).
+//      `harm_to_others`, `threat` and `weapons` also leave a critical misuse alert for the runner
+//      to raise (lead answer 2; B-50 and its lead amendment: threats to hurt others and
+//      weapons-to-school are critical too).
 // 5. Otherwise a classifier throw, timeout, cancel or bad answer propagates: the chain fails closed,
 //    and no safety event is written (an ambiguous hit alone never records one).
 import {
@@ -40,14 +42,18 @@ import {
 
 const NAME = 'moderationIn';
 
+/** Codes that leave a critical misuse alert for the runner to raise (B-50 and its amendment). */
+const MISUSE_CODES: readonly ModerationCode[] = ['harm_to_others', 'threat', 'weapons'];
+
 /**
- * A SafetyAlert about this turn: `kind` distress (self-harm) or misuse (harm to others). The
+ * A SafetyAlert about this turn: `kind` distress (self-harm, level `alert`) or misuse
+ * (harm_to_others, threat or weapons, level `critical` — B-50 and its lead amendment). The
  * excerpt is at most DISTRESS_EXCERPT_MAX code points of the scrubbed text, as in distressDetect.
  */
 export function preGuardAlert(text: string, ctx: PreGuardCtx, kind: Alert['kind']): SafetyAlert {
   return SafetyAlertSchema.parse({
     id: ctx.ids.next('alert'),
-    level: 'alert',
+    level: kind === 'misuse' ? 'critical' : 'alert',
     kind,
     studentId: ctx.entitlement.studentId,
     teacherId: ctx.entitlement.teacherId,
@@ -82,7 +88,7 @@ async function verdict(
   });
   ctx.blocks.set(
     NAME,
-    code === 'harm_to_others' ? { code, alert: preGuardAlert(text, ctx, 'misuse') } : { code },
+    MISUSE_CODES.includes(code) ? { code, alert: preGuardAlert(text, ctx, 'misuse') } : { code },
   );
   return { result: { ok: false, action: 'block', reason: code }, usage: [] };
 }
@@ -121,7 +127,10 @@ export function createModerationInGuard(): Guard<PreGuardCtx> {
           ModerationVerdictSchema,
         );
       } catch (error) {
-        if (!(error instanceof SafetyGuardCancelledError) && (await jailbreakRuleBlocks(text, ctx))) {
+        if (
+          !(error instanceof SafetyGuardCancelledError) &&
+          (await jailbreakRuleBlocks(text, ctx))
+        ) {
           return { result: { ok: true }, usage: [] };
         }
         throw error;

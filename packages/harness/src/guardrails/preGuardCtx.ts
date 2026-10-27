@@ -14,8 +14,9 @@ import type { Clock, IdSource } from '../pipeline/clock.js';
 
 /**
  * What a blocking pre guard leaves for preGuard (task 4.4): the code that picks the student's
- * reply and, for `harm_to_others`, the misuse alert to raise. The chain keeps no reason, so this is
- * how the code reaches the step. Never text beyond the alert's redacted excerpt.
+ * reply and, for `harm_to_others`, `threat` and `weapons`, the critical misuse alert to raise
+ * (B-50 and its lead amendment, 7.2m). The chain keeps no reason, so this is how the code reaches
+ * the step. Never text beyond the alert's redacted excerpt.
  */
 export interface PreGuardBlock {
   code: Exclude<SafetyEventCode, 'self_harm'>;
