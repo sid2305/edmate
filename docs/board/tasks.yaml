@@ -3362,7 +3362,8 @@ tasks:
 - id: 6.5c
   milestone: M13
   title: '6.5a plan Q3: the worker''s JOB.evidence processor (apps/worker/src/commit/processors.ts) folds mastery in a second, unlocked transaction after evidenceEvents.append; move it onto appendAndFold
-    so the append and the fold share the profile-row lock, as 6.2 did for profileStoreFor.applyEvidence'
+    so the append and the fold share the profile-row lock, as 6.2 did for profileStoreFor.applyEvidence; plus 6.5a review MEDIUM/LOWs: the processor reports an event dropped by the reset watermark as already_written
+    (tell a watermark drop apart from a replayed duplicate, and fix the processors.ts comment); a debug log when learner.ts dropBeforeReset drops events or sessions.end skips a stale summary'
   accept: a concurrent test shows two evidence jobs for one learner fold both events; worker and db gates green
   deps:
   - 6.5a
@@ -5033,7 +5034,8 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 13.regatea
   milestone: M13
-  title: '13.regate review MEDIUM: a partial index on eval_runs for the regate sweep''s last passed, published gate-suite run per agent (database-reviewer, security-reviewer), with a migration and EXPLAIN evidence'
+  title: '13.regate review MEDIUM: a partial index on eval_runs for the regate sweep''s last passed, published gate-suite run per agent (database-reviewer, security-reviewer), with a migration and EXPLAIN
+    evidence'
   accept: a migration adds the index; the sweep's candidate query uses it (EXPLAIN in the handoff); db typecheck, lint and test green
   deps:
   - 13.regate
@@ -7108,9 +7110,9 @@ tasks:
   deps:
   - 8.2h
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2i-ingest-followups
+  model: plan:sonnet build:sonnet
 - id: 11.2c
   milestone: M13
   title: '11.2a review LOW: a composite index on class_questions (live_class_id, created_at, id) for the teacher queue scan once volumes grow'
