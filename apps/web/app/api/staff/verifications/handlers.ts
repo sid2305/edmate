@@ -20,6 +20,7 @@ import {
   RepositoryError,
   SUBJECT_HISTORY_MAX_LIMIT,
   type Repositories,
+  type StaffTakedownRow,
   type TeacherVerificationQueueRow,
 } from '@edmate/db';
 import type { NextRequest } from 'next/server';
@@ -129,11 +130,15 @@ export function toLookupItem(
  * in parallel -- the queue is capped at 50, the lookup is always one row; no batched audit read
  * exists or is needed at this scale). `list`, `lookup` and `page.tsx`'s server-rendered first paint
  * all share this helper, so they can never drift from each other.
+ *
+ * Task 12.3g: a caller that already read `listActiveForStaff` for this request (the
+ * repeat-infringers list) passes it as `activeList`, so this never reads it twice per request.
  */
 export async function enrichQueueRows(
   repos: Pick<Repositories, 'takedowns' | 'audit'>,
   by: string,
   rows: TeacherVerificationQueueRow[],
+  activeList?: StaffTakedownRow[],
 ): Promise<
   (TeacherVerificationQueueRow & {
     activeTakedowns: TakedownSummary[];
@@ -141,7 +146,7 @@ export async function enrichQueueRows(
     subjectHistory: SubjectChange[];
   })[]
 > {
-  const active = await repos.takedowns.listActiveForStaff(by);
+  const active = activeList ?? (await repos.takedowns.listActiveForStaff(by));
   const byTeacher = new Map<string, TakedownSummary[]>();
   for (const t of active) {
     if (t.teacherId === null) continue;

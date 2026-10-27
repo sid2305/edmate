@@ -200,6 +200,68 @@ describe('listRepeatInfringersForStaff', () => {
     expect(list).toEqual([]);
   });
 
+  it('a takedown exactly on the window boundary (365 days before now) counts', async () => {
+    const m = memory();
+    m.addProfile('tch_a', 'asha-math');
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    m.addTakedown({
+      teacherId: 'tch_a',
+      teacherSlug: 'asha-math',
+      createdAt: new Date(NOW - REPEAT_INFRINGER_WINDOW_DAYS * DAY_MS).toISOString(),
+    });
+    const list = await listRepeatInfringersForStaff(
+      {
+        takedowns: m.takedowns,
+        teacherProfiles: m.teacherProfiles,
+        audit: m.audit,
+      } as unknown as Pick<Repositories, 'takedowns' | 'teacherProfiles' | 'audit'>,
+      'stf_1',
+      NOW,
+    );
+    expect(list.map((t) => t.slug)).toEqual(['asha-math']);
+  });
+
+  it('a takedown one millisecond older than the window boundary does not count', async () => {
+    const m = memory();
+    m.addProfile('tch_a', 'asha-math');
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    m.addTakedown({
+      teacherId: 'tch_a',
+      teacherSlug: 'asha-math',
+      createdAt: new Date(NOW - REPEAT_INFRINGER_WINDOW_DAYS * DAY_MS - 1).toISOString(),
+    });
+    const list = await listRepeatInfringersForStaff(
+      {
+        takedowns: m.takedowns,
+        teacherProfiles: m.teacherProfiles,
+        audit: m.audit,
+      } as unknown as Pick<Repositories, 'takedowns' | 'teacherProfiles' | 'audit'>,
+      'stf_1',
+      NOW,
+    );
+    expect(list).toEqual([]);
+  });
+
+  it('reads listActiveForStaff once per request, even though enrichQueueRows also uses it', async () => {
+    const m = memory();
+    m.addProfile('tch_a', 'asha-math');
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    m.addTakedown({ teacherId: 'tch_a', teacherSlug: 'asha-math' });
+    await listRepeatInfringersForStaff(
+      {
+        takedowns: m.takedowns,
+        teacherProfiles: m.teacherProfiles,
+        audit: m.audit,
+      } as unknown as Pick<Repositories, 'takedowns' | 'teacherProfiles' | 'audit'>,
+      'stf_1',
+      NOW,
+    );
+    expect(m.takedowns.listActiveForStaff).toHaveBeenCalledTimes(1);
+  });
+
   it('a non-copyright category active takedown does not count', async () => {
     const m = memory();
     m.addProfile('tch_a', 'asha-math');
