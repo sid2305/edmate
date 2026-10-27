@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2s budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 49 tool calls (harness count) against a plan budget of 20.
+- Why: The drift check ran drizzle-kit twice and had to clean up the generated files in between, which the lead's estimate missed. Future snapshot fixes should plan about 40.
+
+---
+
 ### 27 Oct 2026 · 8.2q markProcessingIfStorageKey and the widened sweep filter · decided by builder · risk: high
 - Decided: `packages/db/src/repositories/chunks.ts` gains a `markProcessingIfStorageKey`
   compare-and-set read-then-write (same shape and risk as 8.2i's `failIfStorageKey`, no new access
