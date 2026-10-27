@@ -10,6 +10,56 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 12.2i apps/web/app/staff/reports/client.ts change · decided by builder · risk: high
+- Decided: `client.ts` is in `apps/web/app/staff/**`, a risky path per `risk-paths.txt`; this PR
+  needs security-reviewer (named group) plus the task's own named reviewer set
+  (typescript-reviewer, code-reviewer, silent-failure-hunter), per rule 6.
+- Why: the plan names this risk group explicitly for Phase B; logging it here so the merge gate
+  can require all four reviewers and `review.md` names them. (Phase A's own risk: high entry
+  below covers `packages/db/src/repositories/**`; both groups need the same four reviewers, so one
+  combined review can cover the whole PR.)
+
+No other decision beyond what the plan already made (Q5 followed as recommended: a type-only
+import of `@edmate/db` into the two client-bundled files is zero-runtime-cost).
+
+---
+
+### 27 Oct 2026 · 12.2i packages/db/src/repositories changes · decided by builder · risk: high
+- Decided: the cycle fix touches `packages/db/src/repositories/**` (chunks.ts, takedowns.ts,
+  reports.ts, new takedown-predicate.ts), a risky path per `risk-paths.txt`; this PR needs
+  security-reviewer (named group) plus the task's own named reviewer set (typescript-reviewer,
+  code-reviewer, silent-failure-hunter), per rule 6.
+- Why: the plan names this risk group explicitly and it is unchanged in Phase A; logging it here
+  so the merge gate can require all four reviewers and `review.md` names them.
+
+No other decision beyond what the plan already made (Q1/Q2 followed as recommended: module name
+`takedown-predicate.ts`; `reports.ts` imports it directly rather than through `takedowns.ts`'s
+re-export).
+
+---
+
+### 27 Oct 2026 · 12.2i approve the import-cycle fix on risky paths · decided by lead · risk: high
+- Decided: merge 12.2i. It touches packages/db/src/repositories/** (a new leaf module, takedown-predicate.ts, that chunks.ts, takedowns.ts and reports.ts now import the takedown predicate from) and apps/web/app/staff/reports/client.ts (a type-only import plus compile-time category guards). security-reviewer, typescript-reviewer, code-reviewer and silent-failure-hunter all approved; the takedown SQL is unchanged and every exported name stays where it was.
+- Why: the cycle made the db package crash with a TDZ error when reports.ts or takedowns.ts was imported first; the fix moves code without changing behaviour, and the new import-order tests catch the bug.
+
+---
+
+### 27 Oct 2026 · 12.2i budget overrun accepted · decided by lead · risk: low
+- Decided: accept 127 tool calls (harness count: Phase A 58, Phase B 69) against a budget of 90 (1.4x). The builders reported 26 and 32.
+- Why: both phases finished green on the first pass with no fix round; the extra calls went on full dependents gate runs on a loaded machine.
+
+---
+
+### 27 Oct 2026 · 12.2i stale comment in the reports handler left as is · decided by lead · risk: low
+- Decided: leave the CATEGORY_EXCERPT comment in apps/web/app/api/sessions/[id]/reports/handlers.ts (it says "the route's own category enum", which now comes from @edmate/db) for the next change that touches the file.
+- Why: wording only, no behaviour change; not worth a fix round.
+
+---
+
+### 27 Oct 2026 · 6.3a parked behind a new task 6.3c · decided by lead · risk: medium
+- Decided: 6.3a (teacher-approved mistake tags) goes back to todo and now depends on a new task, 6.3c, which wires classifyMistakeTags and learnerRepo.applyMistakes into graded practice turns after 6.4a. The 6.3a plan stays in docs/tasks/6.3a/plan.md for later. Also added 0.20f for the harness timing tests that still flake after 0.20d (91.43 against 64 on PR #369).
+- Why: the 6.3a planner found that nothing in production calls the classifier or applyMistakes, so a proposals table would have no producer. 6.3c and 6.4a both hook into graded practice answers, so 6.3c follows 6.4a.
+
 ### 27 Oct 2026 · 6.3b prettier reformatted the whole of `profile-store.int.test.ts` · decided by builder · risk: low
 - Decided: ran `prettier --write` on the file (as the gate requires `prettier --check` to pass)
   rather than hand-formatting only the new test bodies; this rewrote every existing `it(...)`
