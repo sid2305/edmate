@@ -144,6 +144,22 @@ three phases are complete.
   conditions warn against. The net effect for the accept line is the same either way: a signing
   failure leaves no visible `uploading` row.
 
+### 27 Oct 2026 · 8.2a approve the merge (repositories and storage paths) · decided by lead · risk: high
+- Decided: merge 8.2a. It touches the risky path packages/db/src/repositories/** (a read-only modules.list(), scoped like ids()); security-reviewer and database-reviewer ran and found nothing above MEDIUM, and code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+- Why: storage now fails closed in production, signing happens before any write on replace, a signing failure on create removes its row, and the uploads page stops updating after unmount; every finding is MEDIUM or LOW.
+
+### 27 Oct 2026 · 8.2a signing-failure orphan and onAddLink guard deferred to 8.2q · decided by lead · risk: low
+- Decided: defer two MEDIUMs to 8.2q: (1) apps/web/src/studio/routes.ts create: if the signing fails and the cleanup delete also fails, an uploading row survives, and the ingest sweep only scans processing rows; 8.2q makes the sweep reconcile stale uploading rows and tests the cleanup-failure branch; (2) apps/web/app/teacher/uploads/UploadsView.tsx onAddLink lacks the unmount guard the other handlers got. S3_REGION joining the production-required list also goes to 8.2q.
+- Why: (1) needs two failures in a row and leaves a row with no file and no data, which the teacher can delete; 8.2q already owns the upload-centre retry and cleanup work. (2) is a no-op state update after unmount in React 19, not a user-visible bug.
+
+### 27 Oct 2026 · 8.2a two LOWs left as is · decided by lead · risk: low
+- Decided: wontfix (1) the production storage-config check duplicated in apps/web/src/storage/presign.ts and apps/worker/src/storage/roundtrip.ts, and (2) no row limit on packages/db/src/repositories/modules.ts list().
+- Why: (1) the two apps don't share a storage package, and a shared helper in packages/contracts would need an ADR for a few lines; both copies have their own tests. (2) list() has the same bound as the existing ids() (one course per teacher in the MVP); both get a cap together if that changes.
+
+### 27 Oct 2026 · 8.2a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 182 tool calls by harness count (Phase A 64, Phases B and C 118; the agents reported 32, 19 and 42) against a plan budget of 110.
+- Why: Phase C added a db repository method with an integration test and a full dependents gate; the work is done and the reviewers approved.
+
 ## Gate
 
 - `export PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH && corepack pnpm turbo run typecheck lint test --filter=...@edmate/worker --filter=@edmate/web...`
