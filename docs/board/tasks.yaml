@@ -9341,9 +9341,9 @@ tasks:
   accept: plain next build succeeds and build-smoke passes on the Turbopack build, or the reason to stay on --webpack is logged
   deps:
   - 1.7b
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/1.7e-turbopack
+  model: plan:sonnet build:sonnet
 - id: 1.7a
   milestone: M13
   title: 'Age and consent follow-ups (1.7 review MEDIUM/LOW): content validate flags minAge outside 13-18; refuse an unsigned privacy notice in production (the signed flag is unused); a default-deny clearance
