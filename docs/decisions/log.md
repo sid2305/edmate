@@ -10,6 +10,54 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 1.7d budget overrun (149 vs 40) · decided by lead · risk: low
+- Decided: accept 149 tool calls against the 40 budget.
+- Why: the gate includes a full production build plus build-smoke, which the builder ran several times while making the cleanup reliable; the change stayed inside the plan's files and all three reviewers approved (one MEDIUM deferred). Future build-smoke tasks get a budget of about 80.
+
+---
+
+### 26 Oct 2026 · 1.7d review MEDIUM deferred to 1.7i, two LOWs wontfix · decided by lead · risk: low
+- Decided: the code-reviewer MEDIUM (apps/web/test/build-smoke.test.ts assigns eraseStudent only after createSession succeeds, so a createSession failure leaks the student row) goes to board task 1.7i. Wontfix: apps/web/src/auth/age.ts does not strip bidi-override characters (out of scope: the strip prevents log-line splitting, not visual spoofing); apps/web/test/build-smoke.test.ts's nested try/finally in afterAll can let a later cleanup error replace an earlier one (accepted so the restore steps always run).
+- Why: fix only CRITICAL/HIGH before merge; the LOWs are informational, by the reviewers' own account.
+
+---
+
+### 26 Oct 2026 · 1.7d cleanup erases the student through recordAgeAnswer, not a new delete method · decided by builder · risk: low
+- Decided: `IdentityStore` has no direct "delete this student" method (by design — `anonymise`
+  only clears fields, it never deletes the row). The build-smoke test's `afterAll` now erases the
+  student and session rows it created by calling `identity.recordAgeAnswer` with a birth year a
+  few years old (under every market's minimum age) for the `global` market, which takes the same
+  `under_age` branch `age.ts` itself uses in production — deleting the sign-in rows and the user
+  row in one transaction. This stays inside the public `@edmate/db` API (`apps/web` cannot import
+  `@edmate/db/internal`, a lint rule enforces that) and matches the plan's "through the same
+  identity/db API the test used to create them; no raw SQL string building."
+- Why: no dedicated delete method exists, and adding one to `@edmate/db` is out of scope for a
+  test-hardening task; the age-gate's own erase path already does exactly this, with a store-level
+  guarantee (no `noticeVersion` option set here) that the call cannot fail on a version mismatch.
+
+---
+
+### 26 Oct 2026 · 1.7d assembles the fail-closed assertion from the production code's own string · decided by builder · risk: low
+- Decided: the new build-smoke assertion that `log` never contains
+  `'the compiled safe-regex worker is missing in production (failing closed)'` uses the exact
+  string literal from `packages/content/src/safeRegexGuard.ts`'s `unsafeInProduction`, copied by
+  hand rather than imported (that function is not exported).
+- Why: the plan says to use the exact message the code logs today and not change it; copying the
+  literal is the only way to assert on it from a different package's test without exporting a
+  production-only error string purely for test use.
+
+---
+
+### 26 Oct 2026 · 1.7d merge touches apps/web/src/auth/age.ts · decided by builder · risk: high
+- Decided: this PR touches `apps/web/src/auth/**` (a risky path), so the merge needs
+  security-reviewer, code-reviewer and typescript-reviewer named in `review.md`, per the plan's
+  "Risky paths" section and the repo's non-negotiable rule 6.
+- Why: `age.ts` is the age gate's own log-stripping code; a mistake there is a privacy/safety
+  regression (a control character splitting a log line, or stripping too much/too little), so it
+  gets the same reviewer set as any other change to that file.
+
+---
+
 ### 26 Oct 2026 · 13.4g budget overrun (29 vs 20) · decided by lead · risk: low
 - Decided: accept 29 tool calls against the 20 budget (1.45x).
 - Why: a background-task wait and a commit retry; the change itself stayed inside the plan's three files, and all three reviewers approved with no findings.

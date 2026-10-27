@@ -9236,9 +9236,31 @@ tasks:
   accept: each listed item is fixed or closed with a logged reason; an interrupted build-smoke run leaves the checkout usable
   deps:
   - 1.7b
-  status: running
+  status: done
   branch: m13/1.7d-build-smoke-hardening
   model: plan:lead build:sonnet
+  metrics:
+    tool_calls: 376
+    tokens_in: 1310
+    tokens_out: 96839
+    cache_read_tokens: 51507959
+    wall_time_seconds: 3056
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 0
 - id: 1.7i
   milestone: M13
   title: '1.7d review follow-up (code-reviewer MEDIUM): apps/web/test/build-smoke.test.ts assigns eraseStudent only after identity.createSession succeeds, so a createSession failure leaks the student row
