@@ -7971,7 +7971,8 @@ tasks:
   milestone: M13
   title: '8.7m review follow-up: in packages/db/src/repositories/redact-json.ts a rp_<hex40> or other prefixed id, UUID or hex digest followed by one space and then a phone-shaped run is redacted together
     with the phone (PHONE_CANDIDATE extends across the space into the exempt span), so the id''s tail is lost; stop a phone candidate at an exempt span''s boundary so the id survives and the phone is still
-    redacted'
+    redacted; from the 8.7o re-review (typescript-reviewer, LOW after lead triage): redactEmails steps back over a low surrogate without checking the unit before it is a high surrogate, so a lone low surrogate
+    inside a local-part run over-redacts text before it (fails closed); check 0xd800-0xdbff before stepping and add an unpaired-surrogate case to the differential fuzz alphabet'
   accept: '"rp_<hex40> 555-010-0199" keeps the id and redacts the phone; same for a UUID and a hex digest; the differential tests against the old behaviour show no phone run survives; db typecheck, lint
     and test green.'
   deps:
@@ -9277,8 +9278,9 @@ tasks:
   deps:
   - 9.3k
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.3m-subject-history
+  model: plan:sonnet build:sonnet
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
