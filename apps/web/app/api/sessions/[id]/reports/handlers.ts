@@ -34,6 +34,20 @@ const ReportBody = z.strictObject({
   messageId: z.string().min(1).max(200),
   category: z.enum(['harmful', 'inappropriate', 'wrong_information', 'copyright', 'other']),
 });
+type ReportCategory = z.infer<typeof ReportBody.shape.category>;
+
+/**
+ * Task 12.2h: a grammatical excerpt per category for the staff alert inbox. A plain
+ * `${category} reply` template reads as "a inappropriate reply" or "a other reply"; this map is
+ * typed over the route's own category enum so a new category fails typecheck here too.
+ */
+const CATEGORY_EXCERPT: Record<ReportCategory, string> = {
+  harmful: 'a harmful reply',
+  inappropriate: 'an inappropriate reply',
+  wrong_information: 'a reply with wrong information',
+  copyright: 'a reply that may break copyright',
+  other: 'a reply for another reason',
+};
 
 /** The server log the route writes to: an event name and codes, never message text. */
 export interface ServerLog {
@@ -97,7 +111,7 @@ export function createSessionReportsHandlers(backend: SessionReportsBackend): { 
               studentId: scope.studentId,
               teacherId: scope.teacherId,
               sessionId: path.data.id,
-              excerptRedacted: `A student reported a ${body.data.category} reply.`,
+              excerptRedacted: `A student reported ${CATEGORY_EXCERPT[body.data.category]}.`,
               createdAt: new Date().toISOString(),
             });
           } catch (error) {

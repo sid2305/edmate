@@ -2960,9 +2960,9 @@ tasks:
   deps:
   - '6.2'
   risk: risky
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/6.2a-rebuild-batching
+  model: plan:sonnet build:sonnet
 - id: 5.8b
   milestone: M13
   title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
@@ -2974,9 +2974,32 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: running
+  status: done
   branch: m13/5.8b-roleplay-gate-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 963
+    tokens_in: 3272
+    tokens_out: 212207
+    cache_read_tokens: 115235109
+    wall_time_seconds: 479265
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 2
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 1
 - id: 6.3b
   milestone: M13
   title: '6.3 review follow-ups: a concurrent applyMistakes test (Promise.all on one tag, assert the summed count, like 6.2''s race test); cap the patch length and the stored mistakes array; applyMistakes
@@ -9957,7 +9980,9 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/9.3g-staff-lift-followups
 - id: 9.2g
   milestone: M13
   title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students
@@ -10502,17 +10527,62 @@ tasks:
   deps:
   - 12.2f
   risk: risky
-  status: running
+  status: done
   branch: m13/12.2h-report-signal
-  model: plan:lead build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 704
+    tokens_in: 2480
+    tokens_out: 170669
+    cache_read_tokens: 87716121
+    wall_time_seconds: 6495
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        LOW: 3
+        INFO: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 2
+    human_questions: 0
 - id: 5.8f
   milestone: M13
-  title: '5.8b review LOW (typescript-reviewer): packages/harness/src/pedagogy/skills.ts SkillInput has two independent optional fields, rolePlayStep and rolePlayStepPersonaId, so a caller that sets one without the
-    other only fails at run time with an unclear "computed for a different persona" error; join them into one optional field, e.g. rolePlayStepFor: { step, personaId }'
+  title: '5.8b review LOW (typescript-reviewer): packages/harness/src/pedagogy/skills.ts SkillInput has two independent optional fields, rolePlayStep and rolePlayStepPersonaId, so a caller that sets one
+    without the other only fails at run time with an unclear "computed for a different persona" error; join them into one optional field, e.g. rolePlayStepFor: { step, personaId }'
   accept: one optional field carries the role-play step with its persona id; a caller cannot pass one without the other; harness typecheck, lint and test green
   deps:
   - 5.8b
   risk: low
+  status: running
+  branch: m13/5.8f-roleplay-step-field
+  model: plan:lead build:sonnet
+- id: 12.2i
+  milestone: M13
+  title: '12.2h review LOWs: (1) break the import cycle between packages/db/src/repositories/chunks.ts and takedowns.ts (chunks.ts calls notTakenDown at module load; importing reports.ts or takedowns.ts
+    before the barrel throws "Cannot access ''qualified'' before initialization"), e.g. move qualified/notTakenDown into a module with no back-edge to chunks.ts, with a test that imports reports.ts first;
+    (2) the report category list is duplicated in apps/web (app/api/sessions/[id]/reports/handlers.ts, app/staff/reports/client.ts, src/chat/reportMessage.ts) instead of using REPORT_CATEGORIES from @edmate/db,
+    so a new category added only in db does not fail typecheck there (security-reviewer, typescript-reviewer, code-reviewer, silent-failure-hunter)'
+  accept: importing any repositories module directly, in any order, loads without error; every report category list in apps/web derives from one source; db and web typecheck, lint and test green
+  deps:
+  - 12.2h
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 8.2p
+  milestone: M13
+  title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first) has no supporting index, so each 15-minute run seq-scans documents; add a partial index on documents (updated_at, id) WHERE status = ''processing'' when the table grows past pilot scale'
+  accept: an EXPLAIN in an int test (or the migration test) shows the sweep query uses the new index; db typecheck, lint and test green
+  deps:
+  - 8.2i
+  risk: risky
   status: todo
   branch: null
   model: null

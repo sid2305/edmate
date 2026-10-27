@@ -6,7 +6,7 @@ import type { TurnContext } from '@edmate/contracts';
 import { composeSystemPrompt } from '../../pedagogy/compose.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from '../../pedagogy/policy.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
-import { rolePlayControl } from '../../pedagogy/skills.js';
+import { pauseHasExtraText, rolePlayControl } from '../../pedagogy/skills.js';
 import { PilotLanguageClamped } from '../errors.js';
 import { noTools, policyTools } from '../tools.js';
 import type { DecideResult, StepEnv, Steps } from '../types.js';
@@ -41,7 +41,8 @@ export const decide: Steps['decide'] = {
     new Promise<DecideResult>((resolve) => {
       // Only the entitled tools reach the policy (access rule 5); generate checks them again.
       const tools = policyTools(env.deps.tools ?? noTools, ctx.entitlement);
-      // The role-play control (3.11e) is read here, so the policy never sees the text.
+      // The role-play control (3.11e), and whether a `/pause` carried extra text (5.8b, B-37
+      // q8), are read here, so the policy never sees the text itself.
       const control = rolePlayControl(env.input);
       const turn = {
         kind: env.input.kind,
@@ -51,7 +52,14 @@ export const decide: Steps['decide'] = {
         decided(
           env,
           ctx,
-          decidePolicy({ ctx, turn, help, tools, ...(control === undefined ? {} : { control }) }),
+          decidePolicy({
+            ctx,
+            turn,
+            help,
+            tools,
+            ...(control === undefined ? {} : { control }),
+            pauseHasExtraText: pauseHasExtraText(env.input),
+          }),
         ),
       );
     }),

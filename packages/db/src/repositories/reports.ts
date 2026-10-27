@@ -15,6 +15,7 @@
 // other in the opposite order. Nothing here locks a profile, an agent or a run, so there is no
 // cycle with publish's order (advisory, profile, agent, run) either.
 import { createHash } from 'node:crypto';
+import { debuglog } from 'node:util';
 import { and, asc, eq, inArray, like, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -44,6 +45,18 @@ export const REPORTS_QUEUE_MAX_LIMIT = 50;
 export const REPORT_NOTE_MAX = 500;
 
 const TARGET_PREFIX = 'message:';
+
+const debug = debuglog('edmate:db');
+
+/**
+ * `listOpenForStaff`'s per-row mapping can only fail with `RepositoryError('integrity', ...)`
+ * (toStaffReportRow's only throw site, map.ts's `checked` helper) — a stored `reason` that no
+ * longer matches `ReportCategorySchema`. Anything else (a connection drop, a programmer error) is
+ * not a "skip this one bad row" case and must surface for the whole batch.
+ */
+export function isSkippableReportRowError(e: unknown): boolean {
+  return e instanceof RepositoryError && e.kind === 'integrity';
+}
 
 const FileInput = z.strictObject({
   sessionId: IdSchema,
@@ -196,6 +209,7 @@ export function reportsRepo(db: Db) {
                 .limit(REPORTS_QUEUE_MAX_LIMIT * REPORT_CITED_DOCUMENTS_MAX);
 
         const out: StaffReportRow[] = [];
+        let skipped = 0;
         for (const r of rows) {
           const hasMessage = r.role !== null && r.text !== null && r.messageAt !== null;
           const wanted = new Set(cited(r));
@@ -232,15 +246,19 @@ export function reportsRepo(db: Db) {
                 method,
               ),
             );
-          } catch {
-            // toStaffReportRow's only throw site is map.ts's `checked` helper, and it only ever
-            // throws RepositoryError('integrity', ...) — raised when a row's stored `reason`
-            // fails ReportCategorySchema (e.g. written before a category was removed from
-            // REPORT_CATEGORIES). Skip that row rather than throwing for the whole batch: one bad
-            // row drops out of the queue instead of hiding every row. Nothing to log here — this
-            // is a pure function, and the caller already logs only error names, not the error
-            // itself.
+          } catch (e) {
+            // A row's stored `reason` can fail ReportCategorySchema (e.g. written before a
+            // category was removed from REPORT_CATEGORIES) — that's the one case we skip, so one
+            // bad row drops out of the queue instead of hiding every row. Anything else rethrows
+            // for the whole batch instead of silently disappearing.
+            /* v8 ignore next -- toStaffReportRow only throws integrity errors today; the rule is unit-tested via isSkippableReportRowError */
+            if (!isSkippableReportRowError(e)) throw e;
+            skipped += 1;
           }
+        }
+        if (skipped > 0) {
+          // Count only, never the row id, report text or reason: this log is shared.
+          debug('%s: skipped %d row(s) with an invalid stored category', method, skipped);
         }
         return out;
       });
