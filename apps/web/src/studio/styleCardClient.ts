@@ -24,9 +24,18 @@ export interface StyleCardInterview {
   mistakeCandidates: string[];
 }
 
+/** A teacher's own proposed mistake tag, pending review (6.3a). */
+export interface MistakeProposalRow {
+  tag: string;
+  count: number;
+  lastSeen: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; status: number; code: string };
 
 const BASE = '/api/studio/style-card';
+const PROPOSALS_BASE = '/api/studio/mistake-proposals';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
 async function errorCode(res: Response): Promise<string> {
@@ -87,5 +96,25 @@ export function saveStyleCard(input: {
     BASE,
     { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(input) },
     async (res) => (await asJson<{ card: StyleCardView }>(res)).card,
+  );
+}
+
+/** The signed-in teacher's own pending proposed mistake tags. */
+export function listMistakeProposals(): Promise<ApiResult<MistakeProposalRow[]>> {
+  return call(PROPOSALS_BASE, { method: 'GET' }, async (res) => {
+    return (await asJson<{ proposals: MistakeProposalRow[] }>(res)).proposals;
+  });
+}
+
+/** Approves or rejects a proposed tag; approving returns the new style-card version. */
+export function decideMistakeProposal(input: {
+  tag: string;
+  action: 'approve' | 'reject';
+}): Promise<ApiResult<{ approved: boolean; card: StyleCardView | null } | { rejected: boolean }>> {
+  return call(
+    PROPOSALS_BASE,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) },
+    async (res) =>
+      asJson<{ approved: boolean; card: StyleCardView | null } | { rejected: boolean }>(res),
   );
 }

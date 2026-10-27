@@ -6,12 +6,17 @@
 import { useTranslations } from 'next-intl';
 import { useRef, useState, type FormEvent } from 'react';
 import {
+  decideMistakeProposal,
   draftStyleCardApi,
   saveStyleCard,
   type ApiResult,
+  type MistakeProposalRow,
   type StyleCardView as StyleCardRow,
 } from '../../../src/studio/styleCardClient';
-import { STYLE_CARD_QUESTIONS, type StyleCardQuestionKey } from '../../../src/studio/styleCardQuestions';
+import {
+  STYLE_CARD_QUESTIONS,
+  type StyleCardQuestionKey,
+} from '../../../src/studio/styleCardQuestions';
 
 const ERROR_KEYS = [
   'validation',
@@ -19,6 +24,7 @@ const ERROR_KEYS = [
   'forbidden',
   'not_found',
   'unauthorized',
+  'limit_reached',
   'provider_error',
 ] as const;
 type ErrorKey = (typeof ERROR_KEYS)[number];
@@ -31,7 +37,14 @@ function errorKey(result: Extract<ApiResult<unknown>, { ok: false }>): ErrorKey 
 
 /** Splits a comma-separated field into a trimmed, non-empty, de-duplicated list. */
 function parseTags(text: string): string[] {
-  return [...new Set(text.split(',').map((s) => s.trim()).filter((s) => s.length > 0))];
+  return [
+    ...new Set(
+      text
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    ),
+  ];
 }
 
 /** Splits a newline-separated field into a trimmed, non-empty list. */
@@ -51,11 +64,17 @@ const emptyAnswers = (): Record<StyleCardQuestionKey, string> =>
 export interface StyleCardViewProps {
   /** The teacher's current saved card, or `null` before a first save. */
   initialCard: StyleCardRow | null;
+  /** The teacher's own pending proposed mistake tags (6.3a). */
+  initialProposals: MistakeProposalRow[];
 }
 
-export function StyleCardView({ initialCard }: StyleCardViewProps) {
+export function StyleCardView({ initialCard, initialProposals }: StyleCardViewProps) {
   const t = useTranslations('styleCard');
   const [card, setCard] = useState(initialCard);
+  const [proposals, setProposals] = useState(initialProposals);
+  // Task 6.3a fix round 1: tracks every tag with an in-flight decide call, not just one, so a
+  // decision started on one proposal cannot overwrite (and re-enable) another's pending state.
+  const [decidingTags, setDecidingTags] = useState<ReadonlySet<string>>(new Set());
   const [answers, setAnswers] = useState(emptyAnswers);
   const [mistakesText, setMistakesText] = useState('');
   const [samples, setSamples] = useState(['', '', '']);
@@ -112,9 +131,63 @@ export function StyleCardView({ initialCard }: StyleCardViewProps) {
     }
   }
 
+  async function onDecide(tag: string, action: 'approve' | 'reject') {
+    setDecidingTags((prev) => new Set(prev).add(tag));
+    setError(null);
+    try {
+      const result = await decideMistakeProposal({ tag, action });
+      if (!result.ok) return setError(errorKey(result));
+      // No optimistic removal: the proposal stays listed until the call actually succeeds.
+      setProposals((prev) => prev.filter((p) => p.tag !== tag));
+      if ('card' in result.value && result.value.card) {
+        saveCount.current += 1;
+        setCard(result.value.card);
+        setText(result.value.card.text);
+        setTagsText(result.value.card.mistakeTags.join(', '));
+      }
+    } catch {
+      setError('provider_error');
+    } finally {
+      setDecidingTags((prev) => {
+        const next = new Set(prev);
+        next.delete(tag);
+        return next;
+      });
+    }
+  }
+
   return (
     <div className="style-card">
       <p>{t('intro')}</p>
+      <section>
+        <h2>{t('proposedTags.title')}</h2>
+        <p>{t('proposedTags.hint')}</p>
+        {proposals.length === 0 ? (
+          <p>{t('proposedTags.none')}</p>
+        ) : (
+          <ul>
+            {proposals.map((p) => (
+              <li key={p.tag}>
+                <span>{p.tag}</span> <span>{t('proposedTags.countLabel', { count: p.count })}</span>{' '}
+                <button
+                  type="button"
+                  disabled={decidingTags.has(p.tag)}
+                  onClick={() => void onDecide(p.tag, 'approve')}
+                >
+                  {t('proposedTags.approveButton')}
+                </button>{' '}
+                <button
+                  type="button"
+                  disabled={decidingTags.has(p.tag)}
+                  onClick={() => void onDecide(p.tag, 'reject')}
+                >
+                  {t('proposedTags.rejectButton')}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <section>
         <h2>{t('interviewTitle')}</h2>
         <p>{t('interviewHint')}</p>

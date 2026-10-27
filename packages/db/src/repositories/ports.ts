@@ -105,8 +105,10 @@ function defaultProfile(scope: StudentScope): LearnerProfile {
  * that omits something an adapter needs. The session is resolved whatever its status (not
  * required to be open), so a tag write racing session end still lands (lead decision, 6.3d).
  *
- * `recordProposedMistakes` stays a documented no-op (scope check only) until 6.3a lands the real
- * persistence of proposed tags for teacher review.
+ * Task 6.3a: `recordProposedMistakes` now calls `mistakeProposalsRepo.record`, scoped to the
+ * teacher only (`mistake_tag_proposals` has no `studentId` column -- proposals aggregate per
+ * teacher across all their students, matching `classifyMistakeTags`'s own per-teacher
+ * `allowedTags` input and the acceptance line "shown to its teacher only").
  */
 export function profileStoreFor(
   repos: Repositories,
@@ -160,9 +162,11 @@ export function profileStoreFor(
       const allowedTags = await resolveMistakeTagAllowList(method);
       await repos.learnerProfiles.applyMistakes(bound, known, allowedTags);
     },
-    async recordProposedMistakes(mistakeScope) {
+    async recordProposedMistakes(mistakeScope, proposed) {
       const method = 'profileStoreFor.recordProposedMistakes';
       checkPair(mistakeScope.studentId, mistakeScope.teacherId, method);
+      if (proposed.length === 0) return;
+      await repos.mistakeProposals.record({ teacherId: bound.teacherId }, proposed);
     },
   };
 }

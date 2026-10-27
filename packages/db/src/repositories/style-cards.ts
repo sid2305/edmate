@@ -24,11 +24,7 @@ export const STYLE_CARD_LIMITS = {
  * and de-duplicated, keeping the teacher's order.
  */
 const DraftInput = z.strictObject({
-  text: z
-    .string()
-    .max(STYLE_CARD_LIMITS.textMaxChars)
-    .regex(/\S/)
-    .pipe(StyleCardSchema.shape.text),
+  text: z.string().max(STYLE_CARD_LIMITS.textMaxChars).regex(/\S/).pipe(StyleCardSchema.shape.text),
   mistakeTags: z
     .array(z.string().trim().min(1).max(STYLE_CARD_LIMITS.tagMaxChars))
     .max(STYLE_CARD_LIMITS.tagsMax)
@@ -50,6 +46,42 @@ const columns = {
   text: styleCards.text,
   mistakeTags: styleCards.mistakeTags,
 };
+
+/** The transaction type `db.transaction`'s callback receives. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/**
+ * Inserts the scope's next style-card version (its highest + 1, starting at 1) inside the
+ * caller's own transaction `tx`, and returns it. Extracted from `create` (task 6.3a) so
+ * `mistakeProposalsRepo.approve` can insert a new version atomically with marking its proposal
+ * `approved`, without nesting `db.transaction` calls. `teacherId` must already be checked by the
+ * caller (this function trusts it); the advisory lock serialises concurrent callers for the same
+ * teacher, same as `create` always has.
+ */
+export async function insertNextVersion(
+  tx: Tx,
+  teacherId: string,
+  draft: { text: string; mistakeTags: string[] },
+  method: string,
+): Promise<StyleCard> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${VERSION_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
+  );
+  const [current] = await tx
+    .select({ max: sql<number>`coalesce(max(${styleCards.version}), 0)::int` })
+    .from(styleCards)
+    .where(eq(styleCards.teacherId, teacherId));
+  const [row] = await tx
+    .insert(styleCards)
+    .values({
+      teacherId,
+      version: current!.max + 1,
+      text: draft.text,
+      mistakeTags: draft.mistakeTags,
+    })
+    .returning(columns);
+  return checked(StyleCardSchema, row, method);
+}
 
 export function styleCardsRepo(db: Db) {
   return {
@@ -100,23 +132,7 @@ export function styleCardsRepo(db: Db) {
           const role = await lockRole(tx, teacherId);
           if (role === null) throw new RepositoryError('not_found', method);
           if (role !== 'teacher') throw new RepositoryError('scope', method);
-          await tx.execute(
-            sql`select pg_advisory_xact_lock(${VERSION_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
-          );
-          const [current] = await tx
-            .select({ max: sql<number>`coalesce(max(${styleCards.version}), 0)::int` })
-            .from(styleCards)
-            .where(eq(styleCards.teacherId, teacherId));
-          const [row] = await tx
-            .insert(styleCards)
-            .values({
-              teacherId,
-              version: current!.max + 1,
-              text: d.text,
-              mistakeTags: d.mistakeTags,
-            })
-            .returning(columns);
-          return checked(StyleCardSchema, row, method);
+          return insertNextVersion(tx, teacherId, d, method);
         }),
       );
     },

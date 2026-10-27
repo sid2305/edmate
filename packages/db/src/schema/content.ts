@@ -247,6 +247,36 @@ export const styleCards = pgTable(
   (t) => [uniqueIndex('style_cards_teacher_id_version_key').on(t.teacherId, t.version)],
 );
 
+/**
+ * Task 6.3a: a mistake tag `classifyMistakeTags` saw but that is not yet on the style card's
+ * `mistakeTags` allow-list, aggregated per teacher (not per student -- the allow-list itself is
+ * per-teacher) for the teacher to review and approve. One row per (teacherId, tag); `record`
+ * upserts into it. `decidedAt` is set when `status` leaves `pending`.
+ */
+export const mistakeTagProposals = pgTable(
+  'mistake_tag_proposals',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    tag: text('tag').notNull(),
+    count: integer('count').notNull(),
+    lastSeen: tstz('last_seen').notNull(),
+    status: text('status').notNull().default('pending'),
+    decidedAt: tstz('decided_at'),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('mistake_tag_proposals_teacher_id_tag_key').on(t.teacherId, t.tag),
+    index('mistake_tag_proposals_teacher_id_status_idx')
+      .on(t.teacherId, t.status)
+      .where(sql`${t.status} = 'pending'`),
+    check(
+      'mistake_tag_proposals_status_check',
+      sql`${t.status} in ('pending', 'approved', 'rejected')`,
+    ),
+  ],
+);
+
 /** A teacher's fix to an answer; also becomes a teacher-note chunk and an eval case. */
 export const corrections = pgTable(
   'corrections',

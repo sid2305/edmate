@@ -701,15 +701,32 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       expect(await repos.learnerProfiles.get(scope)).toBeNull();
     }, 15_000);
 
-    it('recordProposedMistakes is a documented no-op for the bound pair, and a scope error for another', async () => {
+    it('recordProposedMistakes with an empty proposed array is a no-op', async () => {
+      const { scope, sessionId } = await withSession(['late_carry'], 'proposedempty');
+      const store = profileStoreFor(repos, scope, sessionId);
+      const before = await repos.mistakeProposals.listPending({ teacherId: scope.teacherId });
+      await store.recordProposedMistakes!(scope, []);
+      expect(await repos.mistakeProposals.listPending({ teacherId: scope.teacherId })).toEqual(
+        before,
+      );
+    }, 15_000);
+
+    it('recordProposedMistakes persists a pending proposal the bound teacher’s own listPending returns, and is a scope error for another', async () => {
       const { scope, sessionId } = await withSession(['late_carry'], 'proposed');
       const store = profileStoreFor(repos, scope, sessionId);
-      await expect(
-        store.recordProposedMistakes!(scope, [
-          { tag: 'not_on_card', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
-        ]),
-      ).resolves.toBeUndefined();
+      await store.recordProposedMistakes!(scope, [
+        { tag: 'not_on_card', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+      ]);
       expect(await repos.learnerProfiles.get(scope)).toBeNull();
+      const pending = await repos.mistakeProposals.listPending({ teacherId: scope.teacherId });
+      expect(pending).toContainEqual({
+        tag: 'not_on_card',
+        count: 1,
+        lastSeen: '2026-10-27T10:00:00.000Z',
+        status: 'pending',
+      });
+
+      const before = await repos.mistakeProposals.listPending({ teacherId: teacherId('B') });
       expect(
         await kind(
           store.recordProposedMistakes!({ studentId: scope.studentId, teacherId: teacherId('B') }, [
@@ -717,6 +734,9 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
           ]),
         ),
       ).toBe('scope');
+      expect(await repos.mistakeProposals.listPending({ teacherId: teacherId('B') })).toEqual(
+        before,
+      );
     }, 15_000);
 
     it('a missing/unresolvable session is an integrity error, not a silent drop', async () => {
@@ -837,6 +857,24 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       const store = profileStoreFor(repos, scope);
       await expect(store.applyMistakes!(scope, [], [])).resolves.toBeUndefined();
       expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
+
+    // 6.3a (lead answer, 6.3e review deferral): applyMistakes's `proposed` third parameter is
+    // still ignored even when `known` is non-empty -- a wrong-practice-answer turn with both a
+    // known and an off-list tag only ever persists the known one through `applyMistakes`; the
+    // off-list tag reaches the profile only through the separate `recordProposedMistakes` port.
+    it('a non-empty proposed array is ignored even when known is non-empty', async () => {
+      const { scope, sessionId } = await withSession(['late_carry'], 'proposedwithknown');
+      const store = profileStoreFor(repos, scope, sessionId);
+      await store.applyMistakes!(
+        scope,
+        [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+        [{ tag: 'not_on_card', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+      );
+      const after = await repos.learnerProfiles.get(scope);
+      expect(after!.mistakes).toEqual([
+        { tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+      ]);
     }, 15_000);
 
     // 6.3e: the adapter's third parameter (`proposed`) is accepted but ignored -- it does not

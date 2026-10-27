@@ -2,7 +2,13 @@
 // Task 8.4b: the browser side of the studio style-card API. Fetch is stubbed (rule 4); no real
 // model or database call. Mirrors uploadClient.test.ts's shape.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { draftStyleCardApi, getStyleCard, saveStyleCard } from './styleCardClient';
+import {
+  decideMistakeProposal,
+  draftStyleCardApi,
+  getStyleCard,
+  listMistakeProposals,
+  saveStyleCard,
+} from './styleCardClient';
 
 const reply = (status: number, body?: unknown) =>
   new Response(body === undefined ? null : JSON.stringify(body), {
@@ -71,6 +77,40 @@ describe('saveStyleCard', () => {
     expect(calls[0]!.init).toMatchObject({
       method: 'PUT',
       body: JSON.stringify({ text: CARD.text, mistakeTags: CARD.mistakeTags }),
+    });
+  });
+});
+
+describe('listMistakeProposals', () => {
+  it('reads the pending proposals', async () => {
+    const rows = [{ tag: 'units', count: 2, lastSeen: '2026-10-01T00:00:00Z', status: 'pending' }];
+    const calls = stubFetch(reply(200, { proposals: rows }));
+    await expect(listMistakeProposals()).resolves.toEqual({ ok: true, value: rows });
+    expect(calls[0]!.url).toBe('/api/studio/mistake-proposals');
+    expect(calls[0]!.init).toMatchObject({ method: 'GET', cache: 'no-store' });
+  });
+});
+
+describe('decideMistakeProposal', () => {
+  it('posts an approve decision and returns the new card', async () => {
+    const calls = stubFetch(reply(200, { approved: true, card: CARD }));
+    await expect(decideMistakeProposal({ tag: 'units', action: 'approve' })).resolves.toEqual({
+      ok: true,
+      value: { approved: true, card: CARD },
+    });
+    expect(calls[0]!.url).toBe('/api/studio/mistake-proposals');
+    expect(calls[0]!.init).toMatchObject({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tag: 'units', action: 'approve' }),
+    });
+  });
+
+  it('posts a reject decision and returns the result', async () => {
+    stubFetch(reply(200, { rejected: true }));
+    await expect(decideMistakeProposal({ tag: 'units', action: 'reject' })).resolves.toEqual({
+      ok: true,
+      value: { rejected: true },
     });
   });
 });
