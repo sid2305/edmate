@@ -10,6 +10,35 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 8.7o EMAIL export is test-only · decided by builder · risk: low
+- Decided: export `EMAIL` from `redact-json.ts` itself (not from `src/repositories/index.ts` or
+  `src/index.ts`) so the differential test can import it directly from the module path, instead of
+  adding it to the package's public API.
+- Why: the plan needed a way for the test to compare old-vs-new regex output on exactly the EMAIL
+  pattern (not the full `redactString` pipeline, which also runs PHONE_CANDIDATE/UUID/etc. and
+  would make a differential comparison meaningless). A module-local export reached by its file
+  path keeps the package's public surface (`src/index.ts`) unchanged.
+
+---
+
+### 26 Oct 2026 · 8.7o budget overrun · decided by lead · risk: low
+- Decided: accept 111 tool calls in total (build 37, fix round 74) against a plan budget of 30.
+- Why: the fix round was caused by the lead's own plan, whose lookbehind design failed open on adjacent emails; the fixer also lost calls to a hang after the Mac slept. The diff stays in scope.
+
+---
+
+### 26 Oct 2026 · 8.7o lone low surrogate finding deferred · decided by lead · risk: medium
+- Decided: the re-review's HIGH from typescript-reviewer (packages/db/src/repositories/redact-json.ts `redactEmails` steps back over a low surrogate without checking the unit before it is a high surrogate) is triaged to LOW and deferred to 8.7p, which already edits this file.
+- Why: it only over-redacts (fails closed, never leaks an email), and only on text holding an unpaired surrogate, which Postgres text and jsonb reject anyway; security-reviewer and code-reviewer each matched the old regex on 130,000 to 200,000 fuzzed strings.
+
+---
+
+### 26 Oct 2026 · 8.7o merge · decided by lead · risk: high
+- Decided: merge 8.7o after one fix round; security-reviewer and code-reviewer approved the fix, and typescript-reviewer's one remaining finding is deferred to 8.7p.
+- Why: packages/db/src/repositories/redact-json.ts is a risky path (reviewers: security-reviewer); the change replaces a quadratic email regex with a linear scan that gives the same output and closes the round 1 fail-open.
+
+---
+
 ### 26 Oct 2026 · B-59 privacy rights for export, delete and retention · decided by human · risk: high
 - Decided: all five recommendations. (1) Retention periods are placeholders in the worker only, and the jobs stay in dry-run (report, don't delete) until counsel sets the numbers. (2) Account delete anonymises the user, their consents and message text; safety alerts, payments and the audit log stay. (3) A delete is held while a safety alert is open or a payment is disputed. (4) A parent asking on a minor's behalf is a separate task after the pilot. (5) One account-wide export across all teachers, on top of the per-teacher export.
 - Why: the lead's recommendation; it unblocks 13.4b.
