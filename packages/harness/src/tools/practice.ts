@@ -186,6 +186,15 @@ export function practiceNextItemTool(
     if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
     return generatedAnswerKeyFor(itemId);
   };
+  // 6.4a: the item's topic, server-side, the same way answerKeyFor resolves it — the bank first
+  // (its own `topicId`), then the generator's parsed id. Undefined for an id outside scope.
+  const topicIdFor = (itemId: string, scope: PracticeScope): string | undefined => {
+    const fromBank = bank.itemFor(itemId, scope)?.topicId;
+    if (fromBank !== undefined) return fromBank;
+    const g = parseGeneratedId(itemId);
+    if (g === undefined || !scope.allowedModuleIds.includes(g.moduleId)) return undefined;
+    return g.topicId;
+  };
   // 5.6b: the active item, rebuilt inside the turn's entitlement: the bank first, then the
   // generator (its prompt and key recomputed from the id). Outside scope: undefined.
   const activeItem = (itemId: string, ctx: TurnContext): ItemContext | undefined => {
@@ -234,7 +243,14 @@ export function practiceNextItemTool(
         ...new Set([...(opts.heldKeys ?? []), ...(opts.issuedKeys ?? []), ...answerKey]),
       ];
       if (JSON.stringify(union).length > PRACTICE_KEYS_MAX_JSON) return undefined;
-      return { itemId, moduleId, answerKey: [...answerKey], shown: shownText(parsed.data) };
+      const topicId = topicIdFor(itemId, scope);
+      return {
+        itemId,
+        moduleId,
+        ...(topicId === undefined ? {} : { topicId }),
+        answerKey: [...answerKey],
+        shown: shownText(parsed.data),
+      };
     },
   };
 }

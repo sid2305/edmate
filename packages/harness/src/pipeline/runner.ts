@@ -14,6 +14,7 @@
 // GROUNDING_ASKS_PER_SESSION per session, counted in the help state; past the cap the student
 // gets the ask-teacher reply only).
 import {
+  type EvidenceEvent,
   type Intent,
   type PedagogyDecision,
   type SafetyAlert,
@@ -230,6 +231,8 @@ class Turn {
   private loadedItems: ItemContext[] = [];
   /** The loaded held and carried practice keys (5.6b, design 4). */
   private loadedPracticeKeys: string[] = [];
+  /** decide's skill for this turn (6.4a): gates the graded-check evidence producer in `finish`. */
+  private turnSkill: Skill | null = null;
 
   constructor(
     private readonly input: TurnInput,
@@ -581,6 +584,7 @@ class Turn {
       );
     }
     const { decision } = decided;
+    this.turnSkill = decided.skill ?? null;
     // The session's grounding escalation count rides along on every path that saves the help
     // state (decide's ladder may rebuild the state without it; 4.7 fix round 1).
     const asked = built.helpState.groundingAsks ?? 0;
@@ -1097,6 +1101,7 @@ class Turn {
     move: PedagogyDecision['move'],
     alertDelivered?: Promise<void>,
   ): Promise<TurnRunResult> {
+    const evidence = this.evidenceFor(e, rec.context);
     const record: CommitRecord = {
       ...this.withStopFlag(this.withPractice(rec)),
       turnId: this.turnId,
@@ -1107,6 +1112,7 @@ class Turn {
       createdAt: isoAt(this.deps.clock.now()),
       entitled: e,
       ...(this.escalatedText === undefined ? {} : { escalatedText: this.escalatedText }),
+      ...(evidence === undefined ? {} : { evidence }),
     };
     // Usage from a metered turn gateway was metered at the gateway (2.4); only the rest goes here.
     const usage = this.meterable.map((u) => ({ ...u }));
@@ -1201,6 +1207,33 @@ class Turn {
   }
 
   /**
+   * One topic-scored EvidenceEvent for a graded practice check (6.4a; harness-internal producer
+   * for `CommitRecord.evidence`, whose consumer, `commit.ts`'s `profiles.applyEvidence`, already
+   * shipped in 3.17). Only `'correct'`/`'wrong'` count (lead answer Q1 — `'partial'` is a ladder
+   * steering signal, not a settled outcome); only the `practice` skill (Q2); weight is always 1
+   * (Q3, BKT math stays the db adapter's job). `ctx` is this turn's context when one was built; no
+   * context (an early error/blocked turn) or no stored topic (a defensive gap: an item issued
+   * before this task, or a non-practice answerKey) means no event — never throws.
+   */
+  private evidenceFor(e: Entitled, ctx: TurnContext | undefined): EvidenceEvent[] | undefined {
+    if (ctx === undefined || this.turnSkill !== 'practice') return undefined;
+    if (ctx.attempt !== 'correct' && ctx.attempt !== 'wrong') return undefined;
+    const topicId = this.loadedHelp?.help.practiceTopicId;
+    if (topicId === undefined) return undefined;
+    return [
+      {
+        studentId: e.entitlement.studentId,
+        teacherId: e.entitlement.teacherId,
+        topicId,
+        correct: ctx.attempt === 'correct',
+        source: 'practice',
+        weight: 1,
+        ts: isoAt(this.deps.clock.now()),
+      },
+    ];
+  }
+
+  /**
    * The practice state to save (5.6, ADR-0010 §4). The practice fields of the loaded state ride
    * along on every saved state (decide's ladder rebuilds it without them, as for groundingAsks).
    * When an item went out this turn, on any outcome, the saved state holds its key (the union of
@@ -1241,6 +1274,7 @@ class Turn {
       answerKey,
       practiceItemId: last.itemId,
       practiceModuleId: last.moduleId,
+      ...(last.topicId === undefined ? {} : { practiceTopicId: last.topicId }),
       practiceServed: [...prior.filter((id) => !ids.includes(id)), ...ids].slice(
         -PRACTICE_SERVED_MAX,
       ),

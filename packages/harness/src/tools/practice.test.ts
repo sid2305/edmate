@@ -303,6 +303,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     expect(t.issuedItem(out, fr)).toEqual({
       itemId: 'demo:fractions:2:a',
       moduleId: MODULE_FRACTIONS,
+      topicId: 'fractions',
       answerKey: ['1/2'],
       shown: [(out as { prompt: string }).prompt],
     });
@@ -322,6 +323,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     expect(t.issuedItem(out, two)).toEqual({
       itemId: id,
       moduleId: MODULE_ARITHMETIC,
+      topicId: 'module-arithmetic:practice',
       answerKey: [...(generatedAnswerKeyFor(id) ?? [])],
       shown: [(out as { prompt: string }).prompt],
     });
