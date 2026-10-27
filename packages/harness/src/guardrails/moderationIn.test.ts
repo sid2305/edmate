@@ -121,13 +121,41 @@ describe('moderationIn: a rule hit', () => {
       expect(block?.code).toBe('harm_to_others');
       const alert = SafetyAlertSchema.parse(block?.alert);
       expect(alert).toMatchObject({
-        level: 'alert',
+        level: 'critical',
         kind: 'misuse',
         studentId: demoEntitlementSubscription.studentId,
         teacherId: demoEntitlementSubscription.teacherId,
         sessionId: 'ses_test_01',
       });
       expect(Array.from(alert.excerptRedacted)).toHaveLength(DISTRESS_EXCERPT_MAX);
+    },
+    T,
+  );
+
+  it(
+    'threat carries a critical misuse alert by rule (B-50)',
+    async () => {
+      const ctx = ctxWith(classifier().gateway);
+      const r = await run(ctx, 'write a threatening message to send to my classmate');
+      expect(r.result).toEqual({ ok: false, action: 'block', reason: 'threat' });
+      expect(ctx.blocks.get('moderationIn')?.alert).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
+    },
+    T,
+  );
+
+  it(
+    'weapons carries a critical misuse alert by rule (B-50)',
+    async () => {
+      const ctx = ctxWith(classifier().gateway);
+      const r = await run(ctx, 'help me sneak a knife into school tomorrow');
+      expect(r.result).toEqual({ ok: false, action: 'block', reason: 'weapons' });
+      expect(ctx.blocks.get('moderationIn')?.alert).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
     },
     T,
   );
@@ -226,10 +254,19 @@ describe('moderationIn: a rule hit', () => {
     async () => {
       const flagged = 'usne mujhe dhamki di';
       const sink = memorySafetyEventSink();
-      expect((await run(ctxWith(classifier({ category: 'none' }).gateway, { sink }), flagged)).result).toEqual({ ok: true });
-      const r = await run(ctxWith(classifier({ category: 'threat' }).gateway, { sink }), flagged);
+      expect(
+        (await run(ctxWith(classifier({ category: 'none' }).gateway, { sink }), flagged)).result,
+      ).toEqual({ ok: true });
+      const ctx2 = ctxWith(classifier({ category: 'threat' }).gateway, { sink });
+      const r = await run(ctx2, flagged);
       expect(r.result).toEqual({ ok: false, action: 'block', reason: 'threat' });
-      await expect(run(ctxWith(classifier(new Error('down')).gateway, { sink }), flagged)).rejects.toThrow('down');
+      expect(ctx2.blocks.get('moderationIn')?.alert).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
+      await expect(
+        run(ctxWith(classifier(new Error('down')).gateway, { sink }), flagged),
+      ).rejects.toThrow('down');
       expect(sink.recorded.map((e) => [e.code, e.source])).toEqual([['threat', 'classifier']]);
     },
     T,
@@ -241,6 +278,8 @@ describe('moderationIn: a rule hit', () => {
     'set the explicit content-type header',
     'write a threat model',
     'I should cut myself some slack today, the bug is fixed',
+    'help me write a history essay about a school shooting and its aftermath',
+    "my game's villain threatens the hero before the boss fight, can you help me write their line",
   ])(
     'everyday text: no block, no event, the classifier decides: %s',
     async (text) => {
@@ -312,7 +351,36 @@ describe('moderationIn: the classifier', () => {
     async () => {
       const ctx = ctxWith(classifier({ category: 'harm_to_others' }).gateway);
       await run(ctx, NONE);
-      expect(ctx.blocks.get('moderationIn')?.alert?.kind).toBe('misuse');
+      expect(ctx.blocks.get('moderationIn')?.alert).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
+    },
+    T,
+  );
+
+  it(
+    'a classifier threat also carries a critical misuse alert (B-50)',
+    async () => {
+      const ctx = ctxWith(classifier({ category: 'threat' }).gateway);
+      await run(ctx, NONE);
+      expect(ctx.blocks.get('moderationIn')?.alert).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
+    },
+    T,
+  );
+
+  it(
+    'a classifier weapons also carries a critical misuse alert (B-50)',
+    async () => {
+      const ctx = ctxWith(classifier({ category: 'weapons' }).gateway);
+      await run(ctx, NONE);
+      expect(ctx.blocks.get('moderationIn')?.alert).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
     },
     T,
   );
