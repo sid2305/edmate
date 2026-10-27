@@ -1,6 +1,6 @@
 // Identity store (task 1.3): the one path sign-in uses to read and write users, linked accounts
 // and database sessions; since 1.4 also email sign-in links. See README.md for its rules; it is deliberately not a repository.
-import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -44,6 +44,20 @@ export interface IdentityUser {
 export interface IdentitySession {
   userId: string;
   expires: Date;
+}
+
+/**
+ * A consent row as the account export (13.4d) reads it: the full history (kind, version, who
+ * granted it, when, and any withdrawal) — unlike `hasOpenForStudent` (13.4b), there is no
+ * "boolean only" narrowing here, since consents carry no other student's data and no teaching
+ * content.
+ */
+export interface ConsentRow {
+  kind: string;
+  version: string;
+  grantedBy: 'self' | 'parent';
+  ts: string;
+  withdrawnAt: string | null;
 }
 
 /** An email sign-in link as the store hands it back: never the token or its hash. */
@@ -166,6 +180,15 @@ export interface IdentityStore {
    * rights method, not a general account-closer.
    */
   anonymise(userId: string): Promise<void>;
+  /**
+   * Task 13.4d (account export): every `consents` row for this user id, ordered by `ts`
+   * ascending, mapped to ISO strings. This serves only the student's own account export; it
+   * returns the full consent record (see `ConsentRow`). Validated with the same `IdSchema`/
+   * `parseArg` as `getUser`/`getMarket` (a bad id is `invalid`, same as those two); no role
+   * check, same stance as `getUser` — consents rows only ever exist for students today, and a
+   * non-student id simply has none.
+   */
+  listConsentsForStudent(userId: string): Promise<ConsentRow[]>;
 }
 
 /** The fixed name an anonymised student's row carries; never a real name again. */
@@ -605,10 +628,7 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
           .where(inArray(messages.sessionId, theirSessions));
         // Free text of theirs that can restate what they said: a session's end-of-session recap,
         // the pair's rolling recap, and any question they asked a teacher.
-        await tx
-          .update(sessions)
-          .set({ summary: null })
-          .where(eq(sessions.studentId, id));
+        await tx.update(sessions).set({ summary: null }).where(eq(sessions.studentId, id));
         await tx
           .update(learnerProfiles)
           .set({ lastSummary: null })
@@ -639,6 +659,28 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
           subjectUserId: id,
         });
       });
+    },
+
+    async listConsentsForStudent(userId: unknown): Promise<ConsentRow[]> {
+      const id = parseArg(IdSchema, userId, 'identity.listConsentsForStudent');
+      const rows = await db
+        .select({
+          kind: consents.kind,
+          version: consents.version,
+          grantedBy: consents.grantedBy,
+          ts: consents.ts,
+          withdrawnAt: consents.withdrawnAt,
+        })
+        .from(consents)
+        .where(eq(consents.userId, id))
+        .orderBy(asc(consents.ts));
+      return rows.map((row) => ({
+        kind: row.kind,
+        version: row.version,
+        grantedBy: row.grantedBy as 'self' | 'parent',
+        ts: row.ts.toISOString(),
+        withdrawnAt: row.withdrawnAt ? row.withdrawnAt.toISOString() : null,
+      }));
     },
   };
 }
