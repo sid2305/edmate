@@ -72,7 +72,10 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
     for (const teacherId of [teacherA, teacherB, teacherC]) {
       if (!teacherId) continue;
       await db.repos.teacherProfiles
-        .setVerification({ teacherId }, { status: 'rejected', by: staffId, reason: 'int test cleanup' })
+        .setVerification(
+          { teacherId },
+          { status: 'rejected', by: staffId, reason: 'int test cleanup' },
+        )
         .catch(() => undefined);
     }
     await db.close();
@@ -120,7 +123,9 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
   it('signed-out is 401; a teacher is 403 on GET and POST and changes nothing', async () => {
     const r = routes();
     expect((await r.GET(call('GET', null))).status).toBe(401);
-    expect((await r.POST(call('POST', null, { teacherId: teacherA, status: 'verified' }))).status).toBe(401);
+    expect(
+      (await r.POST(call('POST', null, { teacherId: teacherA, status: 'verified' }))).status,
+    ).toBe(401);
     expect((await r.GET(call('GET', 'teacher'))).status).toBe(403);
     expect(
       (await r.POST(call('POST', 'teacher', { teacherId: teacherA, status: 'verified' }))).status,
@@ -132,10 +137,15 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
   it('staff see both new teachers pending, with declared name and email', async () => {
     const res = await routes().GET(call('GET', 'staff'));
     expect(res.status).toBe(200);
-    const { teachers } = (await res.json()) as { teachers: { teacherId: string; name: string; email: string }[] };
+    const { teachers } = (await res.json()) as {
+      teachers: { teacherId: string; name: string; email: string }[];
+    };
     const mine = teachers.filter((t) => t.teacherId === teacherA || t.teacherId === teacherB);
     expect(mine.map((t) => t.teacherId)).toEqual([teacherA, teacherB]);
-    expect(mine[0]).toMatchObject({ name: `Int asha ${tag}`, email: `staff-int-${tag}-asha@example.test` });
+    expect(mine[0]).toMatchObject({
+      name: `Int asha ${tag}`,
+      email: `staff-int-${tag}-asha@example.test`,
+    });
   });
 
   it('a pending teacher cannot publish', async () => {
@@ -191,7 +201,9 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
   });
 
   it('staff approve: audited, and only now can the teacher publish', async () => {
-    const res = await routes().POST(call('POST', 'staff', { teacherId: teacherA, status: 'verified' }));
+    const res = await routes().POST(
+      call('POST', 'staff', { teacherId: teacherA, status: 'verified' }),
+    );
     expect(res.status).toBe(200);
     const rows = await verifyRows(teacherA);
     expect(rows).toHaveLength(1);
@@ -256,6 +268,23 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
     });
   });
 
+  it('9.3m (B-58): a subject change shows up as subject history on a queue row and on lookup', async () => {
+    await db.repos.teacherProfiles.update({ teacherId: teacherC }, { subject: 'Biology' });
+    const list = await routes().GET(call('GET', 'staff'));
+    const { teachers } = (await list.json()) as {
+      teachers: { teacherId: string; subjectHistory: { from: string; to: string }[] }[];
+    };
+    const chen = teachers.find((t) => t.teacherId === teacherC);
+    expect(chen?.subjectHistory).toEqual([
+      { from: 'Chemistry', to: 'Biology', ts: expect.any(String) },
+    ]);
+
+    const found = await routes().LOOKUP(lookup('staff', `chen-${tag}`));
+    expect(await found.json()).toMatchObject({
+      teacher: { teacherId: teacherC, subjectHistory: [{ from: 'Chemistry', to: 'Biology' }] },
+    });
+  });
+
   it('a signed-out or non-staff lookup is 401/403, nothing read', async () => {
     expect((await routes().LOOKUP(lookup(null, `asha-${tag}`))).status).toBe(401);
     expect((await routes().LOOKUP(lookup('teacher', `asha-${tag}`))).status).toBe(403);
@@ -272,7 +301,9 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
     await db.identity.grantRole({ userId: teacherA, role: 'staff', by: 'operator' });
     who.self = { userId: teacherA, role: 'staff' };
     const before = await verifyRows(teacherA);
-    const res = await routes().POST(call('POST', 'self', { teacherId: teacherA, status: 'rejected' }));
+    const res = await routes().POST(
+      call('POST', 'self', { teacherId: teacherA, status: 'rejected' }),
+    );
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('forbidden');
     expect(await verifyRows(teacherA)).toHaveLength(before.length);

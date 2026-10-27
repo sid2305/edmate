@@ -47,3 +47,36 @@ describe('audit.findLastVerifyForStaff rejects before any SQL', () => {
     });
   });
 });
+
+const BAD_LIMITS: [string, unknown][] = [
+  ['undefined', undefined],
+  ['null', null],
+  ['a string', '3'],
+  ['zero', 0],
+  ['negative', -1],
+  ['not an integer', 1.5],
+  ['over the cap', 11],
+];
+
+describe('audit.findSubjectHistoryForStaff rejects before any SQL', () => {
+  it.each(BAD_IDS)('a malformed staff id (%s) is invalid', async (_n, by) => {
+    expect(await kindOf(repos.audit.findSubjectHistoryForStaff(by, TEACHER, 10))).toEqual({
+      kind: 'invalid',
+      method: 'audit.findSubjectHistoryForStaff',
+    });
+  });
+
+  it.each(BAD_IDS)('a malformed teacher id (%s) is invalid', async (_n, teacherId) => {
+    expect(await kindOf(repos.audit.findSubjectHistoryForStaff(STAFF, teacherId, 10))).toEqual({
+      kind: 'invalid',
+      method: 'audit.findSubjectHistoryForStaff',
+    });
+  });
+
+  it.each(BAD_LIMITS)('a malformed limit (%s) is invalid', async (_n, limit) => {
+    expect(await kindOf(repos.audit.findSubjectHistoryForStaff(STAFF, TEACHER, limit))).toEqual({
+      kind: 'invalid',
+      method: 'audit.findSubjectHistoryForStaff',
+    });
+  });
+});

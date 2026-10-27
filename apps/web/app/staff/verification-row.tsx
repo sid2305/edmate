@@ -74,6 +74,27 @@ export function VerificationRow({
                 }),
               })}
         </dd>
+        <dt>{t('subjectHistoryLabel')}</dt>
+        <dd>
+          {item.subjectHistory.length === 0 ? (
+            t('subjectHistoryNone')
+          ) : (
+            <ul>
+              {item.subjectHistory.map((change, i) => (
+                <li key={i}>
+                  {t('subjectHistoryLine', {
+                    from: change.from,
+                    to: change.to,
+                    date: format.dateTime(new Date(change.ts), {
+                      dateStyle: 'medium',
+                      timeZone: 'UTC',
+                    }),
+                  })}
+                </li>
+              ))}
+            </ul>
+          )}
+        </dd>
       </dl>
       <p className="staff-field">
         <label htmlFor={reasonId}>{t('reasonLabel')}</label>
@@ -98,10 +119,18 @@ export function VerificationRow({
         {t('safetyHint')}
       </p>
       <p className="staff-actions">
-        <button type="button" disabled={disabled} onClick={() => onDecide('verified', reason, false)}>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onDecide('verified', reason, false)}
+        >
           {pending === 'verified' ? t('working') : t('approve')}
         </button>{' '}
-        <button type="button" disabled={disabled} onClick={() => onDecide('rejected', reason, safety)}>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onDecide('rejected', reason, safety)}
+        >
           {pending === 'rejected' ? t('working') : t('reject')}
         </button>
       </p>
