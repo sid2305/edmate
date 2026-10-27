@@ -62,7 +62,8 @@ export interface TurnBackend {
    */
   sessionRateLimit: SessionRateLimiter;
   /** One turn's pipeline dependencies for this student x teacher. */
-  depsFor(scope: StudentScope): PipelineDeps;
+  /** `sessionId` (task 6.3d): threaded to `profileStoreFor` for its `applyMistakes` allow-list. */
+  depsFor(scope: StudentScope, sessionId?: string): PipelineDeps;
   steps: Steps;
   now(): Date;
   log: ServerLog;
@@ -326,7 +327,7 @@ export function createSessionHandlers(backend: () => Promise<TurnBackend>) {
       if (session === null || session.endedAt !== null || session.agentId !== input.agentId) {
         return notFound(MSG.session);
       }
-      deps = b.depsFor(scope);
+      deps = b.depsFor(scope, sessionId);
     } catch (error) {
       return failed(b, 'turns.start_failed', error);
     }

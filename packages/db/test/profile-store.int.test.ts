@@ -609,4 +609,161 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
     ).toBe('scope');
     expect(await repos.learnerProfiles.get(scope)).toBeNull();
   }, 15_000);
+
+  // Task 6.3d (6.3c Phase B): profileStoreFor.applyMistakes/recordProposedMistakes through the real
+  // db adapter. A fresh style card + agent version + session per case (never mutating the seeded
+  // sty_a / agent version 1 other tests in this file depend on).
+  describe('profileStoreFor.applyMistakes / recordProposedMistakes', () => {
+    // Each case needs its own agent_versions row (agent_id, version) is unique, so this starts
+    // past the seed's version 1 and bumps every call -- never reusing a version across cases.
+    let nextAgentVersion = 2;
+
+    async function withSession(
+      mistakeTags: string[],
+      studentPostfix: string,
+    ): Promise<{ scope: { studentId: string; teacherId: string }; sessionId: string }> {
+      const scope = {
+        studentId: `stu_mistakes_adapter_${studentPostfix}`,
+        teacherId: own.teacherId,
+      };
+      const agentVersion = nextAgentVersion++;
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'Mistakes Adapter', 'en', 'test', 'student')`,
+      );
+      const card = await repos.styleCards.create(
+        { teacherId: own.teacherId },
+        { text: `[A] style for ${studentPostfix}`, mistakeTags },
+      );
+      const agentVersionId = `av_mistakes_${studentPostfix}`;
+      const config = {
+        ...(await repos.agentVersions.get(
+          { teacherId: own.teacherId },
+          { agentId: ids.agent('A'), version: 1 },
+        ))!,
+        version: agentVersion,
+        styleCardId: card.id,
+      };
+      await handle.db.execute(sql`
+        insert into agent_versions (id, teacher_id, agent_id, version, config)
+        values (${agentVersionId}, ${own.teacherId}, ${ids.agent('A')}, ${agentVersion}, ${JSON.stringify(config)}::jsonb)
+      `);
+      const { id: sessionId } = await repos.sessions.create(scope, {
+        agentId: ids.agent('A'),
+        agentVersion,
+        packageId: ids.pkg('A'),
+        packageVersion: 1,
+      });
+      return { scope, sessionId };
+    }
+
+    it('a known tag on the style card lands on the profile through the real db adapter', async () => {
+      const { scope, sessionId } = await withSession(['late_carry'], 'known');
+      const store = profileStoreFor(repos, scope, sessionId);
+      await store.applyMistakes!(
+        scope,
+        [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+        [],
+      );
+      const after = await repos.learnerProfiles.get(scope);
+      expect(after!.mistakes).toEqual([
+        { tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+      ]);
+    }, 15_000);
+
+    it('an off-list tag is a scope error and writes nothing', async () => {
+      const { scope, sessionId } = await withSession(['late_carry'], 'offlist');
+      const store = profileStoreFor(repos, scope, sessionId);
+      expect(
+        await kind(
+          store.applyMistakes!(
+            scope,
+            [{ tag: 'not_on_card', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+            [],
+          ),
+        ),
+      ).toBe('scope');
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
+
+    it('a call naming another pair is a scope error', async () => {
+      const { scope, sessionId } = await withSession(['late_carry'], 'otherpair');
+      const store = profileStoreFor(repos, scope, sessionId);
+      expect(
+        await kind(
+          store.applyMistakes!(
+            { studentId: scope.studentId, teacherId: teacherId('B') },
+            [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+            [],
+          ),
+        ),
+      ).toBe('scope');
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
+
+    it('recordProposedMistakes is a documented no-op for the bound pair, and a scope error for another', async () => {
+      const { scope, sessionId } = await withSession(['late_carry'], 'proposed');
+      const store = profileStoreFor(repos, scope, sessionId);
+      await expect(
+        store.recordProposedMistakes!(scope, [
+          { tag: 'not_on_card', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+        ]),
+      ).resolves.toBeUndefined();
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+      expect(
+        await kind(
+          store.recordProposedMistakes!({ studentId: scope.studentId, teacherId: teacherId('B') }, [
+            { tag: 'not_on_card', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+          ]),
+        ),
+      ).toBe('scope');
+    }, 15_000);
+
+    it('a missing/unresolvable session is an integrity error, not a silent drop', async () => {
+      const scope = { studentId: 'stu_mistakes_adapter_missing', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'Missing Session', 'en', 'test', 'student')`,
+      );
+      const store = profileStoreFor(repos, scope, 'session-does-not-exist');
+      expect(
+        await kind(
+          store.applyMistakes!(
+            scope,
+            [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+            [],
+          ),
+        ),
+      ).toBe('integrity');
+    }, 15_000);
+
+    it('no sessionId and a non-empty known array is also an integrity error', async () => {
+      const scope = { studentId: 'stu_mistakes_adapter_nosession', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'No Session', 'en', 'test', 'student')`,
+      );
+      const store = profileStoreFor(repos, scope);
+      expect(
+        await kind(
+          store.applyMistakes!(
+            scope,
+            [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+            [],
+          ),
+        ),
+      ).toBe('integrity');
+    }, 15_000);
+
+    it('an empty known array is a no-op even with no sessionId', async () => {
+      const scope = { studentId: 'stu_mistakes_adapter_emptyknown', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'Empty Known', 'en', 'test', 'student')`,
+      );
+      const store = profileStoreFor(repos, scope);
+      await expect(store.applyMistakes!(scope, [], [])).resolves.toBeUndefined();
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
+  });
 });
