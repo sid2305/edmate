@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · Three upheld copyright takedowns in 12 months raise a staff alert; staff decide on suspension (B-63, task 12.3d) · decided by you · risk: high
+Decided: A teacher with 3 upheld copyright takedowns in any 12 months is flagged to staff as a repeat infringer. Staff decide whether to suspend the teacher; a suspended teacher's agent takes no new students, and current students keep access until staff act. Nothing is suspended automatically in the pilot.
+Why: A US platform hosting uploads needs a written repeat-infringer policy it applies, to keep its copyright safe harbour; a person decides during the pilot, the same shape as B-12's jailbreak strikes.
+Alternatives: automatic suspension at 3 that staff can lift (b); no number, staff judge each case (c).
+Reversible: Yes, the threshold and window are settings in 12.3d.
+
+### 27 Oct 2026 · The human builds the worker image once to record its ffmpeg licence (B-62, task 11.4i) · decided by you · risk: low
+Decided: The human runs `docker build -f apps/worker/Dockerfile -t edmate-worker-check .` and `docker run --rm --entrypoint ffmpeg edmate-worker-check -version | head -3` and pastes the output; if the configuration line shows --enable-gpl, the worker switches to ADR-0016's LGPL-only fallback.
+Why: Two commands answer ADR-0016's open licence question now rather than at deploy; agents don't run docker.
+Alternatives: wait until the deploy work (13.x) builds the image (b).
+Reversible: Yes.
+
+### 27 Oct 2026 · The human rebuilds the local stack; the lead runs the magic-link sandbox check (B-61, task 1.4f) · decided by you · risk: low
+Decided: The human rebuilds the compose stack once on current code (`AUTH_SECRET=$(openssl rand -base64 32) docker compose -f docker/compose.yaml up -d --build`); the lead then runs `node apps/web/scripts/sandbox-magic-link.mjs` (localhost only) and records the result in docs/tasks/1.4f/handoff.md.
+Why: One command from the human; the rest needs no docker and stays with the team.
+Alternatives: the human runs both and pastes the output (a); skip the sandbox run until deploy (c).
+Reversible: Yes.
+
+---
+
 ### 27 Oct 2026 · 7.2f repeated payment and licence-claim cases kept · decided by lead · risk: low
 - Decided: keep the five Phase H cases that reword payment-not-synced and school-licence tricks (evals/suites/locked/locked-functions-paidplan-glitch-en.yaml, locked-lists-paidplan-reload-en.yaml, locked-loops-paidplan-notsynced-en.yaml, locked-dicts-school-sitelicense-en.yaml, locked-loops-schooldistrict-renewed-en.yaml).
 - Why: they are new phrasings, not duplicates, and cost nothing to keep; Phase I added no more of that kind.

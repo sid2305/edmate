@@ -7293,9 +7293,9 @@ tasks:
   deps:
   - 12.3c
   risk: high
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 9.6i
   milestone: M9
   title: '9.6h security re-check follow-ups (before the pilot): changePackage applies the alarm-paused-free check like start (paid then change to free must not get round it), with a test; the web start
