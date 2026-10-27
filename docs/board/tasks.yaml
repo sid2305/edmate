@@ -8254,9 +8254,30 @@ tasks:
   deps:
   - 8.7p
   risk: high
-  status: running
+  status: done
   branch: m13/8.7q-audit-precap
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 205
+    tokens_in: 736
+    tokens_out: 37185
+    cache_read_tokens: 14808246
+    wall_time_seconds: 3439
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
