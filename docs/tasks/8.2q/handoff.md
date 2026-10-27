@@ -1,6 +1,6 @@
 # Handoff: 8.2q
 
-Status: PARTIAL (Phases B, C and E done; A and D left)
+Status: DONE
 
 ## Phase B
 
@@ -90,7 +90,108 @@ Red then green:
 State after this phase: `UploadsView.test.tsx` has 39 tests, `presign.test.ts` has 20,
 `roundtrip.test.ts` has 35, all green.
 
+## Phase A
+
+The replace-during-complete race (item 1) and a test for `create`'s cleanup-delete-fails branch
+(item 5).
+
+`packages/db/src/repositories/chunks.ts` gains `documentsRepo(db).markProcessingIfStorageKey(scope,
+id, expectedStorageKey)`: the same atomic compare-and-set shape as `failIfStorageKey` (8.2i), but
+moves the row to `processing` (via `STATUS_FROM.processing`, so it matches from `uploading`,
+`processing` or `failed`) instead of `failed`, and clears any failure reason. A storageKey
+mismatch, a wrong current status, a missing row or another teacher's row all return `{ updated:
+false }` rather than throwing.
+
+`apps/web/src/studio/routes.ts`'s `complete` now calls this instead of a plain
+`updateStatus(scope, id, 'processing')` for its own processing write -- the compare-and-set closes
+the window between `complete`'s `head()` read of storage and that write, during which a
+concurrent `replace` could change the row's `storageKey` and reset it to `uploading`. `updated:
+false` means a replace won that race; `complete` now answers 409 with the new
+`MSG.replacedDuringUpload` message (code `validation`, per the lead's Q2 answer) and touches
+nothing else -- the old row is no longer this request's to mark. `StudioBackend.documents`'s
+`Pick<...>` gains `markProcessingIfStorageKey`.
+
+Files: `packages/db/src/repositories/chunks.ts` (+ `packages/db/test/documents.int.test.ts`),
+`apps/web/src/studio/routes.ts` (+ `routes.test.ts`), plus the cross-actor isolation grid in
+`packages/db/test/repositories.int.test.ts` (a new case was required there: the grid's own
+meta-test asserts it has an entry for every method `createRepositories` returns, so the new
+repository method needed its own `IsolationCase`, not listed in the plan's files but required by
+an existing test; a new fixture document per teacher, `mpDoc`, was added alongside the existing
+`repDoc` fixture so the new case's ordering doesn't depend on any other case's side effects).
+
+Red then green:
+- `documents.int.test.ts`: a new `describe('markProcessingIfStorageKey', ...)` block (matches from
+  each of the three allowed from-states; a storageKey mismatch, wrong status, missing/another
+  teacher's row and a malformed id/key are all no-ops or `invalid`; no revision bump) -- all failed
+  red with `repos.documents.markProcessingIfStorageKey is not a function` before the method was
+  added, then passed (57 tests, up from 51).
+- `repositories.int.test.ts`: the new `documents.markProcessingIfStorageKey` isolation case failed
+  red (`has a case for exactly the methods createRepositories returns` -- a missing key) before
+  the case and its `mpDoc` fixture rows were added, then passed (193 tests).
+- `routes.test.ts`: two new/changed `complete` cases -- the existing "confirms the upload" order
+  test now watches `markProcessingIfStorageKey` instead of `updateStatus`; a replace landing
+  between `head()` and the processing write (faked by overriding
+  `markProcessingIfStorageKey` to return `{ updated: false }`) answers 409 with the row's
+  `storageKey`/`status` untouched by this request and nothing enqueued; the "delete racing the
+  status write" case (previously expecting a `not_found`-shaped 404) now expects the same 409 a
+  replace race gets, since both are the same `{ updated: false }` outcome from the one
+  compare-and-set. A new `create` case (item 5) asserts that when the cleanup delete after a
+  signing failure also throws, the original signing error still surfaces (through `run()`'s
+  generic catch, as a 500) and `studio.create_cleanup_failed` is still logged once, before
+  `studio.failed`. All failed red (the old plain `updateStatus` call, and no cleanup-delete test
+  existed) before the change, then passed (87 tests).
+
+State after this phase: `packages/db` and `apps/web` both typecheck and test green;
+`markProcessingIfStorageKey` is wired end to end from the repository through `complete`'s 409.
+
+## Phase D
+
+Item 4: the ingest sweep now reconciles stale `uploading` rows, not just stale `processing` ones.
+
+`packages/db/src/repositories/ingestSweep.ts`'s `staleProcessing` widens its `WHERE` from
+`eq(documents.status, 'processing')` to `inArray(documents.status, ['processing', 'uploading'])`.
+The doc comment above it (and the file header) is rewritten, not just the code: it explains *why*
+`uploading` is included (a `create` whose signing failed and whose own cleanup delete also failed
+leaves a row stuck in `uploading` forever, same shape as a crashed worker's stuck `processing`
+row) and names both `STUCK_PROCESSING_MINUTES` (`apps/worker/src/ingest/sweep.ts`, 30 minutes) and
+`UPLOAD_URL_TTL_SECONDS` (`apps/web/src/storage/presign.ts`, 15 minutes) per the lead's answer, so
+a later change to either constant is checked against the other. No rename of
+`StaleProcessingDocument`/`staleProcessing` (lead's Q3 answer: no). No write-path change --
+`failIfStorageKey`'s existing `STATUS_FROM.failed` already accepts `uploading` as a from-state
+(8.2i), so `apps/worker/src/ingest/sweep.ts`'s job loop needed no edit.
+
+Files: `packages/db/src/repositories/ingestSweep.ts` (+ `packages/db/test/ingest-sweep.int.test.ts`),
+`apps/worker/src/ingest/sweep.test.ts` (regression case only, as planned -- no `sweep.ts` edit).
+
+Red then green:
+- `ingest-sweep.int.test.ts`: the existing "returns only past-cutoff processing rows" case had its
+  `uploading` row removed from the excluded list (it's no longer excluded); a new case seeds a
+  stale `uploading` row and a fresh one, asserting the stale one is returned (with its storage key)
+  and the fresh one is not. Both failed red (the old `eq(documents.status, 'processing')` excluded
+  every `uploading` row) before the widen, then passed (5 tests, same count as before -- one case
+  edited, one added, no others changed).
+- `sweep.test.ts`: a new case feeds a fake `staleProcessing` returning one stale-`uploading`-shaped
+  row (the row's own prior status never reaches this file -- `staleProcessing` already filtered
+  before returning it) and asserts the job loop marks it failed exactly like any other row. This
+  test documents the "no code change needed" claim rather than failing red on this file (as the
+  plan said it would) -- it passed immediately, since `failIfStorageKey`'s own from-state list
+  already accepted `uploading` before this task.
+
+State after this phase: `packages/db` and `apps/worker` both typecheck and test green; a `create`
+whose signing and cleanup both fail no longer leaves a permanently stuck `uploading` row -- the
+next sweep run fails it.
+
 ## Decisions
+
+### 27 Oct 2026 · 8.2q markProcessingIfStorageKey and the widened sweep filter · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/chunks.ts` gains a `markProcessingIfStorageKey`
+  compare-and-set read-then-write (same shape and risk as 8.2i's `failIfStorageKey`, no new access
+  path); `ingestSweepRepo.staleProcessing` widens its status filter to also catch stale `uploading`
+  rows (a cross-teacher scheduled read, same scope as before, no new column or write path).
+  Reviewed by security-reviewer and database-reviewer because both files are under the risky
+  `packages/db/src/repositories/**` glob.
+- Why: the plan names this decision verbatim (its draft text, used here unchanged) as required by
+  the merge-gate rule for any `packages/db/src/repositories/**` touch.
 
 ### 27 Oct 2026 · 8.2q dropObject retries 3 times total, no backoff · decided by builder · risk: low
 - Decided: `DROP_OBJECT_ATTEMPTS = 3` (one try plus two retries), tried back-to-back with no delay
@@ -131,6 +232,29 @@ State after this phase: `UploadsView.test.tsx` has 39 tests, `presign.test.ts` h
   changed no behaviour).
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
+## Phase A, D Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web...
+  --filter=@edmate/worker...`: 44 tasks total. First run: `@edmate/db#typecheck` failed (the
+  isolation grid's own meta-test needed a case for the new `markProcessingIfStorageKey` method --
+  fixed by adding the case and its `mpDoc` fixture, see Phase A above); after the fix, 38
+  successful. Of the remainder, `@edmate/cli#test` showed two unrelated failures under machine
+  load (`test/chatDbRetrieval.int.test.ts`'s `beforeAll` hook timed out and
+  `src/commands/chat/sameTopic.test.ts` timed out, both with a Postgres "terminating connection due
+  to administrator command" error -- a load/connection-limit issue, not this task's files); re-run
+  alone, both files passed clean. `src/commands/gate.test.ts`'s `full-scope change on the real
+  suites (B-40)` case also failed once under the same load and passed alone on a separate re-run.
+  None of these three files is in this plan's file list. Dev Postgres was reachable throughout (the
+  int tests above ran, not skipped).
+- Postgres-backed int tests touched by this task, each run alone and green:
+  `packages/db/test/documents.int.test.ts` (57 tests), `packages/db/test/ingest-sweep.int.test.ts`
+  (5 tests), `packages/db/test/repositories.int.test.ts` (193 tests).
+- `corepack pnpm exec prettier --check` on the eight changed files: one needed `--write`
+  (`packages/db/test/documents.int.test.ts`); re-verified clean and re-ran that file's tests after
+  the formatting pass (57 tests, unchanged behaviour).
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
 ## Budget
 
 Phases B, C, E tool calls used: 64
+Phases A, D tool calls used: 95

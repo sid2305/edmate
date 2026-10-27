@@ -219,6 +219,8 @@ const delDoc = (actor: Teacher, target: Teacher) =>
   `doc_del_${actor.toLowerCase()}${target.toLowerCase()}`;
 /** Task 8.2: each teacher's document that startReplace rewrites (one chunk, ord 0). */
 const repDoc = (t: Teacher) => `doc_rep_${t.toLowerCase()}`;
+/** Task 8.2q: each teacher's own document for markProcessingIfStorageKey's isolation case. */
+const mpDoc = (t: Teacher) => `doc_mp_${t.toLowerCase()}`;
 type DocRow = { id: string; teacherId: string; sourceTitle: string };
 const docOwners = (d: DocRow) => [teacherOfId(d.teacherId), ...markers(d.sourceTitle)];
 const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
@@ -404,6 +406,31 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       const unaffected = await r.documents.get(tScope(actor), repDoc(actor));
       expect(unaffected?.status).toBe('failed');
       expect(unaffected?.failureReason).toBe('provider_error');
+    },
+  },
+  // Task 8.2q: the atomic compare-and-set `complete` uses to close the replace-during-complete
+  // race. Same shape as `documents.failIfStorageKey` above: a mismatch (wrong teacher, wrong
+  // storageKey, wrong current status, missing row) never throws -- `{ updated: false }` -- so
+  // `owns: () => true` skips the generic cross-actor loop and isolation is asserted in `verify`.
+  'documents.markProcessingIfStorageKey': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope, actor) =>
+      r.documents.markProcessingIfStorageKey(scope, mpDoc(actor), `[${actor}] mp`),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ updated: true });
+      const mine = await r.documents.get(tScope(actor), mpDoc(actor));
+      expect(mine?.status).toBe('processing');
+      const other = otherTeacher(actor);
+      const cross = await r.documents.markProcessingIfStorageKey(
+        tScope(other),
+        mpDoc(actor),
+        `[${actor}] mp`,
+      );
+      expect(cross).toEqual({ updated: false });
+      const unaffected = await r.documents.get(tScope(actor), mpDoc(actor));
+      expect(unaffected?.status).toBe('processing');
     },
   },
   'documents.delete': {
@@ -4630,6 +4657,14 @@ describe.skipIf(!up)(
           kind: 'material',
           sourceTitle: `[${target}] replaceable`,
           storageKey: `[${target}] rep`,
+          rightsDeclared: true,
+        });
+        await repos.documents.create(tScope(target), {
+          id: mpDoc(target),
+          moduleId: ids.module(target, 1),
+          kind: 'material',
+          sourceTitle: `[${target}] mark-processing`,
+          storageKey: `[${target}] mp`,
           rightsDeclared: true,
         });
       }

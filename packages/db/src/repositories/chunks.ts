@@ -458,6 +458,41 @@ export function documentsRepo(db: Db) {
     },
 
     /**
+     * Task 8.2q: atomically marks the scope's document `processing`, but only if it still holds
+     * `expectedStorageKey` and is still `uploading`, `processing` or `failed`
+     * (`STATUS_FROM.processing`) -- the check and the write are the one UPDATE below, closing the
+     * window `complete`'s `head()` read and its old plain `updateStatus` write left open (a
+     * `replace` landing in between, which changes `storageKey` and resets to `uploading`, would
+     * otherwise have the old file processed under the new key's identity). Same shape as
+     * `failIfStorageKey` (8.2i): a storageKey mismatch, a wrong current status, a missing row and
+     * another teacher's row all return `{ updated: false }` rather than throwing. No failure
+     * reason to clear or set (processing has none).
+     */
+    async markProcessingIfStorageKey(
+      scope: TeacherScope,
+      id: string,
+      expectedStorageKey: string,
+    ): Promise<{ updated: boolean }> {
+      const method = 'documents.markProcessingIfStorageKey';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema, id, method);
+      const key = parseArg(StorageKeyArgSchema, expectedStorageKey, method);
+      const [row] = await db
+        .update(documents)
+        .set({ status: 'processing', failureReason: null, updatedAt: sql`now()` })
+        .where(
+          and(
+            eq(documents.id, docId),
+            eq(documents.teacherId, teacherId),
+            eq(documents.storageKey, key),
+            inArray(documents.status, [...STATUS_FROM.processing]),
+          ),
+        )
+        .returning({ id: documents.id });
+      return { updated: row !== undefined };
+    },
+
+    /**
      * Deletes the scope's document and its chunks and bumps the material revision, in one
      * transaction: the next retrieval search (and leakCheck) no longer sees it. The row is locked
      * first, so a concurrent chunk insert waits and then finds no document. Returns the storage

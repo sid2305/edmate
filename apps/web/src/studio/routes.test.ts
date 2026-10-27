@@ -106,6 +106,19 @@ function memoryBackend() {
         if (failureReason) r.failureReason = failureReason;
         else delete r.failureReason;
       },
+      async markProcessingIfStorageKey({ teacherId }, id, expectedStorageKey) {
+        const r = mine(teacherId, id);
+        if (
+          !r ||
+          r.storageKey !== expectedStorageKey ||
+          !STATUS_FROM.processing!.includes(r.status)
+        ) {
+          return { updated: false };
+        }
+        r.status = 'processing';
+        delete r.failureReason;
+        return { updated: true };
+      },
       async delete({ teacherId }, id) {
         const r = mine(teacherId, id);
         if (!r) throw notFound('documents.delete');
@@ -397,6 +410,25 @@ describe('POST /api/studio/documents (create)', () => {
     expect(s.rows.size).toBe(0);
     expect(s.logs).toEqual([
       { event: 'studio.create_rate_limit_unavailable', fields: { error: 'RangeError' } },
+    ]);
+  });
+
+  it('when the cleanup delete after a signing failure also fails, the original signing error still surfaces (task 8.2q)', async () => {
+    const s = setup();
+    vi.mocked(s.backend.storage.createUploadUrl).mockRejectedValueOnce(new Error('bucket down'));
+    const deleteCalls: string[] = [];
+    s.backend.documents.delete = async (_scope, id) => {
+      deleteCalls.push(id);
+      throw new RangeError('delete also failed');
+    };
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    // The original signing error surfaces through run()'s generic catch, as a 500 -- not swallowed
+    // by the cleanup-delete's own failure.
+    expect(res.status).toBe(500);
+    expect(deleteCalls).toHaveLength(1);
+    expect(s.logs).toEqual([
+      { event: 'studio.create_cleanup_failed', fields: { error: 'RangeError' } },
+      { event: 'studio.failed', fields: { error: 'Error' } },
     ]);
   });
 });
@@ -761,10 +793,10 @@ describe('POST /api/studio/documents/:id/complete', () => {
     const s = setup();
     const { documentId, row } = await uploaded(s);
     const order: string[] = [];
-    const update = s.backend.documents.updateStatus;
-    s.backend.documents.updateStatus = async (...a) => {
-      order.push(`status:${a[2]}`);
-      return update(...a);
+    const mark = s.backend.documents.markProcessingIfStorageKey;
+    s.backend.documents.markProcessingIfStorageKey = async (...a) => {
+      order.push('status:processing');
+      return mark(...a);
     };
     vi.mocked(s.backend.enqueue).mockImplementation(async (job, storageKey) => {
       order.push('enqueue');
@@ -910,13 +942,26 @@ describe('POST /api/studio/documents/:id/complete', () => {
     expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(400);
   });
 
-  it('a delete racing the status write is not_found and nothing is enqueued', async () => {
+  it('a delete racing the status write answers 409 (same as a replace race) and nothing is enqueued', async () => {
     const s = setup();
     const { documentId } = await uploaded(s);
-    s.backend.documents.updateStatus = async () => {
-      throw new RepositoryError('not_found', 'documents.updateStatus');
-    };
-    expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(404);
+    s.backend.documents.markProcessingIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect(s.enqueued).toHaveLength(0);
+  });
+
+  it('a replace landing between head() and the processing write answers 409, row untouched by this request', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    const staleKey = row.storageKey;
+    // Simulate a concurrent replace: it changed the stored key and reset status to uploading.
+    s.backend.documents.markProcessingIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.storageKey).toBe(staleKey);
+    expect(row.status).toBe('uploading');
     expect(s.enqueued).toHaveLength(0);
   });
 

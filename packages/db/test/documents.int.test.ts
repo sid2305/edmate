@@ -360,6 +360,68 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
     });
   });
 
+  describe("markProcessingIfStorageKey (8.2q: complete's compare-and-set against a concurrent replace)", () => {
+    it('matches from uploading, processing or failed and updates to processing', async () => {
+      for (const from of ['uploading', 'processing', 'failed'] as const) {
+        const id = await doc([], `uploads/doc/mp-${from}.pdf`);
+        if (from === 'processing') await repos.documents.updateStatus(A, id, 'processing');
+        if (from === 'failed') {
+          await repos.documents.updateStatus(A, id, 'processing');
+          await repos.documents.updateStatus(A, id, 'failed', 'provider_error');
+        }
+        const res = await repos.documents.markProcessingIfStorageKey(
+          A,
+          id,
+          `uploads/doc/mp-${from}.pdf`,
+        );
+        expect(res, from).toEqual({ updated: true });
+        expect((await repos.documents.get(A, id))?.status).toBe('processing');
+      }
+    });
+
+    it('a storageKey mismatch is a no-op: updated: false, row unchanged', async () => {
+      const id = await doc([], 'uploads/doc/mp1.pdf');
+      const res = await repos.documents.markProcessingIfStorageKey(A, id, 'uploads/doc/other.pdf');
+      expect(res).toEqual({ updated: false });
+      expect((await repos.documents.get(A, id))?.status).toBe('uploading');
+    });
+
+    it('a wrong current status (already ready) is a no-op', async () => {
+      const id = await doc([], 'uploads/doc/mp2.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      await repos.documents.updateStatus(A, id, 'ready');
+      const res = await repos.documents.markProcessingIfStorageKey(A, id, 'uploads/doc/mp2.pdf');
+      expect(res).toEqual({ updated: false });
+      expect((await repos.documents.get(A, id))?.status).toBe('ready');
+    });
+
+    it("a missing document or another teacher's is a no-op, not a throw", async () => {
+      const id = await doc([], 'uploads/doc/mp3.pdf');
+      expect(
+        await repos.documents.markProcessingIfStorageKey(B, id, 'uploads/doc/mp3.pdf'),
+      ).toEqual({ updated: false });
+      expect(
+        await repos.documents.markProcessingIfStorageKey(A, 'doc_nope', 'uploads/doc/mp3.pdf'),
+      ).toEqual({ updated: false });
+      expect((await repos.documents.get(A, id))?.status).toBe('uploading');
+    });
+
+    it('rejects a malformed id or storage key before any SQL', async () => {
+      const id = await doc([], 'uploads/doc/mp4.pdf');
+      expect((await rejection(repos.documents.markProcessingIfStorageKey(A, id, ''))).kind).toBe(
+        'invalid',
+      );
+      expect((await repos.documents.get(A, id))?.status).toBe('uploading');
+    });
+
+    it('does not bump the material revision', async () => {
+      const id = await doc([], 'uploads/doc/mp5.pdf');
+      const before = await repos.retrieval.revision(A);
+      await repos.documents.markProcessingIfStorageKey(A, id, 'uploads/doc/mp5.pdf');
+      expect(await repos.retrieval.revision(A)).toBe(before);
+    });
+  });
+
   describe('delete', () => {
     it('removes chunks and row, bumps the revision, and the next search misses it', async () => {
       const id = await doc(['zygomorphic petals unique marker', 'second zygomorphic chunk']);

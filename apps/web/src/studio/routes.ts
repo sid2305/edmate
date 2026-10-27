@@ -38,7 +38,13 @@ export interface ServerLog {
 export interface StudioBackend {
   documents: Pick<
     Repositories['documents'],
-    'get' | 'listForTeacher' | 'create' | 'updateStatus' | 'delete' | 'startReplace'
+    | 'get'
+    | 'listForTeacher'
+    | 'create'
+    | 'updateStatus'
+    | 'markProcessingIfStorageKey'
+    | 'delete'
+    | 'startReplace'
   >;
   storage: StudioStorage;
   /** `enqueueIngest` on the ingest queue, keyed by the storage key being processed. */
@@ -150,6 +156,8 @@ const MSG = {
   linkReplace: "A link can't be replaced. Delete it and add the link again.",
   linkRateLimited: 'Too many links added. Wait a while, then try again.',
   createRateLimited: 'Too many uploads started. Wait a while, then try again.',
+  // Task 8.2q: `complete` lost the race -- a `replace` landed between its read and this write.
+  replacedDuringUpload: 'The file was replaced before the upload finished.',
 } as const;
 
 /**
@@ -359,8 +367,13 @@ const complete: Work = async (b, scope, _req, ctx) => {
     await dropObject(b, key);
     return validation(MSG.type);
   }
-  // `processing` first: the worker's own `ready` write is refused from `uploading`.
-  await b.documents.updateStatus(scope, id, 'processing');
+  // `processing` first: the worker's own `ready` write is refused from `uploading`. Task 8.2q:
+  // a compare-and-set on `key`, not a plain `updateStatus` -- a `replace` landing between this
+  // request's `head()` read above and this write would otherwise silently process the old file
+  // under the new key's identity. `updated: false` means a replace won the race; nothing here is
+  // the old row's to mark anymore, so this request answers 409 and touches nothing else.
+  const marked = await b.documents.markProcessingIfStorageKey(scope, id, key);
+  if (!marked.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
   // Task 8.2n: the needs-transcription rule lives on the upload type, not here.
   try {
     await b.enqueue(
