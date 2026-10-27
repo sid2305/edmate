@@ -5837,9 +5837,30 @@ tasks:
   deps:
   - 8.7l
   risk: high
-  status: running
+  status: done
   branch: m13/8.7n-publish-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 196
+    tokens_in: 690
+    tokens_out: 55942
+    cache_read_tokens: 17703501
+    wall_time_seconds: 81686
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7m
   milestone: M13
   title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID
@@ -7019,7 +7040,8 @@ tasks:
 - id: 7.2l
   milestone: M13
   title: '7.2k review LOWs: in packages/harness/src/guardrails/moderationPatterns.ts the Devanagari past and habitual forms (बिकता, बेचा, छिपाया, ले गया ...) of the vapes and weapons rules block without
-    an intent marker, so a factual or news sentence can hard-block; decide (with 13.3) whether they need an intent marker or a near-miss set; order prefix-overlapping alternatives longest-first'
+    an intent marker, so a factual or news sentence can hard-block; decide (with 13.3) whether they need an intent marker or a near-miss set; order prefix-overlapping alternatives longest-first; from the
+    7.2n review (LOW): Object.freeze the exported MISUSE_CODES in packages/harness/src/guardrails/moderationIn.ts so a cast cannot mutate it'
   accept: near-miss tests for factual past/habitual sentences pass or a logged decision keeps them blocking; harness and evals green.
   deps:
   - 7.2k
@@ -8847,10 +8869,10 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: planning
+  status: running
   risk: risky
-  branch: null
-  model: plan:sonnet
+  branch: m13/1.7a-age-consent-followups
+  model: plan:sonnet build:sonnet
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
