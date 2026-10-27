@@ -53,10 +53,19 @@ export interface AgeContent {
  * file and its reasons only (already non-PII codes/messages -- the same strings `loadLocalePacks`
  * puts in the thrown `Error` for the default-pack case). The gate itself does not change
  * behaviour: a refused pack's market still falls back to the default pack, same as before.
+ *
+ * `production` (default `false`, so every pre-existing call keeps today's behaviour) and
+ * `allowUnsignedNotice` (default `false`) gate a market's notice (1.7a, 1.7 review deferral): in
+ * production, an unsigned notice (`signed: false`) throws instead of being served, unless
+ * `allowUnsignedNotice` is set, in which case it is served and `log` gets one non-PII line naming
+ * the code and the market. Neither flag is read from `process.env` here -- the caller
+ * (`apps/web/src/auth/index.ts`) computes both and passes them in explicitly.
  */
 export function loadAgeContent(
   dir: string,
   log: (line: string) => void = (line) => console.error(line),
+  production = false,
+  allowUnsignedNotice = false,
 ): AgeContent {
   const { notices, errors } = readPrivacyNoticesDir(join(dir, 'legal', 'privacy-notice'));
   if (errors.length > 0) {
@@ -81,7 +90,14 @@ export function loadAgeContent(
     agePolicy: agePolicyResolver(packs),
     notice(market) {
       const n = pickPrivacyNotice(market, notices);
-      return { market: n.market, version: n.version, body: n.body, signed: noticeSigned(n) };
+      const signed = noticeSigned(n);
+      if (production && !signed) {
+        if (!allowUnsignedNotice) {
+          throw new Error(`privacy notice for "${market}" is not signed; refusing in production`);
+        }
+        log(`[auth] age gate: age_notice_unsigned_allowed ${market}`);
+      }
+      return { market: n.market, version: n.version, body: n.body, signed };
     },
   };
 }
@@ -164,7 +180,9 @@ export async function submitAgeAnswer(input: unknown, deps: AgeGateDeps): Promis
   let resolved: Resolved | null;
   try {
     resolved = await deps.resolve(deps.cookies);
-  } catch {
+  } catch (error) {
+    const log = deps.log ?? ((line: string) => console.error(line));
+    log(`[auth] age gate: resolve failed ${describeError(error)}`);
     return failed;
   }
   if (!resolved) return { error: errorBody('unauthorized', 'Sign in first.') };
@@ -203,6 +221,8 @@ export async function submitAgeAnswer(input: unknown, deps: AgeGateDeps): Promis
     if (error instanceof RepositoryError && error.kind === 'invalid') {
       return { error: errorBody('validation', ASK_AGAIN) };
     }
+    const log = deps.log ?? ((line: string) => console.error(line));
+    log(`[auth] age gate: record failed ${describeError(error)}`);
     return failed;
   }
 }
@@ -217,10 +237,17 @@ export type AgeGateView =
 
 /** What the age gate page shows (it never shows a cut-off). */
 export async function ageGateView(
-  deps: Pick<AgeGateDeps, 'cookies' | 'resolve' | 'content' | 'secureCookies'>,
+  deps: Pick<AgeGateDeps, 'cookies' | 'resolve' | 'content' | 'secureCookies' | 'log'>,
 ): Promise<AgeGateView> {
   if (deps.cookies.get(ageBlockCookieName(deps.secureCookies))) return { state: 'closed' };
-  const resolved = await deps.resolve(deps.cookies);
+  let resolved: Resolved | null;
+  try {
+    resolved = await deps.resolve(deps.cookies);
+  } catch (error) {
+    const log = deps.log ?? ((line: string) => console.error(line));
+    log(`[auth] age gate: resolve failed ${describeError(error)}`);
+    return { state: 'sign_in' };
+  }
   if (!resolved) return { state: 'sign_in' };
   if (resolved.status === null) return { state: 'not_student' };
   if (resolved.status === 'age_needed') return { state: 'ask', markets: deps.content.markets };

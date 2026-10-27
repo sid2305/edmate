@@ -25,6 +25,7 @@ import {
   hasDistressKeyword,
   matchJailbreak,
   matchModeration,
+  MISUSE_CODES,
   runTurn,
   withheldMessage,
 } from '@edmate/harness';
@@ -134,7 +135,8 @@ async function runOneTurn(
     await transcripts.append(input.sessionId, {
       id: `m${transcripts.appended.length + 1}`,
       role: 'student',
-      text: commit.inputWithheld === true ? withheldMessage(commit.withheldCode) : commit.input.text,
+      text:
+        commit.inputWithheld === true ? withheldMessage(commit.withheldCode) : commit.input.text,
       createdAt: '2026-10-19T10:00:00.000Z',
     });
   }
@@ -176,9 +178,9 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('46 moderation true positives, 16 near-misses, 57 jailbreak cases (all reviewed, none pending)', () => {
+  it('46 moderation true positives, 18 near-misses, 57 jailbreak cases (all reviewed, none pending)', () => {
     expect(seededMod).toHaveLength(46);
-    expect(seededNear).toHaveLength(16);
+    expect(seededNear).toHaveLength(18);
     expect(seededJb).toHaveLength(57);
     // MVP first: the lead signed off every held-out case (4.4 sync with main after 4.3); none
     // is reviewed_by: pending any more.
@@ -234,7 +236,10 @@ for (const mode of MODES) {
             expect(ev).toMatchObject({ guard, source: 'rule' });
             expect(r.reply).toBe(BLOCK_REPLIES[ev.code as BlockCode]);
             expect(JSON.stringify(ev)).not.toContain(turn.student.slice(0, 12));
-            expect(r.alertKinds).toEqual(ev.code === 'harm_to_others' ? ['misuse'] : []);
+            // harm_to_others, threat and weapons carry a critical misuse alert (B-50, 7.2m).
+            expect(r.alertKinds).toEqual(
+              (MISUSE_CODES as readonly string[]).includes(ev.code) ? ['misuse'] : [],
+            );
             expect(checkMustBlock({ text: r.reply, blocked: verdict }, true).pass).toBe(true);
             if (turn.expect?.must_not_contain) {
               expect(checkMustNotContain(r.reply, turn.expect.must_not_contain).pass).toBe(true);

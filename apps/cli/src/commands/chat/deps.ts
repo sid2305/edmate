@@ -42,6 +42,7 @@ import {
   memoryEntitlementStore,
   memoryUsageMeter,
 } from '@edmate/harness/testing';
+import { buildDbRetrieval, dbConfigured } from './dbRetrieval.js';
 import { createChatGateway, gatewayFor, type Env } from './gateway.js';
 import { buildChatRetrieval } from './retrieval.js';
 import {
@@ -221,6 +222,11 @@ export interface ChatSetup {
   personasReason?: string;
   /** Where `deps.promptPacks` came from: the real signed set, or the harness's fixture fallback. */
   promptPackSource: 'real' | 'fixture';
+  /**
+   * Set only when `deps.retrieval` came from a real database (task 3.9f): closes its pool.
+   * Undefined on the no-`DATABASE_URL` in-memory path, same as before this task.
+   */
+  close?: () => Promise<void>;
 }
 
 /** Builds one run's full `PipelineDeps`, ready for `runTurn(input, { deps, steps: defaultSteps })`. */
@@ -236,6 +242,19 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
   const clock = opts.clock ?? systemClock();
   const usage = opts.usage ?? memoryUsageMeter();
   const prices = loadBundledPrices();
+
+  // Task 3.9f: a database-backed retrieval index when one is configured, over the in-memory
+  // lexical fallback (`buildChatRetrieval`) otherwise. No new option: `DATABASE_URL` already
+  // travels through `opts.env`.
+  let retrieval: PipelineDeps['retrieval'];
+  let dbClose: (() => Promise<void>) | undefined;
+  if (dbConfigured(opts.env)) {
+    const db = await buildDbRetrieval(opts.env, teacherId, content);
+    retrieval = db.index;
+    dbClose = db.close;
+  } else {
+    retrieval = buildChatRetrieval(content, teacherId);
+  }
 
   let gatewayForDeps: PipelineDeps['gatewayFor'];
   if (opts.gateway !== undefined) {
@@ -272,7 +291,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     profiles: memoryProfileStore(),
     transcripts: memoryTranscriptStore(),
     sessionState: worldSessionStateStore(world),
-    retrieval: buildChatRetrieval(content, teacherId),
+    retrieval,
     teacherQuestions: memoryTeacherQuestionStore(),
     usage,
     traces: memoryTraceSink(),
@@ -294,5 +313,6 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     personasSource,
     promptPackSource,
     ...(personasReason === undefined ? {} : { personasReason }),
+    ...(dbClose === undefined ? {} : { close: dbClose }),
   };
 }

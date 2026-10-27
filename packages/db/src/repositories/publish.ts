@@ -77,11 +77,7 @@ const INSERT_BATCH = 500;
 
 /** Why `startRun` or `goLive` refused, for the studio's 409s (plan Phase D). */
 export type PublishRefusal =
-  | 'no_packages'
-  | 'suspended'
-  | 'nothing_to_publish'
-  | 'gate_running'
-  | 'regulated_unapproved';
+  'no_packages' | 'suspended' | 'nothing_to_publish' | 'gate_running' | 'regulated_unapproved';
 
 /**
  * A RepositoryError that also says which publish rule refused (no new contracts error codes:
@@ -862,12 +858,16 @@ export function publishRepo(db: Db) {
               group by ${packages.id}
             ) pkg
           )
-          or last.published_at < (
+          -- No course row for the teacher reads as "not changed" (false), matching this
+          -- function's own stated default -- coalesce keeps the clause NULL-safe like the
+          -- is distinct from clauses above it, instead of relying on the JS-side === true
+          -- coercion below to mask a top-level NULL (decided in task 8.7n).
+          or coalesce(last.published_at < (
             select ${courses.updatedAt} from ${courses}
             where ${courses.teacherId} = ${teacherId}::text
             order by ${courses.order} asc, ${courses.createdAt} asc, ${courses.id} asc
             limit 1
-          )
+          ), false)
         ) as changed
         from last
       `);

@@ -239,6 +239,13 @@
       "when": 1792980393445,
       "tag": "0033_document_live_class_teacher",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793066324075,
+      "tag": "0034_agents_created_at_id_index",
+      "breakpoints": true
     }
   ]
 }

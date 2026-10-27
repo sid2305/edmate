@@ -318,31 +318,6 @@ describe('forged teacher-note marker (3.11d)', () => {
   });
 
   /**
-   * Min-of-3 wall-clock time (ms) for `fn()`, after one untimed warm-up call. A median (the old
-   * form) still let a single unlucky pair of samples (one low on `small`, one high on `large`)
-   * swing the ratio on a loaded CI runner (PR #297: ratio 82 vs the 64 bound); the minimum is the
-   * steadier estimate of the real cost, since noise only ever pushes a wall-clock reading up, never
-   * below the true floor. The untimed warm-up call keeps one-off JIT compilation out of the timed
-   * samples. This still times wall-clock work (docs/lessons.md prefers counting work); the base
-   * input size below (4,000 units) gives each sample more real work relative to timer resolution
-   * and scheduler jitter, which is the other half of steadying this check. Fix round (PR #299): CI
-   * is roughly 10x slower than a laptop under full-suite load with coverage on a 2-core runner, so
-   * n = 8,000 with 5 runs (83s) blew past the 60s test timeout; dropping to n = 4,000 with 3 runs
-   * keeps the total work close to the original n = 2,000 with 5 runs while the timeout widens to
-   * 120s as a margin.
-   */
-  function minOf3(fn: () => void): number {
-    fn(); // untimed warm-up: let JIT compilation happen outside the timed samples
-    const times: number[] = [];
-    for (let i = 0; i < 3; i += 1) {
-      const start = performance.now();
-      fn();
-      times.push(performance.now() - start);
-    }
-    return Math.min(...times);
-  }
-
-  /**
    * A ratio check that catches quadratic/exponential blow-up on hostile
    * input without pinning a tight wall-clock bound: with a 16x input-size
    * step, linear work gives a 16n/n ratio of about 16; quadratic gives about
@@ -359,13 +334,34 @@ describe('forged teacher-note marker (3.11d)', () => {
    * finite blow-up. It can't stop a true infinite loop: a synchronous call
    * never yields, so neither this bound nor the test timeout fires, and only
    * the CI job timeout ends the run.
+   *
+   * The small and large runs are timed in five interleaved pairs (after one untimed warm-up of
+   * each, to keep one-off JIT compilation out of the timed samples), and the minimum small time
+   * and minimum large time are taken across the five pairs. A single `minOf3` per size (the old
+   * form) still let a load spike that landed only while the large runs were timed inflate the
+   * ratio even though the code is linear (PR #325: ratio 72.7 vs the 64 bound). Interleaving
+   * means a spike hits both sizes alike, so the minimum of either side drops it; a spike can no
+   * longer single out one size's whole sample set the way it could when all of one size's runs
+   * were timed back to back.
    */
   function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
     const n = 4_000;
     const smallInput = buildInput(n);
     const largeInput = buildInput(16 * n);
-    const small = minOf3(() => run(smallInput));
-    const large = minOf3(() => run(largeInput));
+    run(smallInput); // untimed warm-up
+    run(largeInput); // untimed warm-up
+    const smallTimes: number[] = [];
+    const largeTimes: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      let start = performance.now();
+      run(smallInput);
+      smallTimes.push(performance.now() - start);
+      start = performance.now();
+      run(largeInput);
+      largeTimes.push(performance.now() - start);
+    }
+    const small = Math.min(...smallTimes);
+    const large = Math.min(...largeTimes);
     expect(large).toBeLessThan(10_000);
     // Guard against a near-zero small run making the ratio meaningless
     // (e.g. on a very fast machine); floor it at 0.5ms.
@@ -387,10 +383,11 @@ describe('forged teacher-note marker (3.11d)', () => {
   it('expectLinear still fails a deliberately quadratic function (self-test)', () => {
     // A real quadratic workload would need to burn real CPU to show up in a wall-clock ratio,
     // which is itself slow and -- on a 100+ worker parallel CI run -- liable to blow past even a
-    // 120s test timeout (that was tried and timed out under full-suite load). Faking the clock
-    // instead keeps this self-test instant and deterministic: `run` reports elapsed time
-    // proportional to input.length^2, with no real work behind it, so its 16x-input ratio (256)
-    // reliably trips the <64 bound above regardless of CI load.
+    // 60s test timeout (that was tried and timed out under full-suite load, before the test
+    // timeout widened to 120s). Faking the clock instead keeps this self-test instant and
+    // deterministic: `run` reports elapsed time proportional to input.length^2, with no real work
+    // behind it, so its 16x-input ratio (256) reliably trips the <64 bound above regardless of CI
+    // load.
     let clock = 0;
     const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
     const quadratic = (input: string): void => {
@@ -400,6 +397,45 @@ describe('forged teacher-note marker (3.11d)', () => {
       expect(() => expectLinear((n) => 'x'.repeat(n), quadratic)).toThrow();
     } finally {
       now.mockRestore();
+    }
+  });
+
+  it('a load burst that would have tripped minOf3-per-size no longer flips the ratio', () => {
+    // Regression test for PR #325 (ratio 72.7 vs the 64 bound): a burst that slows the *last
+    // three timed calls to `run`* by 5x used to land entirely on the large side's three timed
+    // samples (small ran first, large ran last), inflating the large minimum and so the ratio.
+    // With five interleaved small/large pairs the last three timed calls can no longer cover
+    // every large run, so the true (unburst) minimum survives on both sides.
+    //
+    // A first, untimed dry run counts how many times `run` is called in total (warm-ups plus
+    // timed samples) for one `expectLinear` call; that count tells the second pass which calls
+    // are "the last three" without hard-coding the sample count here.
+    let dryRunCalls = 0;
+    const dryClockSpy = vi.spyOn(performance, 'now').mockImplementation(() => 0);
+    try {
+      expectLinear(
+        (n) => 'x'.repeat(n),
+        () => {
+          dryRunCalls += 1;
+        },
+      );
+    } finally {
+      dryClockSpy.mockRestore();
+    }
+
+    let clock = 0;
+    let call = 0;
+    const burstSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const run = (input: string): void => {
+      call += 1;
+      const inBurst = call > dryRunCalls - 3; // the last three calls overall, timed or not --
+      // warm-ups happen first, so this is exactly the last three *timed* calls.
+      clock += (input.length / 1_000) * (inBurst ? 5 : 1);
+    };
+    try {
+      expect(() => expectLinear((n) => 'x'.repeat(n), run)).not.toThrow();
+    } finally {
+      burstSpy.mockRestore();
     }
   });
 });

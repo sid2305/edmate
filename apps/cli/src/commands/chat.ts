@@ -271,6 +271,11 @@ export async function runChatCommand(
   } finally {
     process.off('SIGINT', onSigint);
   }
+  // Task 3.9f: closes the db-retrieval pool (if any) on every clean exit path -- "exit", Ctrl+D or
+  // Ctrl+C alike -- so a `edmate chat` run against a real database never leaks its pool. `setup`
+  // only exists once `buildChatDeps` returned successfully, so the earlier `catch` above (which
+  // returns before `setup` is assigned) can never skip a close that was needed.
+  await setup.close?.();
   rl.close();
   io.stdout('\nbye\n');
   return 0;

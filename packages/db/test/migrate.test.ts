@@ -148,8 +148,8 @@ describe('runPostMigrateSteps', () => {
     );
   });
 
-  it('the default step list runs the three 0009 VALIDATEs, the three 0023 VALIDATEs, the 0024 VALIDATE, the 0033 VALIDATE and the package-pin and open-session indexes', () => {
-    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(8);
+  it('the default step list runs the three 0009 VALIDATEs, the three 0023 VALIDATEs, the 0024 VALIDATE, the 0033 VALIDATE, the two 0014 VALIDATEs and the package-pin and open-session indexes', () => {
+    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(10);
     expect(
       POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint' && s.table === 'documents'),
     ).toEqual([
@@ -178,6 +178,16 @@ describe('runPostMigrateSteps', () => {
         table: 'agents',
         constraint: 'agents_regulated_approval_check',
       },
+    ]);
+    expect(
+      POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint' && s.table === 'consents'),
+    ).toEqual([
+      { kind: 'validateConstraint', table: 'consents', constraint: 'consents_granted_by_check' },
+    ]);
+    expect(
+      POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint' && s.table === 'users'),
+    ).toEqual([
+      { kind: 'validateConstraint', table: 'users', constraint: 'users_birth_year_check' },
     ]);
     expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'concurrentIndex')).toEqual([
       {

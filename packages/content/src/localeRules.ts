@@ -5,8 +5,16 @@
 // value, and these rules are what keep such a pack from passing validation.
 import type { LocalePack } from '@edmate/contracts';
 import { compileLocalePatterns } from '@edmate/harness';
+import { PLATFORM_MIN_AGE } from './agePolicy.js';
 import { PILOT_LANGUAGES } from './pilotLanguages.js';
 import { checkSafeRegexGuarded } from './safeRegexGuard.js';
+
+/**
+ * The oldest a market's minimum age may be set to: 18, the age of majority @edmate/db's
+ * `CONSENT_AGE` also uses. Kept as a local constant, not imported, because this package does not
+ * depend on @edmate/db (same reasoning `agePolicy.ts`'s header already states).
+ */
+const MAX_MIN_AGE = 18;
 
 export type LocalePacks = ReadonlyMap<string, LocalePack>;
 export type LocaleRule = (packs: LocalePacks) => string[];
@@ -63,6 +71,15 @@ export const complianceReviewed: LocaleRule = (packs) =>
     return issues;
   });
 
+/** `compliance.minAge` is a safe integer within `[PLATFORM_MIN_AGE, 18]` (1.7 review deferral). */
+export const minAgeInRange: LocaleRule = (packs) =>
+  each(packs, (p) => {
+    const v = p.compliance.minAge;
+    return Number.isSafeInteger(v) && v >= PLATFORM_MIN_AGE && v <= MAX_MIN_AGE
+      ? []
+      : [`compliance.minAge ${v} must be between 13 and 18`];
+  });
+
 /** English only during the pilot (18 Oct 2026 decision; crisis replies too, B-14). */
 export const localeLanguages: LocaleRule = (packs) =>
   each(packs, (p) => {
@@ -117,6 +134,7 @@ export const LOCALE_RULES: readonly LocaleRule[] = [
   defaultPackPresent,
   helplinesVerified,
   complianceReviewed,
+  minAgeInRange,
   localeLanguages,
   piiPatternsCompileWithGu,
   piiPatternsSafeRegex,

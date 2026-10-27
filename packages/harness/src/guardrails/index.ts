@@ -92,7 +92,7 @@ export {
   matchJailbreak,
   type MatchJailbreakOptions,
 } from './jailbreakPatterns.js';
-export { createModerationInGuard, preGuardAlert } from './moderationIn.js';
+export { createModerationInGuard, MISUSE_CODES, preGuardAlert } from './moderationIn.js';
 export { matchModeration, MODERATION_CODES, type ModerationCode } from './moderationPatterns.js';
 export type { PreGuardBlock, PreGuardCtx } from './preGuardCtx.js';
 export {

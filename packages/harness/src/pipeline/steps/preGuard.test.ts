@@ -159,7 +159,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
     expect(r).toMatchObject({
       result: 'block',
       reply: BLOCK_REPLIES.harm_to_others,
-      alert: { kind: 'misuse', level: 'alert', sessionId: demoTurnInput.sessionId },
+      alert: { kind: 'misuse', level: 'critical', sessionId: demoTurnInput.sessionId },
     });
     expect(r.guards[0]).toEqual({ name: 'distressDetect', ok: true });
   }, 5_000);
@@ -297,12 +297,12 @@ describe('createPreGuardStep: outcome mapping', () => {
 });
 
 describe('teacherPackageNames (fix round MEDIUM 5)', () => {
-  it('without the dep: only the student\'s own package', async () => {
+  it("without the dep: only the student's own package", async () => {
     const { env } = envWith('x');
     expect(await teacherPackageNames(env, entitled)).toEqual([demoPackagePaid.name]);
   }, 5_000);
 
-  it('reads all of the teacher\'s names by the entitlement teacher; own first, no duplicates', async () => {
+  it("reads all of the teacher's names by the entitlement teacher; own first, no duplicates", async () => {
     const asked: string[] = [];
     const { env } = envWith('x', {
       teacherPackageNames: (tid) => {
@@ -372,7 +372,10 @@ describe('recentStudentTurns', () => {
   it('a withheld student message is read back as "[earlier message blocked: <code>]", never its text (fix round 2)', async () => {
     const transcripts = memoryTranscriptStore();
     await transcripts.append(demoTurnInput.sessionId, msg('s1', 'student', 'first'));
-    await transcripts.append(demoTurnInput.sessionId, msg('s2', 'student', withheldMessage('jailbreak_override')));
+    await transcripts.append(
+      demoTurnInput.sessionId,
+      msg('s2', 'student', withheldMessage('jailbreak_override')),
+    );
     await transcripts.append(demoTurnInput.sessionId, msg('s3', 'student', WITHHELD_MESSAGE));
     const { env } = envWith('x', { transcripts });
     expect(await recentStudentTurns(env)).toEqual([
