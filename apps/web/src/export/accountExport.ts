@@ -16,6 +16,11 @@ import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { buildExport, type ExportBackend, type ExportJson } from './buildExport';
 
+/** Largest number of distinct (teacherId, agentId) pairs one account export builds; each pair
+ * fans out into a full `buildExport()` (sessions, messages, evidence, questions, etc.), unlike
+ * `teacher-questions.ts`'s `QUESTIONS_MAX_LIMIT` (one row per item), so this cap is smaller. */
+export const TEACHER_PAIRS_MAX = 100;
+
 /** One of the student's subscription pairs, live or ended (`subscriptions.listAllForStudent`). */
 export interface SubscriptionPair {
   agentId: string;
@@ -76,9 +81,24 @@ export async function buildAccountExport(
     backend.identity.listConsentsForStudent(studentId),
   ]);
 
+  // A student can hold more than one subscription to the same teacher's agent over time
+  // (13.4d's `listAllForStudent` returns every one, live or ended): dedupe by (teacherId,
+  // agentId) to one entry, keeping the row with the latest `periodEnd`, before fanning each
+  // distinct pair out into its own full `buildExport()`.
+  const byPair = new Map<string, SubscriptionPair>();
+  for (const pair of pairs) {
+    const key = `${pair.teacherId}:${pair.agentId}`;
+    const existing = byPair.get(key);
+    if (existing === undefined || pair.periodEnd > existing.periodEnd) {
+      byPair.set(key, pair);
+    }
+  }
+  const dedupedPairs = [...byPair.values()];
   const truncated: string[] = [];
+  if (dedupedPairs.length > TEACHER_PAIRS_MAX) truncated.push('teachers');
+  const cappedPairs = dedupedPairs.slice(0, TEACHER_PAIRS_MAX);
   const teachers = await Promise.all(
-    pairs.map(async (pair) => {
+    cappedPairs.map(async (pair) => {
       const pairExport = await buildExport(
         backend,
         { studentId, teacherId: pair.teacherId, agentId: pair.agentId },

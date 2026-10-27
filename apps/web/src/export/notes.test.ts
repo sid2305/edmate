@@ -15,8 +15,17 @@ function baseExport(overrides: Partial<ExportJson> = {}): ExportJson {
     complete: true,
     truncated: [],
     counts: { sessions: 0, messages: 0, evidence: 0, teacherQuestions: 0 },
-    subscription: { status: 'active', periodEnd: '2026-11-22T00:00:00.000Z', package: { id: 'pkg_1', name: 'Fractions', version: 1 } },
-    progress: { modules: [], counts: { topicsCovered: 0, topicsMastered: 0 }, nextSteps: [], other: [] },
+    subscription: {
+      status: 'active',
+      periodEnd: '2026-11-22T00:00:00.000Z',
+      package: { id: 'pkg_1', name: 'Fractions', version: 1 },
+    },
+    progress: {
+      modules: [],
+      counts: { topicsCovered: 0, topicsMastered: 0 },
+      nextSteps: [],
+      other: [],
+    },
     learnerProfile: null,
     evidence: [],
     sessions: [],
@@ -55,8 +64,18 @@ describe('notesDocument', () => {
           createdAt: '2026-10-01T00:00:00.000Z',
           endedAt: '2026-10-01T01:00:00.000Z',
           messages: [
-            { id: 'm1', role: 'student', text: 'Why does the denominator matter?', createdAt: '2026-10-01T00:30:00.000Z' },
-            { id: 'm2', role: 'teacher', text: 'It tells you the size of each piece.', createdAt: '2026-10-01T02:00:00.000Z' },
+            {
+              id: 'm1',
+              role: 'student',
+              text: 'Why does the denominator matter?',
+              createdAt: '2026-10-01T00:30:00.000Z',
+            },
+            {
+              id: 'm2',
+              role: 'teacher',
+              text: 'It tells you the size of each piece.',
+              createdAt: '2026-10-01T02:00:00.000Z',
+            },
           ],
         },
       ],
@@ -97,7 +116,9 @@ describe('notesDocument', () => {
     expect(answersIdx).toBeGreaterThan(sessionsIdx);
     expect(mistakesIdx).toBeGreaterThan(answersIdx);
 
-    expect(blocks.some((b) => b.text.includes('Worked through word problems about pizza slices.'))).toBe(true);
+    expect(
+      blocks.some((b) => b.text.includes('Worked through word problems about pizza slices.')),
+    ).toBe(true);
     expect(blocks.some((b) => b.text === 'Why does the denominator matter?')).toBe(true);
     expect(blocks.some((b) => b.text === 'It tells you the size of each piece.')).toBe(true);
     expect(blocks.some((b) => b.text.includes('sign_error'))).toBe(true);
@@ -152,9 +173,19 @@ describe('notesDocument', () => {
             // One grouped-answer transaction closes tq_1 and tq_2 together but writes only one
             // teacher message for this student (task 5.10's `answer`): both questions share its
             // exact timestamp.
-            { id: 'm1', role: 'teacher', text: 'Shared answer for both', createdAt: '2026-10-01T00:00:10.000Z' },
+            {
+              id: 'm1',
+              role: 'teacher',
+              text: 'Shared answer for both',
+              createdAt: '2026-10-01T00:00:10.000Z',
+            },
             // A later, separate answer closes tq_3 alone, with its own message.
-            { id: 'm2', role: 'teacher', text: 'A different, later answer', createdAt: '2026-10-01T00:00:11.000Z' },
+            {
+              id: 'm2',
+              role: 'teacher',
+              text: 'A different, later answer',
+              createdAt: '2026-10-01T00:00:11.000Z',
+            },
           ],
         },
       ],
@@ -205,6 +236,87 @@ describe('notesDocument', () => {
     expect(texts[idxOf('Question three') + 1]).toBe('A different, later answer');
   });
 
+  it(
+    'marks an exactly-matched message used too, so a later fallback cannot also claim it ' +
+      '(task 9.6f review LOW) -- a later question whose own answeredAt lands before an earlier ' +
+      "exact match's timestamp can still only fall forward onto a *different*, later message",
+    () => {
+      const exportJson = baseExport({
+        sessions: [
+          {
+            id: 'ses_1',
+            agentId: 'agt_1',
+            agentVersion: 1,
+            packageId: null,
+            packageVersion: null,
+            summary: null,
+            createdAt: '2026-10-01T00:00:00.000Z',
+            endedAt: null,
+            messages: [
+              // Two distinct teacher messages that happen to share a timestamp -- a grouped answer
+              // closing tq_a and tq_c together writes only m1; a separate, unrelated answer for a
+              // different question happens to land at the exact same wall-clock second and writes
+              // m2. Both m1 and m2 are reachable, never collapsed into one.
+              {
+                id: 'm1',
+                role: 'teacher',
+                text: 'First answer',
+                createdAt: '2026-10-01T00:00:10.000Z',
+              },
+              {
+                id: 'm2',
+                role: 'teacher',
+                text: 'Second answer',
+                createdAt: '2026-10-01T00:00:10.000Z',
+              },
+            ],
+          },
+        ],
+        teacherQuestions: [
+          {
+            // tq_b is answered before tq_a's timestamp, has no exact match of its own, and falls
+            // forward to the nearest not-yet-used message at or after its own answeredAt -- which is
+            // m1 (nothing has used it yet when tq_b is processed, since tq_b sorts first).
+            id: 'tq_b',
+            teacherId: 'tch_asha',
+            agentId: 'agt_1',
+            studentId: 'std_amy',
+            text: 'Question B',
+            similarIds: [],
+            status: 'answered',
+            createdAt: '2026-10-01T00:00:00.000Z',
+            answeredAt: '2026-10-01T00:00:09.000Z',
+          },
+          {
+            // tq_a's answeredAt matches m1 (and m2) exactly; the grouped-answer design means exact
+            // matching ignores `used` and still returns m1, the first teacher message at that time.
+            id: 'tq_a',
+            teacherId: 'tch_asha',
+            agentId: 'agt_1',
+            studentId: 'std_amy',
+            text: 'Question A',
+            similarIds: [],
+            status: 'answered',
+            createdAt: '2026-10-01T00:00:00.000Z',
+            answeredAt: '2026-10-01T00:00:10.000Z',
+          },
+        ],
+      });
+      const blocks = notesDocument(exportJson, PROGRESS);
+      const texts = blocks.map((b) => b.text);
+      const idxOf = (t: string) => texts.indexOf(t);
+      // Both land on m1: tq_b's fallback runs first (nothing used yet) and claims m1, then tq_a's
+      // exact match also returns m1 (the same teacher message both questions were really answered
+      // by) -- m2, a genuinely distinct message, is never reachable from either of these two
+      // questions' own timestamps, so this also documents that `used` marking an exact match's
+      // index does not change this pair's outcome either way.
+      expect(idxOf('Question B')).toBeGreaterThan(-1);
+      expect(texts[idxOf('Question B') + 1]).toBe('First answer');
+      expect(idxOf('Question A')).toBeGreaterThan(-1);
+      expect(texts[idxOf('Question A') + 1]).toBe('First answer');
+    },
+  );
+
   it('never includes a raw chat transcript line that is not a summary or an answered Q&A', () => {
     const exportJson = baseExport({
       sessions: [
@@ -218,7 +330,12 @@ describe('notesDocument', () => {
           createdAt: '2026-10-01T00:00:00.000Z',
           endedAt: null,
           messages: [
-            { id: 'm1', role: 'student', text: 'raw transcript line that should not appear', createdAt: '2026-10-01T00:00:00.000Z' },
+            {
+              id: 'm1',
+              role: 'student',
+              text: 'raw transcript line that should not appear',
+              createdAt: '2026-10-01T00:00:00.000Z',
+            },
           ],
         },
       ],

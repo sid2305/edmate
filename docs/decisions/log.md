@@ -10,6 +10,136 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 5.2a real-transcriber timing check split to 5.2b · decided by lead · risk: low
+- Decided: the third 5.2 review LOW (a real-transcriber timing check against the 15-minute budget) is not part of 5.2a; it is board task 5.2b, run by a human.
+- Why: it needs a real model call, which tests may not make; the two type LOWs are done here.
+
+---
+
+### 26 Oct 2026 · 13.4f merge touches packages/db/src/identity/store.ts · decided by lead · risk: high
+- Decided: merge 13.4f. It changes `packages/db/src/identity/store.ts` (a risky path): `listConsentsForStudent` now parses `grantedBy` with a zod enum through an exported pure `parseConsentRow` instead of casting it. security-reviewer, code-reviewer and typescript-reviewer approved.
+- Why: a bad stored value now fails loud instead of being trusted; the only caller stays inside the guarded store methods, which scrub the error, and zod's enum message does not echo the bad value.
+
+---
+
+### 26 Oct 2026 · 13.4f budget overrun (60 vs 45) · decided by lead · risk: low
+- Decided: accept 60 tool calls against a budget of 45 (the builder reported 38).
+- Why: the work stayed inside the plan's files and finished in one phase; the overrun was test runs across two packages, not scope growth.
+
+---
+
+### 26 Oct 2026 · 13.4f review MEDIUM and LOW deferred to 13.4g · decided by lead · risk: low
+- Decided: the exact-periodEnd tie in the export dedupe (code-reviewer MEDIUM) and the error contract of the exported parseConsentRow (security-reviewer LOW) move to board task 13.4g.
+- Why: neither is a blocker: a tie needs a cancel and resubscribe ending on the same instant, and parseConsentRow's only caller is guarded today.
+
+---
+
+### 26 Oct 2026 · 9.6f merge touches packages/db/src/repositories · decided by lead · risk: high
+- Decided: merge 9.6f. It changes `packages/db/src/repositories/` messages.ts (one CROSS JOIN LATERAL raw `sql` statement for the export), sessions.ts (a row-value cursor) and subscriptions.ts (pause and cancel as one lock-and-write CTE), plus migration 0035. database-reviewer, typescript-reviewer, security-reviewer and code-reviewer re-reviewed after the fix round and approved.
+- Why: the scope filter stays in SQL with bound parameters only, the cursor is now an index seek (EXPLAIN-tested), and the CTE keeps the same scope, lock order and refusals as before.
+
+---
+
+### 26 Oct 2026 · 9.6f budget overrun (237 vs 125) · decided by lead · risk: low
+- Decided: accept 237 tool calls against the plan budget of 125: 95 for Phase A and 142 for Phase B (the builders reported 64 and 41). Phase B also absorbed the Phase A review fixes.
+- Why: both phases stayed inside the plan's files; the extra calls were full db test runs (about 7 minutes each) and the EXPLAIN work. Future db-heavy briefs keep the foreground-only test rule.
+
+---
+
+### 26 Oct 2026 · 9.6f re-review MEDIUM and LOW deferred to 9.6g · decided by lead · risk: low
+- Decided: EXPLAIN coverage of the real lateral statement (database-reviewer MEDIUM) and EXPLAIN tests that run the repositories' own SQL (LOW) move to board task 9.6g.
+- Why: both are test-coverage gaps, not shipped bugs; the functional paging tests pass and the plan shape is very likely right (equality predicate on an indexed pair).
+
+---
+
+### 26 Oct 2026 · 9.6f notes.ts used-set fix is a documented invariant, not an observed behavior change · decided by builder · risk: low
+- Decided: implemented the literal ask (mark an exact match's index `used` too) and added a test,
+  but the test documents the intended invariant with the actually-reachable processing order
+  rather than asserting a scenario where old and new code differ.
+- Why: an exhaustive search (46,656 combinations of message/question timestamps, including ties
+  and `answeredAt`-absent cases, via a throwaway script) found zero observable difference between
+  the old (`usedByFallback`, exact branch never marks `used`) and new (`used`, exact branch marks
+  it) code. This is provable directly from the algorithm's own structure: `answered` is sorted
+  ascending by `at`, so any question whose exact match claims message index `m` has `at ==
+  m.createdAt`; every later-processed question's own `at` is `>= ` that value by sort order, so
+  its fallback's forward search (`m.createdAt >= at`) can never even reach that earlier index
+  regardless of whether it is marked `used` — the ordering invariant already prevents the reuse
+  the fix defends against. The change is still correct, matches the review's literal ask, and
+  costs nothing; the comment documents the invariant for a reader, and the new test exercises the
+  real code path (including the intentional grouped-answer exact-ignores-`used` behavior) with
+  correct expectations rather than a false before/after narrative.
+
+---
+
+### 26 Oct 2026 · 9.6f subscriptions.ts pause/cancel: one CTE statement instead of lockLive + update · decided by builder · risk: low
+- Decided: `pause` and `cancel` call a new shared `lockAndWriteStatusIfLive` helper (one
+  `with ... for update` + `update ... from` statement) instead of `lockLive` followed by a
+  separate `tx.update(...)`; `changePackage` and `resume` keep `lockLive` unchanged.
+- Why: `pause`/`cancel` have no read between the lock and the write (unlike `changePackage`/
+  `resume`), so their two round trips collapse into one without changing lock order or behavior.
+  `changePackage`/`resume` do have a read in between (packages/auditLog), so folding them the same
+  way would either move that read inside the CTE (a bigger, harder-to-verify rewrite) or lose the
+  "lock first, read everything else after" ordering `lockLive`'s own comment requires — out of
+  scope for this task's plan (which named only `pause`/`cancel`).
+
+---
+
+### 26 Oct 2026 · 9.6f new test file instead of repositories.int.test.ts · decided by planner (carried forward) · risk: low
+- Decided: the messages.listForStudent test cases live in a new file,
+  `packages/db/test/export-cursor-paging.int.test.ts`, not next to the sessions cases in the
+  out-of-bounds `repositories.int.test.ts`.
+- Why: `repositories.int.test.ts` is owned by another builder right now; editing it would conflict.
+
+---
+
+### 26 Oct 2026 · 9.6f CONCURRENTLY post-migrate steps, not a plain migration · decided by planner (carried forward) · risk: low
+- Decided: migration 0035's two new indexes are built CONCURRENTLY by `POST_MIGRATE_STEPS`
+  (schema-only in `learning.ts`), following the `sessions`-table precedent (0010/0028/0032), not
+  as a plain `CREATE INDEX` in the migration file like 0034's `agents` index.
+- Why: both `sessions` and `messages` are big, high-write tables (per-turn/per-session writes); a
+  plain `CREATE INDEX` would hold the table's lock for the whole build inside drizzle's one
+  migration transaction.
+
+---
+
+### 26 Oct 2026 · 9.6f messages.listForStudent: per-session typed queries, not one lateral SQL statement · decided by builder · risk: low
+- Decided: the bounded-candidate rewrite issues one typed drizzle query per session (via
+  `Promise.all`), not a single raw-SQL `LATERAL` join.
+- Why: the plan left the exact SQL/drizzle shape to the builder's call (acceptance is
+  EXPLAIN-based, not implementation-based). A per-session query keeps every statement inside
+  drizzle's own typed query builder (no raw-SQL column-aliasing/type-parsing to get right by hand)
+  and is simplest to verify is correct; the per-session query count is bounded by how many
+  sessions the pair has, each one a cheap, index-backed, `limit + 1` seek.
+- Superseded (lead, 26 Oct 2026): Phase B replaced the per-session queries with one CROSS JOIN LATERAL statement after the Phase A review HIGH (unbounded N+1).
+
+---
+
+### 26 Oct 2026 · 9.6f noise rows needed to exercise the sessions index in the test · decided by builder · risk: low
+- Decided: the test seeds 5,000 unrelated "noise" sessions (other students of the same teacher)
+  in addition to the pair's own 12, and a separate small second pair for the exact-boundary/
+  malformed-cursor/return-key-set cases.
+- Why: on a 12-row table, Postgres's planner correctly prefers a seq scan + sort over any index
+  (same reasoning the 12.4e precedent test used 500 `agents` rows); the first draft of this test
+  failed the sessions EXPLAIN assertion for exactly this reason before the noise rows were added.
+  A second, small pair was needed for the cursor edge cases because the big pair's own history
+  (10,000+ rows) exceeds `EXPORT_PAGE_MAX` (500), so it can never reach an exact-boundary
+  `next = null` through the repository's own capped read; a direct, uncapped raw-SQL read is used
+  instead as ground truth for the big pair's page-concatenation regression test.
+
+---
+
+### 26 Oct 2026 · 7.2l budget overrun · decided by lead · risk: low
+- Decided: accept 105 tool calls against a plan budget of 25.
+- Why: most of the extra calls polled a backgrounded gate run, which the brief forbids. The diff is small and both reviewers checked every pattern alternative before and after. The next harness briefs repeat the foreground-only rule.
+
+---
+
+### 26 Oct 2026 · 7.2l merge of the moderation guard changes · decided by lead · risk: high
+- Decided: merge the packages/harness/src/guardrails changes. The Devanagari past and habitual forms of the weapons-conceal and vapes-sell rules stay fail-closed (they block without an intent marker). The alternatives are reordered longest-first, and MISUSE_CODES is frozen.
+- Why: the pilot is English-only, and Devanagari is a safety-net table, as in 7.2j and 7.2k. A false block on a factual Hindi sentence is a smaller harm than a miss. code-reviewer and typescript-reviewer confirmed that every pattern matches the same set and that no behaviour changed beyond the new test.
+
+---
+
 ### 26 Oct 2026 · 8.7i no new v8 ignore for RunShape.createdAt · decided by builder · risk: low
 - Decided: did not add a `/* v8 ignore next */` comment for the new `createdAt: z.date()` field,
   despite the plan's wording suggesting one.

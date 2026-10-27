@@ -63,8 +63,10 @@ const GAME =
   '(?:game|games|unity|godot|unreal|roblox|pygame|sprite|sprites|minecraft|fortnite|asset|assets|' +
   'animation|simulator|simulation|level|mod|class|object|3d|player|enemy|enemies|shooter)';
 /** Nouns after "explicit", "adult" and so on that are about code or data, not content. */
-const NOT_CONTENT = '(?:type|types|header|headers|policy|rating|filter|filters|flag|warning|cast|conversion)';
-const SEX_ADJ = '(?:explicit|adult|erotic|sexual|sexy|dirty|nsfw|porn\\S*|xxx|smut\\S*|lewd|steamy)';
+const NOT_CONTENT =
+  '(?:type|types|header|headers|policy|rating|filter|filters|flag|warning|cast|conversion)';
+const SEX_ADJ =
+  '(?:explicit|adult|erotic|sexual|sexy|dirty|nsfw|porn\\S*|xxx|smut\\S*|lewd|steamy)';
 const SEX_NOUN =
   '(?:story|stories|content|roleplay|role play|fanfic|fan fiction|chat|scene|scenes|pics?|pictures?|' +
   'images?|videos?|photos?|kahani|kahaniyan|kahaani|novel|poem)';
@@ -103,7 +105,10 @@ const RULES: readonly Rule<ModerationCode>[] = [
       '(?:alone|together in (?:bed|my room)|in bed)',
   ),
   decisive('sexual', '(?:अश्लील|सेक्सी|गंदी) (?:कहानी|कहानियां|वीडियो|फोटो|बातें|बात)'),
-  decisive('sexual', '(?:ashleel|ashlil|sexy|gandi) (?:kahani|kahaniyan|kahaani|video|photo|baatein)'),
+  decisive(
+    'sexual',
+    '(?:ashleel|ashlil|sexy|gandi) (?:kahani|kahaniyan|kahaani|video|photo|baatein)',
+  ),
   ambiguous('sexual', 'nude|nudes|naked|porn\\S*|sexting'),
 
   // ---- Hate ---------------------------------------------------------------------------------------
@@ -133,7 +138,10 @@ const RULES: readonly Rule<ModerationCode>[] = [
     '(?:disabled|viklang|handicapped|apahij|andhe|langde|dalit|muslim|hindu)' +
       `${gap(2)} (?:ka|ki|ke) (?:mazaak|mazak|majak|mazaq)`,
   ),
-  decisive('hate', '(?:धर्म|जाति|मजहब|समुदाय|विकलांग|दलित)' + `${gap(3)} (?:का|की|के) (?:मजाक|गाली|गालियां)`),
+  decisive(
+    'hate',
+    '(?:धर्म|जाति|मजहब|समुदाय|विकलांग|दलित)' + `${gap(3)} (?:का|की|के) (?:मजाक|गाली|गालियां)`,
+  ),
 
   // ---- Harm to others -----------------------------------------------------------------------------
   decisive('harm_to_others', `(?:way|ways|how) to ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`),
@@ -142,7 +150,10 @@ const RULES: readonly Rule<ModerationCode>[] = [
     `(?:how (?:do|can|could|should) i|help me|tell me how to|teach me how to|show me how to) ` +
       `${HARM_VERB}${gap(1)} ${OTHER_PERSON}`,
   ),
-  decisive('harm_to_others', '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)'),
+  decisive(
+    'harm_to_others',
+    '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)',
+  ),
   decisive(
     'harm_to_others',
     `(?:use|usko|unko|ladke ko|ladki ko|bande ko|teacher ko)${gap(4)} ` +
@@ -162,14 +173,19 @@ const RULES: readonly Rule<ModerationCode>[] = [
     `(?:उसे|उसको|उन्हें|उनको|तुझे|तुम्हें|लडके को|लडकी को)${gap(4)} ` +
       '(?:मार डालूंगा|मार डालूंगी|मार दूंगा|मार दूंगी|मार डालेंगे|मार डालूगा)',
   ),
-  ambiguous('harm_to_others', '(?:maar|mar) (?:dalunga|daalunga|dalungi|daalungi)|मार (?:डालूंगा|डालूंगी)'),
+  ambiguous(
+    'harm_to_others',
+    '(?:maar|mar) (?:dalunga|daalunga|dalungi|daalungi)|मार (?:डालूंगा|डालूंगी)',
+  ),
 
   // ---- Weapons --------------------------------------------------------------------------------------
   decisive(
     'weapons',
     `(?:make|build|making|building|create|assemble|bana|banana)${gap(3)} ` +
       '(?:bomb|bombs|pipe bomb|explosive|explosives|ied|grenade|molotov|gun|pistol|katta|weapon)',
-    { unless: `(?:bomb|bombs|explosive|explosives|grenade|gun|guns|pistol|weapon|weapons)${gap(3)} ${GAME}` },
+    {
+      unless: `(?:bomb|bombs|explosive|explosives|grenade|gun|guns|pistol|weapon|weapons)${gap(3)} ${GAME}`,
+    },
   ),
   // The game exemption downgrades a bomb or explosive to ambiguous, never drops it (fix round 2):
   // "a pipe bomb in minecraft" is flagged for the classifier; "a gun game in unity" is no hit.
@@ -188,7 +204,10 @@ const RULES: readonly Rule<ModerationCode>[] = [
     '(?:bomb|bum|explosive|katta|pistol|bandook|banduk) (?:banane|banana|banaane) (?:ka|ki|ke) ' +
       '(?:tarika|tareeka|tarike|vidhi|process|formula)',
   ),
-  decisive('weapons', '(?:बम|विस्फोटक|बंदूक|कट्टा) (?:कैसे|किस तरह) (?:बनाते|बनाएं|बनाऊं|बनता|बनाया|बनाए)'),
+  decisive(
+    'weapons',
+    '(?:बम|विस्फोटक|बंदूक|कट्टा) (?:कैसे|किस तरह) (?:बनाते|बनाएं|बनाऊं|बनता|बनाया|बनाए)',
+  ),
   decisive('weapons', '(?:बम|विस्फोटक|बंदूक|कट्टा) बनाने (?:का|की) (?:तरीका|विधि)'),
   decisive(
     'weapons',
@@ -200,10 +219,16 @@ const RULES: readonly Rule<ModerationCode>[] = [
     `(?:hathiyar|hathyar|chaku|chaaku|chaakoo|knife|gun|pistol|katta|bandook)${gap(4)} ` +
       '(?:chhupa|chupa|chhupake|chupake|le ja|le jaane|le jane|le jau)',
   ),
+  // Fail-closed by design (7.2l decision log): a factual/news-style past-tense sentence
+  // ("चोर चाकू ले गया") blocks too, same as a real admission — telling the two
+  // apart needs subject/person detection this phrase table doesn't do, and that's
+  // disproportionate before real Devanagari traffic exists (Devanagari is a safety-net table
+  // during the English-only, US-first pilot). Don't "fix" this over-block without reopening
+  // that decision.
   decisive(
     'weapons',
     '(?:हथियार|चाकू|बंदूक|बम)' +
-      `${gap(4)} (?:छुपा|छिपा|ले जा|छुपाया|छुपाई|छिपाया|छिपाई|ले गया|ले गई)`,
+      `${gap(4)} (?:छुपाया|छुपाई|छिपाया|छिपाई|ले गया|ले गई|छुपा|छिपा|ले जा)`,
   ),
   // 7.2k: infinitives (new verb लाना, plus छुपाना/छिपाना/ले जाना) need an adjacent intent/need
   // marker, directly after the infinitive, or an essay-style "X karna illegal hai" question would
@@ -245,8 +270,14 @@ const RULES: readonly Rule<ModerationCode>[] = [
       `${gap(4)} (?:of|about) (?:my |a |the |this |that )?` +
       '(?:teacher|classmate|friend|girl|boy|sir|maam|madam|principal|someone|him|her)',
   ),
-  decisive('harassment', `(?:fake|false|spread|spreading|start|starting)${gap(1)} (?:a )?rumou?rs?`),
-  decisive('harassment', '(?:jhoothi|jhuthi|jhooti|jhuti) (?:afwah|afwaah|khabar)|afwah (?:faila|failao)'),
+  decisive(
+    'harassment',
+    `(?:fake|false|spread|spreading|start|starting)${gap(1)} (?:a )?rumou?rs?`,
+  ),
+  decisive(
+    'harassment',
+    '(?:jhoothi|jhuthi|jhooti|jhuti) (?:afwah|afwaah|khabar)|afwah (?:faila|failao)',
+  ),
   decisive('harassment', '(?:झूठी|झूठा|झूठे) (?:अफवाह|खबर)|अफवाह (?:फैला|वाला|वाली)'),
   decisive(
     'harassment',
@@ -254,12 +285,21 @@ const RULES: readonly Rule<ModerationCode>[] = [
       '(?:mazaak|mazak|majak|mazaq) (?:udaane|udane|udana|udao|uda)',
   ),
   ambiguous('harassment', 'deepfake\\S*|rumou?rs? about'),
-  ambiguous('harassment', 'so (?:everyone|everybody|the whole class|they all|all of them) (?:laughs?|laugh at)'),
+  ambiguous(
+    'harassment',
+    'so (?:everyone|everybody|the whole class|they all|all of them) (?:laughs?|laugh at)',
+  ),
 
   // ---- Cheating -------------------------------------------------------------------------------------
-  decisive('cheating', `(?:submit|turn in|hand in|pass off)${gap(3)} (?:as|under) (?:mine|my own|my name)`),
+  decisive(
+    'cheating',
+    `(?:submit|turn in|hand in|pass off)${gap(3)} (?:as|under) (?:mine|my own|my name)`,
+  ),
   decisive('cheating', `pay you${gap(2)} (?:to|if you) (?:write|do|take|solve|complete)`),
-  decisive('cheating', '(?:take|attend|sit|give|write|do) my (?:\\S+ ){0,2}(?:exam|test|quiz|paper) for me'),
+  decisive(
+    'cheating',
+    '(?:take|attend|sit|give|write|do) my (?:\\S+ ){0,2}(?:exam|test|quiz|paper) for me',
+  ),
   decisive(
     'cheating',
     `(?:test|exam|paper|assignment|homework)${gap(2)} (?:de|likh|kar|bana|solve kar) ` +
@@ -267,7 +307,10 @@ const RULES: readonly Rule<ModerationCode>[] = [
   ),
   decisive('cheating', 'answers? copy kar'),
   decisive('cheating', 'अपने नाम से (?:जमा|सबमिट)'),
-  decisive('cheating', '(?:पूरा|पूरी|सारा) (?:असाइनमेंट|पेपर|होमवर्क|टेस्ट) (?:लिख|कर|बना) (?:दो|दीजिए|देना)'),
+  decisive(
+    'cheating',
+    '(?:पूरा|पूरी|सारा) (?:असाइनमेंट|पेपर|होमवर्क|टेस्ट) (?:लिख|कर|बना) (?:दो|दीजिए|देना)',
+  ),
   ambiguous(
     'cheating',
     '(?:write|do|solve|complete|finish) my (?:\\S+ ){0,3}(?:exam|test|assignment|quiz|paper)' +
@@ -304,10 +347,12 @@ const RULES: readonly Rule<ModerationCode>[] = [
       `mang\\S*|supply)${gap(3)} (?:school|class|college|campus)(?: (?:mein|me|main|pe|par))?`,
   ),
   // Devanagari variant, same style as the weapons Devanagari rule: no school word required.
+  // Fail-closed by design (7.2l decision log): same reasoning as the weapons conceal rule above
+  // — a factual/news-style past-tense sentence blocks too rather than risk under-blocking a
+  // genuine disclosure. Don't "fix" this over-block without reopening that decision.
   decisive(
     'other_unsafe',
-    '(?:वेप|वेप्स|वेपिंग)' +
-      `${gap(4)} (?:बेच|बिक|खरीद|बेचा|बेची|खरीदा|खरीदी|बिकता|बिकती)`,
+    '(?:वेप|वेप्स|वेपिंग)' + `${gap(4)} (?:बेचा|बेची|खरीदा|खरीदी|बिकता|बिकती|बेच|बिक|खरीद)`,
   ),
   // 7.2k: infinitives need an adjacent intent/need marker, directly after the infinitive, so an
   // essay-style question such as "वेप बेचना गैरकानूनी क्यों है" (an infinitive followed by an
@@ -318,7 +363,10 @@ const RULES: readonly Rule<ModerationCode>[] = [
       `${gap(4)} (?:बेचना|बेचूँ|बेचूंगा|बेचूंगी|खरीदना|खरीदूँगा|खरीदूंगी|बिकना) ` +
       '(?:है|हूँ|हूं|चाहता|चाहती|चाहिए|पड़ेगा|पड़ेगी)',
   ),
-  ambiguous('other_unsafe', `(?:buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`),
+  ambiguous(
+    'other_unsafe',
+    `(?:buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`,
+  ),
   ambiguous(
     'other_unsafe',
     `hack${gap(3)} (?:account|instagram|insta|email|whatsapp|portal|password|phone|facebook)`,
