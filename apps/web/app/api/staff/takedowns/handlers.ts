@@ -10,6 +10,7 @@ import {
   type Repositories,
   type StaffTakedownRow,
   TAKEDOWN_KINDS,
+  TAKEDOWN_NOTE_MAX,
 } from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -19,7 +20,7 @@ import type { RoleContext } from '../../../../src/auth/guard';
 import { readJson, TOO_LARGE } from '../../../../src/studio/routes';
 
 /** takedowns.create/lift's own note cap (packages/db TAKEDOWN_NOTE_MAX). */
-export const MAX_NOTE_CHARS = 500;
+export const MAX_NOTE_CHARS = TAKEDOWN_NOTE_MAX;
 
 const Note = z.string().trim().min(1).max(MAX_NOTE_CHARS);
 
