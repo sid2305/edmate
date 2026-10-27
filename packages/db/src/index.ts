@@ -20,7 +20,13 @@ export type { FileChunkKind } from './repositories/chunks.js';
 export * from './identity/index.js';
 export { migrateDatabase, MIGRATIONS_DIR } from './migrate.js';
 export type { DbEnv } from './client.js';
-export { applyBkt, BKT_DEFAULTS, foldMastery, type BktParams, type MasteryEntry } from './mastery.js';
+export {
+  applyBkt,
+  BKT_DEFAULTS,
+  foldMastery,
+  type BktParams,
+  type MasteryEntry,
+} from './mastery.js';
 
 export interface OpenDatabaseOptions {
   /** The identity store's age rule and notice versions (1.7; the web wires them from content). */
@@ -46,3 +52,9 @@ export function openDatabase(
     close,
   };
 }
+
+// Task 13.regate (Phase A): `regateRepo` is exported (above, via `./repositories/index.js`) for
+// apps/worker's Phase B to call directly, the same standalone shape as `retentionRepo`. It is
+// deliberately not wired into `openDatabase`'s return here: that object's shape is pinned by an
+// exhaustive-keys assertion in `test/repositories.int.test.ts`, a file another task is editing
+// concurrently (9.2g) -- Phase B wires `regate` into `openDatabase` once that lands.
