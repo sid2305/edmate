@@ -2,6 +2,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from '../src/index.js';
+// redactEmails is not part of the public API; imported directly from the module for the 8.7o
+// differential test only (old vs new output), not re-exported from the package.
+import { redactEmails } from '../src/repositories/redact-json.js';
 
 /** A fake `rp_<hex40>`-shaped id, same shape as reportRowId (packages/db/src/repositories/reports.ts). */
 function fakeReportRowId(): string {
@@ -412,5 +415,189 @@ describe('redactPersonalData', () => {
     expect(JSON.parse(JSON.stringify(out))).toEqual(
       JSON.parse('{"__proto__":{"email":"[redacted]","polluted":true},"ok":1}'),
     );
+  });
+});
+
+// 8.7o: the EMAIL regex ran in quadratic time on adversarial input, because its local-part
+// alternation `[\p{L}\p{N}._%+-]+` could start a match attempt at every position of a long run of
+// local-part characters. Fix round 1 added a lookbehind to block inner start points, but that
+// changes output across two adjacent emails (see redact-json.ts's comment on `redactEmails`), so
+// the fix is instead a linear scan, `redactEmails`, that reproduces the old regex's
+// `String.replace` semantics exactly. These tests pin a loose time bound (CI-safe) and check, with
+// a differential property test against the old regex, that no output changes -- including the
+// lookbehind's failure case, adjacent and overlapping email-shaped runs.
+describe('redactEmails linear time (8.7o)', () => {
+  // The pre-8.7o regex, kept test-only so the differential test below can compare old vs new
+  // output. Do not use this constant outside tests.
+  const OLD_EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
+  // Fix round 1's lookbehind regex: kept test-only to show it fails the adjacent-email case the
+  // linear scan passes.
+  const LOOKBEHIND_EMAIL =
+    /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
+
+  // A quadratic run at 600k characters takes minutes; 1s is loose enough for CI noise but still
+  // catches a regression back to quadratic behaviour (measured ~130ms for the domain-part case on
+  // one machine; see the 8.7o handoff for all six measured times).
+  const TIME_BOUND_MS = 1000;
+
+  function timed(fn: () => void): number {
+    const start = performance.now();
+    fn();
+    return performance.now() - start;
+  }
+
+  it.each([
+    ['a long run with no @', 'a1_'.repeat(200_000)],
+    ['a long run with one trailing @', `${'a1_'.repeat(200_000)}@`],
+    ['a long dotted local-part run with no @', 'a.'.repeat(300_000)],
+    ['a long dotted local-part run with a trailing @', `${'a.'.repeat(300_000)}@`],
+    ['a long dotted domain after @', `x@${'a.'.repeat(300_000)}`],
+    ['a long dashed domain after @', `x@${'a-'.repeat(300_000)}`],
+  ])('redacts %s in under %dms'.replace('%dms', `${TIME_BOUND_MS}ms`), (_label, input) => {
+    let out = '';
+    const ms = timed(() => {
+      out = redactPersonalData(input) as string;
+    });
+    expect(ms).toBeLessThan(TIME_BOUND_MS);
+    // None of these inputs contains a full email (no valid domain follows the `@`, or there is no
+    // `@` at all), so nothing should be redacted: the timing test must not mask a correctness
+    // regression. Correctness on real email-shaped input is covered by the differential test below.
+    expect(out).toBe(input);
+  });
+
+  /** Seeded PRNG (mulberry32): deterministic, so a differential failure is reproducible. */
+  function mulberry32(seed: number): () => number {
+    let a = seed;
+    return () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Unicode letters and digits included (é, Ж, ٣): the local-part and domain character classes
+  // are `\p{L}`/`\p{N}`, not ASCII-only, so an ASCII-only fuzz alphabet gives false confidence
+  // (typescript-reviewer HIGH, 8.7o fix round).
+  const ALPHABET = 'abcABC012._%+-@ éЖ٣';
+
+  function randomString(rand: () => number, maxLength: number): string {
+    const length = Math.floor(rand() * (maxLength + 1));
+    let s = '';
+    for (let i = 0; i < length; i += 1) {
+      s += ALPHABET[Math.floor(rand() * ALPHABET.length)];
+    }
+    return s;
+  }
+
+  // A second generator, built from email-shaped pieces (local-part runs, `@`, domain labels, `.`,
+  // `-`, spaces), so adjacent and overlapping email shapes -- the case the lookbehind got wrong --
+  // are common, not a rare fuzz accident.
+  const LOCAL_PIECES = ['a', 'ab', 'a.b', 'a_b', 'a%b', 'a+b', '0', 'é', 'Ж', '٣'];
+  const LABEL_PIECES = ['a', 'co', 'bc', 'example', '0', 'é', 'Ж'];
+  const TLD_PIECES = ['com', 'io', 'co', 'org', 'ab', 'bc', 'ee'];
+  const GLUE_PIECES = ['', '-', '.', ' ', '@'];
+
+  function pick<T>(rand: () => number, items: readonly T[]): T {
+    return items[Math.floor(rand() * items.length)] as T;
+  }
+
+  function randomEmailShapedString(rand: () => number, maxPieces: number): string {
+    const pieceCount = 1 + Math.floor(rand() * maxPieces);
+    let s = '';
+    for (let i = 0; i < pieceCount; i += 1) {
+      const kind = Math.floor(rand() * 5);
+      if (kind === 0) s += pick(rand, LOCAL_PIECES);
+      else if (kind === 1) s += '@';
+      else if (kind === 2) {
+        s += `${pick(rand, LABEL_PIECES)}.${pick(rand, TLD_PIECES)}`;
+      } else if (kind === 3) s += pick(rand, GLUE_PIECES);
+      else s += pick(rand, LABEL_PIECES);
+    }
+    return s;
+  }
+
+  const EXISTING_EMAIL_STRINGS = [
+    'someone@example.com',
+    'write to someone.else+tag@example.com today',
+    'SOMEONE@EXAMPLE.ORG',
+    'a@example.com, b@example.org',
+    '@mention and a@b',
+    'the student reset their progress',
+    '12345678-1234-4234-8234-123456789012',
+    'abc5551234567',
+    'id12345678-1234-4234-8234-123456789012',
+  ];
+
+  // The lookbehind case the 8.7o plan got wrong, plus other adjacent and overlapping shapes
+  // (code-reviewer and security-reviewer examples): the new linear scan must match the old
+  // regex's output on every one of these, even though the lookbehind version does not.
+  // Every string below is a fake, test-shaped address, not a real account.
+  const ADJACENT_EMAIL_STRINGS = [
+    'contact ab@test.example-cd@test.example now', // secret-scan: allow fake test-shaped address
+    'a@b.co.c@d.io', // secret-scan: allow fake test-shaped address
+    'x@y.com.z@w.org', // secret-scan: allow fake test-shaped address
+    'a@b.cc@d.ee', // secret-scan: allow fake test-shaped address
+    'u@0.Bc2@B.Aa', // secret-scan: allow fake test-shaped address
+    'a@b.ab2@c.bc', // secret-scan: allow fake test-shaped address
+    'x@y.ab2@z.co', // secret-scan: allow fake test-shaped address
+  ];
+
+  // Branch coverage for the surrogate-pair step in `redactEmails`: an astral (outside the BMP)
+  // letter directly before `@`, with another local-part character before that, so the scan steps
+  // left over the whole astral character as one unit (the `charStart > pos` guard is true).
+  it('steps over an astral local-part character as one unit', () => {
+    const s = 'a\u{1d49c}@a.bc'; // 'a' + MATHEMATICAL SCRIPT CAPITAL A (U+1D49C) + '@a.bc'
+    expect(redactEmails(s)).toBe(s.replace(OLD_EMAIL, REDACTED));
+  });
+
+  // Branch coverage for the same guard's other side: a lone (unpaired) low surrogate sits right
+  // at `pos` (the string's start), so the scan must not step further left past `pos`. This is not
+  // valid Unicode text, but the scan must not throw or read out of bounds on it.
+  it('does not step past `pos` on a lone low surrogate at the string start', () => {
+    const s = '\udc00@a.bc';
+    expect(() => redactEmails(s)).not.toThrow();
+    expect(redactEmails(s)).toBe(s.replace(OLD_EMAIL, REDACTED));
+  });
+
+  it('matches the old (quadratic) regex output on every existing email test string', () => {
+    for (const s of EXISTING_EMAIL_STRINGS) {
+      expect(redactEmails(s)).toBe(s.replace(OLD_EMAIL, REDACTED));
+    }
+  });
+
+  it('matches the old (quadratic) regex output on adjacent and overlapping email shapes', () => {
+    for (const s of ADJACENT_EMAIL_STRINGS) {
+      const oldOut = s.replace(OLD_EMAIL, REDACTED);
+      expect(redactEmails(s)).toBe(oldOut);
+    }
+  });
+
+  it('shows the lead’s plan was wrong: the fix-round-1 lookbehind drops the second of two emails that directly abut (old and the linear scan both catch it)', () => {
+    const s = 'contact ab@test.example-cd@test.example now';
+    const oldOut = s.replace(OLD_EMAIL, REDACTED);
+    expect(redactEmails(s)).toBe(oldOut);
+    expect(s.replace(LOOKBEHIND_EMAIL, REDACTED)).not.toBe(oldOut);
+  });
+
+  it('matches the old (quadratic) regex output on 50,000 seeded random strings', () => {
+    const rand = mulberry32(0xe4d7a7e);
+    for (let i = 0; i < 50_000; i += 1) {
+      const s = randomString(rand, 60);
+      const oldOut = s.replace(OLD_EMAIL, REDACTED);
+      const newOut = redactEmails(s);
+      expect(newOut).toBe(oldOut);
+    }
+  });
+
+  it('matches the old (quadratic) regex output on 50,000 seeded email-shaped strings', () => {
+    const rand = mulberry32(0x9e3779b9);
+    for (let i = 0; i < 50_000; i += 1) {
+      const s = randomEmailShapedString(rand, 12);
+      const oldOut = s.replace(OLD_EMAIL, REDACTED);
+      const newOut = redactEmails(s);
+      expect(newOut).toBe(oldOut);
+    }
   });
 });

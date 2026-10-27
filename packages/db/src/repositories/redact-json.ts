@@ -52,7 +52,83 @@ function isPersonalKey(key: string): boolean {
   );
 }
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu;
+/** An email local-part character, matching the old regex's `[\p{L}\p{N}._%+-]`. */
+const EMAIL_LOCAL_CHAR = /[\p{L}\p{N}._%+-]/u;
+/**
+ * An email domain, run as a sticky regex so it only matches starting exactly at `lastIndex` (no
+ * backtracking into earlier text): `[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}`.
+ */
+const EMAIL_DOMAIN = /[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/uy;
+
+/**
+ * Replaces every email-shaped run in `s` with REDACTED. Reproduces, exactly, the output of the old
+ * regex `/[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu` used with
+ * `String.replace`, but in linear time.
+ *
+ * 8.7o fix round: a lookbehind on the local part, `(?<![\p{L}\p{N}._%+-])`, was tried to make the
+ * regex linear, but it changes output across two adjacent fake addresses (secret-scan: allow
+ * fake test-shaped addresses in a code comment, not real accounts): in
+ * `"contact ab@test.example-cd@test.example now"`, the old regex gives
+ * `"contact [redacted][redacted] now"` (the second local part starts right after the first
+ * domain's `-`), but the lookbehind blocks that second match, because the domain's trailing letter
+ * (`e` in `.example`) is itself a local-part character, so the lookbehind sees "previous character
+ * is a local-part character" and refuses to start there. The lookbehind's "no output change"
+ * argument in the 8.7o plan only considered one run of local-part characters in isolation, not a
+ * local part that directly follows another match's domain.
+ *
+ * This linear scan reproduces the old regex's leftmost-match semantics exactly instead:
+ * - `pos` is the end of the previous match (0 initially); `from` is where to resume searching for
+ *   the next `@` (it moves past a failed candidate's `@` without moving `pos`, so a later local
+ *   part is still free to start inside what would have been the failed candidate's domain text).
+ * - For each `@` found at or after `from`: walk left over the maximal run of local-part characters,
+ *   but never past `pos` (text already consumed by an earlier match is never reused). An astral
+ *   (surrogate-pair) character is stepped over as one unit, not as two lone surrogate halves.
+ * - If that run is empty, this `@` cannot start a match; move on to the next `@` (`pos` unchanged).
+ * - Otherwise, try the domain pattern as a sticky match starting right after the `@`. If it
+ *   matches, emit REDACTED for [localStart, domainEnd) and advance `pos` (and `from`) to
+ *   `domainEnd`. If it does not match, this `@` cannot start a match either; move on, `pos`
+ *   unchanged.
+ * This is linear: `@` is in neither the local-part nor domain character class, so each local-part
+ * walk stops at the previous match's end or the previous `@`, and each domain attempt stops at the
+ * next `@`; no text is rescanned by more than a constant number of passes.
+ */
+export function redactEmails(s: string): string {
+  let out = '';
+  let pos = 0;
+  let from = 0;
+  for (;;) {
+    const at = s.indexOf('@', from);
+    if (at < 0) break;
+    let localStart = at;
+    while (localStart > pos) {
+      let charStart = localStart - 1;
+      const code = s.charCodeAt(charStart);
+      // `code` is a low surrogate: step one further left to cover the whole astral character,
+      // unless that would go past `pos`.
+      if (code >= 0xdc00 && code <= 0xdfff && charStart > pos) {
+        charStart -= 1;
+      }
+      const ch = String.fromCodePoint(s.codePointAt(charStart) as number);
+      if (!EMAIL_LOCAL_CHAR.test(ch)) break;
+      localStart = charStart;
+    }
+    if (localStart === at) {
+      from = at + 1;
+      continue;
+    }
+    EMAIL_DOMAIN.lastIndex = at + 1;
+    const domainMatch = EMAIL_DOMAIN.exec(s);
+    if (!domainMatch) {
+      from = at + 1;
+      continue;
+    }
+    out += s.slice(pos, localStart) + REDACTED;
+    pos = EMAIL_DOMAIN.lastIndex;
+    from = pos;
+  }
+  return out + s.slice(pos);
+}
+
 /**
  * A phone-shaped run: digits with spaces, dots, dashes or brackets between them. The run may
  * directly follow a letter (`abc5551234567`): only `\p{N}_.+-` before the start block the match,
@@ -113,7 +189,7 @@ function coveredBy(start: number, end: number, spans: Array<[number, number]>): 
  *  (whole value or embedded), prefixed id tokens and bare hex digests are never treated as phone
  *  numbers, even when a digit run inside them is 7 or more digits long. */
 function redactString(s: string): string {
-  const afterEmail = s.replace(EMAIL, REDACTED);
+  const afterEmail = redactEmails(s);
   const spans = [
     ...matchSpans(UUID, afterEmail),
     ...matchSpans(PREFIXED_ID, afterEmail),
