@@ -11152,9 +11152,30 @@ tasks:
   deps:
   - 11.4d
   risk: low
-  status: review
+  status: done
   branch: m13/11.4j-ffmpeg-hardening
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 455
+    tokens_in: 1588
+    tokens_out: 88443
+    cache_read_tokens: 48461538
+    wall_time_seconds: 2344
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 6.3e
   milestone: M13
   title: '6.3d review LOWs for packages/db/src/repositories/ports.ts profileStoreFor: name the unused third applyMistakes parameter _proposed so the omission reads as intentional; add a profile-store int
@@ -11197,6 +11218,6 @@ tasks:
   deps:
   - 11.4j
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4k-chunker-comments
+  model: plan:lead build:sonnet

@@ -10,6 +10,24 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 11.4j size-watch poll cadence · decided by builder · risk: low
+- Decided: used a plain `setInterval` with an in-flight guard (skip a tick if the previous async readdir/stat pass hasn't finished) rather than a recursive `setTimeout` chain.
+- Why: the plan didn't specify the exact scheduling primitive, only the check's semantics (sum sizes, abort over the limit, ignore vanished files, clear on settle); a guarded `setInterval` is the simplest implementation meeting all of those and was not called out as disallowed.
+
+---
+
+### 27 Oct 2026 · 11.4j readFile spy mechanism · decided by builder · risk: low
+- Decided: used `vi.mock('node:fs/promises', ...)` wrapping the real module (spreading `actual` and wrapping only `readFile` in `vi.fn`) instead of `vi.spyOn`, which vitest rejects for this ESM module ("Cannot redefine property: readFile").
+- Why: the plan's item 5 said "via a spy or a counter in the fake" without naming the exact mechanism; this is the standard vitest pattern for spying on a non-configurable ESM export while leaving every other export (and the real filesystem behaviour) untouched for the rest of the suite.
+
+---
+
+### 27 Oct 2026 · 11.4j budget overrun accepted · decided by lead · risk: low
+- Decided: accept 57 harness-counted tool calls against a 45-call budget (1.27x).
+- Why: all six plan items landed within the plan's file list, and both reviewers approved with no blocking finding. The two security LOWs (comments only) go to 11.4k.
+
+---
+
 ### 27 Oct 2026 · 8.2r drop-and-reinstate of documents_failure_reason_only_when_failed · decided by builder · risk: high
 - Decided: migration `0041_documents_list_index_failure_reason_validate.sql` contains
   `ALTER TABLE "documents" DROP CONSTRAINT "documents_failure_reason_only_when_failed";` followed
