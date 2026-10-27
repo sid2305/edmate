@@ -10975,9 +10975,31 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: running
+  status: done
   branch: m13/6.4b-session-end-claim
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 843
+    tokens_in: 2890
+    tokens_out: 391051
+    cache_read_tokens: 109512201
+    wall_time_seconds: 4381
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: 6.4c
   milestone: M13
   title: '6.4a review LOWs: telemetry when evidenceFor skips a turn with no topic (packages/harness/src/pipeline/runner.ts); a test for a SessionSummarySchema failure in the end route (route.test.ts); a

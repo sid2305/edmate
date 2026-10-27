@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.4b add a `sessions.attachSummary` case to `repositories.int.test.ts` · decided by builder · risk: low
+- Decided: added the required `CASES['sessions.attachSummary']` entry (and a third seeded,
+  already-ended, summary-less session per pair, `endable3`) to
+  `packages/db/test/repositories.int.test.ts`, even though this file was not in the plan's "Files
+  to create/modify" list.
+- Why: `CASES` is typed `Record<RepositoryMethod, IsolationCase>` and a runtime check also
+  compares `createRepositories(db)`'s own methods against `CASES` — adding `attachSummary` to
+  `Repositories['sessions']` (needed per the plan's own design) makes `packages/db` itself fail to
+  `tsc`/fail the runtime check without this addition. This isn't a design choice or a scope
+  widening; it's the minimum edit the plan's own chosen design requires to keep `packages/db`
+  compiling and its own isolation test accurate. Kept the shape identical to the adjacent
+  `sessions.end` case (same owner-marker/no-leak assertions, same mismatches pattern) and used a
+  freshly seeded session rather than reusing `endable`/`endable2` so it never races with those
+  cases' own state.
+
+---
+
+### 27 Oct 2026 · 6.4b approve merge · decided by lead · risk: high
+- Decided: 6.4b merges. It changes `packages/db/src/repositories/sessions.ts` (new `attachSummary`, scoped to the pair and conditional on an ended session with no summary) and the end route now claims the session before summarizing, so two concurrent end requests run the summarizer once. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; typescript-reviewer's HIGH (a history read failure after the claim returned an error for an ended session) was fixed in fix round 1 and re-verified.
+- Why: it closes 6.4a's security MEDIUM (unmetered duplicate summaries) using the existing atomic `end()` claim, without changing `end()`.
+
+---
+
+### 27 Oct 2026 · 6.4b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 129 tool calls (build 85, fix round 44, by the harness count) against the plan's 90.
+- Why: the overrun is the fix round for a real HIGH; the build itself came in under budget.
+
+---
+
+### 27 Oct 2026 · 6.4b three review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix for packages/db/src/repositories/sessions.ts (attachSummary reads the memory-reset watermark at attach time, which is the wanted behaviour), route.ts (the `endedAt` early return is only a fast path before the atomic claim) and route.test.ts (the in-memory concurrency test proves route ordering; cross-instance atomicity is `end()`'s conditional UPDATE, covered by the packages/db int tests), all under apps/web/app/api/sessions/[id]/end/.
+- Why: none is a defect; each reviewer marked it informational.
+
+---
+
 ### 27 Oct 2026 · 6.3c `ProfileStore` port extension (ADR-0017) · decided by builder · risk: high
 - Decided: extend `ProfileStore` (`packages/contracts/src/ports.ts`) with two new optional methods,
   `applyMistakes?` and `recordProposedMistakes?`, under ADR-0017 (status Proposed; architect,
