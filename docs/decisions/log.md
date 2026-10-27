@@ -10,6 +10,74 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 0.20g confirmed webServer-before-globalSetup ordering from source · decided by builder · risk: low
+- Decided: Built the fix on the plan's assumption (webServer starts before globalSetup) after
+  confirming it directly in the installed Playwright runner source (see Summary); no change to the
+  plan's approach was needed.
+- Why: The plan asked the builder to verify this before relying on it; recorded here as the
+  concrete evidence rather than a guess.
+
+---
+
+### 27 Oct 2026 · 0.20g deterministic full-flow/teacher-packages failures found but not fixed · decided by builder · risk: low
+- Decided: Left `full-flow.spec.ts` and `teacher-packages-walkthrough.spec.ts` untouched; reporting
+  their deterministic (not intermittent) failures to the lead as a separate follow-up rather than
+  investigating or fixing them here.
+- Why: Both files are out of bounds for this task's narrow one-file fix, the failures are
+  unrelated in shape (deterministic, inside a step that already has its own cold-start timeout
+  wrapper) to the cold-route-compile flake this task targets, and the budget (~40 tool calls) does
+  not cover a second investigation.
+
+---
+
+### 27 Oct 2026 · US payment provider: Paddle as merchant of record (B-53, task 10.1) · decided by you · risk: high
+Decided: Paddle is the US merchant of record, so it handles sales tax. Before its adapter is built, the human describes Edmate to Paddle in writing (subscriptions to AI tutoring software; teachers paid by Edmate as content suppliers; live classes an included feature) and gets their OK. If Paddle refuses, Stripe Billing plus Stripe Tax, with Edmate filing US sales tax itself. Payouts to teachers stay manual in the pilot.
+Why: Signed, timestamped webhooks, a separate sandbox, clear proration and native pause/resume fit 10.2 and 10.3; the providers can refuse marketplaces, so the written OK comes first.
+Alternatives: Lemon Squeezy (b); Stripe Billing plus Stripe Tax from the start (c).
+Reversible: Yes, the Payments port keeps the adapter swappable.
+
+### 27 Oct 2026 · Sign-in sessions last 7 days, renewed on use (B-60, task 13.3b) · decided by you · risk: high
+Decided: A database sign-in session lasts 7 days and is renewed while the person keeps using Edmate, before the pilot opens to more people. Today's 30-day value stays until 13.3b lands.
+Why: A lost or shared device stops working within a week; active users rarely notice the renewal.
+Alternatives: keep 30 days (a); 14 days renewed on use (c).
+Reversible: Yes, one value in apps/web/src/auth/config.ts.
+
+
+### 27 Oct 2026 · 6.4b add a `sessions.attachSummary` case to `repositories.int.test.ts` · decided by builder · risk: low
+- Decided: added the required `CASES['sessions.attachSummary']` entry (and a third seeded,
+  already-ended, summary-less session per pair, `endable3`) to
+  `packages/db/test/repositories.int.test.ts`, even though this file was not in the plan's "Files
+  to create/modify" list.
+- Why: `CASES` is typed `Record<RepositoryMethod, IsolationCase>` and a runtime check also
+  compares `createRepositories(db)`'s own methods against `CASES` — adding `attachSummary` to
+  `Repositories['sessions']` (needed per the plan's own design) makes `packages/db` itself fail to
+  `tsc`/fail the runtime check without this addition. This isn't a design choice or a scope
+  widening; it's the minimum edit the plan's own chosen design requires to keep `packages/db`
+  compiling and its own isolation test accurate. Kept the shape identical to the adjacent
+  `sessions.end` case (same owner-marker/no-leak assertions, same mismatches pattern) and used a
+  freshly seeded session rather than reusing `endable`/`endable2` so it never races with those
+  cases' own state.
+
+---
+
+### 27 Oct 2026 · 6.4b approve merge · decided by lead · risk: high
+- Decided: 6.4b merges. It changes `packages/db/src/repositories/sessions.ts` (new `attachSummary`, scoped to the pair and conditional on an ended session with no summary) and the end route now claims the session before summarizing, so two concurrent end requests run the summarizer once. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; typescript-reviewer's HIGH (a history read failure after the claim returned an error for an ended session) was fixed in fix round 1 and re-verified.
+- Why: it closes 6.4a's security MEDIUM (unmetered duplicate summaries) using the existing atomic `end()` claim, without changing `end()`.
+
+---
+
+### 27 Oct 2026 · 6.4b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 129 tool calls (build 85, fix round 44, by the harness count) against the plan's 90.
+- Why: the overrun is the fix round for a real HIGH; the build itself came in under budget.
+
+---
+
+### 27 Oct 2026 · 6.4b three review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix for packages/db/src/repositories/sessions.ts (attachSummary reads the memory-reset watermark at attach time, which is the wanted behaviour), route.ts (the `endedAt` early return is only a fast path before the atomic claim) and route.test.ts (the in-memory concurrency test proves route ordering; cross-instance atomicity is `end()`'s conditional UPDATE, covered by the packages/db int tests), all under apps/web/app/api/sessions/[id]/end/.
+- Why: none is a defect; each reviewer marked it informational.
+
+---
+
 ### 27 Oct 2026 · 6.3c `ProfileStore` port extension (ADR-0017) · decided by builder · risk: high
 - Decided: extend `ProfileStore` (`packages/contracts/src/ports.ts`) with two new optional methods,
   `applyMistakes?` and `recordProposedMistakes?`, under ADR-0017 (status Proposed; architect,

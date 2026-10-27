@@ -68,14 +68,15 @@ decisions:
     recommendation: Subscriptions + split payouts to teachers; compare fees
     answer: Razorpay in India (UPI AutoPay, Route split payouts); a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax; both behind the one Payments port
   mor-provider:
-    status: open
+    status: decided
     question: 'US merchant of record: Paddle or Lemon Squeezy, and has it accepted Edmate''s model in writing? (B-53)'
     options:
     - Paddle
     - Lemon Squeezy
     - Stripe Billing + Stripe Tax (fallback if refused)
     recommendation: Paddle; get its written OK before 10.1 Phase C
-    answer: null
+    answer: a) Paddle as the US merchant of record; the human gets Paddle's written OK on Edmate's business model before the adapter is built; fallback (c) Stripe Billing + Stripe Tax if refused (human,
+      27 Oct 2026, B-53)
   revenue-share:
     status: open
     question: Edmate's revenue share and floor price per package
@@ -3042,7 +3043,9 @@ tasks:
   deps:
   - 6.3c
   risk: risky
-  status: planning
+  status: review
+  branch: m13/6.3d-mistake-db-adapter
+  model: plan:sonnet build:sonnet
 - id: 6.2a
   milestone: M13
   title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
@@ -10942,7 +10945,7 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: running
+  status: review
   branch: m13/8.2q-upload-hardening
   model: plan:sonnet build:sonnet
 - id: 8.2r
@@ -10975,9 +10978,31 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: running
+  status: done
   branch: m13/6.4b-session-end-claim
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 843
+    tokens_in: 2890
+    tokens_out: 391051
+    cache_read_tokens: 109512201
+    wall_time_seconds: 4381
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: 6.4c
   milestone: M13
   title: '6.4a review LOWs: telemetry when evidenceFor skips a turn with no topic (packages/harness/src/pipeline/runner.ts); a test for a SessionSummarySchema failure in the end route (route.test.ts); a
@@ -10987,9 +11012,9 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.4c-review-lows
+  model: plan:lead build:sonnet
 - id: 1.4f
   milestone: M13
   title: '1.4e Part 2 (split by the lead): run the magic-link sandbox script against a local stack rebuilt on current code and record the result; waits on B-61 (who rebuilds the stack)'
@@ -11008,9 +11033,54 @@ tasks:
   accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
   deps: []
   risk: low
-  status: running
+  status: done
   branch: m0/0.20g-e2e-first-chat-warmup
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 364
+    tokens_in: 1226
+    tokens_out: 88387
+    cache_read_tokens: 48707074
+    wall_time_seconds: 3386
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 0.20h
+  milestone: M13
+  title: 'local e2e failures found by 0.20g (pass in CI): full-flow.spec.ts "discover: search, open the teacher page, choose a package" times out in 10 of 10 fresh local runs, and teacher-packages-walkthrough.spec.ts
+    "create the first/second package from preset" fails in 6 of 10; find out whether the cause is local data left in the dev database or a real bug, and fix the test setup or the code; also (0.20g review
+    MEDIUM/LOW) give each warm-up fetch in apps/web/e2e/global-setup.ts an AbortSignal.timeout so a hung route cannot stall globalSetup, and run the two warm-ups with Promise.all'
+  accept: the cause is written in the handoff; both specs pass 5 fresh local runs in a row, and CI e2e stays green.
+  deps:
+  - 0.20g
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 13.3c
+  milestone: M13
+  title: 'B-60 (human, 27 Oct 2026): database sign-in sessions last 7 days, renewed on use; set SESSION_MAX_AGE_S in apps/web/src/auth/config.ts to 7 days (keep the daily SESSION_UPDATE_AGE_S renewal) and
+    update any test or doc that states 30 days'
+  accept: a test pins the 7-day max age and the daily renewal; @edmate/web typecheck, lint and test green.
+  deps:
+  - 13.3b
+  risk: risky
+  status: running
+  branch: m13/13.3c-seven-day-sessions
+  model: plan:lead build:sonnet
 - id: 11.4j
   milestone: M13
   title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
@@ -11020,6 +11090,17 @@ tasks:
   deps:
   - 11.4d
   risk: low
+  status: running
+  branch: m13/11.4j-ffmpeg-hardening
+  model: plan:lead build:sonnet
+- id: 6.3e
+  milestone: M13
+  title: '6.3d review LOWs for packages/db/src/repositories/ports.ts profileStoreFor: name the unused third applyMistakes parameter _proposed so the omission reads as intentional; add a profile-store int
+    test that calls applyMistakes(scope, [], [proposedTag]) and checks it is a no-op'
+  accept: the test passes; @edmate/db typecheck, lint and test green.
+  deps:
+  - 6.3d
+  risk: risky
   status: todo
   branch: null
   model: null

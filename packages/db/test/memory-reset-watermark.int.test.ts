@@ -126,6 +126,34 @@ describe.skipIf(!up)(
       },
     );
 
+    it(
+      'a split end(undefined) then attachSummary across the watermark still skips the summary ' +
+        '(6.4b: the same rule now lives in attachSummary instead of end)',
+      async () => {
+        const res = await repos.learnerProfiles.reset(sc1A);
+        expect(res).toEqual({ reset: true });
+        expect(await memoryResetAt(sc1A)).not.toBeNull();
+
+        const staleTs = '2026-10-17T10:00:00Z'; // before the reset above
+        await raw.query(
+          `insert into sessions
+             (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version, created_at)
+           values ('ses_stale_split_1a', $1, $2, $3, 1, $4, 1, $5)`,
+          [sc1A.studentId, sc1A.teacherId, ids.agent('A'), ids.pkg('A'), staleTs],
+        );
+        const endRes = await repos.sessions.end(sc1A, 'ses_stale_split_1a', undefined);
+        expect(endRes).toEqual({ ended: true });
+        const attachRes = await repos.sessions.attachSummary(
+          sc1A,
+          'ses_stale_split_1a',
+          'a late split summary',
+        );
+        expect(attachRes).toEqual({ attached: true });
+        const profileAfterAttach = await repos.learnerProfiles.get(sc1A);
+        expect(profileAfterAttach && 'lastSummary' in profileAfterAttach).toBe(false);
+      },
+    );
+
     it('a pair that was never reset (memory_reset_at stays NULL) behaves exactly as before', async () => {
       expect(await memoryResetAt(sc2B)).toBeNull();
       const topicId = ids.topic('B');
