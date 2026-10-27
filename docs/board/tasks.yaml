@@ -2521,9 +2521,10 @@ tasks:
   accept: a production worker or web with missing or dev storage config refuses to start ingest or uploads and logs only a code; no orphan uploading row after a signing failure.
   deps:
   - '8.2'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/8.2a-storage-hardening
   risk: risky
+  model: plan:sonnet build:sonnet
 - id: 5.10b
   milestone: M13
   title: '5.10 review follow-ups: teacherQuestions.answer locks the group rows in one id-ordered statement (no 40P01 deadlock between two answers in one group) and takes the agent lock first like open;
@@ -10764,3 +10765,25 @@ tasks:
   status: running
   branch: m13/0.20f-harness-timing-flake
   model: plan:lead build:sonnet review:sonnet
+- id: 8.2q
+  milestone: M13
+  title: 'Upload-centre race, retry and quota hardening (deferred from 8.2a, see docs/tasks/8.2a/plan.md): complete compares storageKey before setting processing (409 on mismatch, like failIfStorageKey);
+    dropObject retries a failed S3 delete 2-3 times before logging; create gets a per-teacher rate limit like addLink'
+  accept: a replace during complete answers 409 and leaves the row unchanged; a failed S3 delete is retried before it is logged; create past the limit answers 429; web and db tests green.
+  deps:
+  - 8.2a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 8.2r
+  milestone: M13
+  title: 'Documents list index and 0017 validate-at-scale hygiene (deferred from 8.2a): composite index (teacher_id, created_at desc, id desc) for documents.listForTeacher, and a new migration that re-adds
+    documents_failure_reason_only_when_failed as NOT VALID then VALIDATE CONSTRAINT'
+  accept: the new migration applies cleanly on a fresh and a migrated database; listForTeacher uses the composite index (EXPLAIN in a db int test or the handoff); db tests green.
+  deps:
+  - 8.2a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
