@@ -20,9 +20,21 @@ import {
   type AudioChunker,
 } from '@edmate/gateway';
 
-/** The three types `apps/web`'s upload table names as recordings the worker can't split today
+/** The ffmpeg input demuxer forced per allowed mime (ADR-0016): never interpolate the mime string
+ * itself into the argv -- this fixed table is the only thing that reaches `-f`. ffmpeg otherwise
+ * content-sniffs the input, which lets a file shaped like an HLS or concat playlist make it fetch
+ * network URLs or read local files regardless of the real container; forcing the demuxer (together
+ * with `-protocol_whitelist file`, below) rejects those inputs outright as invalid data. Its keys
+ * are the three types `apps/web`'s upload table names as recordings the worker can't split today
  * (ADR-0016 Decision §2); everything else goes to `defaultChunker`. */
-const FFMPEG_SCOPE = new Set(['audio/mp4', 'video/mp4', 'video/webm']);
+const FFMPEG_INPUT_FORMAT: Readonly<Record<string, string>> = {
+  'audio/mp4': 'mp4',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+};
+/** Single source of truth with `FFMPEG_INPUT_FORMAT`'s keys, so the scope check and the forced
+ * demuxer lookup can never disagree. */
+const FFMPEG_SCOPE = new Set(Object.keys(FFMPEG_INPUT_FORMAT));
 
 /** 16 kHz, mono, 16-bit PCM: the fixed output format the Decision computes `segment_time` from. */
 const SAMPLE_RATE = 16_000;
@@ -48,6 +60,11 @@ export type ProcessRunner = (
   opts: { readonly signal: AbortSignal },
 ) => Promise<ProcessResult>;
 
+/** How long `realRunner` waits after an abort sends SIGTERM before escalating to SIGKILL. A
+ * process that ignores SIGTERM must not hang the (concurrency-1) ingest worker forever.
+ * Overridable in `ProcessRunnerOptions` for tests that want a short grace window. */
+export const DEFAULT_SIGKILL_GRACE_MS = 5_000;
+
 function drain(stream: NodeJS.ReadableStream | null): void {
   stream?.on('data', () => {
     /* ffmpeg's stderr/stdout is drained, never read into a string: it could carry
@@ -55,34 +72,58 @@ function drain(stream: NodeJS.ReadableStream | null): void {
   });
 }
 
-/** `child_process.spawn`, fixed argv, no shell -- the default `ProcessRunner`. */
-const realRunner: ProcessRunner = (bin, args, opts) =>
-  new Promise((resolve, reject) => {
-    let child;
-    try {
-      child = spawn(bin, args, {
-        shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        signal: opts.signal,
+/** `child_process.spawn`, fixed argv, no shell -- the default `ProcessRunner`. Abort handling is
+ * done by this module, not by `spawn`'s own `signal` option: Node's built-in integration rejects
+ * the moment the signal aborts (it sends one SIGTERM but does not wait to see whether the child
+ * actually exits), which would let `run()` settle while a process that ignores SIGTERM keeps
+ * running. Instead, on abort this sends SIGTERM itself and starts a grace timer that escalates to
+ * SIGKILL if `exit` hasn't fired by then; the timer is cleared as soon as the process actually
+ * exits, and the promise settles exactly once, only on a real `exit` (or a genuine spawn
+ * failure), never on the abort itself. */
+export function createRealRunner(graceMs: number): ProcessRunner {
+  return (bin, args, opts) =>
+    new Promise((resolve, reject) => {
+      let child;
+      try {
+        child = spawn(bin, args, {
+          shell: false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('ffmpeg could not be started'));
+        return;
+      }
+      drain(child.stdout);
+      drain(child.stderr);
+      let settled = false;
+      let graceTimer: NodeJS.Timeout | undefined;
+      const clearGrace = (): void => {
+        if (graceTimer !== undefined) clearTimeout(graceTimer);
+        graceTimer = undefined;
+      };
+      const onAbort = (): void => {
+        if (settled) return;
+        child.kill('SIGTERM');
+        graceTimer = setTimeout(() => {
+          if (!settled) child.kill('SIGKILL');
+        }, graceMs);
+      };
+      if (opts.signal.aborted) onAbort();
+      else opts.signal.addEventListener('abort', onAbort, { once: true });
+      child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
+        clearGrace();
+        reject(err);
       });
-    } catch (err) {
-      reject(err instanceof Error ? err : new Error('ffmpeg could not be started'));
-      return;
-    }
-    drain(child.stdout);
-    drain(child.stderr);
-    let settled = false;
-    child.on('error', (err) => {
-      if (settled) return;
-      settled = true;
-      reject(err);
+      child.on('exit', (code) => {
+        if (settled) return;
+        settled = true;
+        clearGrace();
+        resolve({ code });
+      });
     });
-    child.on('exit', (code) => {
-      if (settled) return;
-      settled = true;
-      resolve({ code });
-    });
-  });
+}
 
 function ascii(b: Uint8Array, at: number, n: number): string {
   return String.fromCharCode(...b.subarray(at, at + n));
@@ -127,6 +168,9 @@ export interface FfmpegChunkerOptions {
   readonly maxOutputBytes?: number;
   /** Tests inject a fake process runner; defaults to a real `child_process.spawn`. */
   readonly run?: ProcessRunner;
+  /** How long the default runner waits after SIGTERM before escalating to SIGKILL. Ignored when
+   * `run` is supplied. Defaults to `DEFAULT_SIGKILL_GRACE_MS`. */
+  readonly sigkillGraceMs?: number;
 }
 
 /**
@@ -139,12 +183,16 @@ export function createFfmpegChunker(opts: FfmpegChunkerOptions = {}): AudioChunk
   const ffmpegPath = opts.ffmpegPath ?? 'ffmpeg';
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxOutputBytes = opts.maxOutputBytes ?? DEFAULT_MAX_DOWNLOAD_BYTES;
-  const run = opts.run ?? realRunner;
+  const run = opts.run ?? createRealRunner(opts.sigkillGraceMs ?? DEFAULT_SIGKILL_GRACE_MS);
 
   return async (audio, mimeType, maxBytes): Promise<readonly AudioChunk[]> => {
-    if (!FFMPEG_SCOPE.has(mimeType.toLowerCase())) {
+    const lowerMime = mimeType.toLowerCase();
+    if (!FFMPEG_SCOPE.has(lowerMime)) {
       return defaultChunker(audio, mimeType, maxBytes);
     }
+    // `lowerMime` is in `FFMPEG_SCOPE`, which is derived from this table's own keys, so the lookup
+    // always hits.
+    const inputFormat = FFMPEG_INPUT_FORMAT[lowerMime]!;
 
     const dir = await mkdtemp(join(tmpdir(), 'edmate-ffmpeg-'));
     try {
@@ -158,6 +206,10 @@ export function createFfmpegChunker(opts: FfmpegChunkerOptions = {}): AudioChunk
       const args = [
         '-nostdin',
         '-y',
+        '-protocol_whitelist',
+        'file',
+        '-f',
+        inputFormat,
         '-i',
         inputPath,
         '-vn',

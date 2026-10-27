@@ -8,11 +8,17 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWhisperTranscriber, Secret, TranscriberError } from '@edmate/gateway';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createFfmpegChunker, type ProcessResult, type ProcessRunner } from './ffmpegChunker.js';
+import {
+  createFfmpegChunker,
+  createRealRunner,
+  type ProcessResult,
+  type ProcessRunner,
+} from './ffmpegChunker.js';
 
 const FAKE_KEY = 'sk-fake-not-a-real-key-0000000000000000'; // secret-scan: allow synthetic fixture, not a real credential
 
@@ -142,6 +148,40 @@ describe('createFfmpegChunker: argv and no-shell invocation', () => {
   });
 });
 
+describe('createFfmpegChunker: protocol whitelist and forced demuxer', () => {
+  it.each([
+    ['audio/mp4', 'mp4'],
+    ['video/mp4', 'mp4'],
+    ['video/webm', 'webm'],
+  ] as const)(
+    'forces -protocol_whitelist file and -f %s before -i for %s (never content-sniffed)',
+    async (mime, format) => {
+      let seen: readonly string[] | undefined;
+      const run: ProcessRunner = async (_bin, args) => {
+        seen = args;
+        return { code: 1 }; // non-zero so we don't need real output pieces for this assertion
+      };
+      const chunker = createFfmpegChunker({ run });
+      await failure(() => chunker(new Uint8Array([1, 2, 3]), mime, 1_000_000));
+
+      const args = seen!;
+      const iIndex = args.indexOf('-i');
+      const whitelistIndex = args.indexOf('-protocol_whitelist');
+      const formatIndex = args.indexOf('-f');
+      expect(iIndex).toBeGreaterThan(-1);
+      expect(whitelistIndex).toBeGreaterThan(-1);
+      expect(args[whitelistIndex + 1]).toBe('file');
+      expect(formatIndex).toBeGreaterThan(-1);
+      expect(args[formatIndex + 1]).toBe(format);
+      // Both must precede -i: ffmpeg must never be left to probe/content-sniff the input.
+      expect(whitelistIndex).toBeLessThan(iIndex);
+      expect(formatIndex).toBeLessThan(iIndex);
+      // The forced format is always the fixed table's value, never the mime string itself.
+      expect(args).not.toContain(mime);
+    },
+  );
+});
+
 describe('createFfmpegChunker: scope', () => {
   it('delegates audio/mpeg and audio/wav to defaultChunker unchanged', async () => {
     const run: ProcessRunner = async () => {
@@ -164,6 +204,17 @@ describe('createFfmpegChunker: scope', () => {
 });
 
 describe('createFfmpegChunker: failure paths and cleanup', () => {
+  it('a runner that throws for a reason other than the timeout is a non-retryable validation error, and cleans up', async () => {
+    const { run, dirs } = captureDir(async () => {
+      throw new Error('ENOENT: ffmpeg could not be started');
+    });
+    const chunker = createFfmpegChunker({ run });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('validation');
+    expect(err.retryable).toBe(false);
+    await expect(stat(dirs[0]!)).rejects.toThrow();
+  });
+
   it('a non-zero exit is a non-retryable validation error, and removes the temp directory', async () => {
     const { run, dirs } = captureDir(async () => ({ code: 1 }));
     const chunker = createFfmpegChunker({ run });
@@ -209,6 +260,31 @@ describe('createFfmpegChunker: failure paths and cleanup', () => {
   });
 });
 
+describe('createRealRunner: SIGTERM then SIGKILL', () => {
+  it('escalates to SIGKILL after a grace period when the child ignores SIGTERM, so run() settles and the child is gone', async () => {
+    const pidFile = join(tmpdir(), `edmate-sigterm-pid-${String(Date.now())}`);
+    const code = [
+      `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+      `process.on('SIGTERM', () => {});`, // traps and ignores SIGTERM
+      `setInterval(() => {}, 1000);`, // never exits on its own
+    ].join(' ');
+    const runner = createRealRunner(1_000); // grace
+    const signal = AbortSignal.timeout(1_000); // timeout before grace
+
+    const started = Date.now();
+    const result = await runner(process.execPath, ['-e', code], { signal });
+    const elapsedMs = Date.now() - started;
+
+    expect(elapsedMs).toBeLessThan(10_000); // settled; never hung waiting on an ignored SIGTERM
+    expect(result.code).not.toBe(0); // killed, not a clean exit
+
+    const fs = await import('node:fs/promises');
+    const pid = Number((await fs.readFile(pidFile, 'utf8')).trim());
+    expect(() => process.kill(pid, 0)).toThrow(); // ESRCH: the process is gone
+    await fs.rm(pidFile, { force: true });
+  }, 15_000);
+});
+
 describe('createFfmpegChunker: happy path', () => {
   it('returns AudioChunk[] with monotonically increasing offsetMs and durationMs from each own header, and cleans up', async () => {
     const p1 = fakeWav(32_000); // 1 s
@@ -252,6 +328,45 @@ describe.runIf(FFMPEG_PRESENT)('createFfmpegChunker: real ffmpeg (opt-in)', () =
     );
     return readFileSync(out);
   }
+
+  it('rejects an HLS-shaped input labelled video/mp4 and makes no network connection (protocol whitelist + forced demuxer)', async () => {
+    const net = await import('node:net');
+    let connections = 0;
+    const server = net.createServer((socket) => {
+      connections += 1;
+      socket.destroy();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const port = (server.address() as AddressInfo).port;
+    const playlist = `#EXTM3U\n#EXTINF:10,\nhttp://127.0.0.1:${String(port)}/x.ts\n`;
+
+    const chunker = createFfmpegChunker();
+    const err = await failure(() =>
+      chunker(new TextEncoder().encode(playlist), 'video/mp4', 1_000_000),
+    );
+    expect(err.code).toBe('validation');
+    expect(connections).toBe(0);
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('rejects a concat-shaped input labelled video/mp4 and never reads the local file it points at', async () => {
+    const fs = await import('node:fs/promises');
+    const secretPath = join(tmpdir(), `edmate-concat-secret-${String(Date.now())}.txt`);
+    const secretContents = 'do-not-read-me';
+    await fs.writeFile(secretPath, secretContents);
+    const playlist = `ffconcat version 1.0\nfile '${secretPath}'\n`;
+
+    const chunker = createFfmpegChunker();
+    const err = await failure(() =>
+      chunker(new TextEncoder().encode(playlist), 'video/mp4', 1_000_000),
+    );
+    expect(err.code).toBe('validation');
+    // The forced mp4 demuxer never invokes the concat demuxer, so the referenced file is
+    // untouched -- the chunker rejects the playlist itself before any file inclusion is read.
+    expect(await fs.readFile(secretPath, 'utf8')).toBe(secretContents);
+    await fs.rm(secretPath, { force: true });
+  });
 
   it('splits a short synthetic silent MP4 into several pieces when maxBytes is artificially small', async () => {
     const mp4 = syntheticMp4(12);

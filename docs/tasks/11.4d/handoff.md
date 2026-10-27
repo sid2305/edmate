@@ -53,6 +53,74 @@ a deployed image — tracked on follow-up board task 11.4i. Whether GitHub's hos
 CI runner has ffmpeg on PATH (so Phase A's opt-in tests run there rather than skip) is still
 unverified (Q4); the lead checks the next CI run's log for `ffmpegChunker.test.ts`'s pass/skip line.
 
+## Fix round 1
+
+Addressed the three required findings from `review.md` (security-reviewer CRITICAL, architect
+HIGH, typescript-reviewer HIGH); the MEDIUM/LOW items (output cap during the run, `wavDurationMs`
+bounds, drain error listener, bare catch, oversized-output test) are deferred to task 11.4j, per
+the fix brief, and not touched here.
+
+**1. ffmpeg must not follow references inside the media (security CRITICAL / architect HIGH).**
+`apps/worker/src/ingest/ffmpegChunker.ts`: added a fixed `FFMPEG_INPUT_FORMAT` table
+(`audio/mp4`/`video/mp4` -> `mp4`, `video/webm` -> `webm`) and put `-protocol_whitelist file -f
+<format>` before `-i` in the argv -- the demuxer name comes only from this table, never from the
+mime string itself (`lowerMime` is only a lookup key). Verified directly with the real ffmpeg on
+this machine (4.2.3) that `-f mp4` and `-f webm` are both accepted input-format names (confirmed
+against `ffmpeg -demuxers`'s `mov,mp4,m4a,3gp,3g2,mj2` and `matroska,webm` rows) and that, without
+this fix, `-i` on an `#EXTM3U` playlist whose segment points at `http://127.0.0.1:9/x.ts` and on an
+`ffconcat` playlist referencing a local file both succeed in opening those references (content
+sniffing), while forcing `-protocol_whitelist file -f mp4` makes both fail immediately with
+"Invalid data found when processing input" -- confirmed by hand with real ffmpeg before writing the
+test.
+- Red: wrote `createFfmpegChunker: protocol whitelist and forced demuxer` (3 cases, one per mime)
+  and the two new opt-in tests (HLS-shaped and concat-shaped inputs labelled `video/mp4`) against
+  the pre-fix `ffmpegChunker.ts`; the protocol-whitelist assertions failed (no `-protocol_whitelist`
+  or forced `-f` in argv) and the opt-in HLS test failed because real ffmpeg actually tried to open
+  the manual-test-confirmed network path (observed directly via the hand-run `ffmpeg -i hls.m3u8`
+  command above, which attempts to connect before this fix; after the fix the same command rejects
+  the input outright).
+- Green: after adding the fixed table and the two new argv entries, all argv tests pass; both
+  opt-in tests pass -- the HLS test's local TCP listener on `127.0.0.1` receives zero connections,
+  and the concat test's referenced local file is read back unchanged (never consumed by ffmpeg).
+
+**2. A process that ignores SIGTERM must not hang the worker (typescript HIGH).** Rewrote
+`realRunner` as `createRealRunner(graceMs)` (exported for the new test): it no longer passes
+`signal: opts.signal` to `spawn` (Node's own signal integration rejects the promise the instant the
+signal aborts, without waiting to see whether the child actually exited -- which is exactly the bug:
+`run()` would falsely report completion while an ffmpeg that ignores SIGTERM kept running).
+Instead, on abort the runner now sends SIGTERM itself, starts a `setTimeout(graceMs)` that calls
+`child.kill('SIGKILL')` if `exit`/`error` hasn't fired yet, clears that timer the moment the process
+actually exits, and the returned promise settles exactly once, only on a genuine `exit` or spawn
+`error`. `DEFAULT_SIGKILL_GRACE_MS` (5 s) is the default; `FfmpegChunkerOptions.sigkillGraceMs`
+overrides it.
+- Red: with the original `spawn({ signal })`-based `realRunner`, the new test (`createRealRunner:
+  SIGTERM then SIGKILL`) failed immediately with `AbortError: The operation was aborted` thrown from
+  inside the promise -- Node's built-in signal handling rejected the moment `AbortSignal.timeout`
+  fired, before the child (which traps and ignores SIGTERM) had any chance to actually exit. This is
+  precisely the HIGH finding reproduced as a failing test, not just asserted in prose.
+- Green: after the rewrite, the test spawns a real `node -e` child that writes its own pid to a
+  file, traps SIGTERM as a no-op, and loops forever; `createRealRunner(1000)` with a 1 s
+  `AbortSignal.timeout` settles well under 10 s and `process.kill(pid, 0)` throws afterwards
+  (`ESRCH`), proving the child was actually reaped by the SIGKILL escalation, not just that the
+  promise resolved.
+
+**3. ADR.** `docs/adr/0016-ffmpeg-chunker.md`: Decision §3 now states the protocol whitelist and
+forced demuxer (replacing "probed by content... ffmpeg's own demuxer sniffing picks the
+container"); Decision §5's timeout bullet now states the SIGTERM-then-SIGKILL grace escalation
+(replacing "SIGTERM'd rather than hanging... indefinitely", which undersold that a single SIGTERM
+alone does not guarantee the process exits); Consequences gained a new bullet naming ffmpeg's own
+parser/memory-safety attack surface on untrusted media and the mitigations (non-root `USER node`,
+the timeout-then-SIGKILL escalation, the output cap, the protocol whitelist and forced demuxer).
+`python3 docs/adr/check-headings.py` stays green (heading order untouched).
+
+Also folded `FFMPEG_SCOPE` into a single source of truth derived from `FFMPEG_INPUT_FORMAT`'s own
+keys (`Object.keys(...)`), so the scope check and the forced-demuxer lookup can never disagree and
+the lookup needs no dead `undefined` branch; added one more unit test (a runner that throws for a
+reason other than the timeout, e.g. an `ENOENT`-shaped spawn failure) to keep branch coverage at
+the same 80% bar the original Phase A handoff reported, after the new code added branches.
+
+**Files touched:** `apps/worker/src/ingest/ffmpegChunker.ts`, `apps/worker/src/ingest/ffmpegChunker.test.ts`, `docs/adr/0016-ffmpeg-chunker.md`, this handoff. No file outside that list changed.
+
 ## Decisions
 
 ### 27 Oct 2026 · 11.4d ffmpeg chunker (ADR-0016) · decided by builder · risk: high
@@ -85,7 +153,21 @@ No other decision the plan didn't already make was needed in Phase A.
   `docker build -f apps/worker/Dockerfile .` and check the ffmpeg licence banner (ADR-0016 Q3,
   tracked on follow-up 11.4i) before this ships in a deployed image.
 
+**Fix round 1:**
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker...` — **green.** 38/38
+  tasks successful; `@edmate/worker:test` 468/468 tests passed (7 new: 3 protocol-whitelist argv
+  cases, the SIGTERM-then-SIGKILL real-child test, 2 opt-in HLS/concat rejection tests, and one
+  unit test for the pre-existing non-timeout throw path, all of which ran — not skipped — since
+  ffmpeg is present on this machine); `src/ingest/ffmpegChunker.ts` 88.07% statements / 80%
+  branches / 93.75% functions / 91.08% lines.
+- `python3 docs/adr/check-headings.py` — **green** (no output, exit 0).
+- `corepack pnpm exec prettier --check` on `docs/adr/0016-ffmpeg-chunker.md`,
+  `apps/worker/src/ingest/ffmpegChunker.ts`, `apps/worker/src/ingest/ffmpegChunker.test.ts` —
+  **green.**
+- `python3 .githooks/secret-scan.py --all` — **green.**
+
 ## Budget
 
 Phase A tool calls used: 72
 Phase B tool calls used: 19
+Fix tool calls used: 32
