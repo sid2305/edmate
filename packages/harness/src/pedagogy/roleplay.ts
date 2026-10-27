@@ -32,15 +32,22 @@ export type RolePlay =
   | Readonly<{ phase: 'ended' }>;
 
 /**
- * Whether this role-play turn skips the coverage gate (5.8, open question 6: lead default,
- * pending B-37; ADR-0013 §1). Every turn but an answer to a question skips it: `/pause`, `stop`,
- * resume, debrief and ended turns judge or steer the role-play, not the material, and the opening
- * question (N = 1, a start) with no material asks the student which topic to practise. A gated
- * one would open a teacher question and, on `stop`, never end the role-play. Question N > 1 (the
- * student's answer to N − 1) still goes through the gate like any other turn.
+ * Whether this role-play turn skips the coverage gate (5.8b, B-37 final rule; ADR-0013 §1). Only
+ * two cases still meet it: a turn whose stored phase is `ended` (treated as an ordinary turn, not
+ * a role-play one), and a `/pause` that carries extra text after the command (steered past the
+ * role-play control to the ordinary off_topic/meta path, `steersRolePlay` in `policy.ts`). Every
+ * other role-play turn skips it: a bare `/pause`, `stop`, resume, debrief and — reversing the
+ * Phase B draft — every answer turn (`question`, N > 1), because a gated answer could route a
+ * personal reply to the teacher inbox (B-37 q9) and a gated `stop` would never reach `ended`.
  */
-export function rolePlaySkipsCoverageGate(r: RolePlay): boolean {
-  return r.phase !== 'question' || r.question === 1;
+export function rolePlaySkipsCoverageGate(
+  r: RolePlay,
+  control: RolePlayControl | undefined,
+  pauseHasExtraText: boolean,
+): boolean {
+  if (r.phase === 'ended') return false;
+  if (control === 'pause' && pauseHasExtraText) return false;
+  return true;
 }
 
 /** The frame section that states a phase (`frame@1.2.0`, ADR-0013 §3). */

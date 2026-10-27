@@ -28,6 +28,12 @@ export interface PolicyInput {
   turn: Pick<TurnInput, 'kind' | 'skill'>;
   /** The turn's role-play control (3.11e): decide reads it from the text with `rolePlayControl`. */
   control?: RolePlayControl;
+  /**
+   * Whether a `/pause` control carried text after the command (5.8b, B-37 q8): decide reads it
+   * with `pauseHasExtraText`, alongside `rolePlayControl`, so the policy never sees the text
+   * itself. Ignored unless `control === 'pause'`.
+   */
+  pauseHasExtraText?: boolean;
   help: Readonly<HelpState>;
   /** The tool registry's list (5.4/5.5). Default none. */
   tools?: readonly PolicyTool[];
@@ -71,6 +77,12 @@ export interface PolicyResult {
    * closed moves and the fallback. Harness-internal: never in `DecideResultSchema`.
    */
   rolePlay?: RolePlay;
+  /**
+   * Whether this role-play turn skipped the coverage gate (5.8b, `rolePlaySkipsCoverageGate`).
+   * Only meaningful alongside `rolePlay`; `compose.ts` reads it to drop sub-threshold chunks a
+   * gate-skipped turn never screened.
+   */
+  rolePlayGateSkipped?: boolean;
 }
 
 const DEFAULT_OPTIONS: PolicyOptions = Object.freeze({
@@ -98,10 +110,14 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
   // control word must never carry a misuse turn past its redirect.
   if (ctx.intent === 'misuse') return closed('redirect', 'misuse');
   const persona = ctx.persona;
-  // A control (start, `/pause`, `stop`) in an active role-play beats the meta and off_topic
-  // redirect (5.8 fix round 1): a bare "stop" the router labels meta must still stop it.
+  const pauseHasExtraText = i.control === 'pause' && (i.pauseHasExtraText ?? false);
+  // A bare control (start, `/pause`, `stop`) in an active role-play beats the meta and off_topic
+  // redirect (5.8 fix round 1): a bare "stop" the router labels meta must still stop it. A
+  // `/pause` with extra text after the command does not steer (5.8b, B-37 q8, `steersRolePlay`
+  // fix): that text gets the ordinary redirect instead, same as any other off_topic/meta turn.
   const steersRolePlay =
     i.control !== undefined &&
+    !pauseHasExtraText &&
     skill === 'mock_interview' &&
     persona !== undefined &&
     help.personaId === persona.id &&
@@ -110,14 +126,16 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
     return closed('redirect', ctx.intent);
   }
   const control = i.control === undefined ? {} : { control: i.control };
-  // The role-play phase is worked out before the gate (pure, no state saved yet), so a control,
-  // resume, debrief, ended or opening turn skips it (5.8, open question 6: lead default, pending
-  // B-37). A closed turn below still leaves the role-play state as it was.
+  // The role-play phase is worked out before the gate (pure, no state saved yet). Only an
+  // `ended` turn and a `/pause` with extra text still meet the gate (5.8b, B-37 final rule,
+  // `rolePlaySkipsCoverageGate`). A closed turn below still leaves the role-play state as it was.
   const rp =
     skill === 'mock_interview' && persona !== undefined
-      ? rolePlayStep({ persona, help, ...control })
+      ? { step: rolePlayStep({ persona, help, ...control }), personaId: persona.id }
       : undefined;
-  if (rp === undefined || !rolePlaySkipsCoverageGate(rp.rolePlay)) {
+  const gateSkipped =
+    rp !== undefined && rolePlaySkipsCoverageGate(rp.step.rolePlay, i.control, pauseHasExtraText);
+  if (!gateSkipped) {
     const gate = coverageGate(ctx, opts.coverageThreshold);
     if (gate !== null) return closed(gate, gate === 'locked' ? 'locked_module' : 'not_covered');
   }
@@ -129,9 +147,12 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
       help,
       skill,
       ...control,
-      ...(rp === undefined ? {} : { rolePlayStep: rp }),
+      ...(rp === undefined ? {} : { rolePlayStep: rp.step, rolePlayStepPersonaId: rp.personaId }),
     }),
-    { allowPracticeRelease: true },
+    {
+      allowPracticeRelease: true,
+      ...(rp === undefined ? {} : { rolePlayGateSkipped: gateSkipped }),
+    },
   );
 }
 
@@ -168,7 +189,7 @@ export function fallbackPolicy(
 function finish(
   i: PolicyInput,
   s: Omit<SkillStep, 'reason'> & { reason: PolicyReason },
-  opts: { allowPracticeRelease?: boolean } = {},
+  opts: { allowPracticeRelease?: boolean; rolePlayGateSkipped?: boolean } = {},
 ): PolicyResult {
   const entitled = i.ctx.entitlement.skills;
   const names =
@@ -180,9 +201,7 @@ function finish(
   // skill_not_entitled) passes no flag, so it keeps the key guarded even if `ctx.attempt`
   // happens to read `correct`.
   const practiceSolved =
-    (opts.allowPracticeRelease ?? false) &&
-    i.ctx.attempt === 'correct' &&
-    holdsPracticeKey(i.help);
+    (opts.allowPracticeRelease ?? false) && i.ctx.attempt === 'correct' && holdsPracticeKey(i.help);
   return {
     move: s.move,
     rung: s.rung,
@@ -192,9 +211,7 @@ function finish(
     // never, whatever the move (5.6, ADR-0010 §5).
     ...keysFor(
       i.help,
-      (s.move === 'solution' &&
-        i.ctx.pkg.finalAnswers !== 'never' &&
-        !holdsPracticeKey(i.help)) ||
+      (s.move === 'solution' && i.ctx.pkg.finalAnswers !== 'never' && !holdsPracticeKey(i.help)) ||
         practiceSolved,
     ),
     tools: [...new Set(names)],
@@ -202,6 +219,9 @@ function finish(
     next: s.next,
     reason: s.reason,
     ...(s.rolePlay === undefined ? {} : { rolePlay: s.rolePlay }),
+    ...(opts.rolePlayGateSkipped === undefined
+      ? {}
+      : { rolePlayGateSkipped: opts.rolePlayGateSkipped }),
   };
 }
 

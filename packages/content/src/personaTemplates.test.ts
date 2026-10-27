@@ -7,6 +7,7 @@ import { resolvePersona } from '@edmate/harness';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   comparePersonaVersions,
+  PersonaTemplateError,
   type PersonaTemplate,
   readPersonaLibrary,
   readPersonaTemplateDir,
@@ -266,6 +267,19 @@ describe('readPersonaLibrary: signed-only, highest version per id', () => {
       /no such persona-template directory/,
     );
   });
+
+  it('throws a typed PersonaTemplateError, not a bare Error', () => {
+    const dir = broken((d) =>
+      editFile(d, 'viva@1.0.0.yaml', (t) => t.replace('id: viva', 'id: oral-exam')),
+    );
+    try {
+      readPersonaLibrary(dir);
+      expect.unreachable('readPersonaLibrary should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(PersonaTemplateError);
+      expect((e as Error).message).toMatch(/the file name says id viva/);
+    }
+  });
 });
 
 describe('selectPersonaLibrary', () => {
@@ -301,6 +315,14 @@ describe('selectPersonaLibrary', () => {
       },
     ]);
     expect(r.chosen.get('viva')).toBe('1.2.0');
+  });
+
+  it('never lets a signed prerelease outrank a lower signed release, across majors', () => {
+    const r = selectPersonaLibrary([
+      template({ version: '1.3.0' }),
+      template({ version: '2.0.0-rc.1', endAfterQuestions: 1 }),
+    ]);
+    expect(r.chosen.get('viva')).toBe('1.3.0');
   });
 
   it('sorts the chosen personas by id', () => {

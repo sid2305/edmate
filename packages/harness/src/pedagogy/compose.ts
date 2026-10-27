@@ -10,6 +10,7 @@
 // Locked material (ADR-0003): every retrieved chunk is checked against the entitlement before
 // anything is rendered; one outside it throws LockedMaterialError, whose message names no text.
 import type { AgentConfig, Chunk, Lang, SourceRef, TurnContext } from '@edmate/contracts';
+import { DEFAULT_COVERAGE_THRESHOLD } from './coverage.js';
 import { personaQuestionsAsked } from './helpState.js';
 import { fenced, inline } from './dataText.js';
 import { resolveDisclaimer } from './disclaimer.js';
@@ -180,7 +181,14 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   const f = set.frame;
   const distress = mode === 'distress';
   const teaching = (SKILL_PACKS as readonly string[]).includes(mode);
-  const chunks = showsMaterial(mode) ? ctx.retrieved : [];
+  const shown = showsMaterial(mode) ? ctx.retrieved : [];
+  // A gate-skipped role-play turn (5.8b) never had its retrieved chunks screened against the
+  // coverage threshold (the gate itself was skipped), so compose screens them here instead: a
+  // sub-threshold chunk is dropped rather than shown as if it were in-course material.
+  const chunks =
+    policy.rolePlayGateSkipped === true
+      ? shown.filter((c) => c.score === undefined || c.score >= DEFAULT_COVERAGE_THRESHOLD)
+      : shown;
   const parts: string[] = [set.packs.safety.body];
 
   let modeText = set.packs[mode].body;

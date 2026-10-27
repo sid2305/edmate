@@ -214,20 +214,18 @@ describe('practice key release on a correct attempt (5.6f)', () => {
     },
   );
 
-  it.each([
-    ['distress' as const],
-    ['misuse' as const],
-    ['off_topic' as const],
-    ['meta' as const],
-  ])('a closed path (%s) never releases the key even if attempt reads correct', (intent) => {
-    const r = decidePolicy(
-      base({
-        ctx: ctxWith({ intent, attempt: 'correct' }),
-        help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
-      }),
-    );
-    expect(r.mustNotReveal).toEqual(key);
-  });
+  it.each([['distress' as const], ['misuse' as const], ['off_topic' as const], ['meta' as const]])(
+    'a closed path (%s) never releases the key even if attempt reads correct',
+    (intent) => {
+      const r = decidePolicy(
+        base({
+          ctx: ctxWith({ intent, attempt: 'correct' }),
+          help: helpWith({ answerKey: key, practiceItemId: 'item-1' }),
+        }),
+      );
+      expect(r.mustNotReveal).toEqual(key);
+    },
+  );
 
   it('a locked skill never releases the key even if attempt reads correct', () => {
     const r = decidePolicy(
@@ -523,30 +521,67 @@ describe('role-play turns and the coverage gate (5.8, open question 6: lead defa
       undefined,
     ],
     ['debrief', { personaQuestionsAsked: M, personaId: id }, undefined, 'ended'],
-    [
-      'ended',
-      { personaQuestionsAsked: M, personaId: id, personaPhase: 'ended' },
-      undefined,
-      'ended',
-    ],
-  ] as const)('an uncovered %s turn passes the gate', (phase, help, control, stored) => {
+  ] as const)('an uncovered %s turn passes the gate (skipped)', (phase, help, control, stored) => {
     const r = run(help, control);
     expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
     expect(r.rolePlay?.phase).toBe(phase);
     expect(r.next.help.personaPhase).toBe(stored);
+    expect(r.rolePlayGateSkipped).toBe(true);
   });
 
-  it('an uncovered answer to question N (a question turn) still goes to the gate', () => {
+  it('an uncovered answer to question N (a question turn) now skips the gate (B-37 reversal)', () => {
     const r = run({ personaQuestionsAsked: 2, personaId: id });
+    expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+    expect(r.rolePlay?.phase).toBe('question');
+    expect(r.rolePlayGateSkipped).toBe(true);
+    expect(r.next.help.personaQuestionsAsked).toBe(3);
+  });
+
+  it('an uncovered ended turn still meets the gate (B-37 final rule)', () => {
+    const help = { personaQuestionsAsked: M, personaId: id, personaPhase: 'ended' as const };
+    const r = run(help);
     expect([r.move, r.reason]).toEqual(['ask_teacher', 'not_covered']);
     expect(r).not.toHaveProperty('rolePlay');
-    expect(r.next.help.personaQuestionsAsked).toBe(2);
+    expect(r.next.help.personaPhase).toBe('ended');
   });
 
-  it('an uncovered question turn with a locked hit is locked', () => {
-    const help = { personaQuestionsAsked: 2, personaId: id };
+  it('an ended turn with a locked hit is locked (the gate still applies)', () => {
+    const help = { personaQuestionsAsked: M, personaId: id, personaPhase: 'ended' as const };
     const r = run(help, undefined, 'message', uncovered({ lockedHit: true }));
     expect([r.move, r.reason]).toEqual(['locked', 'locked_module']);
+  });
+
+  it('a /pause with extra text meets the gate; a bare /pause skips it (B-37 q8)', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    const bare = decidePolicy(
+      base({
+        ctx: uncovered(),
+        turn: turnOf('message', 'mock_interview'),
+        help: helpWith(help),
+        control: 'pause',
+      }),
+    );
+    expect([bare.move, bare.reason]).toEqual(['ask', 'mock_interview']);
+    expect(bare.rolePlayGateSkipped).toBe(true);
+
+    const withText = decidePolicy(
+      base({
+        ctx: uncovered(),
+        turn: turnOf('message', 'mock_interview'),
+        help: helpWith(help),
+        control: 'pause',
+        pauseHasExtraText: true,
+      }),
+    );
+    expect([withText.move, withText.reason]).toEqual(['ask_teacher', 'not_covered']);
+    expect(withText).not.toHaveProperty('rolePlay');
+  });
+
+  it('an uncovered question turn with a locked hit still skips the gate (B-37 reversal)', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    const r = run(help, undefined, 'message', uncovered({ lockedHit: true }));
+    expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+    expect(r.rolePlayGateSkipped).toBe(true);
   });
 
   it.each([
@@ -596,6 +631,41 @@ describe('role-play turns and the coverage gate (5.8, open question 6: lead defa
       expect(r.move).toBe('redirect');
       expect(r).not.toHaveProperty('rolePlay');
     }
+  });
+
+  it.each(['meta', 'off_topic'] as const)(
+    'a /pause with extra text during an active role-play gets the ordinary %s redirect (B-37 q8, steersRolePlay fix)',
+    (intent) => {
+      const help = { personaQuestionsAsked: 2, personaId: id };
+      const r = decidePolicy(
+        base({
+          ctx: uncovered({ intent }),
+          turn: turnOf('message', 'mock_interview'),
+          help: helpWith(help),
+          control: 'pause',
+          pauseHasExtraText: true,
+        }),
+      );
+      expect([r.move, r.reason]).toEqual(['redirect', intent]);
+      expect(r).not.toHaveProperty('rolePlay');
+      // The phase is left exactly as it was: a redirected /pause<text> never pauses the role-play.
+      expect(r.next.help.personaPhase).toBeUndefined();
+      expect(r.next.help.personaQuestionsAsked).toBe(2);
+    },
+  );
+
+  it('a bare /pause during an active role-play still steers past the redirect (no extra text)', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    const r = decidePolicy(
+      base({
+        ctx: uncovered({ intent: 'meta' }),
+        turn: turnOf('message', 'mock_interview'),
+        help: helpWith(help),
+        control: 'pause',
+      }),
+    );
+    expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+    expect(r.rolePlay?.phase).toBe('pause');
   });
 
   it('a covered role-play turn is unchanged by the gate rule', () => {
