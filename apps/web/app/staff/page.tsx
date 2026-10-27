@@ -27,7 +27,9 @@ export default async function StaffPage() {
     const repos = serverDatabase().repos;
     const rows = await repos.teacherProfiles.listPendingForStaff(principal.userId);
     const enriched = await enrichQueueRows(repos, principal.userId, rows);
-    initial = enriched.map((r) => toQueueItem(r, r.activeTakedowns, r.lastDecision));
+    initial = enriched.map((r) =>
+      toQueueItem(r, r.activeTakedowns, r.lastDecision, r.subjectHistory),
+    );
   } catch (error) {
     console.error(`[staff] page queue read failed: ${describeError(error)}`);
   }

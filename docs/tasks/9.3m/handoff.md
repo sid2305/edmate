@@ -89,3 +89,96 @@ on yet (the plan's own note — Phase A's gate only needs `@edmate/db`).
 ## Budget
 
 Tool calls used: 61
+
+# 9.3m handoff — Phase B (apps/web)
+
+Status: **DONE**
+
+## Summary
+
+Built, tests-first, the staff-facing subject-change history per B-58, on top of Phase A's
+`audit.findSubjectHistoryForStaff` (sha a8941e45).
+
+- `apps/web/app/api/staff/verifications/handlers.ts` — new exported `SubjectChange { from, to, ts }`;
+  `QueueItem` gains `subjectHistory: SubjectChange[]`; `toQueueItem`/`toLookupItem` gain a fourth
+  parameter (default `[]`, same style as the existing `lastDecision`); `enrichQueueRows` now also
+  calls `repos.audit.findSubjectHistoryForStaff(by, row.teacherId, SUBJECT_HISTORY_MAX_LIMIT)` per
+  row, in parallel with the existing `findLastVerifyForStaff` call (one `Promise.all` per row, same
+  no-batched-read precedent as 9.3h). `list` and `lookup` both pass the new field through.
+- `apps/web/app/staff/client.ts` — new `SubjectChangeSchema`; `QueueItemSchema` gains
+  `subjectHistory: z.array(SubjectChangeSchema)`.
+- `apps/web/app/staff/verification-row.tsx` — one more `dt`/`dd` pair (`subjectHistoryLabel`); empty
+  history shows `subjectHistoryNone`, else a `ul` of `subjectHistoryLine` entries (old to new, dated
+  with the same `useFormatter().dateTime` call `lastDecisionLine` already uses).
+- `apps/web/app/staff/page.tsx` — its own `toQueueItem` call now also passes `r.subjectHistory`.
+- `apps/web/messages/en.json` (`staff` namespace) — `subjectHistoryLabel`, `subjectHistoryNone`,
+  `subjectHistoryLine`.
+- Tests (tests-first, following 9.3h's own file-by-file pattern): `route.test.ts` (a new audit mock
+  method, a new memory `subjectHistories` map, two new cases proving a queue row and a lookup row
+  carry subject history, and `subjectHistory: []` added to every existing full-body expectation plus
+  the default-logger test's inline `audit` stub), `route.int.test.ts` (one new case: a real
+  `teacherProfiles.update()` subject change shows up on both the queue row and the lookup row),
+  `client.test.ts` (`ITEM` gains `subjectHistory: []`; one new round-trip case), `page.test.tsx` (one
+  new SSR case; the audit mock gains `findSubjectHistoryForStaff`), `view.test.tsx` (the acceptance
+  line's own test: a queue row with a non-empty `subjectHistory` renders both change lines; a
+  dedicated empty-history case asserts `subjectHistoryNone`; `ASHA`/`BEN` gain `subjectHistory: []`).
+- `packages/db/src/repositories/index.ts` — see Decisions: Phase A's `SUBJECT_HISTORY_MAX_LIMIT` was
+  never re-exported from the repositories barrel, so `apps/web` could not import it. Added one export
+  line next to the existing `AUDIT_MAX_LIMIT` export; no other change to `packages/db`.
+
+## Decisions
+
+### 26 Oct 2026 · 9.3m the staff-facing field · decided by builder · risk: high
+- Decided: the staff verification queue, lookup and SSR first paint (`enrichQueueRows`) now show
+  each row's last 10 subject changes (old → new, dated), per B-58's cap.
+- Why: matches the plan's design exactly (Phase B, items 1-5); `enrichQueueRows` fetches it the same
+  way it already fetches `lastDecision`, so `list`, `lookup` and `page.tsx`'s SSR read can never
+  drift from each other.
+
+### 26 Oct 2026 · 9.3m missing barrel export in packages/db · decided by builder · risk: low
+- Decided: added `SUBJECT_HISTORY_MAX_LIMIT` to `packages/db/src/repositories/index.ts`'s existing
+  `export { AUDIT_JSON_MAX_LENGTH, AUDIT_MAX_LIMIT, ... } from './audit.js'` line (one new name in
+  that list; no other line touched). This is the one line in `packages/db` this phase touches.
+- Why: Phase A's handoff built `SUBJECT_HISTORY_MAX_LIMIT` and exported it from `audit.ts` itself
+  (confirmed: `export const SUBJECT_HISTORY_MAX_LIMIT = 10;` at audit.ts:34), but the repositories
+  barrel file never re-exported it (only `AUDIT_MAX_LIMIT` was listed), so `@edmate/db`'s public
+  surface didn't carry it. `apps/web/app/api/staff/verifications/handlers.ts` needs the constant to
+  cap `enrichQueueRows`' per-row read at the plan's fixed 10 (no UI control to change it). Without
+  this line the import silently resolved to `undefined`, which made every `findSubjectHistoryForStaff`
+  call throw `invalid` (caught first as the test run's own 403/400 failures) -- confirmed by adding
+  the export and re-running the full web test suite green. A one-line barrel fix, not a behavior or
+  schema change, so treated as `risk: low` rather than reopening Phase A's own `risk: high` decision.
+
+## Gate
+
+```
+$ corepack pnpm turbo run build --filter=@edmate/db        (picks up the barrel export)
+  6 successful, 6 total
+
+$ TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate \
+  corepack pnpm turbo run typecheck lint test --filter=...@edmate/web...
+  34 successful, 34 total
+  @edmate/web:test -- all suites pass, including app/staff/** and
+  app/api/staff/verifications/** (17 files, 319 tests)
+  @edmate/db:test -- 80 files, 1728 passed | 4 skipped; coverage 99.66% stmts / 97.81%
+  branch / 99.65% funcs / 99.71% lines (src/repositories 100% stmts/funcs/lines)
+
+$ corepack pnpm exec prettier --check <files changed>
+  All matched files use Prettier code style!
+
+$ python3 .githooks/secret-scan.py --all
+  (clean, no output)
+
+$ python3 .claude/skills/merge-gate/merge_gate.py 9.3m
+  FAIL (expected at this stage): docs/tasks/9.3m/review.md is missing -- review runs after both
+  build phases, not part of this handoff.
+```
+
+Risk logged per the plan's "Risky paths touched": `apps/web/app/api/staff/verifications/handlers.ts`
+is in group `apps/web/app/api/staff/**` (required reviewer: `security-reviewer`; recommended also
+`code-reviewer`) -- this is a `risk: high` task per the board, and this phase's own decision above
+is logged `risk: high` accordingly.
+
+## Budget
+
+Tool calls used: 48
