@@ -3012,6 +3012,17 @@ tasks:
   status: running
   branch: m13/6.3c-mistake-tagging
   model: plan:sonnet build:sonnet
+- id: 6.3d
+  milestone: M13
+  title: '6.3c Phase B (split out by lead decision): implement ProfileStore.applyMistakes and recordProposedMistakes (ADR-0017) in packages/db profileStoreFor, passing the style card''s mistakeTags as allowedTags
+    and checking the scope against the adapter''s bound pair like applyEvidence does; recordProposedMistakes stays a documented no-op until 6.3a; add the methods to the worker gate, studio test-chat, CLI
+    chat and web test-backend adapters'
+  accept: a wrong practice answer in a scripted turn records the classified mistake tags on the learner profile (only tags on the style card) through the real db adapter; a call naming another pair is a
+    scope error; no real model calls in tests.
+  deps:
+  - 6.3c
+  risk: risky
+  status: planning
 - id: 6.2a
   milestone: M13
   title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
@@ -10898,7 +10909,7 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 11.4i
@@ -10932,7 +10943,7 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 1.4f
@@ -10953,14 +10964,14 @@ tasks:
   accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
   deps: []
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m0/0.20g-e2e-first-chat-warmup
+  model: plan:sonnet build:sonnet
 - id: 11.4j
   milestone: M13
   title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
     add an error listener to the drained stdout/stderr streams; keep the error name (not content) when a run() failure is mapped to a validation error, so a missing binary differs from bad input; make the
-    oversized-output test count reads instead of checking the directory after cleanup'
+    oversized-output test count reads instead of checking the directory after cleanup; remove the runner''s abort listener when the child exits or errors first'
   accept: each item is fixed with a test; @edmate/worker typecheck, lint and test green.
   deps:
   - 11.4d
