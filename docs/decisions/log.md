@@ -10,6 +10,64 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 0.20f step-count measure instead of the fallback · decided by builder · risk: low
+- Decided: used the preferred step-count approach (patching `String.prototype[Symbol.iterator]`
+  to count character-scan work), not the 3-attempts-pass-if-any-under-bound fallback the plan
+  allowed.
+- Why: both `breakFenceRuns` and `neutraliseForgedLabel` scan their input with exactly one
+  `for (const ch of text)` loop (no other seam, like a regex callback or exposed counter, exists
+  without touching the source files, which the plan forbids), and that loop's iterator calls are
+  interceptable from a test file alone. This gives an exact, load-independent step count, so the
+  acceptance's "does not use wall-clock ratios" is met outright and the fallback and its logged
+  deviation are not needed.
+
+---
+
+### 27 Oct 2026 · 0.20f self-test input size · decided by builder · risk: low
+- Decided: the quadratic self-test uses its own small `n = 200` via a new optional third
+  parameter on `expectLinear`, instead of the real check's `n = 4,000`.
+- Why: a genuine doubly-nested scan (needed so the self-test exercises real quadratic work, not a
+  mocked clock) at `n = 4,000` does order `(16 * 4,000)^2 ≈ 4` billion no-op iterations at the 16x
+  size, which is real, slow CPU work; it hit the default 20 s test timeout under load (see red
+  evidence above) even though no wall clock is read anywhere in the measure itself. `n = 200`
+  keeps the same 16x shape (so the ratio math is identical) while finishing in milliseconds.
+
+---
+
+### 27 Oct 2026 · 0.20f step count plus an absolute ceiling, no wall-clock ratio · decided by builder · risk: low
+- Decided: the measure is the original step count (`countStringIteratorSteps`/`expectLinear`,
+  unchanged) *plus* a second, independent absolute wall-clock ceiling (`expectUnderCeiling`,
+  `Date.now()`-based, a fixed `2_000` ms bound, not a ratio). No wall-clock ratio is used anywhere.
+- Why: fix round 1 found the step count blind to regex-internal work (`.replace`, `.matchAll`,
+  regex `exec`), so a catastrophic-backtracking regex in `forgedLabelPattern` or
+  `decodeHtmlEntities` would pass unseen. An absolute ceiling (not a ratio) catches that: ordinary
+  CI load cannot push a sub-100-ms real scan past a 2-second ceiling, but a backtracking or
+  quadratic regex blow-up on a similarly sized hostile string takes seconds to many seconds (shown
+  by the self-test), so the gap between "real work" and "blow-up" stays wide without any
+  load-dependent tuning. This keeps the acceptance's "does not use wall-clock ratios" intact: the
+  step-count ratio check (16x input -> ratio < 64) still carries all the linear-vs-quadratic
+  judgment; the new check only ever compares one elapsed time to one fixed constant.
+
+---
+
+### 27 Oct 2026 · 0.20f approve the test-only change under packages/harness/src/pedagogy · decided by lead · risk: high
+- Decided: merge 0.20f. It changes only packages/harness/src/pedagogy/modelRequest.test.ts and packages/harness/src/pipeline/runner.test.ts; no source file changes. code-reviewer (required for the group) and typescript-reviewer approved after one fix round.
+- Why: the change is test-only; the earlier HIGH (the step count missed regex work) is fixed by an absolute 2,000 ms ceiling over the real functions, confirmed by both reviewers.
+
+---
+
+### 27 Oct 2026 · 0.20f budget overrun accepted · decided by lead · risk: low
+- Decided: accept 177 tool calls against a budget of 40 (build 48, fix round 1 97, fix round 2 32 by harness count; the agents reported 29, 44 and 14).
+- Why: the fix round had to measure timings under load to pick a ceiling and a self-test size; the work is done and both reviewers approved.
+
+---
+
+### 27 Oct 2026 · 0.20f backtracking self-test grows its input until it crosses the ceiling · decided by lead · risk: low
+- Decided: replace the fixed k=25 in the backtracking self-test of packages/harness/src/pedagogy/modelRequest.test.ts with a search: k grows from 16 by 1 until the first run passes the 2,000 ms ceiling (capped at 40, test timeout about 30 s), then the test asserts expectUnderCeiling throws. This fixes the reviewers' thin-margin MEDIUM and the CI timeout (fix round 2). No re-review: the change is test-only, inside the self-test, and leaves expectUnderCeiling, the ceiling and the real-input test unchanged.
+- Why: an earlier lead call left the margin as is, reasoning that CI runners are slower so the margin is wider; that was wrong in the other direction: on CI the fixed k=25 took 28.8 s and hit the 20 s test timeout. A search adapts to the machine's speed either way.
+
+---
+
 ### 27 Oct 2026 · 1.4e timeout design · decided by builder · risk: low
 - Decided: the shared "ready" entry has no timeout of its own; only individual callers time
   out via their own `setTimeout`. The `ready` listener (and the WeakMap entry) is removed when

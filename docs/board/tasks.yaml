@@ -10830,13 +10830,37 @@ tasks:
   deps:
   - 0.20d
   risk: risky
-  status: running
+  status: done
   branch: m13/0.20f-harness-timing-flake
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 614
+    tokens_in: 2170
+    tokens_out: 135501
+    cache_read_tokens: 78460814
+    wall_time_seconds: 5837
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2q
   milestone: M13
   title: 'Upload-centre race, retry and quota hardening (deferred from 8.2a, see docs/tasks/8.2a/plan.md): complete compares storageKey before setting processing (409 on mismatch, like failIfStorageKey);
-    dropObject retries a failed S3 delete 2-3 times before logging; create gets a per-teacher rate limit like addLink'
+    dropObject retries a failed S3 delete 2-3 times before logging; create gets a per-teacher rate limit like addLink; from the 8.2a review: the ingest sweep also reconciles stale uploading rows (a signing
+    failure whose cleanup delete also failed leaves one), with a test for the cleanup-failure branch in apps/web/src/studio/routes.ts; UploadsView onAddLink gets the same unmount guard as the other async
+    handlers; S3_REGION joins REQUIRED_IN_PRODUCTION in apps/web/src/storage/presign.ts and apps/worker/src/storage/roundtrip.ts'
   accept: a replace during complete answers 409 and leaves the row unchanged; a failed S3 delete is retried before it is logged; create past the limit answers 429; web and db tests green.
   deps:
   - 8.2a
