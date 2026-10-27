@@ -110,7 +110,8 @@ function scriptedChatGateway(replies: string[]) {
     {
       generateObject: [
         ...repeat(replies.length, {
-          match: (req: { system: string }) => req.system.includes('thoughts of suicide or self-harm'),
+          match: (req: { system: string }) =>
+            req.system.includes('thoughts of suicide or self-harm'),
           value: { distress: false },
         }),
         ...repeat(replies.length, {
@@ -162,45 +163,47 @@ async function runOneTurn(
   return { events, result };
 }
 
-describe.skipIf(!up)('edmate chat retrieves from the db-backed index when configured (3.9f)', () => {
-  let handle: DbHandle;
+describe.skipIf(!up)(
+  'edmate chat retrieves from the db-backed index when configured (3.9f)',
+  () => {
+    let handle: DbHandle;
 
-  beforeAll(async () => {
-    await createDatabase(dbName);
-    await migrateDatabase(TEST_URL);
-    handle = createDb({ DATABASE_URL: TEST_URL });
-    const { db } = handle;
-    await db.insert(s.users).values({
-      id: TEACHER,
-      name: 'Demo teacher',
-      locale: 'en',
-      market: 'test',
-      role: 'teacher',
+    beforeAll(async () => {
+      await createDatabase(dbName);
+      await migrateDatabase(TEST_URL);
+      handle = createDb({ DATABASE_URL: TEST_URL });
+      const { db } = handle;
+      await db.insert(s.users).values({
+        id: TEACHER,
+        name: 'Demo teacher',
+        locale: 'en',
+        market: 'test',
+        role: 'teacher',
+      });
+      const content = loadChatContent();
+      const course = content.course;
+      await db
+        .insert(s.courses)
+        .values({ id: course.id, teacherId: TEACHER, title: course.title, order: 0 });
+      await db.insert(s.modules).values(
+        course.modules.map((m, order) => ({
+          id: m.id,
+          teacherId: TEACHER,
+          courseId: course.id,
+          title: m.title,
+          order,
+        })),
+      );
+      const repos = createRepositories(db);
+      await seedChatChunks(repos, content, TEACHER);
     });
-    const content = loadChatContent();
-    const course = content.course;
-    await db.insert(s.courses).values({ id: course.id, teacherId: TEACHER, title: course.title, order: 0 });
-    await db.insert(s.modules).values(
-      course.modules.map((m, order) => ({
-        id: m.id,
-        teacherId: TEACHER,
-        courseId: course.id,
-        title: m.title,
-        order,
-      })),
-    );
-    const repos = createRepositories(db);
-    await seedChatChunks(repos, content, TEACHER);
-  });
 
-  afterAll(async () => {
-    await handle?.close();
-    await dropDatabase(dbName);
-  });
+    afterAll(async () => {
+      await handle?.close();
+      await dropDatabase(dbName);
+    });
 
-  it(
-    'three same-topic allowed turns on the db-backed index: no error/locked, and the saved help rung climbs above 0',
-    async () => {
+    it('three same-topic allowed turns on the db-backed index: no error/locked, and the saved help rung climbs above 0', async () => {
       const allowedTurns = [
         'What is a variable?',
         'Is a variable a name for a value?',
@@ -248,10 +251,9 @@ describe.skipIf(!up)('edmate chat retrieves from the db-backed index when config
       } finally {
         await setup.close?.();
       }
-    },
-    20000,
-  );
-});
+    }, 20000);
+  },
+);
 
 describe.skipIf(up)('edmate chat retrieves from the db-backed index when configured', () => {
   it.skip(SKIP_REASON, () => undefined);

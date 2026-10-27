@@ -10,7 +10,7 @@
 import type { DemoTeacherContent } from '@edmate/content';
 import type { RetrievalIndex } from '@edmate/contracts';
 import { openDatabase, retrievalIndexFor, type Repositories } from '@edmate/db';
-import { chunkDocument, indexDocument, parseMarkdown } from '@edmate/ingest';
+import { indexDocument, parseMarkdown } from '@edmate/ingest';
 import type { Env } from './gateway.js';
 
 /** True iff `env.DATABASE_URL` names a database: the only signal `edmate chat` uses to switch to
