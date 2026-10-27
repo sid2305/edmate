@@ -106,7 +106,9 @@ describe.skipIf(!up)(`safetyAlerts on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
       const a = alert();
       expect(await repos.safetyAlerts.record(a)).toEqual({ written: true });
       expect(await repos.safetyAlerts.record(a)).toEqual({ written: false });
-      expect(await count('select count(*)::int as n from safety_alerts where id = $1', [a.id])).toBe(1);
+      expect(
+        await count('select count(*)::int as n from safety_alerts where id = $1', [a.id]),
+      ).toBe(1);
       const r = await row(a.id);
       expect((r!.created_at as Date).toISOString()).toBe(a.createdAt);
       expect(r!.received_at).toBeInstanceOf(Date);
@@ -175,7 +177,9 @@ describe.skipIf(!up)(`safetyAlerts on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
     it("a session that is not the alert's own is not_found and writes nothing", async () => {
       const a = alert({ sessionId: ids.session('2B') });
       expect(await kind(repos.safetyAlerts.markEscalated(a, 0))).toBe('not_found');
-      expect(await count('select count(*)::int as n from safety_alerts where id = $1', [a.id])).toBe(0);
+      expect(
+        await count('select count(*)::int as n from safety_alerts where id = $1', [a.id]),
+      ).toBe(0);
     });
   });
 
@@ -187,6 +191,24 @@ describe.skipIf(!up)(`safetyAlerts on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
       expect(await repos.safetyAlerts.isAcknowledged(a.id)).toBe(false);
       await repos.safetyAlerts.acknowledge(STAFF, { alertId: a.id });
       expect(await repos.safetyAlerts.isAcknowledged(a.id)).toBe(true);
+    });
+  });
+
+  describe('hasOpenForStudent', () => {
+    it('is false with no alerts, true once open, false for another student, false once acknowledged', async () => {
+      const none = 'stu_sa_hos_none';
+      const other = 'stu_sa_hos_other';
+      expect(await repos.safetyAlerts.hasOpenForStudent(none)).toBe(false);
+      const a = alert({
+        studentId: studentId('2'),
+        teacherId: teacherId('B'),
+        sessionId: ids.session('2B'),
+      });
+      expect(await repos.safetyAlerts.record(a)).toEqual({ written: true });
+      expect(await repos.safetyAlerts.hasOpenForStudent(studentId('2'))).toBe(true);
+      expect(await repos.safetyAlerts.hasOpenForStudent(other)).toBe(false);
+      await repos.safetyAlerts.acknowledge(STAFF, { alertId: a.id });
+      expect(await repos.safetyAlerts.hasOpenForStudent(studentId('2'))).toBe(false);
     });
   });
 
@@ -269,7 +291,11 @@ describe.skipIf(!up)(`safetyAlerts on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
       await raw.query('delete from audit_log where target like $1', ['safety_alert:%']);
       await raw.query('delete from safety_alerts');
       const old = alert({ createdAt: '2026-10-22T09:00:00.000Z' });
-      const mid = alert({ createdAt: '2026-10-22T09:30:00.000Z', teacherId: teacherId('B'), sessionId: ids.session('1B') });
+      const mid = alert({
+        createdAt: '2026-10-22T09:30:00.000Z',
+        teacherId: teacherId('B'),
+        sessionId: ids.session('1B'),
+      });
       const esc = alert({ createdAt: '2026-10-22T09:45:00.000Z', kind: 'abuse', level: 'alert' });
       const done = alert({ createdAt: '2026-10-22T08:00:00.000Z' });
       for (const a of [old, mid, esc, done]) await repos.safetyAlerts.record(a);
@@ -325,9 +351,14 @@ describe.skipIf(!up)(`safetyAlerts on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
         await repos.safetyAlerts.record(alert());
       }
       expect(
-        await repos.safetyAlerts.listForStaff(STAFF, { status: 'open', limit: SAFETY_ALERT_LIST_MAX_LIMIT }),
+        await repos.safetyAlerts.listForStaff(STAFF, {
+          status: 'open',
+          limit: SAFETY_ALERT_LIST_MAX_LIMIT,
+        }),
       ).toHaveLength(SAFETY_ALERT_LIST_MAX_LIMIT);
-      expect(await repos.safetyAlerts.listForStaff(STAFF, { status: 'all', limit: 2 })).toHaveLength(2);
+      expect(
+        await repos.safetyAlerts.listForStaff(STAFF, { status: 'all', limit: 2 }),
+      ).toHaveLength(2);
     }, 20_000);
   });
 });
