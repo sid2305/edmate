@@ -10,6 +10,35 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 9.2e budget overrun · decided by lead · risk: low
+- Decided: accept 128 tool calls (harness count across both phases and the fix round) against the plan's 80.
+- Why: builders run about 2x their self-reports, and Phase 2 hit int-test contention on the shared dev database. Each phase stayed under the 150-call ceiling.
+
+---
+
+### 26 Oct 2026 · 9.2e merge of discovery.ts and the repositories barrel · decided by lead · risk: high
+- Decided: merge the changes to packages/db/src/repositories/discovery.ts (comment) and packages/db/src/repositories/index.ts (the `LanguageTag` type re-export).
+- Why: security-reviewer and database-reviewer ran on this risk path and found no CRITICAL or HIGH issue. The barrel change adds a type only, and the gate covered the dependents (--filter=...@edmate/db).
+
+---
+
+### 26 Oct 2026 · 9.2e searchParams lang length · decided by lead · risk: low
+- Decided: wontfix the LOW on apps/web/src/discovery/searchParams.ts: no extra length cap on `lang`.
+- Why: `LanguageTag` limits `lang` to letters, digits and hyphens. The value only reaches the query as a bound parameter, and the URL length limit already bounds it, so a long tag costs one cheap no-match search. Low impact before the pilot.
+
+---
+
+### 26 Oct 2026 · 9.2e rate-limit timeout values · decided by builder · risk: low
+- Decided: `connectTimeout` and `commandTimeout` are both 1000 ms (not the plan's illustrative
+  "~10 s" ceiling, just a bound well under it).
+- Why: the plan only specifies that a hang must be bounded well below ~10 s; 1 s keeps the public
+  `/teachers` page responsive even during a Redis outage (the limiter fails open on any store
+  error per the existing module doc), without being so short it risks spurious timeouts under
+  normal load. No spec or existing convention named an exact number, so this is logged rather than
+  escalated.
+
+---
+
 ### 26 Oct 2026 · 0.20e budget overrun · decided by lead · risk: low
 - Decided: accept 32 tool calls against a plan budget of 15.
 - Why: the regression proof needed extra SLO runs against the shared dev database, and each run is slow. The diff is one test file.

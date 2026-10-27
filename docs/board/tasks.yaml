@@ -5061,9 +5061,32 @@ tasks:
   deps:
   - 9.2a
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/9.2e-discovery-followups
+  metrics:
+    tool_calls: 588
+    tokens_in: 2110
+    tokens_out: 195982
+    cache_read_tokens: 69326295
+    wall_time_seconds: 6012
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 12.1a
   milestone: M12
   title: Staff verification queue read in packages/db (12.1 Phase A)
