@@ -28,6 +28,7 @@ function hooks() {
     s3: vi.fn(() => ({ send }) as never),
     queue: vi.fn(() => ({ add })),
     linkRateLimit: vi.fn(() => ({ take: vi.fn(async () => true) })),
+    createRateLimit: vi.fn(() => ({ take: vi.fn(async () => true) })),
     log: { error: vi.fn() },
   };
   return { h, add, send, repos };
@@ -48,7 +49,12 @@ describe('createStudioRuntime', () => {
   it('a production S3 config gap is unavailable, by code only', async () => {
     const { h } = hooks();
     const get = createStudioRuntime(
-      () => ({ REDIS_URL: 'redis://x', NODE_ENV: 'production', S3_ENDPOINT: 'http://h.test' }),
+      () => ({
+        REDIS_URL: 'redis://x',
+        NODE_ENV: 'production',
+        S3_ENDPOINT: 'http://h.test',
+        S3_REGION: 'ap-south-1',
+      }),
       h,
     );
     await expect(get()).rejects.toMatchObject({ reason: 'S3_ACCESS_KEY_ID_missing' });
@@ -57,6 +63,7 @@ describe('createStudioRuntime', () => {
         REDIS_URL: 'redis://x',
         NODE_ENV: 'production',
         S3_ENDPOINT: 'http://h.test',
+        S3_REGION: 'ap-south-1',
         S3_ACCESS_KEY_ID: 'synthetic-id',
         S3_SECRET_ACCESS_KEY: 'synthetic-secret',
         S3_BUCKET: 'b',
@@ -79,6 +86,7 @@ describe('createStudioRuntime', () => {
     const b = await get();
     expect(await get()).toBe(b);
     expect(h.repos).toHaveBeenCalledTimes(1);
+    expect(h.createRateLimit).toHaveBeenCalledWith('redis://x', h.log);
     expect(b.newDocumentId()).toMatch(/^doc_[0-9a-f-]{36}$/);
     expect(b.newDocumentId()).not.toBe(b.newDocumentId());
     expect(b.courses).toBe(repos.courses);

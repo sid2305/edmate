@@ -218,6 +218,28 @@ describe('POST: end a session', () => {
     ]);
   });
 
+  // 6.4c: the summariser's own candidate fails `SessionSummarySchema` (here, over
+  // `LIMITS.lastSummaryMaxWords` words) -- `sessionSummary.ts`'s rule applies the same as a
+  // gateway failure: the session still ends, ok() comes back, no summary is attached, and the log
+  // carries the ZodError's name only, never the raw candidate text.
+  it('a SessionSummarySchema failure never blocks ending the session: ends with no summary', async () => {
+    const m = memory({ summary: 'word '.repeat(80).trim() });
+    const res = await m.h.end(post(VALID), ctx());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(m.end).toHaveBeenCalledWith(
+      { studentId: 'stu_1', teacherId: 'tch_1' },
+      'ses_1',
+      undefined,
+    );
+    expect(m.attachSummary).not.toHaveBeenCalled();
+    expect(m.logs).toEqual([
+      { event: 'sessions.end.summarize_failed', fields: { error: 'ZodError' } },
+    ]);
+    const text = JSON.stringify(m.logs);
+    expect(text).not.toContain('word word');
+  });
+
   it('an already-ended session is a no-op success: no summarise, no re-end, summary unchanged', async () => {
     const m = memory({ summary: 'new one' });
     m.sessions.set('ses_1', {
@@ -348,6 +370,7 @@ describe('POST: end a session', () => {
     ['not_found', 404, 'not_found'],
     ['invalid', 400, 'validation'],
     ['integrity', 400, 'validation'],
+    ['limit', 409, 'limit_reached'],
     ['failed', 500, 'provider_error'],
   ] as const)('a repository %s is %i %s, no raw text, no-store', async (kind, status, code) => {
     const m = memory();

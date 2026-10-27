@@ -124,7 +124,7 @@ async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
     sessions: repos.sessions,
     entitlements: ports.entitlements,
     sessionRateLimit,
-    depsFor: (scope) => turnDepsFor(turnProcess, scope),
+    depsFor: (scope, sessionId) => turnDepsFor(turnProcess, scope, sessionId),
     steps: defaultSteps,
     now: () => new Date(),
     log: hooks.log,
@@ -135,7 +135,10 @@ async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
  * A memoised backend factory. The first call builds; a failure is logged once (its reason code or
  * error name, never a key) and every later call gets the same rejection until the process restarts.
  */
-export function createTurnRuntime(env: () => Env, hooks: TurnRuntimeHooks): () => Promise<TurnBackend> {
+export function createTurnRuntime(
+  env: () => Env,
+  hooks: TurnRuntimeHooks,
+): () => Promise<TurnBackend> {
   let backend: Promise<TurnBackend> | undefined;
   return () => {
     backend ??= build(env(), hooks).catch((error: unknown) => {
@@ -179,7 +182,9 @@ export function openRedis(url: string, log: ServerLog): RuntimeRedis {
   const forQueues = new Redis(url, { maxRetriesPerRequest: null });
   const forLimits = new Redis(url, { ...LIMITS_REDIS_OPTIONS });
   for (const client of [forQueues, forLimits]) {
-    client.on('error', (error: unknown) => log.error('turn.redis_error', { error: errorName(error) }));
+    client.on('error', (error: unknown) =>
+      log.error('turn.redis_error', { error: errorName(error) }),
+    );
   }
   return {
     queues: createTurnQueues(forQueues),

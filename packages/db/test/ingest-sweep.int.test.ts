@@ -1,7 +1,8 @@
-// Task 8.2i (Phase B), on a real Postgres 16 (see test/pg.ts; skipped locally without one, fails
-// in CI). `staleProcessing` is a cross-teacher read (a scheduled job, not a signed-in teacher's
-// own request): it returns only `processing` documents whose `updated_at` is older than cutoff,
-// across every teacher, oldest first, capped at `limit`, and never a null-storage-key row.
+// Task 8.2i (Phase B), widened by task 8.2q, on a real Postgres 16 (see test/pg.ts; skipped
+// locally without one, fails in CI). `staleProcessing` is a cross-teacher read (a scheduled job,
+// not a signed-in teacher's own request): it returns `processing` or `uploading` documents whose
+// `updated_at` is older than cutoff, across every teacher, oldest first, capped at `limit`, and
+// never a null-storage-key row.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { and, asc, eq, isNotNull, lt } from 'drizzle-orm';
@@ -75,7 +76,6 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       const recent = await seedDoc(RA, MOD.allowed, 'processing', 'uploads/a/2.pdf', RECENT);
       const ready = await seedDoc(RA, MOD.allowed, 'ready', 'uploads/a/3.pdf', OLD);
       const failed = await seedDoc(RA, MOD.allowed, 'failed', 'uploads/a/4.pdf', OLD);
-      const uploading = await seedDoc(RA, MOD.allowed, 'uploading', 'uploads/a/5.pdf', OLD);
       const note = await seedDoc(RA, MOD.allowed, 'processing', null, OLD);
 
       const rows = await sweep.staleProcessing(CUTOFF);
@@ -85,11 +85,42 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       expect(ids).not.toContain(recent);
       expect(ids).not.toContain(ready);
       expect(ids).not.toContain(failed);
-      expect(ids).not.toContain(uploading);
       expect(ids).not.toContain(note);
 
       const staleARow = rows.find((r) => r.id === staleA);
       expect(staleARow).toEqual({ id: staleA, teacherId: RA, storageKey: 'uploads/a/1.pdf' });
+    });
+
+    // Task 8.2q: a signing failure in `create` whose cleanup delete also fails leaves a row
+    // stuck in `uploading` forever, same as a crashed worker leaves one stuck in `processing`.
+    it('also returns a stale uploading row, but not a fresh one (task 8.2q)', async () => {
+      const staleUploading = await seedDoc(
+        RA,
+        MOD.allowed,
+        'uploading',
+        'uploads/a/stale-up.pdf',
+        OLD,
+      );
+      const freshUploading = await seedDoc(
+        RA,
+        MOD.allowed,
+        'uploading',
+        'uploads/a/fresh-up.pdf',
+        RECENT,
+      );
+
+      const rows = await sweep.staleProcessing(CUTOFF);
+      const ids = rows.map((r) => r.id);
+
+      expect(ids).toContain(staleUploading);
+      expect(ids).not.toContain(freshUploading);
+
+      const staleRow = rows.find((r) => r.id === staleUploading);
+      expect(staleRow).toEqual({
+        id: staleUploading,
+        teacherId: RA,
+        storageKey: 'uploads/a/stale-up.pdf',
+      });
     });
 
     it('is oldest-first and respects `limit`', async () => {
@@ -120,11 +151,14 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       expect(rows).toEqual([]);
     });
 
-    // Task 8.2p: documents_processing_updated_at_id_idx backs this query's `status =
-    // 'processing'` range plus its `ORDER BY updated_at, id` keyset. `enable_seqscan = off` (the
-    // table is tiny, so without it the planner picks a seq scan unforced) inside a rolled-back
-    // transaction, same helper shape as discovery.int.test.ts's explainSeqscanOff.
-    it('the sweep query uses documents_processing_updated_at_id_idx', async () => {
+    // Task 8.2p, index widened by task 8.2r at the 8.2q review's request:
+    // documents_sweep_updated_at_id_idx (replacing documents_processing_updated_at_id_idx) backs
+    // this query's `status = 'processing'` range plus its `ORDER BY updated_at, id` keyset --
+    // the new index's wider `status IN ('processing', 'uploading')` predicate still covers this
+    // query's narrower filter. `enable_seqscan = off` (the table is tiny, so without it the
+    // planner picks a seq scan unforced) inside a rolled-back transaction, same helper shape as
+    // discovery.int.test.ts's explainSeqscanOff.
+    it('the sweep query uses documents_sweep_updated_at_id_idx', async () => {
       const query = handle.db
         .select({
           id: documents.id,
@@ -151,7 +185,7 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       } finally {
         await raw.query('ROLLBACK');
       }
-      expect(plan).toContain('documents_processing_updated_at_id_idx');
+      expect(plan).toContain('documents_sweep_updated_at_id_idx');
     });
   });
 });

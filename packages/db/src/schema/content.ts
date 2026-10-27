@@ -105,12 +105,29 @@ export const documents = pgTable(
     index('documents_live_class_id_idx')
       .on(t.liveClassId)
       .where(sql`${t.liveClassId} is not null`),
-    // Task 8.2p: ingestSweep.staleProcessing's `status = 'processing' AND updated_at < $cutoff`
-    // range plus its `ORDER BY updated_at, id` keyset, in one partial index. Schema-only (see
-    // migrate.ts's POST_MIGRATE_STEPS), the same pattern as documents_live_class_id_idx above.
-    index('documents_processing_updated_at_id_idx')
+    // Task 8.2p, widened by task 8.2r at the 8.2q review's request: ingestSweep.staleProcessing's
+    // `status IN ('processing', 'uploading') AND updated_at < $cutoff` range plus its
+    // `ORDER BY updated_at, id` keyset, in one partial index. 0041 replaces the original
+    // `status = 'processing'`-only predicate (`documents_processing_updated_at_id_idx`) with this
+    // wider one: task 8.2q widens the sweep query itself to also catch stuck `uploading` rows, and
+    // the old single-status predicate can no longer back that widened scan. The new predicate is
+    // implied by both the original query (`status = 'processing'`) and the widened one, so this is
+    // safe whichever of 8.2q/8.2r merges first. Schema-only (see migrate.ts's
+    // POST_MIGRATE_STEPS), the same pattern as documents_live_class_id_idx above.
+    index('documents_sweep_updated_at_id_idx')
       .on(t.updatedAt, t.id)
-      .where(sql`${t.status} = 'processing'`),
+      .where(sql`${t.status} in ('processing', 'uploading')`),
+    // Task 8.2r: backs listForTeacher's `WHERE teacher_id = $1 ORDER BY created_at DESC, id DESC
+    // LIMIT 500` (chunks.ts). Full (non-partial) index -- all three columns are NOT NULL, so the
+    // NULLS ordering never actually applies at runtime, but `.nullsFirst()` on the descending
+    // columns matches the hand-written `DESC` SQL in migrate.ts's POST_MIGRATE_STEPS (Postgres
+    // defaults DESC to NULLS FIRST), as operations.ts does for the same reason (task 8.2s), so the
+    // schema and snapshot agree with the live index.
+    index('documents_teacher_id_created_at_id_idx').on(
+      t.teacherId,
+      t.createdAt.desc().nullsFirst(),
+      t.id.desc().nullsFirst(),
+    ),
     check(
       'documents_failure_reason_only_when_failed',
       sql`${t.failureReason} is null or ${t.status} = 'failed'`,

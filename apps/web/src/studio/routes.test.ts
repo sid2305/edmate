@@ -106,6 +106,28 @@ function memoryBackend() {
         if (failureReason) r.failureReason = failureReason;
         else delete r.failureReason;
       },
+      async markProcessingIfStorageKey({ teacherId }, id, expectedStorageKey) {
+        const r = mine(teacherId, id);
+        if (
+          !r ||
+          r.storageKey !== expectedStorageKey ||
+          !STATUS_FROM.processing!.includes(r.status)
+        ) {
+          return { updated: false };
+        }
+        r.status = 'processing';
+        delete r.failureReason;
+        return { updated: true };
+      },
+      async failIfStorageKey({ teacherId }, id, expectedStorageKey, failureReason) {
+        const r = mine(teacherId, id);
+        if (!r || r.storageKey !== expectedStorageKey || !STATUS_FROM.failed!.includes(r.status)) {
+          return { updated: false };
+        }
+        r.status = 'failed';
+        r.failureReason = failureReason;
+        return { updated: true };
+      },
       async delete({ teacherId }, id) {
         const r = mine(teacherId, id);
         if (!r) throw notFound('documents.delete');
@@ -149,6 +171,7 @@ function memoryBackend() {
     newDocumentId: () => `doc_${++n}`,
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
     linkRateLimit: fakeLinkRateLimiter(),
+    createRateLimit: fakeLinkRateLimiter(),
   };
   return { backend, rows, linked, objects, enqueued, createCalls, replaceCalls, deleted, logs };
 }
@@ -363,6 +386,59 @@ describe('POST /api/studio/documents (create)', () => {
     expect(read.status).toBe(413);
     expect((await json(read)).error?.code).toBe('input_too_large');
     expect(s.rows.size).toBe(0);
+  });
+
+  it('is rate-limited per teacher: the 21st create in the window is 429, nothing written (task 8.2q)', async () => {
+    const s = setup();
+    for (let i = 0; i < 20; i += 1) {
+      const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+      expect(res.status).toBe(201);
+    }
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    expect(res.status).toBe(429);
+    expect((await json(res)).error?.code).toBe('rate_limited');
+    expect(s.rows.size).toBe(20);
+    expect(s.backend.storage.createUploadUrl).toHaveBeenCalledTimes(20);
+  });
+
+  it("doesn't share a rate-limit bucket between teachers or with addLink's (task 8.2q)", async () => {
+    const s = setup();
+    for (let i = 0; i < 20; i += 1) {
+      await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    }
+    const res = await s.h.create(req('POST', '/x', { ...NEW_PDF, moduleId: 'm_ben' }), ctx(BEN));
+    expect(res.status).toBe(201);
+  });
+
+  it('a create rate-limit store error fails closed: 503, nothing written (task 8.2q)', async () => {
+    const s = setup();
+    s.backend.createRateLimit = failingLinkRateLimiter(new RangeError('redis unreachable'));
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    expect(res.status).toBe(503);
+    expect((await json(res)).error?.code).toBe('provider_error');
+    expect(s.rows.size).toBe(0);
+    expect(s.logs).toEqual([
+      { event: 'studio.create_rate_limit_unavailable', fields: { error: 'RangeError' } },
+    ]);
+  });
+
+  it('when the cleanup delete after a signing failure also fails, the original signing error still surfaces (task 8.2q)', async () => {
+    const s = setup();
+    vi.mocked(s.backend.storage.createUploadUrl).mockRejectedValueOnce(new Error('bucket down'));
+    const deleteCalls: string[] = [];
+    s.backend.documents.delete = async (_scope, id) => {
+      deleteCalls.push(id);
+      throw new RangeError('delete also failed');
+    };
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    // The original signing error surfaces through run()'s generic catch, as a 500 -- not swallowed
+    // by the cleanup-delete's own failure.
+    expect(res.status).toBe(500);
+    expect(deleteCalls).toHaveLength(1);
+    expect(s.logs).toEqual([
+      { event: 'studio.create_cleanup_failed', fields: { error: 'RangeError' } },
+      { event: 'studio.failed', fields: { error: 'Error' } },
+    ]);
   });
 });
 
@@ -726,10 +802,10 @@ describe('POST /api/studio/documents/:id/complete', () => {
     const s = setup();
     const { documentId, row } = await uploaded(s);
     const order: string[] = [];
-    const update = s.backend.documents.updateStatus;
-    s.backend.documents.updateStatus = async (...a) => {
-      order.push(`status:${a[2]}`);
-      return update(...a);
+    const mark = s.backend.documents.markProcessingIfStorageKey;
+    s.backend.documents.markProcessingIfStorageKey = async (...a) => {
+      order.push('status:processing');
+      return mark(...a);
     };
     vi.mocked(s.backend.enqueue).mockImplementation(async (job, storageKey) => {
       order.push('enqueue');
@@ -875,13 +951,26 @@ describe('POST /api/studio/documents/:id/complete', () => {
     expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(400);
   });
 
-  it('a delete racing the status write is not_found and nothing is enqueued', async () => {
+  it('a delete racing the status write answers 409 (same as a replace race) and nothing is enqueued', async () => {
     const s = setup();
     const { documentId } = await uploaded(s);
-    s.backend.documents.updateStatus = async () => {
-      throw new RepositoryError('not_found', 'documents.updateStatus');
-    };
-    expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(404);
+    s.backend.documents.markProcessingIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect(s.enqueued).toHaveLength(0);
+  });
+
+  it('a replace landing between head() and the processing write answers 409, row untouched by this request', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    const staleKey = row.storageKey;
+    // Simulate a concurrent replace: it changed the stored key and reset status to uploading.
+    s.backend.documents.markProcessingIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.storageKey).toBe(staleKey);
+    expect(row.status).toBe('uploading');
     expect(s.enqueued).toHaveLength(0);
   });
 
@@ -897,22 +986,61 @@ describe('POST /api/studio/documents/:id/complete', () => {
     // A retry goes through: failed -> processing is allowed.
     expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(202);
   });
+
+  // Task 8.2q fix round 1 (security-reviewer HIGH): a replace landing between `head()` and any
+  // of `complete`'s own failure writes must not flip the *replaced* document to failed under the
+  // stale request's code. Each of the three failure writes is now a `failIfStorageKey` compare-
+  // and-set; a lost race (`{ updated: false }`, faked here the same way the processing-write race
+  // tests above fake `markProcessingIfStorageKey`) answers the same 409 and leaves the row alone.
+  it('a replace landing before the input_too_large write leaves the replaced row untouched (409)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    s.objects.set(row.storageKey!, {
+      contentLength: MAX_DOCUMENT_UPLOAD_BYTES + 1,
+      contentType: PDF,
+    });
+    s.backend.documents.failIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.status).toBe('uploading');
+    expect(s.deleted).toEqual([]);
+    expect(s.enqueued).toHaveLength(0);
+  });
+
+  it('a replace landing before the unsupported_type write leaves the replaced row untouched (409)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    s.objects.set(row.storageKey!, { contentLength: 10, contentType: 'text/html' });
+    s.backend.documents.failIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.status).toBe('uploading');
+    expect(s.deleted).toEqual([]);
+    expect(s.enqueued).toHaveLength(0);
+  });
+
+  it('a replace landing before the enqueue_failed write leaves the replaced row untouched (409)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    vi.mocked(s.backend.enqueue).mockRejectedValueOnce(new Error('redis down at host'));
+    s.backend.documents.failIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.status).toBe('processing');
+    expect(s.logs).toEqual([{ event: 'studio.enqueue_failed', fields: { error: 'Error' } }]);
+  });
 });
 
 describe('complete: failure marking races', () => {
-  it('a delete racing the failed write is fine (still 503); any other error is 500', async () => {
+  it('a storage/db error from a failure write surfaces as 500, not swallowed', async () => {
     const s = setup();
     const { documentId } = await uploaded(s);
     vi.mocked(s.backend.enqueue).mockRejectedValue(new Error('down'));
-    const update = s.backend.documents.updateStatus;
-    s.backend.documents.updateStatus = async (...a) => {
-      if (a[2] === 'failed') throw new RepositoryError('not_found', 'documents.updateStatus');
-      return update(...a);
-    };
-    expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(503);
-    s.backend.documents.updateStatus = async (...a) => {
-      if (a[2] === 'failed') throw new RepositoryError('failed', 'documents.updateStatus');
-      return update(...a);
+    s.backend.documents.failIfStorageKey = async () => {
+      throw new RepositoryError('failed', 'documents.failIfStorageKey');
     };
     expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(500);
   });
@@ -938,12 +1066,26 @@ describe('DELETE /api/studio/documents/:id', () => {
     expect(s.deleted).toEqual([]);
   });
 
-  it('a failed file delete is logged by name and still 204 (the row is gone)', async () => {
+  it('a delete failing twice then succeeding is retried silently (task 8.2q)', async () => {
     const s = setup();
-    const { documentId } = await uploaded(s);
-    vi.mocked(s.backend.storage.deleteObject).mockRejectedValueOnce(new TypeError('bucket x'));
+    const { documentId, row } = await uploaded(s);
+    vi.mocked(s.backend.storage.deleteObject)
+      .mockRejectedValueOnce(new TypeError('bucket x'))
+      .mockRejectedValueOnce(new TypeError('bucket x'));
     const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: documentId }));
     expect(res.status).toBe(204);
+    expect(s.logs).toEqual([]);
+    expect(s.backend.storage.deleteObject).toHaveBeenCalledTimes(3);
+    expect(s.deleted).toEqual([row.storageKey]);
+  });
+
+  it('a delete failing on every attempt is retried then logged exactly once, still 204 (task 8.2q)', async () => {
+    const s = setup();
+    const { documentId } = await uploaded(s);
+    vi.mocked(s.backend.storage.deleteObject).mockRejectedValue(new TypeError('bucket x'));
+    const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(204);
+    expect(s.backend.storage.deleteObject).toHaveBeenCalledTimes(3);
     expect(s.logs).toEqual([
       { event: 'studio.object_delete_failed', fields: { error: 'TypeError' } },
     ]);

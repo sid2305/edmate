@@ -573,4 +573,39 @@ describe('UploadsView', () => {
     expect(consoleError).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
+
+  it('unmounting mid-addLink never touches state after unmount (task 8.2q)', async () => {
+    let resolveLink: ((reply: Response) => void) | undefined;
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url === '/api/studio/documents') {
+        return json({ status: 200, body: { documents: [] } });
+      }
+      if (method === 'POST' && url === '/api/studio/links') {
+        return new Promise<Response>((resolve) => {
+          resolveLink = resolve;
+        });
+      }
+      return json(err(500, 'provider_error'));
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
+    await screen.findByText(/No files yet/);
+    checkRights();
+    fireEvent.change(screen.getByLabelText('Add a web link'), {
+      target: { value: 'https://example.org/a' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
+    await waitFor(() => expect(resolveLink).toBeDefined());
+    expect(() => unmount()).not.toThrow();
+    resolveLink?.(json({ status: 202, body: { documentId: 'doc_9', status: 'processing' } }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
 });

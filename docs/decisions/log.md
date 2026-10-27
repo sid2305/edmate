@@ -10,6 +10,253 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2s budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 49 tool calls (harness count) against a plan budget of 20.
+- Why: The drift check ran drizzle-kit twice and had to clean up the generated files in between, which the lead's estimate missed. Future snapshot fixes should plan about 40.
+
+---
+
+### 27 Oct 2026 · 8.2q markProcessingIfStorageKey and the widened sweep filter · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/chunks.ts` gains a `markProcessingIfStorageKey`
+  compare-and-set read-then-write (same shape and risk as 8.2i's `failIfStorageKey`, no new access
+  path); `ingestSweepRepo.staleProcessing` widens its status filter to also catch stale `uploading`
+  rows (a cross-teacher scheduled read, same scope as before, no new column or write path).
+  Reviewed by security-reviewer and database-reviewer because both files are under the risky
+  `packages/db/src/repositories/**` glob.
+- Why: the plan names this decision verbatim (its draft text, used here unchanged) as required by
+  the merge-gate rule for any `packages/db/src/repositories/**` touch.
+
+---
+
+### 27 Oct 2026 · 8.2q dropObject retries 3 times total, no backoff · decided by builder · risk: low
+- Decided: `DROP_OBJECT_ATTEMPTS = 3` (one try plus two retries), tried back-to-back with no delay
+  between attempts.
+- Why: the plan asked for "2-3 attempts... no backoff config needed at this volume" without
+  picking a number; 3 total matches the plan's own upper bound and keeps the retry test
+  synchronous (no fake timers needed).
+
+---
+
+### 27 Oct 2026 · 8.2q create's 429 uses its own message, not addLink's · decided by builder · risk: low
+- Decided: added `MSG.createRateLimited` ("Too many uploads started...") instead of reusing
+  `MSG.linkRateLimited` ("Too many links added...") for `create`'s 429.
+- Why: the plan names a new log event (`studio.create_rate_limit_unavailable`) for the 503 branch
+  but doesn't say whether the 429 message should differ from `addLink`'s; reusing the link-specific
+  wording for a file/media upload would be confusing to a teacher, and the fixed-message pattern in
+  this file (`REPLACE_REFUSAL_MESSAGE`, `LINK_REFUSAL_MESSAGE`) already treats each action's wording
+  as its own constant.
+
+---
+
+### 27 Oct 2026 · 8.2q onAddLink's finally is guarded too, not just the line the plan named · decided by builder · risk: low
+- Decided: the plan says to add the guard "after its `await addLink(...)`"; this also guards the
+  `finally` block's `setLinkBusy(false)` (`if (mounted.current) setLinkBusy(false)`), since that's
+  a `finally` and runs even when the guard right after the `await` returns early.
+- Why: `onAddLink` is the only handler in this file with a `finally`-set busy flag; without this
+  second guard, a return inside the guard above still lets the unmount-time `setLinkBusy(false)`
+  run and the React warning the test checks for would still fire.
+
+---
+
+### 27 Oct 2026 · 8.2q fix round 1: addLink's own `markFailed` call left unchanged · decided by builder · risk: low
+- Decided: fixed only `complete`'s three `markFailed` call sites (lines 361, 366, 390) to use
+  `failIfStorageKey`; left `addLink`'s `enqueue_failed` `markFailed` call (line 436) as plain
+  `updateStatus`, even though the security-reviewer finding's line list named it alongside the
+  other three.
+- Why: `replace` refuses a link-keyed row outright (`MSG.linkReplace`), so a document `addLink`
+  creates can never be the target of the replace-during-complete race this fix closes -- there is
+  no second request that could change its `storageKey` out from under `addLink`'s own write. The
+  finding and the fix brief both describe the race as specific to `complete` ("complete must not
+  fail a document that was replaced while it ran"); the 436 reference in the raw finding's line
+  list appears to be a copy artifact from grepping every `markFailed` call site, not a second bug.
+
+---
+
+### 27 Oct 2026 · 8.2q approved for merge · decided by lead · risk: high
+- Decided: Merge 8.2q. It changes risky paths chunks.ts and ingestSweep.ts (packages/db/src/repositories/): a key-compared processing write (markProcessingIfStorageKey) and a sweep that also picks up stuck `uploading` rows. security-reviewer, database-reviewer, typescript-reviewer and code-reviewer ran; both HIGHs are fixed and re-verified (the index one through 8.2r on main).
+- Why: The required reviewers for packages/db/src/repositories/** ran, and the re-verifications found no new issue on the branch merged with current main.
+
+---
+
+### 27 Oct 2026 · 8.2q sweep limit left at 1000 · decided by lead · risk: low
+- Decided: Keep INGEST_SWEEP_LIMIT at 1000 in ingestSweep.ts (packages/db/src/repositories/); no follow-up task.
+- Why: The sweep runs again on every tick and orders by updated_at, so a backlog past 1000 drains over a few runs. Stuck uploads are rare, and pilot volume is far below that limit.
+
+---
+
+### 27 Oct 2026 · 8.2q budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 287 tool calls (harness count over three runs: Phases B, C and E 110; Phases A and D 114; fix round 1 63) against a plan budget of 150.
+- Why: The task spanned apps/web, apps/worker and packages/db across five phases plus a race fix. Future multi-package hardening tasks of this size should be split into separate board tasks of about 100 calls each.
+
+---
+
+### 27 Oct 2026 · 6.3d sessionId as profileStoreFor's third optional constructor parameter · decided by builder · risk: low
+- Decided: `profileStoreFor(repos, scope, sessionId?)` resolves the style card's `mistakeTags`
+  allow-list lazily (only when `known.length > 0`) by threading the session id from the
+  composition root, following the plan's design section 2/5 and Lead answer 1 unchanged.
+- Why: the style card is not available at composition-root time; `sessionId` is the cheapest value
+  that is, and the plan/lead answer already settled the design and the `integrity` error kind — no
+  new judgment call, just confirming the plan was followed as written.
+
+---
+
+### 27 Oct 2026 · 6.3d packages/db/src/repositories/ports.ts is a risky path · decided by builder · risk: high
+- Decided: this PR touches `packages/db/src/repositories/ports.ts`
+  (`packages/db/src/repositories/**`, risky path per `.claude/skills/merge-gate/risk-paths.txt`).
+  `review.md` must name **security-reviewer** and **database-reviewer** as required reviewers for
+  this group before merge.
+- Why: non-negotiable #6 and the plan's own "Risky paths touched" section — a repository adapter
+  change needs a security pass (scope/allow-list correctness) alongside the usual database review.
+
+---
+
+### 27 Oct 2026 · 6.3d recordProposedMistakes made async · decided by builder · risk: low
+- Decided: `profileStoreFor.recordProposedMistakes` is declared `async` (not a plain function
+  returning `Promise.resolve()`), so its scope-check throw becomes a rejected promise rather than
+  a synchronous throw.
+- Why: the port is called as `profiles.recordProposedMistakes?.(scope, proposed)` and tested via
+  `await kind(store.recordProposedMistakes!(...))`, which expects a promise it can `.then()`/catch
+  on; a synchronous throw from a non-async function broke that at the first scope-violation test
+  case (caught during red-then-green testing, not spec'd either way by the plan).
+
+---
+
+### 27 Oct 2026 · 6.3d approve merge of the profile store mistake-tag adapter · decided by lead · risk: high
+- Decided: merge the change to `packages/db/src/repositories/ports.ts` (profileStoreFor's applyMistakes allow-list and recordProposedMistakes). security-reviewer, database-reviewer, typescript-reviewer and code-reviewer ran; none raised a CRITICAL, HIGH or MEDIUM finding.
+- Why: the scope check runs before any read, every lookup in the session → agent version → style card chain is scoped to the bound pair, and a broken chain fails with `integrity` rather than a silent default.
+
+---
+
+### 27 Oct 2026 · 6.3d database LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix both database-reviewer LOWs in ports.ts (packages/db/src/repositories/): the repeated session → agent version → style card lookup per mistake-bearing turn, and resolving the session regardless of endedAt.
+- Why: the first is forced by the frozen ProfileStore.applyMistakes signature (ADR-0017) and costs three indexed reads only on turns that carry known tags; the second is the behaviour the plan chose and the handoff already records. The two typescript-reviewer LOWs go to 6.3e.
+
+---
+
+### 27 Oct 2026 · 6.3d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 83 harness-counted tool calls against a 65-call budget (1.28x).
+- Why: the extra calls went on the web composition-root threading and the int-test fixtures the plan asked for; the result needed no fix round.
+
+---
+
+### 27 Oct 2026 · 11.4j size-watch poll cadence · decided by builder · risk: low
+- Decided: used a plain `setInterval` with an in-flight guard (skip a tick if the previous async readdir/stat pass hasn't finished) rather than a recursive `setTimeout` chain.
+- Why: the plan didn't specify the exact scheduling primitive, only the check's semantics (sum sizes, abort over the limit, ignore vanished files, clear on settle); a guarded `setInterval` is the simplest implementation meeting all of those and was not called out as disallowed.
+
+---
+
+### 27 Oct 2026 · 11.4j readFile spy mechanism · decided by builder · risk: low
+- Decided: used `vi.mock('node:fs/promises', ...)` wrapping the real module (spreading `actual` and wrapping only `readFile` in `vi.fn`) instead of `vi.spyOn`, which vitest rejects for this ESM module ("Cannot redefine property: readFile").
+- Why: the plan's item 5 said "via a spy or a counter in the fake" without naming the exact mechanism; this is the standard vitest pattern for spying on a non-configurable ESM export while leaving every other export (and the real filesystem behaviour) untouched for the rest of the suite.
+
+---
+
+### 27 Oct 2026 · 11.4j budget overrun accepted · decided by lead · risk: low
+- Decided: accept 57 harness-counted tool calls against a 45-call budget (1.27x).
+- Why: all six plan items landed within the plan's file list, and both reviewers approved with no blocking finding. The two security LOWs (comments only) go to 11.4k.
+
+---
+
+### 27 Oct 2026 · 8.2r drop-and-reinstate of documents_failure_reason_only_when_failed · decided by builder · risk: high
+- Decided: migration `0041_documents_list_index_failure_reason_validate.sql` contains
+  `ALTER TABLE "documents" DROP CONSTRAINT "documents_failure_reason_only_when_failed";` followed
+  immediately by `ALTER TABLE "documents" ADD CONSTRAINT
+  "documents_failure_reason_only_when_failed" CHECK (...) NOT VALID;` — the merge gate's
+  migration-content scan flags any `DROP CONSTRAINT`/`ALTER TABLE ... DROP` as "drops or deletes
+  data", so this PR is risky via `MIGRATION_REVIEWERS = ("database-reviewer",)`.
+- Why: this only re-adds the exact same CHECK expression, immediately, as `NOT VALID` — the same
+  rule is enforced before and after (confirmed by the new
+  `documents-failure-reason-validate-migration.int.test.ts`: existing rows on both sides of the
+  constraint survive unchanged, the constraint is `convalidated = true` after `migrateDatabase`,
+  and a row that violates it still fails to insert). No row is ever uncovered by the constraint
+  for longer than the two statements take, and no data is read, written or lost — this is
+  hygiene to match this repo's `NOT VALID` → `VALIDATE` convention (migrate.ts's
+  `POST_MIGRATE_STEPS` comment), not a behaviour change. `database-reviewer` should confirm this
+  reading before merge.
+
+---
+
+### 27 Oct 2026 · 8.2r sweep index widened for 8.2q · decided by lead · risk: high
+- Decided: within the same migration 0041, `packages/db/src/schema/content.ts` and
+  `packages/db/src/migrate.ts` replace `documents_processing_updated_at_id_idx` with
+  `documents_sweep_updated_at_id_idx` ON `documents (updated_at, id) WHERE status IN
+  ('processing', 'uploading')`, built CONCURRENTLY, with the old index then dropped
+  CONCURRENTLY/`IF EXISTS` once the new one exists.
+- Why: task 8.2q's review widens `ingestSweep.staleProcessing` to also sweep `uploading` rows;
+  the original partial index (`status = 'processing'` only) could not serve that query shape. The
+  new predicate is a superset of the old one, so it covers both the pre- and post-8.2q query
+  shapes regardless of merge order, and the old index is only dropped after the replacement is
+  built, so the sweep job is never left without a usable index. Confirmed by the new
+  `documents-sweep-index.int.test.ts` (EXPLAIN shows Index Scan, no Sort, for both query shapes)
+  and by `ingest-sweep.int.test.ts`'s own EXPLAIN assertion (updated to the new index name).
+
+---
+
+### 27 Oct 2026 · 8.2r approve merge of migration 0041 · decided by lead · risk: high
+- Decided: merge migration 0041 (the documents list index, the failure_reason CHECK dropped and re-added NOT VALID then validated, and the sweep index replaced) with its changes to `packages/db/src/migrate.ts` and `packages/db/src/schema/content.ts`. database-reviewer, code-reviewer and typescript-reviewer ran; none raised a CRITICAL or HIGH finding.
+- Why: the CHECK swap happens inside the migration's one transaction, so the constraint is never off; the new sweep index is built CONCURRENTLY before the old one is dropped; and the new predicate covers both the current sweep query and 8.2q's widened one, so merge order with 8.2q is safe. The database MEDIUM (nulls order in content.ts) goes to 8.2s.
+
+---
+
+### 27 Oct 2026 · 8.2r budget overrun accepted · decided by lead · risk: low
+- Decided: accept 198 harness-counted tool calls against 60 (45 planned plus 15 for the sweep-index addition), about 3.3x.
+- Why: the lead added the sweep index mid-build, and the Postgres EXPLAIN tests needed several rounds to force index plans on small fixtures. The builder reported about 63 calls, so self-counts are unreliable here. Later migration tasks with EXPLAIN tests should plan about 120 calls, or split the EXPLAIN tests into their own phase.
+
+---
+
+### 27 Oct 2026 · 8.2r journal timestamp left as it is · decided by lead · risk: low
+- Decided: wontfix the database LOW in _journal.json (packages/db/migrations/meta/): entry 41's `when` is earlier than entries 39 and 40.
+- Why: drizzle applies migrations by idx, not by `when`, and rewriting a committed journal entry adds risk for no gain.
+
+---
+
+### 27 Oct 2026 · 6.4c evidenceSkip reason codes · decided by builder · risk: low
+- Decided: Use guard name `evidenceSkip` with `action: 'no_topic'` (no stored `practiceTopicId`)
+  or `action: 'bad_topic_id'` (stored but fails the `id()` shape), carried through
+  `TraceBuilder.addGuards` (name/ok/action only, already shipped, no contracts change).
+- Why: the plan asked for one of the two reason codes without naming the guard's `name` field or
+  distinguishing the two failure branches; `addGuards` is the one existing observability path that
+  needs no `packages/contracts` change (`TurnTraceSchema.guards` already types `name`/`action` as
+  plain strings), and splitting the two causes into distinct action codes matches the plan's own
+  wording ("no_topic / bad_topic_id").
+
+---
+
+### 27 Oct 2026 · 6.4c end route `'limit'` response shape · decided by builder · risk: low
+- Decided: Map `RepositoryError('limit')` to `apiError('limit_reached', MSG.limit, 409)`, the same
+  code/status `apps/web/src/studio/packages.ts`'s `packageLimit()` already uses for the identical
+  `RepositoryErrorKind`, but without that route's extra `reason` body field (session-ending has no
+  equivalent caller-facing reason to name).
+- Why: the plan said "find the existing mapping... and follow it"; `packages.ts` is the one
+  existing caller that already maps this exact repository error kind to a response, and session
+  end has no end-user-controllable packages cap this error would plausibly carry (no production
+  caller of `end`/`get`/`attachSummary`/`studentTurnScope` returns `'limit'` today — the case only
+  closes the switch's exhaustiveness for a future caller).
+
+---
+
+### 27 Oct 2026 · 6.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 107 harness-counted tool calls against a 55-call budget (1.95x); the lead also corrected the handoff's summary-test word count (80 words, not 310).
+- Why: the work stayed inside the plan's file list across two packages and the web route, and both reviewers approved with one LOW, which goes to 6.4d. Small multi-package LOW sweeps run long; future plans for them get about 90 calls.
+
+---
+
+### 27 Oct 2026 · 13.3c sign-in session length · decided by builder · risk: high
+- Decided: `apps/web/src/auth/config.ts`'s `SESSION_MAX_AGE_S` is `7 * 24 * 60 * 60` (604,800
+  seconds), replacing the prior 30-day value.
+- Why: the human answered B-60 on 27 Oct 2026 (docs/decisions/log.md): "Sign-in sessions last 7
+  days, renewed on use." This closes the open question left by 13.3b
+  (docs/tasks/13.3b/plan.md's "Open question" section). `apps/web/src/auth/config.ts` is under
+  `apps/web/src/auth/**`, a risk-paths.txt identity group, so this is `risk: high`.
+
+---
+
+### 27 Oct 2026 · 13.3c approve merge of 7-day sign-in sessions · decided by lead · risk: high
+- Decided: merge the change to `apps/web/src/auth/config.ts` (SESSION_MAX_AGE_S is now 7 days; the daily SESSION_UPDATE_AGE_S renewal is kept). security-reviewer and typescript-reviewer ran and found nothing.
+- Why: this is the human's B-60 answer; both values feed the one Auth.js database-session setting, and nothing else in the sign-in path assumed 30 days. A session in daily use keeps renewing, which is what "renewed on use" asks for.
+
+---
+
 ### 27 Oct 2026 · 0.20g confirmed webServer-before-globalSetup ordering from source · decided by builder · risk: low
 - Decided: Built the fix on the plan's assumption (webServer starts before globalSetup) after
   confirming it directly in the installed Playwright runner source (see Summary); no change to the

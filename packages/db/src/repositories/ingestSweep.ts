@@ -4,12 +4,12 @@
 // with no further write coming -- and marks each one `failed` so the teacher sees a retryable
 // state instead of a silent stall. Same "deliberately outside `createRepositories`, not in the
 // isolation grid" pattern as `./retention.ts`: this is a cross-teacher read, not a scoped one.
-import { and, asc, eq, isNotNull, lt } from 'drizzle-orm';
+import { and, asc, inArray, isNotNull, lt } from 'drizzle-orm';
 import type { Db } from '../client.js';
 import { guarded } from './errors.js';
 import { documents } from '../schema/content.js';
 
-/** One stuck-`processing` document the sweep should fail (always has a storage key: see below). */
+/** One stuck document the sweep should fail (always has a storage key: see below). */
 export interface StaleProcessingDocument {
   id: string;
   teacherId: string;
@@ -22,11 +22,19 @@ export const INGEST_SWEEP_LIMIT = 1000;
 export function ingestSweepRepo(db: Db) {
   return {
     /**
-     * Documents still `processing` whose `updated_at` is older than `cutoff`, oldest first, at
-     * most `limit` rows. A null `storage_key` (a `teacher_note`, which is never ingested async)
-     * never shows here, since `failIfStorageKey`'s compare-and-set needs a real key to compare
-     * against; `ready`/`failed`/`uploading` rows are never stuck in this sense, so they're
-     * excluded too.
+     * Documents stuck `processing` or `uploading` whose `updated_at` is older than `cutoff`,
+     * oldest first, at most `limit` rows. Task 8.2q: `uploading` is included alongside
+     * `processing` -- a `create` whose signing failed and whose own cleanup delete *also* failed
+     * (`routes.ts`'s `create`) can leave a row stuck in `uploading` forever, with no further write
+     * coming, same as a crashed worker leaves one stuck in `processing`. The caller's cutoff
+     * (`STUCK_PROCESSING_MINUTES`, `apps/worker/src/ingest/sweep.ts`, 30 minutes) is twice
+     * `UPLOAD_URL_TTL_SECONDS` (`apps/web/src/storage/presign.ts`, 15 minutes): an upload that
+     * started on a still-valid signed URL has finished or failed well before the sweep's cutoff,
+     * so a row genuinely stuck that long is safe to fail -- check this comment against both
+     * constants if either one changes. A null `storage_key` (a `teacher_note`, which is never
+     * ingested async and never set to `uploading`) never shows here, since `failIfStorageKey`'s
+     * compare-and-set needs a real key to compare against; `ready`/`failed` rows are never stuck
+     * in this sense, so they're excluded too.
      */
     async staleProcessing(
       cutoff: Date,
@@ -43,7 +51,7 @@ export function ingestSweepRepo(db: Db) {
           .from(documents)
           .where(
             and(
-              eq(documents.status, 'processing'),
+              inArray(documents.status, ['processing', 'uploading']),
               lt(documents.updatedAt, cutoff),
               isNotNull(documents.storageKey),
             ),
