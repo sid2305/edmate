@@ -64,6 +64,14 @@ This builder's changes on top of the inherited WIP: removed the unused `chunkDoc
   catch path cannot leak a pool. Confirmed by reading `chat.ts`'s catch block and
   `buildDbRetrieval`'s body: no deviation, no fix needed.
 
+### 26 Oct 2026 · 3.9f budget overrun · decided by lead · risk: low
+- Decided: Accept 250 tool calls across three agents against a budget of 48 (about 5x). The work is complete and reviewed.
+- Why: The first builder stalled at 163 calls before running the gate; the lead committed its WIP, and a fresh builder finished it in 61. The pool-leak fix round took 26. Next time, a builder still running at 2x budget is stopped and its WIP handed to a fresh one sooner.
+
+### 26 Oct 2026 · 3.9f review LOWs · decided by lead · risk: low
+- Decided: Two review LOWs are wontfix: apps/cli/eslint.config.js turns no-restricted-imports off for test/** (a faithful copy of apps/worker's config), and pnpm-lock.yaml churn beyond apps/cli's new deps (a pnpm dedup side effect; the frozen install passes).
+- Why: Both match existing repo conventions and change no behaviour.
+
 ## Gate
 
 ```
@@ -114,5 +122,4 @@ called), letting the CLI process hang.
 
 ## Budget
 
-Tool calls used: 34
-Fix round tool calls: 11
+Tool calls used: 250 (harness count: first builder 163 (stalled), finishing builder 61 (it reported 34), fixer 26 (it reported 11))
