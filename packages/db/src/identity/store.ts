@@ -243,6 +243,12 @@ const GrantedBy = z.enum(['self', 'parent']);
  * A `consents` row, as the database driver hands it back, mapped to `ConsentRow` (13.4d account
  * export). Pure (no I/O), same pattern as `age.ts`'s `ageStatus`, so it is unit-testable with no
  * database: a `grantedBy` outside `GrantedBy` throws instead of being cast.
+ *
+ * Error contract: on a bad `grantedBy` this throws the raw `ZodError` from the cast -- it is not
+ * caught or wrapped here. The only caller in this file (`listConsentsForStudent`'s `rows.map`)
+ * runs behind `guarded` (via `guardAll`), which scrubs any thrown error before it reaches the
+ * caller. Any other caller of `parseConsentRow` must do the same (wrap it behind `guarded` or an
+ * equivalent scrub) or treat the throw as a programming error, not a value to report to a client.
  */
 export function parseConsentRow(row: {
   kind: string;
