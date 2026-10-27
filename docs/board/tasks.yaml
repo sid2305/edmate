@@ -2960,9 +2960,9 @@ tasks:
   deps:
   - '6.2'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.2a-rebuild-batching
+  model: plan:sonnet build:sonnet
 - id: 5.8b
   milestone: M13
   title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
@@ -9957,7 +9957,8 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: 9.2g
   milestone: M13
   title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students
@@ -10470,9 +10471,29 @@ tasks:
   deps:
   - '13.3'
   risk: risky
-  status: running
+  status: done
   branch: m13/13.3b-scope-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 206
+    tokens_in: 694
+    tokens_out: 67954
+    cache_read_tokens: 32529094
+    wall_time_seconds: 3076
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 12.2h
   milestone: M13
   title: '12.2f review MEDIUM/LOW: packages/db/src/repositories/reports.ts listOpenForStaff''s per-row catch skips bad rows with no signal; return a dropped-row count or log one line per call (counts only,
@@ -10485,3 +10506,27 @@ tasks:
   status: running
   branch: m13/12.2h-report-signal
   model: plan:lead build:sonnet
+- id: 5.8f
+  milestone: M13
+  title: '5.8b review LOW (typescript-reviewer): packages/harness/src/pedagogy/skills.ts SkillInput has two independent optional fields, rolePlayStep and rolePlayStepPersonaId, so a caller that sets one
+    without the other only fails at run time with an unclear "computed for a different persona" error; join them into one optional field, e.g. rolePlayStepFor: { step, personaId }'
+  accept: one optional field carries the role-play step with its persona id; a caller cannot pass one without the other; harness typecheck, lint and test green
+  deps:
+  - 5.8b
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 12.2i
+  milestone: M13
+  title: '12.2h review LOWs: (1) break the import cycle between packages/db/src/repositories/chunks.ts and takedowns.ts (chunks.ts calls notTakenDown at module load; importing reports.ts or takedowns.ts before the
+    barrel throws "Cannot access ''qualified'' before initialization"), e.g. move qualified/notTakenDown into a module with no back-edge to chunks.ts, with a test that imports reports.ts first; (2) the report
+    category list is duplicated in apps/web (app/api/sessions/[id]/reports/handlers.ts, app/staff/reports/client.ts, src/chat/reportMessage.ts) instead of using REPORT_CATEGORIES from @edmate/db, so a new category
+    added only in db does not fail typecheck there (security-reviewer, typescript-reviewer, code-reviewer, silent-failure-hunter)'
+  accept: importing any repositories module directly, in any order, loads without error; every report category list in apps/web derives from one source; db and web typecheck, lint and test green
+  deps:
+  - 12.2h
+  risk: risky
+  status: todo
+  branch: null
+  model: null

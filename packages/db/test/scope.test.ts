@@ -278,6 +278,32 @@ describe('every repository method rejects a bad scope before any SQL', () => {
       );
     }
   });
+
+  it('insertTopicLinks rejects a bad scope before any SQL (not on createRepositories, 13.3b)', async () => {
+    const { insertTopicLinks } = await import('../src/repositories/chunks.js');
+    for (const [, bad] of BAD_SCOPES) {
+      const err = await insertTopicLinks(undefined as never, bad as never, []).then(
+        () => new Error('resolved'),
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(RepositoryError);
+      expect((err as RepositoryError).kind).toBe('scope');
+      expect((err as RepositoryError).method).toBe('chunks.insertTopicLinks');
+    }
+  });
+
+  it('topicSources rejects a bad scope before any SQL (not on createRepositories, 13.3b)', async () => {
+    const { topicSources } = await import('../src/repositories/chunks.js');
+    for (const [, bad] of BAD_SCOPES) {
+      const err = await topicSources(undefined as never, bad as never, []).then(
+        () => new Error('resolved'),
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(RepositoryError);
+      expect((err as RepositoryError).kind).toBe('scope');
+      expect((err as RepositoryError).method).toBe('chunks.topicSources');
+    }
+  });
 });
 
 describe('package surface', () => {

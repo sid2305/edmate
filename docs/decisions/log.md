@@ -10,6 +10,16 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 13.3b scope checks on chunks.ts helpers · decided by lead · risk: high
+- Decided: merge the change to packages/db/src/repositories/chunks.ts and outline.ts (risky path packages/db/src/repositories/**): insertTopicLinks and topicSources take a TeacherScope and check it before their empty-input early returns. security-reviewer, code-reviewer and typescript-reviewer all approved with no findings.
+- Why: it closes the 13.3 review's LOW findings that these two helpers sat outside the scope test grid; every query already used the scoped teacher id, and a bad scope now throws instead of returning an empty result.
+
+Builder: None — both code changes are the mechanical fixes already specified by the 13.3 review findings;
+the only open item is the `config.ts` `maxAge` question above, which is explicitly left to the
+human as B-60 rather than decided here.
+
+---
+
 ### 27 Oct 2026 · 13.regatea EXPLAIN test proves the index fits, not the live plan · decided by lead · risk: low
 - Decided: wontfix the database-reviewer LOW on packages/db/test/eval-runs-gate-passed-index.int.test.ts: the test reaches "no Sort" only with local work_mem and random_page_cost settings, so it shows the index matches the regate sweep's query, not that the live planner picks it today.
 - Why: the index matches the query column for column; at pilot table sizes a Sort is cheap, and the sweep runs every 15 minutes off any request path.
