@@ -249,3 +249,8 @@ branch and green together.
 ## Status
 
 READY
+
+## Lead answers (26 Oct 2026)
+- Q1: the slug-coalesced display name, as recommended (staff approve what students will see).
+- Q2: shown alongside "Declared name", as recommended.
+- 9.4f has merged, so `repositories.int.test.ts` and `packages/db/src/repositories/README.md` are free for this task. 13.regate's Phase A runs in parallel in `packages/db/src/repositories/publish.ts` and `test/publish.int.test.ts`; don't touch those.
