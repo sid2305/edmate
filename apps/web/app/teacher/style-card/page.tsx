@@ -13,7 +13,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function StyleCardPage() {
   const principal = await requireRole(['teacher']);
-  const card = await serverDatabase().repos.styleCards.latest({ teacherId: principal.userId });
+  const scope = { teacherId: principal.userId };
+  const card = await serverDatabase().repos.styleCards.latest(scope);
+  const proposals = await serverDatabase().repos.mistakeProposals.listPending(scope);
   const shell = await getTranslations('shell');
   const teacher = await getTranslations('teacher');
   const t = await getTranslations('styleCard');
@@ -33,7 +35,7 @@ export default async function StyleCardPage() {
       <h1>{t('title')}</h1>
       {/* English-only pilot: only the style card's strings go to the client. */}
       <NextIntlClientProvider locale="en" messages={{ styleCard: messages.styleCard }}>
-        <StyleCardView initialCard={card} />
+        <StyleCardView initialCard={card} initialProposals={proposals} />
       </NextIntlClientProvider>
     </AppShell>
   );

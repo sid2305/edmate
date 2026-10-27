@@ -48,7 +48,7 @@ const CARD = { id: 'sty_1', teacherId: 't_1', version: 1, text: 'Old text.', mis
 describe('StyleCardView', () => {
   it('shows "no card yet" with an empty editor when nothing is saved', () => {
     api();
-    renderIntl(<StyleCardView initialCard={null} />);
+    renderIntl(<StyleCardView initialCard={null} initialProposals={[]} />);
     expect(screen.getByText(/no style card yet/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Style card text')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -56,7 +56,7 @@ describe('StyleCardView', () => {
 
   it('shows the saved card text, tags and version when one exists', () => {
     api();
-    renderIntl(<StyleCardView initialCard={CARD} />);
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
     expect(screen.getByText('Current version: 1')).toBeInTheDocument();
     expect(screen.getByLabelText('Style card text')).toHaveValue('Old text.');
     expect(screen.getByLabelText('Mistake tags')).toHaveValue('x');
@@ -65,7 +65,7 @@ describe('StyleCardView', () => {
   it('drafts from the interview, filling the editable text and tags', async () => {
     const { next, calls } = api();
     next('POST /api/studio/style-card/draft', { status: 200, body: { draft: DRAFT } });
-    renderIntl(<StyleCardView initialCard={null} />);
+    renderIntl(<StyleCardView initialCard={null} initialProposals={[]} />);
 
     fireEvent.change(screen.getByLabelText('What tone do you use with students?'), {
       target: { value: 'Warm, a little playful.' },
@@ -86,7 +86,7 @@ describe('StyleCardView', () => {
     const { next, calls } = api();
     const saved = { ...CARD, version: 2, text: 'Fixed text.', mistakeTags: ['x', 'y'] };
     next('PUT /api/studio/style-card', { status: 201, body: { card: saved } });
-    renderIntl(<StyleCardView initialCard={CARD} />);
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
 
     fireEvent.change(screen.getByLabelText('Style card text'), {
       target: { value: 'Fixed text.' },
@@ -103,7 +103,7 @@ describe('StyleCardView', () => {
   it('shows a save error and keeps the previous card unchanged', async () => {
     const { next } = api();
     next('PUT /api/studio/style-card', err(400, 'validation'));
-    renderIntl(<StyleCardView initialCard={CARD} />);
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('Check the text and try again.'),
@@ -116,7 +116,7 @@ describe('StyleCardView', () => {
       'fetch',
       vi.fn(async () => Promise.reject(new TypeError('offline'))),
     );
-    renderIntl(<StyleCardView initialCard={CARD} />);
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
     const button = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(button);
     await waitFor(() => expect(button).not.toBeDisabled());
@@ -128,7 +128,7 @@ describe('StyleCardView', () => {
       'fetch',
       vi.fn(async () => Promise.reject(new TypeError('offline'))),
     );
-    renderIntl(<StyleCardView initialCard={null} />);
+    renderIntl(<StyleCardView initialCard={null} initialProposals={[]} />);
     const button = screen.getByRole('button', { name: 'Generate draft' });
     fireEvent.click(button);
     await waitFor(() => expect(button).not.toBeDisabled());
@@ -148,7 +148,7 @@ describe('StyleCardView', () => {
         return Promise.resolve(json({ status: 201, body: { card: saved } }));
       }),
     );
-    renderIntl(<StyleCardView initialCard={CARD} />);
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate draft' }));
     await waitFor(() => expect(draftCalls).toHaveLength(1));
@@ -158,7 +158,9 @@ describe('StyleCardView', () => {
 
     // The slow draft now resolves, after the save already landed: it must be discarded.
     draftCalls[0]!(json({ status: 200, body: { draft: DRAFT } }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate draft' })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Generate draft' })).not.toBeDisabled(),
+    );
     // The draft's text is discarded: the editable field still holds what was saved, not DRAFT.text.
     expect(screen.getByLabelText('Style card text')).toHaveValue(CARD.text);
     expect(screen.getByText('Current version: 2')).toBeInTheDocument();
@@ -166,8 +168,70 @@ describe('StyleCardView', () => {
 
   it('has no axe violations', async () => {
     api();
-    const { container } = renderIntl(<StyleCardView initialCard={CARD} />);
+    const { container } = renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+});
+
+const PROPOSAL = {
+  tag: 'units',
+  count: 3,
+  lastSeen: '2026-10-01T00:00:00Z',
+  status: 'pending' as const,
+};
+
+describe('StyleCardView: proposed tags', () => {
+  it('shows "no proposed tags" when there are none', () => {
+    api();
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[]} />);
+    expect(screen.getByText('No proposed tags right now.')).toBeInTheDocument();
+  });
+
+  it("approving removes the tag from the pending list and shows the card's new mistakeTags", async () => {
+    const { next, calls } = api();
+    const newCard = { ...CARD, version: 2, mistakeTags: ['x', 'units'] };
+    next('POST /api/studio/mistake-proposals', {
+      status: 200,
+      body: { approved: true, card: newCard },
+    });
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[PROPOSAL]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(screen.getByText('Current version: 2')).toBeInTheDocument());
+    expect(screen.getByText('No proposed tags right now.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mistake tags')).toHaveValue('x, units');
+    expect(calls[0]!.body).toEqual({ tag: 'units', action: 'approve' });
+  });
+
+  it('rejecting removes the tag from the pending list without changing the card', async () => {
+    const { next } = api();
+    next('POST /api/studio/mistake-proposals', { status: 200, body: { rejected: true } });
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[PROPOSAL]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('No proposed tags right now.')).toBeInTheDocument(),
+    );
+    expect(screen.getByText('Current version: 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mistake tags')).toHaveValue('x');
+  });
+
+  it('a failed decision shows the error banner, with no optimistic removal', async () => {
+    const { next } = api();
+    next('POST /api/studio/mistake-proposals', err(500, 'provider_error'));
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[PROPOSAL]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Something went wrong. Please try again.',
+      ),
+    );
+    expect(screen.getByText('units')).toBeInTheDocument();
+    expect(screen.getByText('Current version: 1')).toBeInTheDocument();
   });
 });

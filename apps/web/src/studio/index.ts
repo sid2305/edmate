@@ -2,6 +2,7 @@
 // backend, built once and shared by both handler sets. Nothing is opened at import: the
 // route-coverage test and `next build` import the route files freely.
 import { serverDatabase } from '../auth';
+import { createMistakeProposalHandlers } from './mistakeProposalRoutes';
 import { createOutlineHandlers } from './outline';
 import { createStudioHandlers } from './routes';
 import { createStudioRuntime, realHooks } from './runtime';
@@ -20,5 +21,11 @@ export const styleCardHandlers = createStyleCardHandlers(
     repos: () => serverDatabase().repos,
     log: realHooks.log,
   }),
+  realHooks.log,
+);
+
+// Task 6.3a Phase B: the mistake-proposal API, over the shared auth runtime's repositories.
+export const mistakeProposalHandlers = createMistakeProposalHandlers(
+  { repos: () => serverDatabase().repos },
   realHooks.log,
 );

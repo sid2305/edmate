@@ -1,6 +1,6 @@
 # Handoff: 6.3a
 
-Status: DONE (Phase A only — `packages/db`; Phase B, `apps/web`, is a separate builder's job)
+Status: DONE (Phase A — `packages/db` — and Phase B — `apps/web` — both done, by separate builders)
 
 ## Summary
 
@@ -126,3 +126,95 @@ Tool calls used: ~55 (this session continued from an earlier session's context; 
 only the coverage fix-round, gate re-runs, prettier/secret-scan and this handoff — the schema/
 repo/test authoring itself happened in the prior context window, within the plan's ~65-call budget
 for Phase A).
+
+## Phase B
+
+Built on Phase A commit `262932a4` ("6.3a Phase A: proposed mistake tags the teacher approves
+(packages/db)"), merged with `origin/main` into `50bc339e` before Phase B started. State used, per
+the Phase A handoff above: `repos.mistakeProposals.{record,listPending,approve,reject}` (scopes
+`TeacherScope`), `MistakeProposalRow = { tag, count, lastSeen, status }`, `approve` returns
+`{ approved, card: StyleCard | null }`, `reject` returns `{ rejected }`; `RepositoryErrorKind`
+includes `limit` (code `limit_reached`).
+
+### Summary
+
+- **`apps/web/src/studio/mistakeProposalRoutes.ts` (new):** `createMistakeProposalHandlers` —
+  `list` (`GET`, the session teacher's own pending rows) and `decide` (`{tag, action}` →
+  `approve`/`reject`). **Deviation from the plan's Q2 recommendation:** the decide endpoint is
+  `POST`, not `PATCH` — `src/auth/policy.ts`'s `ROUTE_POLICY` row for `/api/studio/**` only lists
+  `GET, POST, PUT, DELETE`, and `route-coverage.test.ts` fails any method with no matching policy
+  row; `apps/web/src/auth/**` is out of bounds for this builder (Phase B's own "Files out of
+  bounds"), so `POST` (already allowed) was used instead of extending the policy table. One `POST`
+  endpoint still carries both decisions, matching the plan's reasoning otherwise. `fromRepositoryError`
+  maps `scope → 403 forbidden`, `not_found → 404 not_found`, `invalid`/`integrity → 400 validation`,
+  `limit → 409 limit_reached` (Q5, as recommended), `failed → 500 provider_error`.
+- **`apps/web/app/api/studio/mistake-proposals/route.ts` (new):** `GET`/`POST`, both
+  `withRole(['teacher'], ...)`.
+- **`apps/web/src/studio/index.ts` (modified):** wires `mistakeProposalHandlers` from
+  `createMistakeProposalHandlers({ repos: () => serverDatabase().repos }, realHooks.log)`.
+- **`apps/web/src/studio/styleCardClient.ts` (modified):** added `listMistakeProposals()` and
+  `decideMistakeProposal({tag, action})`, reusing the file's `call`/`ApiResult`/`asJson` helpers;
+  exported `MistakeProposalRow`.
+- **`apps/web/app/teacher/style-card/page.tsx` (modified):** also reads
+  `mistakeProposals.listPending({ teacherId: principal.userId })`, passed to `StyleCardView` as
+  `initialProposals`.
+- **`apps/web/app/teacher/style-card/StyleCardView.tsx` (modified):** a "Proposed tags" section
+  above the interview (list of tag/count with Approve/Reject buttons). Approve replaces `card`
+  (and the editable `text`/`tagsText` fields) with the new version and drops the tag from the
+  pending list; Reject just drops it, leaving the card unchanged. A failed call shows the existing
+  error banner (`ERROR_KEYS` extended with `limit_reached`) with **no optimistic removal** — the
+  proposal list is only filtered after the API call actually resolves `ok: true`.
+- **`apps/web/messages/en.json` (modified):** `styleCard.proposedTags.*` (title, hint, none,
+  countLabel, approveButton, rejectButton) and `styleCard.errors.limit_reached`.
+
+### Red → green
+
+`mistakeProposalRoutes.test.ts` written first (list/decide over an in-memory `mistakeProposals`
+repo fake): failed with "Cannot find module './mistakeProposalRoutes'" before the route file
+existed, passed once `mistakeProposalRoutes.ts` was written (one fix round inside this: the test's
+first draft constructed `new RepositoryError(method, kind)`; the real constructor is
+`(kind, method)` — fixed in the test, not the source). `styleCardClient.test.ts` extended with
+`listMistakeProposals`/`decideMistakeProposal` cases — red (no such export) then green.
+`page.test.tsx` extended to mock and assert `repos.mistakeProposals.listPending` — red (prop/mock
+shape didn't exist) then green. `StyleCardView.test.tsx` extended with a `proposed tags` describe
+block (no tags, approve removes + shows new card, reject removes without changing the card, a
+failed decision shows the error banner with the tag still listed) — red (no such UI) then green.
+
+### State after Phase A note used
+
+No change needed to `packages/db`; Phase B called only the four `mistakeProposals` methods and
+constants the Phase A handoff documented, with no further db edits.
+
+## Decisions (Phase B)
+
+### 27 Oct 2026 · 6.3a decide uses POST, not PATCH (Q2) · decided by builder · risk: low
+- Decided: the single decide endpoint (`{tag, action: 'approve'|'reject'}`) is `POST
+  /api/studio/mistake-proposals`, not `PATCH` as the plan's Q2 recommended.
+- Why: `src/auth/policy.ts`'s `ROUTE_POLICY` row for `/api/studio/**` allows only
+  `GET, POST, PUT, DELETE`; `route-coverage.test.ts` fails any exported HTTP method with no
+  matching policy row (deny by default). Extending that row to add `PATCH` would touch
+  `apps/web/src/auth/**`, which this task's own "Files out of bounds" list reserves ("reuse
+  requireRole/withRole as-is") and which this builder's brief also forbids touching. `POST` is
+  already allowed for teachers on this path and carries the same body shape, so no behaviour is
+  lost.
+
+### 27 Oct 2026 · 6.3a no optimistic removal on decide (plan's own line, confirmed in the test) · decided by builder · risk: low
+- Decided: `StyleCardView`'s proposed-tags list only drops a tag after `decideMistakeProposal`
+  resolves `ok: true`; a failed call leaves the tag listed and shows the existing error banner.
+- Why: matches the plan's acceptance line for Phase B ("approving one removes it from the pending
+  list client-side ... rejecting removes it without changing the card") read together with the
+  existing `onSave`/`onDraft` pattern in the same file, which never assumes success before the
+  response is in.
+
+## Gate (Phase B)
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → green: 10/10 tasks
+  successful (one fix round: an unused `MistakeProposalBackend` type import in the new test file
+  tripped `@typescript-eslint/no-unused-vars`; removed it, re-ran, green).
+- `corepack pnpm exec prettier --check` on the changed Phase B files → 4 files needed `--write`
+  (new/extended test and view files); re-checked clean afterward.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+## Budget (Phase B)
+
+Tool calls used: 47.

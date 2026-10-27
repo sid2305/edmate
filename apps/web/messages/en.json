@@ -356,12 +356,21 @@
     "tagsHint": "Comma-separated.",
     "saveButton": "Save",
     "saving": "Saving…",
+    "proposedTags": {
+      "title": "Proposed tags",
+      "hint": "Tags your agent noticed students getting wrong. Approve to add one to your style card, or reject to dismiss it.",
+      "none": "No proposed tags right now.",
+      "countLabel": "Seen {count} times",
+      "approveButton": "Approve",
+      "rejectButton": "Reject"
+    },
     "errors": {
       "validation": "Check the text and try again.",
       "input_too_large": "That's too long. Please shorten it.",
       "forbidden": "This style card is not yours to edit.",
       "not_found": "That style card was not found.",
       "unauthorized": "Please sign in again.",
+      "limit_reached": "You have reached the limit of proposed tags.",
       "provider_error": "Something went wrong. Please try again."
     }
   },
