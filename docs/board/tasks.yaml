@@ -11090,6 +11090,17 @@ tasks:
   deps:
   - 11.4d
   risk: low
+  status: running
+  branch: m13/11.4j-ffmpeg-hardening
+  model: plan:lead build:sonnet
+- id: 6.3e
+  milestone: M13
+  title: '6.3d review LOWs for packages/db/src/repositories/ports.ts profileStoreFor: name the unused third applyMistakes parameter _proposed so the omission reads as intentional; add a profile-store int
+    test that calls applyMistakes(scope, [], [proposedTag]) and checks it is a no-op'
+  accept: the test passes; @edmate/db typecheck, lint and test green.
+  deps:
+  - 6.3d
+  risk: risky
   status: todo
   branch: null
   model: null
