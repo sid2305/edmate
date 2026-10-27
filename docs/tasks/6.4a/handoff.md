@@ -1,6 +1,6 @@
 # Handoff: 6.4a
 
-Status: PARTIAL (Phase A done; Phase B to do)
+Status: DONE
 
 ## Phase A
 
@@ -41,7 +41,79 @@ Confirmed by grep (plan's dependents check): `IssuedItem` and `practiceTopicId` 
 outside `packages/harness/src`, so `@edmate/harness`'s exported surface is unchanged and no
 dependent package needed re-gating beyond the gate command below.
 
+## Phase B
+
+A real "end session" trigger in `apps/web`, test first, per `docs/tasks/6.4a/plan.md` Phase B.
+
+- `apps/web/app/api/sessions/[id]/end/route.ts` (new) — `POST /api/sessions/:id/end`. Follows the
+  reports route's pattern (`app/api/sessions/[id]/reports/route.ts`): the session id is the URL
+  param, the body names only `agentId` so `studentTurnScope` can build the scope. Only the
+  student who owns the session can end it; anyone else, or a missing session, gets the same 404
+  (lead answer, 27 Oct 2026). An already-ended session's `end` is a no-op success (never
+  re-summarised, per `sessionsRepo.end`'s existing contract). Loads up to
+  `SUMMARY_HISTORY_LIMIT` (50) messages via `repos().messages.history`, calls
+  `summarizeSession` from `@edmate/harness` over a bare, unmetered `generateObject` built lazily
+  (Anthropic, or the dev model's fixed summary candidate under `EDMATE_DEV_MODEL=scripted`) —
+  mirrors `apps/web/src/studio/styleCardRuntime.ts`'s drafter pattern (there is no natural turn or
+  entitlement to bill this call to, lead answer Q4). A gateway or schema failure is logged and
+  swallowed, never blocking `sessions.end` (per `sessionSummary.ts`'s own doc comment rule, "don't
+  block ending a session on a model failure"). No `ROUTE_POLICY` edit needed: the existing
+  `/api/sessions/**` POST wildcard already covers it (confirmed via `apps/web/src/auth/
+  route-coverage.test.ts`, unedited).
+- `apps/web/app/api/sessions/[id]/end/route.test.ts` (new) — a memory agents+sessions+messages
+  backend (no database) and a scripted gateway stub (no real model call), per rule 4. Cases:
+  happy path ends the session and stores the summary; another student's / another teacher's /
+  a mismatched-agent session all read as the same 404; an already-ended session is a no-op
+  (summary untouched, `end` never re-called with a new summary); an empty transcript never builds
+  or calls the gateway; a gateway failure and a schema failure both still end the session with no
+  summary, logging the failure name only; oversized/invalid bodies are 400/413; an unexpected
+  throw (`Error` and a non-`Error` value) is 500, logging only the error's name
+  (`errorName()` → `'Error'` / `'string'`, never the message); the default logger writes to
+  `console.error`; routed through the real guard and `ROUTE_POLICY` end to end. Verified red
+  first: with the route's body temporarily stubbed to always 404, every happy-path and no-op case
+  failed; restored, all pass.
+- `apps/web/src/chat/EndSessionButton.tsx` (new) — same size/pattern as `ReportButton.tsx`
+  (12.2c). Closed shows one "End chat" button; clicking asks for a plain confirm (no destructive
+  action without one) before `endSession()` POSTs. On success, `onEnded` defaults to
+  `window.location.reload()` — `loadChat.ts`'s existing rule already treats a reopened, ended
+  session's `?s=` as a fresh empty chat, so no new client-side "ended" state was needed. A
+  failure shows fixed text (never the server's own message) and returns to the confirm step to
+  retry.
+- `apps/web/src/chat/EndSessionButton.test.tsx` (new) — renders nothing without an open session;
+  opens the confirm step, a11y clean closed and open; sends on confirm, disables both buttons
+  while busy, calls `onEnded` on success; cancel returns to closed without sending; a failure
+  shows fixed text and stays on the confirm step; the `endSession()` fetch layer: posts the
+  session+agent id with no body text and returns `ok: true` on 200, a non-2xx is `ok: false` and
+  never throws, a network failure is `ok: false` and never throws, the session id is
+  URL-encoded. Verified red first (component and fetch layer both absent), then green.
+- `apps/web/src/chat/ChatView.tsx` — mounts `<EndSessionButton agentId={agentId}
+  sessionId={reportSessionId} />` next to the existing `<HintButton />`, reusing the pre-existing
+  `reportSessionId` variable; no new props threaded through `ChatView`.
+- `apps/web/messages/en.json` — new `endSession` namespace (button/confirm/ending/cancel/failed
+  strings) alongside the existing `report` namespace.
+
+### Deviation from the plan's file list
+The plan suggested widening `TurnBackend`/using `turn/depsFor` to reach the transcript and
+session row. I used `serverDatabase().repos.messages.history` / `.repos.sessions` directly
+instead (the same reader `loadChat.ts` already uses for a reopened chat) — see Decisions below.
+
 ## Decisions
+
+### 27 Oct 2026 · 6.4a end route reads repos directly, not TurnBackend · decided by builder · risk: low
+- Decided: `apps/web/app/api/sessions/[id]/end/route.ts` reads the transcript and session row via
+  `serverDatabase().repos.messages.history` / `.repos.sessions`, not by widening
+  `TurnBackend`/`turn/depsFor` as the plan's Phase B file list suggested.
+- Why: ending a session is housekeeping, not a teaching turn — `depsFor` wires Redis and queue
+  machinery for the turn pipeline that this route has no need of. `runtime.test.ts` confirms
+  production `TurnBackend.sessions` is literally `repos.sessions`, so the result is behaviourally
+  the same object, just without the unrelated dependency. `turn/routes.ts` was not edited.
+
+### 27 Oct 2026 · 6.4a endSession strings added to en.json · decided by builder · risk: low
+- Decided: added an `endSession` namespace to `apps/web/messages/en.json` (not in the plan's
+  literal Phase B file list).
+- Why: `EndSessionButton.tsx` needs real button/confirm/error text and the test harness
+  (`renderIntl`) renders against the real `en.json`; every other button on this page
+  (`ReportButton`, `HintButton`) follows the same pattern of owning its own namespace there.
 
 ### 27 Oct 2026 · 6.4a helpState.ts practiceTopicId · decided by builder · risk: high
 - Decided: add `practiceTopicId?: string` to `HelpState` (`packages/harness/src/pedagogy/
@@ -98,7 +170,44 @@ corepack pnpm --filter @edmate/harness typecheck lint test                 (leaf
   `--write` on the new test file to match the repo's formatting).
 - `python3 .githooks/secret-scan.py --all`: clean.
 
+### Phase B
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/web...
+corepack pnpm --filter @edmate/web typecheck
+corepack pnpm --filter @edmate/web lint
+corepack pnpm exec vitest run -- end/route.test.ts EndSessionButton.test.tsx ChatView.test.tsx
+```
+- The dependents-form gate (`--filter=@edmate/web...`) ran `@edmate/web`'s own typecheck/lint/
+  test tasks clean (no `@edmate/web` failure anywhere in the run), but the combined run failed
+  overall on **`@edmate/harness#test`** — 3 pre-existing timing-sensitive tests under this
+  machine's contention when every workspace package builds/tests together: the same two tests
+  already flagged as known flakes in the Phase A section above
+  (`src/pedagogy/modelRequest.test.ts`'s linear-time ratio check,
+  `src/pipeline/runner.test.ts`'s hardcoded-timeout soft-hit case), plus one more of the same
+  kind in `src/pipeline/steps/preGuard.test.ts`. None of Phase B's files touch
+  `packages/harness` pedagogy/pipeline code.
+- Leaf-alone, run separately to confirm `@edmate/web` itself is clean of that contention:
+  `@edmate/web` typecheck — pass. `@edmate/web` lint — pass, 0 errors (2 pre-existing warnings in
+  `test/lighthouse-a11y.test.ts`, unrelated to this phase). The three new/edited test files plus
+  the full `@edmate/web` suite around them: **170 files / 2716 tests passed, 31 skipped** (the
+  4 skipped int-test files need `TEST_DATABASE_URL`, unrelated), 0 failed.
+- Typecheck first caught the mock gateway in `route.test.ts`: `generateObject<T>` is generic
+  over the caller's schema, so the stub had to call `schema.parse(...)` rather than return a
+  fixed object, to type-check against `ModelGateway`'s real signature. Fixed in both call sites.
+- `corepack pnpm exec prettier --check` on every file this phase touched: `route.ts` and
+  `route.test.ts` needed one `--write` (new files, not yet formatted); the fix to
+  `EndSessionButton.test.tsx` triggered a reformat too; `ChatView.tsx`'s only diff after
+  `--write` was whitespace on the two newly added lines (confirmed via `git diff --stat`,
+  2 insertions only). `EndSessionButton.tsx`, `en.json` already matched.
+- `python3 .githooks/secret-scan.py --all`: clean.
+
 ## Budget
 
 Phase A tool calls used: 68 (over the ~45 planned; most of the overrun was waiting on this
 machine's contended, serialized dependents-form gate run — see Gate above)
+
+Phase B tool calls used: ~95 (over the ~50 planned; a session compaction mid-phase, a round of
+typecheck fixes on the mock gateway's `generateObject` signature, and re-running the gate to
+separate `@edmate/web`'s own clean result from the unrelated `@edmate/harness` contention flake
+accounted for most of the overrun)
