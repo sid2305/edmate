@@ -11488,9 +11488,31 @@ tasks:
   deps:
   - 6.3a
   risk: high
-  status: running
+  status: done
   branch: m13/6.3f-mistake-proposal-hardening
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 164
+    tokens_in: 592
+    tokens_out: 51980
+    cache_read_tokens: 16348112
+    wall_time_seconds: 2714
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        LOW: 3
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 0.20k
   milestone: M13
   title: 'walkthrough Save-button timeout found by 0.20j: one of 6 local runs of teacher-packages-walkthrough.spec.ts timed out waiting for the Save button on the reuse/edit path (no intercepted click),

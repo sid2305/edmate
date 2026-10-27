@@ -10,6 +10,49 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.3f repositories risk: high approval · decided by lead · risk: high
+- Decided: approve the packages/db changes for merge: the tag cap on approve, the role check and the 8402 advisory lock on record, the lastSeen format in mistake-proposals.ts (packages/db/src/repositories/mistake-proposals.ts), and the exported lockStyleCardVersions in style-cards.ts (packages/db/src/repositories/style-cards.ts), which approve now takes before it reads the latest card. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; database-reviewer re-checked fix round 1 and reported the lost update fixed with no deadlock path. The new concurrent-approve test stays even though it did not fail before the fix locally.
+- Why: the approve lost update came from 6.3a and was reachable by two quick clicks on different tags; taking the version lock before the read closes it. A refused approve now returns limit_reached and the tag stays pending, which the client shows. The test documents the invariant and is deterministic with the fix.
+
+---
+
+### 27 Oct 2026 · 6.3f review LOWs not fixed · decided by lead · risk: low
+- Decided: keep the local LastSeen copy of contracts' timestamp() in mistake-proposals.ts (packages/db/src/repositories/mistake-proposals.ts), guarded by its comment, and add no rate limit to approve and reject in mistakeProposalRoutes.ts (apps/web/src/studio/mistakeProposalRoutes.ts). No follow-up task.
+- Why: exporting timestamp() needs an ADR for one line. Approve and reject are teacher-only, signed in, same-origin and bounded by the 100-row proposal cap.
+
+---
+
+### 27 Oct 2026 · 6.3f merge and budget, 117 tool calls against 50 · decided by lead · risk: low
+- Decided: merge at 117 harness-counted tool calls (build 70, fix round 1 47) against the plan's 50.
+- Why: the build ran a full dependents gate and concurrency tests against the local database, and the fix round spent calls trying to make the race fail before the fix. Both are reviewed and green.
+
+---
+
+### 27 Oct 2026 · 6.3f risk: high — a `packages/db/src/repositories/**` fix · decided by builder · risk: high
+- Decided: ship the four `mistake-proposals.ts` fixes (tag cap on approve, role check and advisory
+  lock on record, `lastSeen` format) in one PR, same file 6.3a itself logged `risk: high` for.
+- Why: `risk-paths.txt` lines 29-41 (`packages/db/src/repositories/**`) require security-reviewer;
+  the board task itself already carries `risk: high`.
+
+---
+
+### 27 Oct 2026 · 6.3f optional rate limit deferred (Q1, lead-decided) · decided by builder · risk: low
+- Decided: no per-teacher rate limit on approve/reject in this task, and no follow-up task opened.
+- Why: the lead's answer treats this as a wontfix — approve/reject are teacher-only, signed-in,
+  same-origin and already bounded by the 100-row proposal cap.
+
+---
+
+### 27 Oct 2026 · 6.3f `timestamp()` duplicated locally instead of exported from contracts · decided by builder · risk: low
+- Decided: `mistake-proposals.ts` defines its own `z.iso.datetime({ offset: true })` constant
+  rather than importing `timestamp` from `@edmate/contracts` (not exported, see "plan guesses that
+  were wrong" above) or adding it to the contracts' public exports.
+- Why: exporting a new symbol from `packages/contracts` needs an ADR (rule 2); this task's scope
+  and budget don't include one, and the duplicate is a single, well-commented line with identical
+  behaviour.
+
+---
+
 ### 27 Oct 2026 · 0.20j instrumentation.test.ts patches Module.prototype.require instead of vi.mock · decided by builder · risk: low
 - Decided: The three "dispatches to instrumentation.node" tests monkeypatch
   `Module.prototype.require` (restored in `afterEach`) instead of using `vi.mock`, which the plan's
