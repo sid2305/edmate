@@ -118,3 +118,97 @@ Test Files  1 passed (1)
 ## Budget
 
 Phase A tool calls used: 58
+
+## Phase B
+
+Phase B status: DONE
+
+### Summary
+
+`apps/web/app/api/sessions/[id]/reports/handlers.ts` — `createSessionReportsHandlers`'s `file`
+handler now pages the existing staff alert inbox (12.5's `safetyAlerts.record`) on a genuinely new
+report (`reports.file`'s `{ created: true }`), in addition to the `/staff/reports` queue (12.2e):
+
+- `SessionReportsBackend.repos()`'s return type widens from `Pick<Repositories, 'reports'>` to
+  `Pick<Repositories, 'reports' | 'safetyAlerts'>`. The one runtime wiring site,
+  `apps/web/app/api/sessions/[id]/reports/route.ts`, already passes `serverDatabase().repos` (the
+  full `Repositories` object) — confirmed by grep before editing; no other file needed a change.
+- A new local helper `reportAlertId(reportId)` derives the alert row id deterministically from the
+  report id (`createHash('sha256').update('report-alert\0' + reportId).digest('hex')`, prefixed
+  `ra_`), the same shape as `reports.ts`'s `reportRowId` but with a different domain tag
+  (`report-alert` vs. `reportRowId`'s message-target tag), so it can never collide with a report
+  id. Deterministic means a retried or replayed report never double-records — `safetyAlerts.record`
+  is already `on conflict (id) do nothing`.
+- On `created: true`, the handler calls `backend.repos().safetyAlerts.record({...})` with
+  `level: 'info'`, `kind: 'other'` (lead answer Q2), `studentId`/`teacherId`/`sessionId` taken
+  straight from the already-validated `scope` and `path.data.id` (no new lookup), and
+  `excerptRedacted` a fixed, non-PII string built only from the closed-set category:
+  `` `A student reported a ${category} reply.` ``. `category` is always one of the five fixed
+  `REPORT_CATEGORIES` enum values (never free text), so this string can never leak the reported
+  message's text or the reporter's identity.
+- The write is wrapped in its own `try/catch`: a failure there is logged by event name and error
+  name only (`sessions.reports.alert_failed`), and never changes the response — `{ ok: true }`
+  still reflects the report write, which already succeeded.
+- No escalation/re-page wiring (lead answer Q1); no change to `apps/worker/src/alerts/**`,
+  `packages/queue/**`, `apps/web/app/staff/alerts/**`, `packages/db/src/repositories/safety-alerts.ts`
+  or `packages/contracts/src/safety.ts` (the existing `other`/`info` values are reused, no new type).
+
+`apps/web/app/api/sessions/[id]/reports/route.test.ts` — the memory backend now carries a mocked
+`safetyAlerts.record`; three new cases:
+
+1. a new report (`created: true`) calls `safetyAlerts.record` once with the expected `level`,
+   `kind`, the scope's own ids and the fixed excerpt string;
+2. a duplicate report (`created: false`) does not call it a second time;
+3. a `safetyAlerts.record` rejection still returns `201` / `{ ok: true }` (the report's own
+   success), logging only `sessions.reports.alert_failed` and the error's name.
+
+Two existing tests that stub `repos()` with a bare `{ reports: { file } }` cast needed the cast's
+type widened to include a stubbed `safetyAlerts.record` (the "default logger" test and the memory
+helper) so the handler's new call has something to call; no behaviour in those tests changed.
+
+### Red-then-green evidence
+
+Red (scoped `git stash push -u -- apps/web/app/api/sessions/*/reports/handlers.ts`, same test
+file, then `vitest run`):
+
+```
+❯ app/api/sessions/[id]/reports/route.test.ts (32 tests | 2 failed)
+  × a new report also pages the trust inbox with a fixed, non-PII excerpt
+    AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+  × a safetyAlerts.record failure still returns the report success and logs only the error name
+    AssertionError: expected [] to deeply equal [ { event: 'sessions.reports.alert_failed', ... } ]
+Test Files  1 failed (1)
+     Tests  2 failed | 30 passed (32)
+```
+
+Green (`git stash apply` + `git stash drop` to restore the handler change, re-run):
+
+```
+Test Files  1 passed (1)
+     Tests  32 passed (32)
+```
+
+### Decisions
+
+### 27 Oct 2026 · 12.2f Phase B alert id domain tag · decided by builder · risk: low
+- Decided: the staff-alert row id for a filed report is `ra_<sha256("report-alert\0" + reportId)
+  first 40 hex chars>`, a local helper (`reportAlertId`) in `handlers.ts`, not a new export from
+  `@edmate/db`'s `reports.ts`.
+- Why: the plan asked for "a different domain tag" from `reportRowId` so the two id spaces can
+  never collide, but did not say where the helper should live. Keeping it local to the one call
+  site that needs it (this handler) avoids widening `packages/db`'s public surface for a
+  single-caller id scheme; `reports.ts`'s own `reportRowId` stays untouched (out of bounds for this
+  phase per the plan's "Files out of bounds").
+
+### Gate
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/web` —
+  10 of 10 tasks successful (typecheck, lint, test for `@edmate/web` and its dependents).
+- `./node_modules/.bin/prettier --check apps/web/app/api/sessions/[id]/reports/handlers.ts apps/web/app/api/sessions/[id]/reports/route.test.ts` —
+  all matched files use Prettier code style (ran via a glob to avoid the bracket-path shell guard;
+  one formatting fix applied to `route.test.ts` before this passed).
+- `python3 .githooks/secret-scan.py --all` — clean, no output.
+
+### Budget
+
+Phase B tool calls used: 29
