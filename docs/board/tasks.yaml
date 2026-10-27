@@ -10190,7 +10190,7 @@ tasks:
   deps:
   - 1.4d
   risk: low
-  status: todo
+  status: planning
 - id: 5.6g
   milestone: M13
   title: '5.6b review MEDIUM and LOWs: packages/harness/src/pipeline/generate/streamGate.ts:301-316 ruleOutCompletes/commitRuledOut judge the released window plus the piece (like keys.leaks), not the bare
