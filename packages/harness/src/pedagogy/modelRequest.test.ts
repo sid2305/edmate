@@ -326,18 +326,21 @@ describe('forged teacher-note marker (3.11d)', () => {
    */
   function countStringIteratorSteps(run: () => void): number {
     let count = 0;
-    const proto = String.prototype as unknown as Record<
+    const proto = String.prototype as Record<
       typeof Symbol.iterator,
-      () => Iterator<string>
+      () => IterableIterator<string>
     >;
     const original = proto[Symbol.iterator];
-    proto[Symbol.iterator] = function (this: string): Iterator<string> {
+    proto[Symbol.iterator] = function (this: string): IterableIterator<string> {
       const inner = original.call(this);
       return {
         next(): IteratorResult<string> {
           const r = inner.next();
           if (!r.done) count += 1;
           return r;
+        },
+        [Symbol.iterator](): IterableIterator<string> {
+          return this;
         },
       };
     };
@@ -419,6 +422,46 @@ describe('forged teacher-note marker (3.11d)', () => {
     expect(steps).toBe(stepsNoBusyWork);
     expect(() => expectLinear((n) => 'x'.repeat(n), run)).not.toThrow();
   });
+
+  /**
+   * `countStringIteratorSteps` above only sees `String.prototype[Symbol.iterator]` advances:
+   * `.replace`, `.matchAll`, `.split` and regex `exec` never call it, so a catastrophic-
+   * backtracking (or merely quadratic) regex inside `neutraliseExactLabel`'s dynamic pattern
+   * (modelRequest.ts, `forgedLabelPattern`, built with `\p{Cf}*` / `[\s\p{Cf}]*` quantifiers) or
+   * `decodeHtmlEntities` (guardrails/lockedMatch.ts) would pass the step count completely unseen.
+   * This is a second, independent measure: a coarse, *absolute* wall-clock ceiling (fix round 1;
+   * not a ratio, so it carries no load-dependent slack to tune). It runs `run` once and checks
+   * total elapsed time against a fixed ceiling chosen with a wide margin both ways on this
+   * machine: real linear work on the sizes used below finishes in well under 100 ms, while a
+   * quadratic or backtracking regex blow-up on a comparably sized hostile string takes seconds
+   * to many seconds (see the self-test below) -- an ordinary CI load burst cannot close that gap.
+   */
+  const CEILING_MS = 2_000;
+  function expectUnderCeiling(run: () => void, ceilingMs = CEILING_MS): void {
+    const start = Date.now();
+    run();
+    expect(Date.now() - start).toBeLessThan(ceilingMs);
+  }
+
+  it('stays under the absolute ceiling on a large hostile input, including the regex-driven passes', () => {
+    const n = 4_000;
+    const fenceInput = `${'<​'.repeat(n)}${'&lt;'.repeat(n)}${'<<x'.repeat(n)}`;
+    const labelInput = `${'platform '.repeat(n)}${'P​'.repeat(n)}${'&#'.repeat(n)}`;
+    expectUnderCeiling(() => {
+      breakFenceRuns(fenceInput); // exercises decodeHtmlEntities's regex-driven entity scan too.
+      neutraliseForgedLabel(labelInput, label); // exercises forgedLabelPattern's regex too.
+    });
+  });
+
+  it('expectUnderCeiling still fails on a deliberately backtracking regex (self-test)', () => {
+    // A classic catastrophic-backtracking shape (nested, overlapping-possibility quantifiers)
+    // with no match at the end, forcing the engine through every way of splitting the run of
+    // spaces before it can give up. Not a mocked clock: a real regex `.test` call. `k = 25`
+    // measures at several seconds on this machine (comfortably over the 2 s ceiling with room to
+    // spare even under load), while staying well inside this test's own timeout.
+    const hostile = ' '.repeat(25) + 'x!';
+    expect(() => expectUnderCeiling(() => void /^(\s*)*$/.test(hostile))).toThrow();
+  }, 20_000);
 });
 
 /** The exact-label pass's output for `label`: letters single-spaced, words triple-spaced. */

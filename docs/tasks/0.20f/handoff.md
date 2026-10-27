@@ -122,6 +122,99 @@ $ python3 .githooks/secret-scan.py --all
 ```
 No output (clean).
 
+## Fix round 1
+
+### What changed
+
+`packages/harness/src/pedagogy/modelRequest.test.ts` only (test file; no source change):
+
+1. **[HIGH] Added an absolute wall-clock ceiling alongside the step count.** The step count
+   (`countStringIteratorSteps`/`expectLinear`) only counts `String.prototype[Symbol.iterator]`
+   advances: `.replace`, `.matchAll`, `.split` and regex `exec` never call it, so a catastrophic-
+   backtracking regex inside `neutraliseExactLabel`'s dynamic pattern (`forgedLabelPattern`,
+   modelRequest.ts:67-77) or `decodeHtmlEntities` (guardrails/lockedMatch.ts:337) would pass the
+   step count unseen. Added `expectUnderCeiling(run, ceilingMs = 2_000)`: runs `run` once, checks
+   `Date.now()` elapsed against a fixed ceiling (not a ratio -- no load-dependent slack to tune).
+   - `'stays under the absolute ceiling on a large hostile input, including the regex-driven
+     passes'` calls `breakFenceRuns` (which calls `decodeHtmlEntities`) and `neutraliseForgedLabel`
+     (which calls `neutraliseExactLabel`'s `forgedLabelPattern` regex) on an `n = 4,000` hostile
+     input -- real measured time 23-35 ms, far under the 2,000 ms ceiling.
+   - `'expectUnderCeiling still fails on a deliberately backtracking regex (self-test)'`: a real
+     `/^(\s*)*$/.test(' '.repeat(25) + 'x!')` call (classic catastrophic-backtracking shape, no
+     match at the end forces every way of splitting the space run), through the same
+     `expectUnderCeiling` helper, and asserts it throws. Picking `k`: `k = 24` measured 1,538 ms
+     (under the 2,000 ms ceiling -- too small); `k = 25` measured 2,948 ms (over the ceiling, with
+     ~1 s of margin) and `k = 26` measured up to 17.6 s under contention from an earlier timing
+     probe's leftover process -- `k = 25` gives a reliable fail with a safe margin on both sides
+     while finishing in under 3 s of this test's 20,000 ms per-test timeout (`it(..., 20_000)`).
+     Kept the existing iterator-step self-test (quadratic function) and the iterator-step tests
+     unchanged.
+2. **[MEDIUM] Removed the double cast.** `countStringIteratorSteps`'s patched iterator now
+   returns a proper `IterableIterator<string>` (adds `[Symbol.iterator]() { return this; }`), and
+   the `String.prototype` cast drops its `as unknown` step (`as Record<typeof Symbol.iterator, ()
+   => IterableIterator<string>>` alone, since that return type now matches the real built-in
+   signature exactly).
+
+### Evidence
+
+Red (the regex self-test fails the ceiling, measured against it):
+```
+k = 24: 1,538 ms (< 2,000 ms ceiling -- self-test did not throw, so k = 24 was too small)
+k = 25: 2,948 ms (> 2,000 ms ceiling -- self-test throws as expected)
+```
+
+Green (`modelRequest.test.ts` + `runner.test.ts`, 5 runs, while `corepack pnpm --filter
+@edmate/harness test` ran the full 127-file suite in the background):
+```
+=== run 1 === Test Files  2 passed (2)   Tests  140 passed (140)   Duration  16.84s
+=== run 2 === Test Files  2 passed (2)   Tests  140 passed (140)   Duration  10.82s
+=== run 3 === Test Files  2 passed (2)   Tests  140 passed (140)   Duration   4.02s
+=== run 4 === Test Files  2 passed (2)   Tests  140 passed (140)   Duration   4.72s
+=== run 5 === Test Files  2 passed (2)   Tests  140 passed (140)   Duration   4.79s
+```
+Background full-suite run: `Test Files  127 passed (127)` / `Tests  5676 passed (5676)`.
+
+### Gate
+
+```
+$ corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness
+```
+`@edmate/harness:test` passes (127 files). Two unrelated flakes under full load, each confirmed
+clean alone (not caused by this task, which touched no file in either package):
+- `@edmate/queue` `test/turnLimits.int.test.ts` ("slides: each take expires windowMs after it was
+  made") -- re-run alone: `Test Files 1 passed (1)`, `Tests 14 passed (14)`.
+- `@edmate/cli` `test/chatDbRetrieval.int.test.ts` ("Connection terminated unexpectedly", a known
+  Postgres socket flake per the round-1 brief) -- re-run alone: `Test Files 1 passed (1)`, `Tests 1
+  passed | 1 skipped (2)`.
+
+```
+$ corepack pnpm exec prettier --check packages/harness/src/pedagogy/modelRequest.test.ts
+```
+Needed `--write` once after the edit; re-verified clean, and re-ran the two test files afterwards
+(still 140/140 passing).
+
+```
+$ python3 .githooks/secret-scan.py --all
+```
+No output (clean).
+
+## Decisions
+
+### 27 Oct 2026 · 0.20f step count plus an absolute ceiling, no wall-clock ratio · decided by builder · risk: low
+- Decided: the measure is the original step count (`countStringIteratorSteps`/`expectLinear`,
+  unchanged) *plus* a second, independent absolute wall-clock ceiling (`expectUnderCeiling`,
+  `Date.now()`-based, a fixed `2_000` ms bound, not a ratio). No wall-clock ratio is used anywhere.
+- Why: fix round 1 found the step count blind to regex-internal work (`.replace`, `.matchAll`,
+  regex `exec`), so a catastrophic-backtracking regex in `forgedLabelPattern` or
+  `decodeHtmlEntities` would pass unseen. An absolute ceiling (not a ratio) catches that: ordinary
+  CI load cannot push a sub-100-ms real scan past a 2-second ceiling, but a backtracking or
+  quadratic regex blow-up on a similarly sized hostile string takes seconds to many seconds (shown
+  by the self-test), so the gap between "real work" and "blow-up" stays wide without any
+  load-dependent tuning. This keeps the acceptance's "does not use wall-clock ratios" intact: the
+  step-count ratio check (16x input -> ratio < 64) still carries all the linear-vs-quadratic
+  judgment; the new check only ever compares one elapsed time to one fixed constant.
+
 ## Budget
 
-Tool calls used: 29
+Tool calls used (round 1): 29
+Fix tool calls used: 44
