@@ -12,6 +12,10 @@
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
+    },
+    "./locked-index": {
+      "types": "./dist/lockedIndex.d.ts",
+      "default": "./dist/lockedIndex.js"
     }
   },
   "scripts": {
