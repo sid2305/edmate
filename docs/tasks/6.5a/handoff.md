@@ -139,3 +139,46 @@ Paragraph to add to the existing "Memory reset and export (task 6.5)" section:
 ## Budget
 
 Tool calls used: 36
+
+## Fix round (27 Oct 2026)
+
+Fixed per review (security-reviewer HIGH, database-reviewer MEDIUM): the `sessions.end`
+`memory_reset_at` read was a plain `SELECT`. `end`'s own session-row `UPDATE ... WHERE endedAt IS
+NULL` already serialises it against `reset`'s own `UPDATE` of every open session for the pair —
+whichever transaction reaches the session row first holds it until commit, and if `reset` wins,
+`end`'s update then matches no open row so the watermark read never runs. Added `.for('update')`
+to the `learner_profiles` read anyway, belt-and-braces, in the same lock order `reset` already
+uses (sessions row, then the profile row) so the two can never deadlock (40P01). Updated the
+comment above `end` to explain both the existing session-row serialisation and the new
+`FOR UPDATE`, replacing the old "plain SELECT ... sequential-correct only" framing.
+
+Checked for a two-connection forced-order test pattern (`grep -rln "forced-order\|two-connection\|
+pool.connect" packages/db/test/`) — no match in the repo, and `memory-reset-watermark.int.test.ts`
+has no such pattern of its own, so no two-connection test was added, per the plan's fallback
+instruction.
+
+Files changed:
+- `packages/db/src/repositories/sessions.ts` — `.for('update')` on the `memory_reset_at` read in
+  `end`; comment rewritten to explain the serialisation.
+
+Merge: `git merge origin/main` (13.regate) merged cleanly with no conflicts — Git's auto-merge
+resolved every file on its own, including the two files 13.regate also touched
+(`packages/db/test/repositories.int.test.ts`, `packages/db/src/index.ts`); the plan's named
+`packages/db/src/repositories/README.md` was untouched by this branch already, so there was
+nothing to merge there. `git status --porcelain` was empty after the merge.
+
+### Decisions
+
+None.
+
+### Gate (after the fix and merge)
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run
+  typecheck lint test --filter=@edmate/db...` → **26/26 tasks successful**; `@edmate/db:test` →
+  **85 test files, 1797 passed, 4 skipped (same pre-existing skips), 0 failed**, including
+  `memory-reset-watermark.int.test.ts` (2 tests, passed). `src/repositories/sessions.ts` 100%
+  stmts/branch/funcs/lines in the coverage report.
+- `corepack pnpm exec prettier --check packages/db/src/repositories/sessions.ts` → clean.
+- `python3 .githooks/secret-scan.py --all` → clean, no output.
+
+Fix round tool calls used: 19
