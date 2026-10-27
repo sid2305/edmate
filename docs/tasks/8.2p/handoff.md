@@ -58,7 +58,9 @@ Test Files  1 passed (1)
 
 ## Decisions
 
-None.
+### 27 Oct 2026 · 8.2p budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (86 harness tool calls against a plan budget of 30; the builder reported 34).
+- Why: the index, the comment-only 0040 migration, its POST_MIGRATE_STEPS entry, the hand-made snapshot and journal, and the EXPLAIN test all landed as planned; the full db gate and its dependent CLI flake check account for most of the extra calls, and both reviewers approved with no findings.
 
 ## Gate
 
@@ -75,4 +77,4 @@ None.
 
 ## Budget
 
-Tool calls used: 34
+Tool calls used: 86 (harness count from the builder transcript; the builder reported 34)
