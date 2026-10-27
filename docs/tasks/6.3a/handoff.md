@@ -218,3 +218,28 @@ constants the Phase A handoff documented, with no further db edits.
 ## Budget (Phase B)
 
 Tool calls used: 47.
+
+## Fix round 1
+
+**Finding (typescript-reviewer, HIGH):** `StyleCardView.tsx`'s `decidingTag` was one shared
+`string | null`. Clicking Approve/Reject on proposal A disabled A's buttons; starting a decision
+on proposal B before A resolved overwrote `decidingTag` to B, re-enabling A's buttons while A's
+own `decide` call was still in flight — a second click on A could fire a duplicate decide call.
+
+**Change:** replaced `decidingTag: string | null` with `decidingTags: ReadonlySet<string>`,
+added via a functional update before each `decide` call and removed (also functionally) in the
+`finally` block; each row's Approve/Reject buttons now disable on `decidingTags.has(p.tag)`
+instead of `decidingTag === p.tag`.
+
+**Test:** added `'keeps a different tag disabled while its own decision is still in flight'` to
+`StyleCardView.test.tsx` — two proposals (`units`, `spelling`); starts A's decide with an
+unresolved promise, confirms A's button is disabled, starts B's decide with its own unresolved
+promise, then asserts A's button is *still* disabled (red before the fix: A's button came back
+enabled once B's `decidingTag` write landed); resolves both and confirms the list empties. Watched
+it fail against the pre-fix code, then pass after the fix.
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → green, 10/10 tasks.
+`corepack pnpm exec prettier --check` on `StyleCardView.tsx`/`StyleCardView.test.tsx` → clean.
+`python3 .githooks/secret-scan.py --all` → clean.
+
+Tool calls used: 12.

@@ -72,7 +72,9 @@ export function StyleCardView({ initialCard, initialProposals }: StyleCardViewPr
   const t = useTranslations('styleCard');
   const [card, setCard] = useState(initialCard);
   const [proposals, setProposals] = useState(initialProposals);
-  const [decidingTag, setDecidingTag] = useState<string | null>(null);
+  // Task 6.3a fix round 1: tracks every tag with an in-flight decide call, not just one, so a
+  // decision started on one proposal cannot overwrite (and re-enable) another's pending state.
+  const [decidingTags, setDecidingTags] = useState<ReadonlySet<string>>(new Set());
   const [answers, setAnswers] = useState(emptyAnswers);
   const [mistakesText, setMistakesText] = useState('');
   const [samples, setSamples] = useState(['', '', '']);
@@ -130,7 +132,7 @@ export function StyleCardView({ initialCard, initialProposals }: StyleCardViewPr
   }
 
   async function onDecide(tag: string, action: 'approve' | 'reject') {
-    setDecidingTag(tag);
+    setDecidingTags((prev) => new Set(prev).add(tag));
     setError(null);
     try {
       const result = await decideMistakeProposal({ tag, action });
@@ -146,7 +148,11 @@ export function StyleCardView({ initialCard, initialProposals }: StyleCardViewPr
     } catch {
       setError('provider_error');
     } finally {
-      setDecidingTag(null);
+      setDecidingTags((prev) => {
+        const next = new Set(prev);
+        next.delete(tag);
+        return next;
+      });
     }
   }
 
@@ -165,14 +171,14 @@ export function StyleCardView({ initialCard, initialProposals }: StyleCardViewPr
                 <span>{p.tag}</span> <span>{t('proposedTags.countLabel', { count: p.count })}</span>{' '}
                 <button
                   type="button"
-                  disabled={decidingTag === p.tag}
+                  disabled={decidingTags.has(p.tag)}
                   onClick={() => void onDecide(p.tag, 'approve')}
                 >
                   {t('proposedTags.approveButton')}
                 </button>{' '}
                 <button
                   type="button"
-                  disabled={decidingTag === p.tag}
+                  disabled={decidingTags.has(p.tag)}
                   onClick={() => void onDecide(p.tag, 'reject')}
                 >
                   {t('proposedTags.rejectButton')}

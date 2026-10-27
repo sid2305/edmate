@@ -219,6 +219,40 @@ describe('StyleCardView: proposed tags', () => {
     expect(screen.getByLabelText('Mistake tags')).toHaveValue('x');
   });
 
+  it('keeps a different tag disabled while its own decision is still in flight', async () => {
+    const PROPOSAL_B = { ...PROPOSAL, tag: 'spelling' };
+    let resolveA: ((reply: Response) => void) | undefined;
+    let resolveB: ((reply: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+        return new Promise<Response>((resolve) => {
+          if (body?.tag === 'units') resolveA = resolve;
+          else resolveB = resolve;
+        });
+      }),
+    );
+    renderIntl(<StyleCardView initialCard={CARD} initialProposals={[PROPOSAL, PROPOSAL_B]} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0]!);
+    await waitFor(() => expect(resolveA).toBeDefined());
+    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[1]!);
+    await waitFor(() => expect(resolveB).toBeDefined());
+
+    // A's buttons must still be disabled while A's own decide call is still in flight.
+    expect(screen.getAllByRole('button', { name: 'Approve' })[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Approve' })[1]).toBeDisabled();
+
+    resolveA!(json({ status: 200, body: { approved: true, card: CARD } }));
+    resolveB!(json({ status: 200, body: { approved: true, card: CARD } }));
+    await waitFor(() =>
+      expect(screen.getByText('No proposed tags right now.')).toBeInTheDocument(),
+    );
+  });
+
   it('a failed decision shows the error banner, with no optimistic removal', async () => {
     const { next } = api();
     next('POST /api/studio/mistake-proposals', err(500, 'provider_error'));
