@@ -3029,7 +3029,7 @@ tasks:
   deps:
   - '6.3'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 6.4a
