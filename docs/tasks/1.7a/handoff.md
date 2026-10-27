@@ -63,6 +63,14 @@ found and closed (see Decisions). No new files were added; only one existing fil
   carries its own 100% coverage threshold in this repo's vitest config; the fix follows the exact
   pattern `ageGateView`'s own "with no log field" test already used, no new pattern introduced.
 
+### 26 Oct 2026 · 1.7a budget · decided by lead · risk: low
+- Decided: Accept 179 tool calls (harness count) against the plan's 40. The first builder stopped at 116 calls without committing. The lead committed its work in progress, and a fresh builder finished in 63 calls.
+- Why: Six review items across three packages turned out larger than a 40-call budget. The overrun came from the first builder not stopping at the PARTIAL line. Next time, a task this wide is split into phases.
+
+### 26 Oct 2026 · 1.7a merge · decided by lead · risk: high
+- Decided: Merge 1.7a. It touches apps/web/src/auth/** (a risky path whose required reviewer is security-reviewer). It also changes migration 0014's CHECK constraints to NOT VALID plus a post-migrate VALIDATE. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved it with no findings.
+- Why: These are the follow-ups to the 1.7 review. A production web app now refuses an unsigned age notice unless AGE_NOTICE_ALLOW_UNSIGNED is exactly 'true'; only the local docker stack sets it. guard.ts behaviour is unchanged; the clearance scan now covers the whole app for student-only pages.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/content...` — green (14/14 tasks).
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` — green (80 test files, 1720
@@ -76,4 +84,4 @@ found and closed (see Decisions). No new files were added; only one existing fil
   requirement that the CHECK constraint edits don't change `src/schema/users.ts`'s schema shape).
 
 ## Budget
-Tool calls used: 27
+Tool calls used: 179 (harness count: 116 by the first builder, which stopped with its work uncommitted, plus 63 by the finishing builder; the finisher reported 27)
