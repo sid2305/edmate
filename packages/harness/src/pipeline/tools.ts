@@ -64,6 +64,8 @@ export interface ToolSessionState {
 export interface IssuedItem {
   itemId: string;
   moduleId: string;
+  /** The item's topic (6.4a): drives the graded-check EvidenceEvent the runner builds on commit. */
+  topicId?: string;
   answerKey: readonly string[];
   /**
    * The text the item shows (its prompt and options). The answer-key check on the tool output and

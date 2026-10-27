@@ -371,14 +371,16 @@ describe('practice fields (5.6, ADR-0010)', () => {
     ...VALID,
     practiceItemId: 'item-2',
     practiceModuleId: 'mod-1',
+    practiceTopicId: 'topic-1',
     practiceServed: ['item-1', 'item-2'],
   };
 
-  it('parse and serialise round-trip the active item, its module and the served ids', () => {
+  it('parse and serialise round-trip the active item, its module, topic and the served ids', () => {
     const s = parseSessionHelp(PRACTICE);
     expect(s.help).toMatchObject({
       practiceItemId: 'item-2',
       practiceModuleId: 'mod-1',
+      practiceTopicId: 'topic-1',
       practiceServed: ['item-1', 'item-2'],
     });
     expect(serializeSessionHelp(s)).toEqual(PRACTICE);
@@ -388,6 +390,18 @@ describe('practice fields (5.6, ADR-0010)', () => {
     const s = parseSessionHelp(VALID);
     expect(s.help).not.toHaveProperty('practiceItemId');
     expect(s.help).not.toHaveProperty('practiceServed');
+  });
+
+  it('a blob saved before 6.4a parses without a topic (practiceModuleId alone)', () => {
+    const noTopic = {
+      ...VALID,
+      practiceItemId: 'item-2',
+      practiceModuleId: 'mod-1',
+      practiceServed: ['item-1', 'item-2'],
+    };
+    const s = parseSessionHelp(noTopic);
+    expect(s.help).not.toHaveProperty('practiceTopicId');
+    expect(s.help.practiceModuleId).toBe('mod-1');
   });
 
   it(`refuses more than PRACTICE_SERVED_MAX (${PRACTICE_SERVED_MAX}) served ids or an empty id`, () => {
@@ -416,6 +430,7 @@ describe('practice fields (5.6, ADR-0010)', () => {
     expect(f).toEqual({
       practiceItemId: 'item-2',
       practiceModuleId: 'mod-1',
+      practiceTopicId: 'topic-1',
       practiceServed: ['item-1', 'item-2'],
     });
     expect(f.practiceServed).not.toBe(h.practiceServed);

@@ -24,7 +24,10 @@ three, so sign-in does not use a repository. It uses this small store, which has
    (role grants now) go to `platform_audit_log`, which this store only inserts into; 12.1 adds
    its read path.
 7. **One account per provider per user** (unique `(user_id, provider)`), as well as one user per
-   provider account: a second Google account can't be attached to an existing user.
+   provider account: a second Google account can't be attached to an existing user. 1.4c's
+   `signIn` callback (`apps/web/src/auth/config.ts`) uses `hasLinkedAccount` as an app-level
+   pre-check before approving a by-email link to an existing user, so this constraint is never the
+   first line of defence — a denied link never reaches `linkAccount` to surface as a driver error.
 8. **Session tokens and sign-in link tokens are stored hashed** (SHA-256 hex in
    `auth_sessions.session_token_hash` and `auth_verification_tokens.token_hash`). An expired
    session reads as `null` and can't be extended; an expired link reads as `null`. Auth.js already

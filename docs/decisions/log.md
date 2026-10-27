@@ -10,6 +10,184 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 1.4e timeout design · decided by builder · risk: low
+- Decided: the shared "ready" entry has no timeout of its own; only individual callers time
+  out via their own `setTimeout`. The `ready` listener (and the WeakMap entry) is removed when
+  the last still-waiting caller has either settled (via `ready`) or timed out.
+- Why: the plan's second test case (a longer-timeout caller still resolving after the
+  shorter-timeout first caller has timed out) is impossible if the shared entry carries the
+  first caller's timeout, since that would reject it and every remaining waiter with it. The plan
+  named this as the preferred, simplest option, and it also removes the "un-awaited rejection"
+  risk entirely, since the entry itself never rejects.
+  **Updated (fix round 1):** the original shape used one shared `Promise` with `.then()`
+  reactions per caller, kept alive by a `waiters` counter; a caller's timeout only decremented the
+  counter and left its `.then()` reaction attached, so during a long outage with sign-ins arriving
+  faster than `timeoutMs`, `waiters` never reached 0 and the entry (plus every reaction ever
+  attached) lived for the whole outage — unbounded memory growth (security-reviewer, HIGH). Fix
+  round 1 replaces the shared `Promise` with a `Set<() => void>` of per-caller settle callbacks on
+  the entry: the single `ready` listener calls and clears every callback in the set, and a
+  caller's timeout removes only its own callback. Memory is now bounded by callers currently
+  waiting, not by every caller since the outage began. Same listener-per-instance and
+  per-caller-timeout behaviour as before; `RedisNotReadyError` unchanged.
+
+---
+
+### 27 Oct 2026 · 1.4e Part 2 split into task 1.4f · decided by lead · risk: low
+- Decided: merge 1.4e with Part 1 only. The sandbox magic-link run (Part 2, part of the acceptance line) moves to a new task 1.4f, which waits on blocker B-61 (who rebuilds the local stack on current code).
+- Why: Part 2 needs the human; holding a reviewed sign-in fix for it would block other apps/web/src/auth work. The acceptance's sandbox clause is carried by 1.4f.
+
+---
+
+### 27 Oct 2026 · 1.4e approve the per-caller timeout in apps/web/src/auth · decided by lead · risk: high
+- Decided: merge the apps/web/src/auth/redis-ready.ts change. security-reviewer (required), typescript-reviewer and code-reviewer reviewed it; the security CRITICAL (callbacks piling up on a never-settling promise during a long outage) was fixed in fix round 1 with a set of per-caller callbacks, and security-reviewer re-checked and approved it.
+- Why: each caller now keeps its own deadline, memory is bounded by callers in flight, and src/auth keeps 100% statement coverage.
+
+---
+
+### 27 Oct 2026 · 1.4e budget overrun accepted · decided by lead · risk: low
+- Decided: accept 102 tool calls against a budget of 30 (build 47, fix round 55 by harness count; the agents reported 22 and 27).
+- Why: the fix round redesigned the waiting logic and added three tests; the work is reviewed and complete.
+
+---
+
+### 27 Oct 2026 · 6.4a end route reads repos directly, not TurnBackend · decided by builder · risk: low
+- Decided: `apps/web/app/api/sessions/[id]/end/route.ts` reads the transcript and session row via
+  `serverDatabase().repos.messages.history` / `.repos.sessions`, not by widening
+  `TurnBackend`/`turn/depsFor` as the plan's Phase B file list suggested.
+- Why: ending a session is housekeeping, not a teaching turn — `depsFor` wires Redis and queue
+  machinery for the turn pipeline that this route has no need of. `runtime.test.ts` confirms
+  production `TurnBackend.sessions` is literally `repos.sessions`, so the result is behaviourally
+  the same object, just without the unrelated dependency. `turn/routes.ts` was not edited.
+
+---
+
+### 27 Oct 2026 · 6.4a endSession strings added to en.json · decided by builder · risk: low
+- Decided: added an `endSession` namespace to `apps/web/messages/en.json` (not in the plan's
+  literal Phase B file list).
+- Why: `EndSessionButton.tsx` needs real button/confirm/error text and the test harness
+  (`renderIntl`) renders against the real `en.json`; every other button on this page
+  (`ReportButton`, `HintButton`) follows the same pattern of owning its own namespace there.
+
+---
+
+### 27 Oct 2026 · 6.4a helpState.ts practiceTopicId · decided by builder · risk: high
+- Decided: add `practiceTopicId?: string` to `HelpState` (`packages/harness/src/pedagogy/
+  helpState.ts`), parallel to `practiceModuleId`, carried by `practiceFields()`/`copyHelp()`; a
+  blob saved before this task still parses (the field is simply absent).
+- Why: the plan calls for it directly and flags `packages/harness/src/pedagogy/**` as a risky path
+  under the MVP-first rule in `risk-paths.txt` — logged `risk: high` per that rule, not because the
+  change itself is risky (it is a narrow, additive, optional string field with no behavior change
+  to existing saved state).
+
+---
+
+### 27 Oct 2026 · 6.4a evidence topic source · decided by builder · risk: low
+- Decided: the `EvidenceEvent`'s `topicId` comes from the *loaded* help state
+  (`this.loadedHelp?.help.practiceTopicId`, i.e. the item the student held before this turn and is
+  now grading), not from any item issued during this same turn.
+- Why: `ctx.attempt` is computed by classifying the student's text against the loaded
+  `answerKey` (the item they are answering); a freshly issued item this turn has no graded attempt
+  yet. The plan's runner.ts bullet names `help.practiceTopicId` without saying which help state,
+  and this is the only one `finish()` has in scope that matches the already-computed `attempt`.
+
+---
+
+### 27 Oct 2026 · 6.4a decide's skill routed through a new `turnSkill` field · decided by builder · risk: low
+- Decided: added a private `turnSkill: Skill | null` field, set from `decided.skill` right after
+  decide, and read inside `finish()`'s new `evidenceFor` helper, instead of threading `skill`
+  through `CommitRecord`/`rec`.
+- Why: `decided.skill` is local to `main()`; `finish()` is the one place every outcome path (error,
+  blocked, escalated, replied) funnels through to build `CommitRecord`, and the field avoids
+  widening `CommitRecord` or every `finish()` call site for a value only this new producer reads.
+
+---
+
+### 27 Oct 2026 · 6.4a approve the session-end and evidence change on risky paths · decided by lead · risk: high
+- Decided: merge 6.4a. It touches packages/harness/src/pedagogy/helpState.ts (risky group: code-reviewer) and the new session-end route in apps/web. code-reviewer, typescript-reviewer, security-reviewer and silent-failure-hunter reviewed it; the one HIGH (a generated practice item's `<module>:practice` topic id reaching evidence and failing the commit) was fixed in fix round 1 and re-checked by typescript-reviewer.
+- Why: all four reviewers approve; the remaining MEDIUM and LOW findings are deferred to 6.4b and 6.4c.
+
+---
+
+### 27 Oct 2026 · 6.4a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 378 tool calls against a budget of 95 (Phase A 145, Phase B 130, fix round 103 by harness count; the agents reported 68, about 95 and 34).
+- Why: two phases plus a fix round across harness and web, with a mid-phase compaction; the work is reviewed and complete. Future tasks of this size get a larger budget or a third phase.
+
+---
+
+### 27 Oct 2026 · 6.4a local dependents gate · decided by lead · risk: low
+- Decided: the code-reviewer MEDIUM (the dependents-form gate never ran clean locally) is closed by fix round 1's dependents run, whose only failures were the two known timing flakes that 0.20f fixes, passing alone, and by the PR's CI node job, which runs the full suite.
+- Why: the failures were load-only flakes outside this task's files; CI is the clean run.
+
+---
+
+### 27 Oct 2026 · 1.4c Google sign-in links to an existing email-verified user; Google's own dangerous-linking flag is on, gated entirely by Edmate's own check · decided by builder · risk: high
+
+- Decided:
+  - **Flag.** The Google provider's `allowDangerousEmailAccountLinking` changes from `false` (1.3)
+    to `true`. This is necessary, not cosmetic: in the installed `@auth/core` 0.41.3, the `signIn`
+    callback (`handleAuthorized`, `lib/actions/callback/index.js:63`) runs **before**
+    `handleLoginOrRegister` (`:70`), which is where the email-match lookup or the
+    `OAuthAccountNotLinked` throw happens (`handle-login.js:236-250`). With the flag `false`, that
+    throw fires regardless of what `signIn` would have returned, so the flag must be `true` for
+    linking to ever be possible; because `signIn` runs first, refusing there stops the link before
+    any row is written — confirmed directly against the real handlers in `flow.test.ts`'s new
+    cases (not just inferred).
+  - **The real gate.** The `signIn` callback refuses the sign-in (returns `false`, same as every
+    other refusal in this callback) unless: Google reports `email_verified: true` (already true
+    since 1.3) **and** the existing user this email belongs to already has `emailVerifiedAt` set
+    (only ever true today for a user who verified by the email-link flow) **and** that user has no
+    other `google` account already linked (`identity.hasLinkedAccount`, new). Any one of those
+    failing refuses the sign-in and links nothing; `@auth/core` never gets to call `linkAccount` in
+    that case.
+  - **Why this is "narrow", not "flip and hope".** The flag alone (Auth.js's documented "dangerous"
+    default) links by email with no verification at all. Edmate never relies on that: every path
+    that could reach `linkAccount` must first pass the three checks above, which is the officially
+    recommended mitigation for this exact flag — the flag only changes *when `@auth/core` is
+    willing to try*, Edmate's callback decides *whether it's allowed to*.
+  - **Unaffected.** The email magic-link provider's own branch of `signIn`; the shared-device
+    check; the under-age block; a returning Google user (resolved by `getUserByAccount`, never
+    reaching the new block) — all re-run unmodified in this build and still pass.
+- Why: this is the only point in `next-auth@5.0.0-beta.32`'s OAuth callback lifecycle where
+  Edmate's own code can decide whether a by-email link is trustworthy; the three-part check
+  (verified on both sides, no existing different link) is exactly the acceptance criteria and
+  mirrors README rule 7's existing data-layer invariant, made explicit and tested instead of left
+  to a driver-error. This decision replaces the Google-provider bullet of the 18 Oct 2026 1.3 entry
+  in `docs/decisions/log.md`.
+- Alternatives:
+  - Keep the flag `false` and try to link inside the callback: rejected, the throw happens earlier
+    in the lifecycle than the callback runs, so there's nothing left for Edmate's code to prevent.
+  - Allow linking on Google's `email_verified` alone, ignoring the existing user's own verification
+    state: rejected, it would let an attacker's freshly-created, Google-verified account silently
+    annex any pre-existing, never-verified Edmate user at that address.
+  - A Better-Auth-style custom OAuth flow: an ADR-level change to the tech stack, out of proportion
+    to this task.
+- Reversible: yes. The flag and the `signIn` block both sit in `createAuthConfig`; reverting to
+  1.3's behaviour is a two-line change with no data migration (no schema change in this task at
+  all).
+
+No further decisions beyond the plan's draft; the plan's open questions (Q1-Q5) and the lead's
+answers were followed as given, with no deviation.
+
+---
+
+### 27 Oct 2026 · 1.4c approve Google linking to a verified email-link account · decided by lead · risk: high
+- Decided: merge 1.4c. This replaces the Google-provider part of the 1.3 decision (18 Oct 2026) that kept `allowDangerousEmailAccountLinking` false. The flag is now true on the Google provider only, and Edmate's `signIn` callback refuses the link unless Google reports `email_verified` true, the existing user's `emailVerifiedAt` is set, and that user has no Google account linked yet. The email-link provider is unchanged.
+- Why: the lead and the security reviewer checked the installed `@auth/core` 0.41.3 and confirmed that `signIn` runs before `handleLoginOrRegister` links anything, so a refusal writes nothing; flow tests against the real handlers prove the linked same-user case and every refusal. The unique `(user_id, provider)` index backs the app check. Security, database, code and typescript reviewers approved with LOW notes only.
+
+---
+
+### 27 Oct 2026 · 1.4c review LOWs left as is · decided by lead · risk: low
+- Decided: wontfix the three review LOWs: in `apps/web/src/auth/config.ts`, no Google self-link while signed in (the shared-device rule), and `hasLinkedAccount` not try/caught; in `packages/db/src/identity/store.ts`, the `sql\`1\`` select style.
+- Why: each fails closed or is style only, and each matches the existing pattern in its file; none is a takeover path.
+
+---
+
+### 27 Oct 2026 · 1.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 99 tool calls (harness count: build 53, CI coverage fix 46) against a budget of 55 (1.8x).
+- Why: the build itself came in under budget; the overrun is one CI fix round for a coverage gap (src/auth/** must stay at 100% statements), mostly a full web coverage run on a loaded machine. The lesson for briefs: auth tasks run the coverage gate locally before pushing.
+
+---
+
 ### 27 Oct 2026 · 12.2i apps/web/app/staff/reports/client.ts change · decided by builder · risk: high
 - Decided: `client.ts` is in `apps/web/app/staff/**`, a risky path per `risk-paths.txt`; this PR
   needs security-reviewer (named group) plus the task's own named reviewer set
