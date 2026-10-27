@@ -9145,7 +9145,9 @@ tasks:
   accept: each item in docs/tasks/5.3/review.md marked [deferred 5.3a] is fixed or explicitly declined in the decision log, with tests where behaviour changes; the db gate passes
   deps:
   - '5.3'
-  status: todo
+  status: running
+  branch: m13/5.3a-retrieval-query-followups
+  model: plan:sonnet build:sonnet
 - id: 5.4a
   milestone: M13
   title: 'Access-filter follow-ups (5.4 review MEDIUM/LOW): audit rule 1 also catches db.query.chunks, namespace imports and public.chunks SQL; rule 2 needs a real scope filter; rule 5 covers apps/* once
