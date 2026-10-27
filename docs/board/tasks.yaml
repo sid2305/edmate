@@ -2949,6 +2949,20 @@ tasks:
   accept: a proposed tag is stored, shown to its teacher only, and becomes taggable only after approval.
   deps:
   - '6.3'
+  - 6.3c
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.3c
+  milestone: M13
+  title: 'Wire mistake tagging into practice turns (found while planning 6.3a): nothing in production calls classifyMistakeTags or learnerRepo.applyMistakes yet, so 6.3a''s proposals table would have
+    no producer. On a wrong practice answer, call classifyMistakeTags and apply the result through applyMistakes with the style card''s mistakeTags as allowedTags; keep the classifier''s
+    out-of-list proposals so 6.3a can store them'
+  accept: a wrong practice answer in a scripted turn records the classified mistake tags on the learner profile (only tags on the style card), and out-of-list proposals reach a port 6.3a can persist; no real model calls in tests.
+  deps:
+  - 6.4a
+  - 6.3b
   risk: risky
   status: todo
   branch: null
@@ -10714,3 +10728,15 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 0.20f
+  milestone: M13
+  title: 'Harness timing tests still flake under load after 0.20d: modelRequest.test.ts "runs in linear time on long hostile input" failed CI on PR #369 (ratio 91.43 against the 64 bound, 27 Oct 2026), and
+    the 6.4a Phase A builder saw it and a runner.test.ts 2000 ms timeout under a parallel dependents gate. Replace the wall-clock ratio with a load-proof measure (for example counting regex or loop steps,
+    or an injected clock), and give the slow runner case an explicit timeout or a lighter fixture'
+  accept: the linear-time test fails on a deliberately quadratic version and does not use wall-clock ratios; harness tests pass five full CI node runs in a row.
+  deps:
+  - 0.20d
+  risk: risky
+  status: todo
+  branch: null
+  model: null

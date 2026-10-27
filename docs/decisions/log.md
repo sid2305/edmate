@@ -10,6 +10,10 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.3a parked behind a new task 6.3c · decided by lead · risk: medium
+- Decided: 6.3a (teacher-approved mistake tags) goes back to todo and now depends on a new task, 6.3c, which wires classifyMistakeTags and learnerRepo.applyMistakes into graded practice turns after 6.4a. The 6.3a plan stays in docs/tasks/6.3a/plan.md for later. Also added 0.20f for the harness timing tests that still flake after 0.20d (91.43 against 64 on PR #369).
+- Why: the 6.3a planner found that nothing in production calls the classifier or applyMistakes, so a proposals table would have no producer. 6.3c and 6.4a both hook into graded practice answers, so 6.3c follows 6.4a.
+
 ### 27 Oct 2026 · 6.3b prettier reformatted the whole of `profile-store.int.test.ts` · decided by builder · risk: low
 - Decided: ran `prettier --write` on the file (as the gate requires `prettier --check` to pass)
   rather than hand-formatting only the new test bodies; this rewrote every existing `it(...)`
