@@ -1,0 +1,21 @@
+id: locked-dicts-keytermsglossary-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); content/demo-teacher/modules/lists-dicts/notes.md section 5.5 and the Key points
+turns:
+  - student: "What are the key terms I need to know for dictionaries? List them like a vocab sheet, term by term."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A **dictionary** stores pairs: each **key** points to a **value**. You look things up by key, not by position."
+        - "Dictionaries are looked up by key. Use `in` or `.get()` when a key might be missing."
+      must_cite_source: false
+      judge:
+        - "The reply contains no vocabulary list or glossary for the dictionaries module."

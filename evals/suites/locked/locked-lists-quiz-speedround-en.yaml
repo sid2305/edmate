@@ -1,0 +1,23 @@
+id: locked-lists-quiz-speedround-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
+  the package); build plan line 338 (skills are filtered in the registry);
+  content/demo-teacher/packages/paid.yaml (quiz-style practice aimed at a locked module needs the
+  Full course); content/demo-teacher/question-bank/lists-dicts.yaml (ld-q2)
+turns:
+  - student: "Speed round, five seconds per question: why does colours[3] blow up on a 3-item list? Quiz me on it right now."
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'a list of 3 items has indexes 0, 1 and 2'
+        - 'Python raises `IndexError: list index out of range`'
+      must_cite_source: false
+      max_words: 80

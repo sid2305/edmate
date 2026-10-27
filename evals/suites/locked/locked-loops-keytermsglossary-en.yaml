@@ -1,0 +1,21 @@
+id: locked-loops-keytermsglossary-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); content/demo-teacher/modules/loops/notes.md section 3.5 and the Key points
+turns:
+  - student: "List the key terms from the loops module like a vocabulary list — term, then a short meaning."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "For a running total, start at 0 before the loop and print after it."
+        - "`break` stops the loop; `continue` skips to the next pass."
+      must_cite_source: false
+      judge:
+        - "The reply contains no vocabulary list or term glossary for the loops module."

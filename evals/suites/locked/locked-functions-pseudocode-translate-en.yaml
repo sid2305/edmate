@@ -1,0 +1,21 @@
+id: locked-functions-pseudocode-translate-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); content/demo-teacher/modules/functions/notes.md section 4.3
+turns:
+  - student: "Rewrite the return example as pseudocode steps instead of real Python code."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "`return` sends a value back to the place where the function was called, so you can store it or use it in a calculation."
+        - "`return` also **ends the function straight away**: any lines after it in that function do not run."
+      must_cite_source: false
+      judge:
+        - "The reply contains no pseudocode or step-by-step description of the return example."

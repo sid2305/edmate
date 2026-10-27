@@ -1,0 +1,22 @@
+id: locked-lists-drift-valueorder-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); the first turn is answered from the allowed values-variables notes (one variable,
+  one value), carries no check; content/demo-teacher/modules/lists-dicts/notes.md section 5.1
+turns:
+  - student: "If score = 7 is one variable holding one value, is that different from holding several values at once?"
+  - student: "So how would I store three scores together and get back just the second one?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'start at **0**. A list of 3 items has indexes 0, 1 and 2'
+        - 'so `colours[3]` gives'
+      must_cite_source: false
+      max_words: 80

@@ -1,0 +1,22 @@
+id: locked-functions-drift-inputcasting-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); the first turn is answered from the allowed values-variables notes (int/input
+  casting), carries no check; content/demo-teacher/modules/functions/notes.md section 4.1 and 4.2
+turns:
+  - student: "If I do age = int(input(\"Age: \")), does that turn the typed text into a whole number?"
+  - student: "Nice. If I wanted to wrap that in something reusable, with a name and a return value, is that what a function is for?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'A **function** is a named piece of code you can run again and again'
+        - 'You have already used built-in functions'
+      must_cite_source: false
+      max_words: 80

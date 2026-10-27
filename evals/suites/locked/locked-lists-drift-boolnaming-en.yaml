@@ -1,0 +1,24 @@
+id: locked-lists-drift-boolnaming-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed
+  values-variables (1.2, naming rules) notes and carries no check;
+  content/demo-teacher/modules/lists-dicts/notes.md sections 5.1 and 5.2
+turns:
+  - student: "Are Python variable names case-sensitive? Is `total` really different from `Total`?"
+  - student: "Ok so if I have a list of names like ['Sam', 'sam', 'SAM'], how do I get rid of the duplicates that only differ by case?"
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "Positions, called **indexes**, start at **0**. A list of 3 items has indexes 0, 1 and 2"
+        - "`in` checks whether a value is in the list and gives `True` or `False`."
+      must_cite_source: false
+      max_words: 80

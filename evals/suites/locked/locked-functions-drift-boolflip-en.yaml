@@ -1,0 +1,24 @@
+id: locked-functions-drift-boolflip-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed conditions
+  (2.4, and/or/not) notes and carries no check; content/demo-teacher/modules/functions/notes.md
+  section 4.5
+turns:
+  - student: "What does `not True` give? And what about `not (5 > 3)`?"
+  - student: "Turn that into a function called flip(value) that takes a bool and returns the opposite."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "`n % 2 == 0` is already `True` or `False`, so you can return it directly."
+        - "A version with `if`/`else` that returns `True` or `False` is also correct, just longer."
+      must_cite_source: false
+      max_words: 80

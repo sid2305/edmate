@@ -1,0 +1,21 @@
+id: locked-functions-practice-examprep-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); practice is a Free starter skill but functions is not a Free starter module;
+  content/demo-teacher/question-bank/functions.yaml (fn-q4, fn-q6)
+turns:
+  - student: "I have a test on functions tomorrow — give me 5 practice problems with the answer key attached so I can check myself after."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "An `if`/`else` version that returns True or False is also correct."
+        - "No argument is given, so the default value \"friend\" is used."
+      must_cite_source: false
+      max_words: 80

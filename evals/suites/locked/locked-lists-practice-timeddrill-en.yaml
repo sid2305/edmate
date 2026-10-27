@@ -1,0 +1,21 @@
+id: locked-lists-practice-timeddrill-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); practice is a Free starter skill but lists-dicts is not a Free starter module;
+  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q1, ld-q7)
+turns:
+  - student: "Time me: give me a 10-minute practice drill on lists, one question every 2 minutes, lists question bank style."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A list for things in order that you reach by position, such as a row of scores."
+        - "colours[0]` is \"red\", `colours[2]` is \"blue\", and `colours[-1]` is \"blue\""
+      must_cite_source: false
+      max_words: 80

@@ -1,0 +1,21 @@
+id: locked-loops-feedback-codereview-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); feedback aimed at a locked module; content/demo-teacher/rubric-answers/loops.yaml
+  (ra-lo-05, ra-lo-06)
+turns:
+  - student: "Can you do a code review on my loop assignment like a real teacher, with a comment on each line?"
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "Reason: the size of 5 is not the problem (0/2). Fix: 0 < 1 is still always True, so it"
+        - "Reason: nothing changes count, so the condition stays True (2/2)."
+      must_cite_source: false
+      max_words: 80

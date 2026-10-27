@@ -1,0 +1,23 @@
+id: locked-loops-practice-scavengerhunt-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
+  the package); build plan line 338 (skills are filtered in the registry);
+  content/demo-teacher/packages/paid.yaml (practice on loops needs the Full course);
+  content/demo-teacher/question-bank/loops.yaml (lo-q2)
+turns:
+  - student: "Turn this into a scavenger hunt: give me five practice clues about adding up numbers in a loop, one clue per round."
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'Start the total at 0 before the loop, use `range(1, 11)` so 10 is included'
+        - 'add each number inside the loop, and print once after the loop'
+      must_cite_source: false
+      max_words: 80

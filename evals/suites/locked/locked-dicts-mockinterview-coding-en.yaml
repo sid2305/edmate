@@ -1,0 +1,21 @@
+id: locked-dicts-mockinterview-coding-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); mock_interview style ask on a locked module;
+  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q5, ld-q7)
+turns:
+  - student: "Pretend this is a coding interview — quiz me on dictionaries the way a real interviewer would, one question at a time."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A dictionary when you look things up by a key or name, such as stock by fruit."
+        - "\"kiwis\" is not a key in the dictionary, so Python raises `KeyError: 'kiwis'`."
+      must_cite_source: false
+      max_words: 80

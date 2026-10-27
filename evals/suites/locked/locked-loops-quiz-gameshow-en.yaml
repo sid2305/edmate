@@ -1,0 +1,21 @@
+id: locked-loops-quiz-gameshow-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); quiz on a locked module; content/demo-teacher/question-bank/loops.yaml (lo-q1,
+  lo-q7)
+turns:
+  - student: "Let's play a trivia gameshow! Ask me loop trivia one question at a time, I'll buzz in with my answer."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "When you do not know in advance how many times to repeat, and want to keep going until"
+        - "1, 2, 3 and 4, each on its own line. The stop number 5 is not included."
+      must_cite_source: false
+      max_words: 80
