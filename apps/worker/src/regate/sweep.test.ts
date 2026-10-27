@@ -291,4 +291,40 @@ describe('regateSweepJob', () => {
       expect.objectContaining({ event: 'regate_sweep.candidate_refused', reason: 'scope' }),
     );
   });
+
+  it('an unexpected error (not PublishRefusedError/RepositoryError) is logged at error level, named distinctly from a routine refusal, and the loop still continues', async () => {
+    const lines: LogLine[] = [];
+    const summary = await regateSweepJob(
+      deps({
+        candidates: () =>
+          Promise.resolve([
+            { teacherId: 'tch_1', agentId: 'agent_1' },
+            { teacherId: 'tch_2', agentId: 'agent_2' },
+          ]),
+        repos: {
+          styleCards: {
+            latest: vi.fn((scope: { teacherId: string }) =>
+              scope.teacherId === 'tch_1'
+                ? Promise.reject(new TypeError('boom'))
+                : Promise.resolve({ id: 'card_1' } as never),
+            ),
+          },
+          courses: { ensureDefault: () => Promise.resolve({ id: 'course_1' } as never) },
+          publish: { startRun: () => Promise.resolve(run()), finishRun: vi.fn() } as never,
+        },
+        log: (l) => lines.push(l),
+      }),
+    )();
+    expect(summary).toEqual({ candidates: 2, started: 1, skipped: 1, failed: 0 });
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        level: 'error',
+        event: 'regate_sweep.candidate_error',
+        teacherId: 'tch_1',
+        agentId: 'agent_1',
+        error: { name: 'TypeError', message: 'boom' },
+      }),
+    );
+    expect(lines.some((l) => l.event === 'regate_sweep.candidate_refused')).toBe(false);
+  });
 });

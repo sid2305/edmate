@@ -121,13 +121,27 @@ export function regateSweepJob(deps: RegateSweepDeps): () => Promise<RegateSweep
         }
       } catch (error) {
         skipped += 1;
-        deps.log({
-          level: 'warn',
-          event: 'regate_sweep.candidate_refused',
-          teacherId: candidate.teacherId,
-          agentId: candidate.agentId,
-          reason: errorReason(error),
-        });
+        if (error instanceof PublishRefusedError || error instanceof RepositoryError) {
+          deps.log({
+            level: 'warn',
+            event: 'regate_sweep.candidate_refused',
+            teacherId: candidate.teacherId,
+            agentId: candidate.agentId,
+            reason: errorReason(error),
+          });
+        } else {
+          // Not a routine refusal: an unexpected error must not look like a `PublishRefusedError`
+          // going at `warn` with only a name would (silent-failure-hunter, task 13.regate fix
+          // round). Logged under its own event so a dashboard can alert on it separately; the
+          // loop still continues to the next candidate.
+          deps.log({
+            level: 'error',
+            event: 'regate_sweep.candidate_error',
+            teacherId: candidate.teacherId,
+            agentId: candidate.agentId,
+            error: describeError(error),
+          });
+        }
       }
     }
 

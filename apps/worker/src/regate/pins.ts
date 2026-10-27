@@ -38,6 +38,8 @@ export async function regatePinsFromEnv(env: Env, hooks: PinsHooks = {}): Promis
     if (set === undefined) return { ok: false, reason: 'prompt_pack_unsigned' };
     promptPackVersion = set.version;
   } catch {
+    // The error is dropped: it may name the directory's problem, never a teacher's content, but
+    // no need (same convention as gate/models.ts's provider-key catch).
     return { ok: false, reason: 'content_missing' };
   }
   const models = await gateModelsFromEnv(env);

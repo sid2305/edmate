@@ -1001,12 +1001,24 @@ export function regateRepo(db: Db) {
         where ${agents.status} = 'live'
           and coalesce(${teacherMaterialRevisions.revision}, 0)
             is distinct from last.published_revision
-          -- No open run (queued/running), at any revision.
+          -- No open run (queued/running), at any revision, unless it is stale by the same
+          -- rule startRun uses to close one as stale itself (deadlineMs(changes) +
+          -- STALE_RUN_GRACE_MS): a crashed worker or a failed enqueue/finishRun pair must not
+          -- strand the agent out of every future sweep. A stale run still counts as its
+          -- revision's one attempt via the r3 check below (status-independent), so startRun
+          -- closes it as stale and this agent only comes back once material changes again.
           and not exists (
             select 1 from ${evalRuns} r2
             where r2.agent_id = last.agent_id
               and r2.suite = ${GATE_SUITE}
               and r2.status in ('queued', 'running')
+              and (extract(epoch from (now() - r2.updated_at)) * 1000) <= (
+                case
+                  when coalesce(r2.changes, '{}'::text[]) && array['first_publish', 'prompt_pack_bump']
+                  then ${FULL_SCOPE_GATE_DEADLINE_MS}::float8
+                  else ${GATE_DEADLINE_MS}::float8
+                end
+              ) + ${STALE_RUN_GRACE_MS}::float8
           )
           -- One automatic attempt per material revision (lead answer Q2): a run of any outcome
           -- already started at the current revision means this sweep has already tried it.

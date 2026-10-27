@@ -1266,6 +1266,51 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
     });
 
+    it("includes a candidate whose only open run is stale (same rule as startRun's: a material-only run's 15 min deadline + 15 min grace) and at an older revision than the current one -- a crashed worker or a failed enqueue/finishRun must not strand it", async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t); // revision 1: a candidate.
+      const run = await repos.publish.startRun(scope(t), pins(t)); // open, basis.materialRevision = 1.
+      expect(run.changes).toEqual(['material']);
+      await bump(t); // revision 2: the open run is now at an older revision.
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '31 minutes' where id = $1`,
+        [run.id],
+      );
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([
+        { teacherId: t.teacherId, agentId: t.agentId },
+      ]);
+      await resolveCandidate(t);
+    });
+
+    it('excludes a live agent whose open run is fresh (not stale), even at an older revision', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t); // revision 1.
+      const run = await repos.publish.startRun(scope(t), pins(t)); // open, basis.materialRevision = 1.
+      await bump(t); // revision 2: the open run is now at an older revision, but still fresh.
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '25 minutes' where id = $1`,
+        [run.id],
+      );
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
+    it('excludes a stale open run at the current revision: the attempt was already made', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t); // revision 1: a candidate.
+      const run = await repos.publish.startRun(scope(t), pins(t)); // open, basis.materialRevision = 1 = current.
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '31 minutes' where id = $1`,
+        [run.id],
+      );
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
     it('excludes a draft and a suspended agent, even with changed material', async () => {
       const draft = await makeTeacher({ status: 'draft' });
       await bump(draft);

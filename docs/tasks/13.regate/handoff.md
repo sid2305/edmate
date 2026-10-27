@@ -260,3 +260,65 @@ edit so the two never diverged in a commit, and the full db/worker gate run belo
 ### Budget
 
 Phase B2 tool calls used: 26
+
+## Fix round (27 Oct 2026)
+
+Fixed the 3 review findings from the regate fix brief (silent-failure-hunter, also
+database-/security-/typescript-reviewer on item 1).
+
+### Files changed
+
+- `packages/db/src/repositories/publish.ts` (`regateRepo(db).liveAgentsWithMaterialChange`,
+  about lines 1004-1021): the "no open run" `NOT EXISTS` now age-bounds a `queued`/`running` run
+  by the same rule `startRun` uses to treat an open run as stale
+  (`deadlineMs(changes) + STALE_RUN_GRACE_MS`, reusing `GATE_DEADLINE_MS` /
+  `FULL_SCOPE_GATE_DEADLINE_MS` / `STALE_RUN_GRACE_MS`, not a new constant). `evalRuns.changes`
+  is a Postgres `text[]` (not jsonb), so the "full-scope" check uses `&&` array overlap against
+  `array['first_publish', 'prompt_pack_bump']`, and the deadline constants are cast `::float8`
+  so the untyped `CASE`/`+` branches don't default to `text` (both caught by running the test
+  first). A stale open run no longer blocks candidacy; the pre-existing, unchanged one-attempt
+  -per-revision `NOT EXISTS` (`r3`, status-independent) still counts a stale run at the current
+  revision as that revision's attempt, so `startRun` closes it as stale and the agent only comes
+  back once material changes again.
+  - Red: added 3 int tests to `packages/db/test/publish.int.test.ts` (new `it`s after "excludes a
+    live agent with an open (queued/running) run..."): (a) stale open run at an older revision
+    with a newer material revision → candidate, (b) fresh (not stale) open run at an older
+    revision → still excluded, (c) stale open run at the current revision → still excluded. Ran
+    against the pre-fix query: (a) failed (`toEqual([])` instead of the one candidate) — the
+    unbounded `NOT EXISTS` matched the stale run and stranded the agent, confirming the bug;
+    (b) and (c) passed already (no regression risk from those two).
+  - Green: after the SQL fix, `corepack pnpm turbo run test --filter=@edmate/db -- test/publish.int.test.ts`
+    → all 54 tests in the file pass, including the 3 new ones.
+- `apps/worker/src/regate/sweep.ts` (the per-candidate `catch`, about lines 122-144): an
+  unexpected error (not `PublishRefusedError`/`RepositoryError`) is now logged at `error` level
+  under its own event `regate_sweep.candidate_error` with `error: describeError(error)` (name and
+  message); a routine refusal still logs at `warn` under `regate_sweep.candidate_refused` as
+  before. The loop still continues to the next candidate either way (`skipped` still increments).
+  - Red: added a test to `apps/worker/src/regate/sweep.test.ts` ("an unexpected error... is
+    logged at error level, named distinctly from a routine refusal, and the loop still
+    continues") asserting `level: 'error'`, `event: 'regate_sweep.candidate_error'`, and
+    `error: {name: 'TypeError', message: 'boom'}`, and that no `regate_sweep.candidate_refused`
+    line appears. Against the pre-fix code it failed (the line was `warn`/`candidate_refused`
+    with only `reason: 'TypeError'`, no message).
+  - Green: after the fix, the new test and the full `sweep.test.ts` suite pass.
+- `apps/worker/src/regate/pins.ts` (the bare `catch` around `readPromptPackLibrary`, about
+  lines 40-42): added a short comment on why the error is dropped, matching
+  `apps/worker/src/gate/models.ts`'s own bare-catch comment convention. No behaviour change, per
+  the brief.
+
+### Gate
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/worker... --filter=@edmate/db...`
+  → green, **38 successful, 38 total**. `@edmate/db`: 1794 passed, 4 skipped (the same
+  pre-existing 4, none new). `@edmate/worker`: `src/regate/sweep.ts` 97.77%/94.44%/100%/97.67%
+  stmts/branch/funcs/lines, `src/regate/pins.ts` 100% across the board.
+- `corepack pnpm exec prettier --check` on the 5 changed files (`--write` needed once on
+  `packages/db/test/publish.int.test.ts`, then clean) → clean.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Decisions
+
+None (every change follows an existing rule or convention named in the brief: `startRun`'s stale
+rule, the `gate/models.ts` bare-catch comment convention, the existing warn/error log split).
+
+Fix round tool calls used: 19
