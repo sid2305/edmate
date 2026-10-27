@@ -75,6 +75,11 @@ task does not touch. Both passed cleanly when re-run standalone and on a repeat 
 
 ## Decisions
 
+### 26 Oct 2026 · 3.4d budget overrun (59 vs 45) · decided by lead · risk: low
+- Decided: accept the build at 59 harness-counted tool calls against a 45-call budget (1.31x); no rework.
+- Why: the extra calls went to a mutation check on the locked-precedence test and a prettier pass; the scope stayed at the three planned files and both reviewers approved with no findings.
+
+
 ### 26 Oct 2026 · 3.4d mergeByScore id tie-break · decided by builder · risk: low
 - Decided: `mergeByScore`'s equal-score tie-break is now explicit (ascending id) instead of
   relying on stable-sort insertion order; only ties can change order, matching 3.4c's plan text.
@@ -83,4 +88,4 @@ task does not touch. Both passed cleanly when re-run standalone and on a repeat 
 
 ## Budget
 
-Tool calls used: 32
+Tool calls used: 59 (harness count; the builder reported 32)
