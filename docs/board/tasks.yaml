@@ -3274,9 +3274,28 @@ tasks:
   deps:
   - 0.20c
   risk: low
-  status: running
+  status: done
   branch: m13/0.20d-linear-time-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 12
+    tokens_in: 46
+    tokens_out: 116
+    cache_read_tokens: 432328
+    wall_time_seconds: 101
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -5765,7 +5784,9 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: planning
+  status: running
+  branch: m13/9.6f-export-cursor-index
+  model: plan:sonnet build:sonnet
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -7258,8 +7279,9 @@ tasks:
   deps:
   - 13.4b
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/13.4d-export-consents-subs
+  model: plan:sonnet build:sonnet
 - id: 13.4e
   milestone: M13
   title: '13.4b follow-up (B-59 (3), payments): DELETE /api/me is also held while the student has an open payment dispute, once disputes exist in the ledger and refunds work (apps/web/src/account/delete.ts)'
@@ -8152,9 +8174,31 @@ tasks:
   deps:
   - 8.7m
   risk: low
-  status: running
+  status: done
   branch: m13/8.7p-redact-span-surrogate
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 267
+    tokens_in: 936
+    tokens_out: 91290
+    cache_read_tokens: 33155012
+    wall_time_seconds: 2040
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -8163,7 +8207,7 @@ tasks:
   deps:
   - 8.7p
   risk: high
-  status: todo
+  status: planning
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -8933,10 +8977,30 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: running
+  status: done
   risk: risky
   branch: m13/1.7a-age-consent-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet finish:sonnet review:sonnet
+  metrics:
+    tool_calls: 641
+    tokens_in: 2134
+    tokens_out: 247460
+    cache_read_tokens: 84777065
+    wall_time_seconds: 549768
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
@@ -9485,9 +9549,32 @@ tasks:
   deps:
   - 9.3k
   risk: high
-  status: running
+  status: done
   branch: m13/9.3m-subject-history
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 1288
+    tokens_in: 4544
+    tokens_out: 416516
+    cache_read_tokens: 137653466
+    wall_time_seconds: 7365
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 4
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 3
 - id: 9.3n
   milestone: M13
   title: '9.3m review LOWs: apps/web/app/staff/verification-row.tsx keys the subjectHistory list on the array index (key on ts plus from/to instead); apps/web/app/api/staff/verifications route tests gain
@@ -9564,7 +9651,9 @@ tasks:
   deps:
   - '13.5'
   risk: risky
-  status: todo
+  status: running
+  branch: m13/13.5a-cost-followups
+  model: plan:sonnet build:sonnet
 - id: 13.3a
   milestone: M13
   title: 'Security headers (13.3 Phase D MEDIUM): apps/web/next.config.ts headers() sets a CSP that works with Next.js (nonce or hash for inline scripts), X-Frame-Options DENY, X-Content-Type-Options nosniff,

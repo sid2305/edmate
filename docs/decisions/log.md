@@ -10,6 +10,151 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 8.7p item-1 clip region includes the separator · decided by builder · risk: low
+- Decided: when a raw `PHONE_CANDIDATE` match is clipped at an exempt span's boundary, the
+  redacted `REDACTED` region covers from the span's end to the match's end — including any
+  separator character (e.g. the single space between an id and a phone number) that sits between
+  them. The id/UUID/digest text itself is always left untouched; only the separator plus the
+  phone text is replaced, so output looks like `rp_<hex40>[redacted]` rather than
+  `rp_<hex40> [redacted]`.
+- Why: the plan's accept line only required "the id/UUID/digest text unchanged and `${REDACTED}`
+  in place of the phone" — it did not pin down whether a separator between them survives as
+  literal text. Keeping the separator as literal text would require a second, separate clip rule
+  for "boundary characters immediately after a span before the phone proper starts," which the
+  plan did not ask for and which adds complexity without changing the safety property (no exempt
+  span text is ever redacted, no phone digit ever survives). Tests were written to check both
+  invariants (`toContain(span)`, `not.toMatch(phone digits)`) rather than pin exact spacing, so
+  this choice does not need a test change if the lead prefers the other spacing later.
+
+---
+
+### 26 Oct 2026 · 8.7p budget · decided by lead · risk: low
+- Decided: Accept 91 tool calls (harness count: build 35, fix round 56) against the plan's 30.
+- Why: The fix round replaced the quadratic span clip and added an adversarial timing test that had to fail on the old code first. The first build ran slightly over.
+
+---
+
+### 26 Oct 2026 · 8.7p merge · decided by lead · risk: high
+- Decided: Merge 8.7p. It touches packages/db/src/repositories/redact-json.ts, a risky path whose required reviewer is security-reviewer. security-reviewer found a HIGH: redactString's clip loop scanned every exempt span for every phone-shaped match, which is quadratic on a crafted audit payload. The fix sorts and merges the spans once and walks them with forward-only pointers. security-reviewer re-reviewed it. On the adversarial payload, the old code took about 17 s and the new code about 62 ms. Over 20,000 fuzz strings the output is byte-for-byte the same as the old code's. code-reviewer and typescript-reviewer approved the original change.
+- Why: Audit redaction must stay correct (surrogate-safe email clipping, ids and digests not mistaken for phone numbers) and run in linear time. The remaining defence, capping input size before redaction in storable(), is task 8.7q.
+
+---
+
+### 26 Oct 2026 · 9.3m the new audit write and its lock-order/no-read-then-write-window property · decided by builder · risk: high
+- Decided: `teacherProfiles.update()` now writes a `teacher.subject` audit row (old/new subject
+  only) when a patch changes the stored subject, captured in the same statement as the UPDATE (a
+  sibling read-only CTE) so there is no read-then-write window; `audit.findSubjectHistoryForStaff`
+  reads the last `SUBJECT_HISTORY_MAX_LIMIT` (10) such rows for staff. B-58.
+- Why: matches the plan's design exactly; the CTE shape expressed cleanly as raw SQL via
+  `tx.execute(sql\`...\`)` (same pattern as `publish.ts`'s own raw CTE reads), no new shared SQL
+  helper needed.
+
+---
+
+### 26 Oct 2026 · 9.3m test fixes for the shared-audit-log test file · decided by builder · risk: low
+- Decided: (a) existing tests in `teacher-profiles.int.test.ts` that query `audit.listForTeacher`
+  by `target` only (not `action`) now filter to `action === 'teacher.verify'` before asserting a
+  row count, since `teacherId('A')`'s target string is now also written by `teacher.subject` rows
+  from earlier tests in the same file (audit_log is append-only and never truncated between
+  tests, by design — same precedent as the existing `auditCount()` delta pattern). (b) the new
+  subject-audit assertions in that file use `rows[0]` / a before-and-after length delta rather than
+  an exact-array `toEqual`, for the same reason. (c) added one new test for the no-subject-patch
+  `not_found` branch (`update(A, { bio: 'X' })` on a ghost profile), since splitting `update()`
+  into two branches (subject vs. no-subject) left that branch's own `not_found` throw uncovered.
+- Why: the plan's test sketches assumed per-test isolation that the file's own existing
+  `auditCount()`-delta convention shows was never actually true for this append-only table; fixing
+  the assertions (not the feature) keeps the 100%-statement-coverage rule without weakening what
+  each test actually checks.
+
+---
+
+### 26 Oct 2026 · 9.3m budget · decided by lead · risk: low
+- Decided: Accept 267 tool calls (harness count: Phase A 117, Phase B 98, fix round 52) against the plan's 95.
+- Why: Both phases ran over. Phase A spent its extra calls on the staff route's real-Postgres tests, and the fix round on a two-connection race test that had to fail on the old code first. The work is complete and reviewed. Future briefs ask builders to count their own calls more honestly; their reports were about half the harness count.
+
+---
+
+### 26 Oct 2026 · 9.3m merge · decided by lead · risk: high
+- Decided: Merge 9.3m. It touches packages/db/src/repositories/** and apps/web/app/api/staff/** (risky paths; the required reviewer is security-reviewer). database-reviewer found a CRITICAL race: teacherProfiles.update() read the old subject without a lock, so a concurrent update could write a stale "before" value into the teacher.subject audit row. security-reviewer raised the same race as MEDIUM, and the lead rated it HIGH. The fix adds FOR UPDATE to the prev CTE, plus a two-connection test that failed before the fix. database-reviewer and security-reviewer re-reviewed it and approved. code-reviewer and typescript-reviewer approved the original change. The LOWs move to 9.3n.
+- Why: Staff now see a teacher's last 10 subject changes on the verification queue (B-58). The audit trail behind that list must be correct under concurrent edits, and the lock makes it so with no new lock-order risk.
+
+---
+
+### 26 Oct 2026 · 1.7a item 5 needs no change · decided by builder · risk: low
+- Decided: `packages/db/src/identity/age.ts` lines 67-70 already carry the exact comment the 1.7
+  review asked for (added in a later 1.7 phase that touched this file for an unrelated reason). No
+  diff to this file in this PR, per the plan.
+- Why: the plan's own "Item 5 is already done" section instructs verify-only; re-read the file and
+  confirmed the comment is present, word for word.
+
+---
+
+### 26 Oct 2026 · 1.7a apps/web/src/auth/** risk · decided by builder · risk: high
+- Decided: logging this decision at `risk: high` per the non-negotiables, naming the
+  `apps/web/src/auth/**` path (items 2 and 4: `age.ts`, `index.ts`).
+- Why: the plan's own "Required reviewers" section calls for this; it is a risky path requiring
+  security-reviewer.
+
+---
+
+### 26 Oct 2026 · 1.7a production-refuses-unsigned-notice consequence · decided by builder · risk: low
+- Decided: recording, per the plan's Open question, that no learner can clear the age gate in a real
+  (non-local) production deployment until a market's privacy notice is signed, and that this is the
+  intended effect of the board's accept line ("production refuses a pending notice"), not a defect.
+- Why: the plan's Open question already analyses this and recommends proceeding; logging it here so
+  it is on record before the pilot gate (GATE/3.10c/B-27 already track getting a notice signed).
+
+---
+
+### 26 Oct 2026 · 1.7a coverage gap in submitAgeAnswer's log fallback · decided by builder · risk: low
+- Decided: added two tests to `apps/web/src/auth/age.test.ts` — "with no log field, a throwing
+  resolve goes to console.error by name only" and the same for an unexpected record failure — to
+  cover the `deps.log ?? ((line) => console.error(line))` default branch in `submitAgeAnswer`'s two
+  catch sites (the first builder's tests always passed a `log` field, so this branch, lines 184 and
+  224, was never exercised and the `@edmate/web` coverage gate failed on `src/auth/**`'s 100%
+  threshold for functions/statements).
+- Why: `packages/harness/src/access/**` and guard logic/subscription state machine aside, `src/auth`
+  carries its own 100% coverage threshold in this repo's vitest config; the fix follows the exact
+  pattern `ageGateView`'s own "with no log field" test already used, no new pattern introduced.
+
+---
+
+### 26 Oct 2026 · 1.7a budget · decided by lead · risk: low
+- Decided: Accept 179 tool calls (harness count) against the plan's 40. The first builder stopped at 116 calls without committing. The lead committed its work in progress, and a fresh builder finished in 63 calls.
+- Why: Six review items across three packages turned out larger than a 40-call budget. The overrun came from the first builder not stopping at the PARTIAL line. Next time, a task this wide is split into phases.
+
+---
+
+### 26 Oct 2026 · 1.7a merge · decided by lead · risk: high
+- Decided: Merge 1.7a. It touches apps/web/src/auth/** (a risky path whose required reviewer is security-reviewer). It also changes migration 0014's CHECK constraints to NOT VALID plus a post-migrate VALIDATE. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved it with no findings.
+- Why: These are the follow-ups to the 1.7 review. A production web app now refuses an unsigned age notice unless AGE_NOTICE_ALLOW_UNSIGNED is exactly 'true'; only the local docker stack sets it. guard.ts behaviour is unchanged; the clearance scan now covers the whole app for student-only pages.
+
+---
+
+### 26 Oct 2026 · 0.20d dry-run call count instead of hard-coded sample count · decided by builder · risk: low
+- Decided: The load-burst self-test finds "the last three timed calls" by first running
+  `expectLinear` once with a counting `run` (clock faked to a constant so no real bound logic
+  misfires) to get the total call count, rather than hard-coding "12 calls" in the test.
+- Why: The plan leaves "how the fake finds 'the last three'" to the builder but asks that the
+  same test code fail on today's sampling and pass on the new one; deriving the count from a dry
+  run (rather than hard-coding a number that depends on the five-pair/three-pair split) keeps the
+  test correct if the pair count ever changes, and it's the exact mechanism the plan suggested
+  (a first pass that records call count, then a second pass with the burst).
+
+---
+
+### 26 Oct 2026 · 0.20d budget · decided by lead · risk: low
+- Decided: Accept 30 tool calls (harness count) against the plan's 20. That is the plan's stop line, and the work finished green.
+- Why: The plan asked for a load-burst self-test that fails on the old sampling and passes on the new. Proving that took extra test runs.
+
+---
+
+### 26 Oct 2026 · 0.20d merge · decided by lead · risk: high
+- Decided: Merge 0.20d. It touches packages/harness/src/pedagogy/**, a risky path, but it changes only modelRequest.test.ts: how the linear-time check samples its timings (5 interleaved small/large pairs) and a new fake-clock self-test. modelRequest.ts, prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it with no findings. The bounds (16x, ratio < 64, 10 s cap, 0.5 ms floor) are unchanged.
+- Why: The test kept flaking in CI (PR #325) because a load burst could land on all the large runs. With interleaving, a burst has to cover most of one size's five samples to change its minimum.
+
+---
+
 ### 26 Oct 2026 · 12.4e plain additive index, no CONCURRENTLY · decided by builder · risk: low
 - Decided: used a plain `CREATE INDEX` inside the migration's own transaction (the `0024`/`0033`
   pattern), not `CREATE INDEX CONCURRENTLY` + `POST_MIGRATE_STEPS` (the `0032` pattern).

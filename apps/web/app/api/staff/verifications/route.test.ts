@@ -12,7 +12,12 @@ import {
 } from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
-import { createGuard, type CookieReader, type Principal, type RoleContext } from '../../../../src/auth/guard';
+import {
+  createGuard,
+  type CookieReader,
+  type Principal,
+  type RoleContext,
+} from '../../../../src/auth/guard';
 import { MAX_BODY_BYTES } from '../../../../src/studio/routes';
 import { createStaffVerificationHandlers, MAX_REASON_CHARS } from './handlers';
 
@@ -50,6 +55,8 @@ function memory() {
     string,
     { status: 'verified' | 'rejected'; reason: string | null; ts: string }
   >();
+  // Task 9.3m (B-58): this teacher's past subject changes, newest first (default empty).
+  const subjectHistories = new Map<string, { from: string; to: string; ts: string }[]>();
   const profiles = new Map<string, TeacherProfileRow>();
   const order: string[] = [];
   const add = (teacherId: string, slug: string) => {
@@ -179,6 +186,21 @@ function memory() {
       }
       return lastDecisions.get(teacherId) ?? null;
     }),
+    findSubjectHistoryForStaff: vi.fn(async (by: unknown, teacherId: unknown, limit: unknown) => {
+      if (typeof by !== 'string' || by === '') {
+        throw new RepositoryError('invalid', 'audit.findSubjectHistoryForStaff');
+      }
+      if (typeof teacherId !== 'string' || teacherId === '') {
+        throw new RepositoryError('invalid', 'audit.findSubjectHistoryForStaff');
+      }
+      if (typeof limit !== 'number' || limit < 1 || limit > 10) {
+        throw new RepositoryError('invalid', 'audit.findSubjectHistoryForStaff');
+      }
+      if (roles.get(by) !== 'staff') {
+        throw new RepositoryError('scope', 'audit.findSubjectHistoryForStaff');
+      }
+      return subjectHistories.get(teacherId) ?? [];
+    }),
   };
   const logs: string[] = [];
   const repos = { teacherProfiles, takedowns, audit } as unknown as Pick<
@@ -189,7 +211,19 @@ function memory() {
     repos: () => repos,
     log: (line) => logs.push(line),
   });
-  return { h, roles, profiles, audits, logs, teacherProfiles, takedowns, audit, activeTakedowns, lastDecisions };
+  return {
+    h,
+    roles,
+    profiles,
+    audits,
+    logs,
+    teacherProfiles,
+    takedowns,
+    audit,
+    activeTakedowns,
+    lastDecisions,
+    subjectHistories,
+  };
 }
 
 const ctx = (principal: Principal = STAFF): RoleContext => ({
@@ -231,6 +265,7 @@ describe('GET: the pending queue', () => {
           email: 'tch_a@example.test',
           activeTakedowns: [],
           lastDecision: null,
+          subjectHistory: [],
         },
         {
           teacherId: 'tch_b',
@@ -240,6 +275,7 @@ describe('GET: the pending queue', () => {
           email: 'tch_b@example.test',
           activeTakedowns: [],
           lastDecision: null,
+          subjectHistory: [],
         },
         {
           teacherId: 'tch_c',
@@ -249,6 +285,7 @@ describe('GET: the pending queue', () => {
           email: null,
           activeTakedowns: [],
           lastDecision: null,
+          subjectHistory: [],
         },
       ],
     });
@@ -301,16 +338,48 @@ describe('GET: the pending queue', () => {
   it('shows an active takedown and a prior decision (9.3h)', async () => {
     const m = memory();
     m.activeTakedowns.set('tch_a', [
-      { id: 'td_1', kind: 'document', targetId: 'doc_1', teacherId: 'tch_a', teacherSlug: 'asha-math', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+      {
+        id: 'td_1',
+        kind: 'document',
+        targetId: 'doc_1',
+        teacherId: 'tch_a',
+        teacherSlug: 'asha-math',
+        category: 'other',
+        createdAt: '2026-10-20T00:00:00.000Z',
+      },
     ]);
-    m.lastDecisions.set('tch_a', { status: 'rejected', reason: 'unsafe', ts: '2026-10-19T00:00:00.000Z' });
+    m.lastDecisions.set('tch_a', {
+      status: 'rejected',
+      reason: 'unsafe',
+      ts: '2026-10-19T00:00:00.000Z',
+    });
     const res = await m.h.list(get(), ctx());
-    const body = (await res.json()) as { teachers: { teacherId: string; activeTakedowns: unknown[]; lastDecision: unknown }[] };
+    const body = (await res.json()) as {
+      teachers: { teacherId: string; activeTakedowns: unknown[]; lastDecision: unknown }[];
+    };
     const asha = body.teachers.find((t) => t.teacherId === 'tch_a');
     expect(asha?.activeTakedowns).toEqual([
       { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
     ]);
     expect(asha?.lastDecision).toEqual({ status: 'rejected', ts: '2026-10-19T00:00:00.000Z' });
+  });
+
+  it('shows a subject-change history on a queue row (9.3m, B-58)', async () => {
+    const m = memory();
+    m.subjectHistories.set('tch_a', [
+      { from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' },
+      { from: 'Biology', to: 'Math', ts: '2026-10-18T00:00:00.000Z' },
+    ]);
+    const res = await m.h.list(get(), ctx());
+    const body = (await res.json()) as {
+      teachers: { teacherId: string; subjectHistory: unknown[] }[];
+    };
+    const asha = body.teachers.find((t) => t.teacherId === 'tch_a');
+    expect(asha?.subjectHistory).toEqual([
+      { from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' },
+      { from: 'Biology', to: 'Math', ts: '2026-10-18T00:00:00.000Z' },
+    ]);
+    expect(m.audit.findSubjectHistoryForStaff).toHaveBeenCalledWith('stf_1', 'tch_a', 10);
   });
 });
 
@@ -330,6 +399,7 @@ describe('GET lookup: find one teacher by slug, any status', () => {
         verificationStatus: 'pending',
         activeTakedowns: [],
         lastDecision: null,
+        subjectHistory: [],
       },
     });
     expect(m.teacherProfiles.findBySlugForStaff).toHaveBeenCalledWith('stf_1', 'asha-math');
@@ -339,14 +409,16 @@ describe('GET lookup: find one teacher by slug, any status', () => {
     const m = memory();
     await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx());
     const verified = await m.h.lookup(getLookup('asha-math'), ctx());
-    expect((await verified.json() as { teacher: { verificationStatus: string } }).teacher.verificationStatus).toBe(
-      'verified',
-    );
+    expect(
+      ((await verified.json()) as { teacher: { verificationStatus: string } }).teacher
+        .verificationStatus,
+    ).toBe('verified');
     await m.h.decide(post({ teacherId: 'tch_b', status: 'rejected' }), ctx());
     const rejected = await m.h.lookup(getLookup('ben-physics'), ctx());
-    expect((await rejected.json() as { teacher: { verificationStatus: string } }).teacher.verificationStatus).toBe(
-      'rejected',
-    );
+    expect(
+      ((await rejected.json()) as { teacher: { verificationStatus: string } }).teacher
+        .verificationStatus,
+    ).toBe('rejected');
   });
 
   it('an unknown slug is 200 with a null teacher', async () => {
@@ -359,9 +431,21 @@ describe('GET lookup: find one teacher by slug, any status', () => {
   it('shows an active takedown and a prior decision on lookup too (9.3h)', async () => {
     const m = memory();
     m.activeTakedowns.set('tch_a', [
-      { id: 'td_1', kind: 'agent', targetId: 'tp_tch_a', teacherId: 'tch_a', teacherSlug: 'asha-math', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+      {
+        id: 'td_1',
+        kind: 'agent',
+        targetId: 'tp_tch_a',
+        teacherId: 'tch_a',
+        teacherSlug: 'asha-math',
+        category: 'other',
+        createdAt: '2026-10-20T00:00:00.000Z',
+      },
     ]);
-    m.lastDecisions.set('tch_a', { status: 'rejected', reason: 'unsafe', ts: '2026-10-19T00:00:00.000Z' });
+    m.lastDecisions.set('tch_a', {
+      status: 'rejected',
+      reason: 'unsafe',
+      ts: '2026-10-19T00:00:00.000Z',
+    });
     const res = await m.h.lookup(getLookup('asha-math'), ctx());
     const body = (await res.json()) as {
       teacher: { activeTakedowns: unknown[]; lastDecision: unknown };
@@ -373,6 +457,18 @@ describe('GET lookup: find one teacher by slug, any status', () => {
       status: 'rejected',
       ts: '2026-10-19T00:00:00.000Z',
     });
+  });
+
+  it('shows a subject-change history on lookup too (9.3m, B-58)', async () => {
+    const m = memory();
+    m.subjectHistories.set('tch_a', [
+      { from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' },
+    ]);
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    const body = (await res.json()) as { teacher: { subjectHistory: unknown[] } };
+    expect(body.teacher.subjectHistory).toEqual([
+      { from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' },
+    ]);
   });
 
   it.each([
@@ -429,7 +525,13 @@ describe('POST: approve or reject', () => {
       { status: 'verified', by: 'stf_1' },
     );
     expect(m.audits).toEqual([
-      { teacherId: 'tch_a', actor: 'stf_1', action: 'teacher.verify', before: 'pending', after: 'verified' },
+      {
+        teacherId: 'tch_a',
+        actor: 'stf_1',
+        action: 'teacher.verify',
+        before: 'pending',
+        after: 'verified',
+      },
     ]);
   });
 
@@ -494,7 +596,9 @@ describe('POST: approve or reject', () => {
   it('after an approval the teacher leaves the queue', async () => {
     const m = memory();
     await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx());
-    const body = (await (await m.h.list(get(), ctx())).json()) as { teachers: { teacherId: string }[] };
+    const body = (await (await m.h.list(get(), ctx())).json()) as {
+      teachers: { teacherId: string }[];
+    };
     expect(body.teachers.map((t) => t.teacherId)).toEqual(['tch_b', 'tch_c']);
   });
 
@@ -514,8 +618,15 @@ describe('POST: approve or reject', () => {
 
   it('a body `by` (or any unknown key) is 400 and never reaches the repo', async () => {
     const m = memory();
-    for (const extra of [{ by: 'stf_2' }, { userId: 'stf_2' }, { verificationStatus: 'verified' }]) {
-      const res = await m.h.decide(post({ teacherId: 'tch_a', status: 'verified', ...extra }), ctx());
+    for (const extra of [
+      { by: 'stf_2' },
+      { userId: 'stf_2' },
+      { verificationStatus: 'verified' },
+    ]) {
+      const res = await m.h.decide(
+        post({ teacherId: 'tch_a', status: 'verified', ...extra }),
+        ctx(),
+      );
       expect(res.status).toBe(400);
       expect(await codeOf(res)).toBe('validation');
     }
@@ -530,7 +641,10 @@ describe('POST: approve or reject', () => {
     ['empty teacherId', { teacherId: '', status: 'verified' }],
     ['numeric teacherId', { teacherId: 7, status: 'verified' }],
     ['blank reason', { teacherId: 'tch_a', status: 'rejected', reason: '   ' }],
-    ['reason too long', { teacherId: 'tch_a', status: 'rejected', reason: 'x'.repeat(MAX_REASON_CHARS + 1) }],
+    [
+      'reason too long',
+      { teacherId: 'tch_a', status: 'rejected', reason: 'x'.repeat(MAX_REASON_CHARS + 1) },
+    ],
     ['safety on an approval', { teacherId: 'tch_a', status: 'verified', safety: true }],
     ['numeric safety', { teacherId: 'tch_a', status: 'rejected', safety: 1 }],
     ['string safety', { teacherId: 'tch_a', status: 'rejected', safety: 'yes' }],
@@ -557,7 +671,11 @@ describe('POST: approve or reject', () => {
   it('malformed JSON is 400; an oversize body is 413; neither reaches the repo', async () => {
     const m = memory();
     expect((await m.h.decide(post(null, '{not json'), ctx())).status).toBe(400);
-    const big = post({ teacherId: 'tch_a', status: 'rejected', reason: 'x'.repeat(MAX_BODY_BYTES) });
+    const big = post({
+      teacherId: 'tch_a',
+      status: 'rejected',
+      reason: 'x'.repeat(MAX_BODY_BYTES),
+    });
     const res = await m.h.decide(big, ctx());
     expect(res.status).toBe(413);
     expect(await codeOf(res)).toBe('input_too_large');
@@ -607,10 +725,16 @@ describe('POST: approve or reject', () => {
 
   it('an unexpected throw is 500 and logs only the error name (a non-Error too)', async () => {
     const m = memory();
-    m.teacherProfiles.setVerification.mockRejectedValueOnce(new Error('pg says person@example.test'));
-    expect((await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx())).status).toBe(500);
+    m.teacherProfiles.setVerification.mockRejectedValueOnce(
+      new Error('pg says person@example.test'),
+    );
+    expect((await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx())).status).toBe(
+      500,
+    );
     m.teacherProfiles.setVerification.mockRejectedValueOnce('nope');
-    expect((await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx())).status).toBe(500);
+    expect((await m.h.decide(post({ teacherId: 'tch_a', status: 'verified' }), ctx())).status).toBe(
+      500,
+    );
     expect(m.logs).toEqual([
       '[staff] verifications.decide failed: Error',
       '[staff] verifications.decide failed: non-error',
@@ -622,7 +746,10 @@ describe('POST: approve or reject', () => {
     const repos = {
       teacherProfiles: { listPendingForStaff: async () => Promise.reject(new RangeError('x')) },
       takedowns: { listActiveForStaff: async () => [] },
-      audit: { findLastVerifyForStaff: async () => null },
+      audit: {
+        findLastVerifyForStaff: async () => null,
+        findSubjectHistoryForStaff: async () => [],
+      },
     } as unknown as Pick<Repositories, 'teacherProfiles' | 'takedowns' | 'audit'>;
     const h = createStaffVerificationHandlers({ repos: () => repos });
     expect((await h.list(get(), ctx())).status).toBe(500);
@@ -658,7 +785,9 @@ describe('through the real guard and ROUTE_POLICY', () => {
         ...(who ? { cookie: `who=${who}` } : {}),
         ...(method === 'POST' ? { origin, 'content-type': 'application/json' } : {}),
       },
-      ...(method === 'POST' ? { body: JSON.stringify({ teacherId: 'tch_b', status: 'verified' }) } : {}),
+      ...(method === 'POST'
+        ? { body: JSON.stringify({ teacherId: 'tch_b', status: 'verified' }) }
+        : {}),
     });
 
   it.each([
@@ -697,7 +826,13 @@ describe('through the real guard and ROUTE_POLICY', () => {
     const res = await g.POST(call('POST', 'staff'));
     expect(res.status).toBe(200);
     expect(g.audits).toEqual([
-      { teacherId: 'tch_b', actor: 'stf_1', action: 'teacher.verify', before: 'pending', after: 'verified' },
+      {
+        teacherId: 'tch_b',
+        actor: 'stf_1',
+        action: 'teacher.verify',
+        before: 'pending',
+        after: 'verified',
+      },
     ]);
   });
 

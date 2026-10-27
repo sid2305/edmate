@@ -37,6 +37,7 @@ export {
   helplinesVerified,
   LOCALE_RULES,
   localeLanguages,
+  minAgeInRange,
   type LocalePacks,
   type LocaleRule,
   piiPatternIssues,

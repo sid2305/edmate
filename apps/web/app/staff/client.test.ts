@@ -12,6 +12,7 @@ const ITEM = {
   email: null,
   activeTakedowns: [],
   lastDecision: null,
+  subjectHistory: [],
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -20,7 +21,10 @@ describe('loadQueue', () => {
   it('GETs the queue with no-store and returns the parsed rows', async () => {
     const f = vi.fn(async () => json({ teachers: [ITEM] }));
     expect(await loadQueue(f)).toEqual({ ok: true, teachers: [ITEM] });
-    expect(f).toHaveBeenCalledWith('/api/staff/verifications', { method: 'GET', cache: 'no-store' });
+    expect(f).toHaveBeenCalledWith('/api/staff/verifications', {
+      method: 'GET',
+      cache: 'no-store',
+    });
   });
 
   it.each([
@@ -53,8 +57,23 @@ describe('loadQueue', () => {
     expect(await loadQueue(f)).toEqual({ ok: true, teachers: [withHistory] });
   });
 
+  it('parses a subject history (9.3m, B-58)', async () => {
+    const withSubjectHistory = {
+      ...ITEM,
+      subjectHistory: [{ from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00Z' }],
+    };
+    const f = vi.fn(async () => json({ teachers: [withSubjectHistory] }));
+    expect(await loadQueue(f)).toEqual({ ok: true, teachers: [withSubjectHistory] });
+  });
+
   it('an old-shaped reply (missing the new fields) is a fixed failure, never half-trusted (9.3h)', async () => {
-    const oldShape = { teacherId: 'tch_a', slug: 'asha-math', subject: 'Math', name: 'Asha', email: null };
+    const oldShape = {
+      teacherId: 'tch_a',
+      slug: 'asha-math',
+      subject: 'Math',
+      name: 'Asha',
+      email: null,
+    };
     const f = async () => json({ teachers: [oldShape] });
     expect(await loadQueue(f)).toEqual({ ok: false, code: 'provider_error' });
   });
@@ -77,7 +96,9 @@ describe('decide', () => {
     const f = vi.fn(async () => json({ teacherId: 'tch_a', verificationStatus: 'verified' }));
     await decide({ teacherId: 'tch_a', status: 'verified', reason: '   ' }, f);
     await decide({ teacherId: 'tch_a', status: 'verified', reason: ' ok ' }, f);
-    const bodies = f.mock.calls.map((c) => JSON.parse((c as unknown as [string, RequestInit])[1].body as string));
+    const bodies = f.mock.calls.map((c) =>
+      JSON.parse((c as unknown as [string, RequestInit])[1].body as string),
+    );
     expect(bodies).toEqual([
       { teacherId: 'tch_a', status: 'verified' },
       { teacherId: 'tch_a', status: 'verified', reason: 'ok' },
@@ -106,8 +127,14 @@ describe('decide', () => {
     ['a network failure', async () => Promise.reject(new TypeError('offline'))],
     ['unreadable JSON', async () => new Response('', { status: 200 })],
     ['a wrong shape', async () => json({ ok: true })],
-    ['another teacher in the reply', async () => json({ teacherId: 'tch_b', verificationStatus: 'verified' })],
-    ['another status in the reply', async () => json({ teacherId: 'tch_a', verificationStatus: 'rejected' })],
+    [
+      'another teacher in the reply',
+      async () => json({ teacherId: 'tch_b', verificationStatus: 'verified' }),
+    ],
+    [
+      'another status in the reply',
+      async () => json({ teacherId: 'tch_a', verificationStatus: 'rejected' }),
+    ],
   ])('%s is provider_error', async (_label, f) => {
     expect(await decide({ teacherId: 'tch_a', status: 'verified' }, f)).toEqual({
       ok: false,

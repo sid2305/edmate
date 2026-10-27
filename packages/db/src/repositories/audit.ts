@@ -22,8 +22,17 @@ import {
 /** The decided status stored on a `teacher.verify` audit row's own `after.verificationStatus`. */
 const VerifyAfter = z.object({ verificationStatus: z.enum(['verified', 'rejected']) });
 
+/** A `teacher.subject` audit row's own `before`/`after` shape: the subject, nothing else. */
+const SubjectChange = z.strictObject({ subject: z.string() });
+
 /** Largest page of audit rows. */
 export const AUDIT_MAX_LIMIT = 200;
+/**
+ * Task 9.3m (B-58): the most subject changes staff see for one teacher. Its own, smaller cap --
+ * not `AUDIT_MAX_LIMIT`, which bounds other, general-purpose reads.
+ */
+export const SUBJECT_HISTORY_MAX_LIMIT = 10;
+const SubjectHistoryLimit = z.int().min(1).max(SUBJECT_HISTORY_MAX_LIMIT);
 /** Largest serialised before or after, in characters, after redaction. Larger is `invalid`. */
 export const AUDIT_JSON_MAX_LENGTH = 10_000;
 
@@ -245,6 +254,41 @@ export function auditRepo(db: Db) {
         const after = VerifyAfter.safeParse(row.after);
         if (!after.success) throw new RepositoryError('integrity', method);
         return { status: after.data.verificationStatus, reason: row.reason, ts: iso(row.ts) };
+      });
+    },
+
+    /**
+     * Task 9.3m (B-58): the last `limit` (at most `SUBJECT_HISTORY_MAX_LIMIT`) `teacher.subject`
+     * changes on `teacherId`'s row (written by `teacherProfiles.update`), newest first, for
+     * `by`, a user who is staff right now (same `lockRole`-gated precedent as
+     * `findLastVerifyForStaff`). A malformed `by`, `teacherId` or out-of-range `limit` is
+     * `invalid` before any SQL; a well-formed `by` who is not staff right now is `scope`; a
+     * teacher with no subject changes is `[]`. A stored `before`/`after` that fails its own
+     * shape is `integrity` (never returned).
+     */
+    async findSubjectHistoryForStaff(
+      by: unknown,
+      teacherId: unknown,
+      limit: unknown,
+    ): Promise<{ from: string; to: string; ts: string }[]> {
+      const method = 'audit.findSubjectHistoryForStaff';
+      const staff = parseArg(IdSchema, by, method);
+      const tid = parseArg(IdSchema, teacherId, method);
+      const n = parseArg(SubjectHistoryLimit, limit, method);
+      return db.transaction(async (tx) => {
+        if ((await lockRole(tx, staff)) !== 'staff') throw new RepositoryError('scope', method);
+        const rows = await tx
+          .select({ before: auditLog.before, after: auditLog.after, ts: auditLog.ts })
+          .from(auditLog)
+          .where(and(eq(auditLog.teacherId, tid), eq(auditLog.action, 'teacher.subject')))
+          .orderBy(desc(auditLog.ts), desc(auditLog.id))
+          .limit(n);
+        return rows.map((row) => {
+          const before = SubjectChange.safeParse(row.before);
+          const after = SubjectChange.safeParse(row.after);
+          if (!before.success || !after.success) throw new RepositoryError('integrity', method);
+          return { from: before.data.subject, to: after.data.subject, ts: iso(row.ts) };
+        });
       });
     },
   };

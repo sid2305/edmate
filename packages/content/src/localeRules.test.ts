@@ -9,6 +9,7 @@ import {
   helplinesVerified,
   LOCALE_RULES,
   localeLanguages,
+  minAgeInRange,
   piiPatternsCompileWithGu,
   piiPatternsSafeRegex,
   unverifiedHelplines,
@@ -87,6 +88,38 @@ describe('complianceReviewed', () => {
   });
 });
 
+describe('minAgeInRange', () => {
+  it.each([13, 18])('passes a minAge of %d', (minAge) => {
+    const pack = { ...XX, compliance: { ...XX.compliance, minAge } };
+    expect(minAgeInRange(packs(pack))).toEqual([]);
+  });
+
+  it.each([12, 19])('flags a minAge of %d', (minAge) => {
+    const pack = { ...XX, compliance: { ...XX.compliance, minAge } };
+    expect(minAgeInRange(packs(pack))).toEqual([
+      `XX.yaml: compliance.minAge ${minAge} must be between 13 and 18`,
+    ]);
+  });
+
+  it('flags a non-integer and NaN', () => {
+    const nonInteger = { ...XX, compliance: { ...XX.compliance, minAge: 13.5 } };
+    expect(minAgeInRange(packs(nonInteger))).toEqual([
+      'XX.yaml: compliance.minAge 13.5 must be between 13 and 18',
+    ]);
+    const notANumber = { ...XX, compliance: { ...XX.compliance, minAge: NaN } };
+    expect(minAgeInRange(packs(notANumber))).toEqual([
+      'XX.yaml: compliance.minAge NaN must be between 13 and 18',
+    ]);
+  });
+
+  it('checkLocalePacks picks it up', () => {
+    const bad = { ...XX, compliance: { ...XX.compliance, minAge: 19 } };
+    expect(checkLocalePacks(packs(bad, base()))).toEqual([
+      'XX.yaml: compliance.minAge 19 must be between 13 and 18',
+    ]);
+  });
+});
+
 describe('piiPatternsCompileWithGu', () => {
   it('passes patterns that compile with exactly gu', () => {
     expect(piiPatternsCompileWithGu(packs(XX))).toEqual([]);
@@ -149,7 +182,7 @@ describe('localeLanguages', () => {
 
 describe('checkLocalePacks', () => {
   it('runs every rule and collects every issue', () => {
-    expect(LOCALE_RULES).toHaveLength(6);
+    expect(LOCALE_RULES).toHaveLength(7);
     const bad = { ...XX, helplines: [{ ...line, verifiedBy: 'pending' }], piiPatterns: ['(a+)+'] };
     expect(checkLocalePacks(packs(bad))).toEqual([
       'global.yaml: missing; the default pack is required (it serves every market without a pack)',
