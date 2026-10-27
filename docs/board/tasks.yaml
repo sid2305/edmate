@@ -3266,6 +3266,36 @@ tasks:
         deferred: 0
         wontfix: 2
     human_questions: 0
+- id: 0.20d
+  milestone: M13
+  title: 'packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" still flakes in CI after 0.20c: 72.7 vs the 64 bound on PR #325 (26 Oct 2026; 12.4e only adds a db
+    index). Make the check measure growth in a way that load cannot skew (for example the median of several runs, or counting steps instead of timing), without loosening it so far that quadratic code passes.'
+  accept: The test fails on a deliberately quadratic version and passes five full CI node runs in a row.
+  deps:
+  - 0.20c
+  risk: low
+  status: done
+  branch: m13/0.20d-linear-time-flake
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 12
+    tokens_in: 46
+    tokens_out: 116
+    cache_read_tokens: 432328
+    wall_time_seconds: 101
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -4999,7 +5029,9 @@ tasks:
   deps:
   - 9.2a
   risk: medium
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/9.2e-discovery-followups
 - id: 12.1a
   milestone: M12
   title: Staff verification queue read in packages/db (12.1 Phase A)
@@ -5752,7 +5784,9 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.6f-export-cursor-index
+  model: plan:sonnet build:sonnet
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -7265,9 +7299,29 @@ tasks:
   deps:
   - 12.4a
   risk: low
-  status: running
+  status: done
   branch: m13/12.4e-agents-index
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 344
+    tokens_in: 1228
+    tokens_out: 88292
+    cache_read_tokens: 49124106
+    wall_time_seconds: 83623
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.5e
   milestone: M13
   title: 'Alert worker follow-up: alert.raise logs a store.record failure before awaiting notify, so a joint DB and notifier outage still logs safety_alert.store_failed (12.5b review)'
@@ -8122,6 +8176,15 @@ tasks:
   status: running
   branch: m13/8.7p-redact-span-surrogate
   model: plan:sonnet build:sonnet
+- id: 8.7q
+  milestone: M13
+  title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
+    checked, so redaction runs on input of any size. Reject an oversized plain JSON before redacting (allowing for REDACTED being longer than a short email), with a test.'
+  accept: storable() refuses an oversized value with RepositoryError invalid before calling redactPersonalData; a test proves redaction is not called for it.
+  deps:
+  - 8.7p
+  risk: high
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -8891,10 +8954,30 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: running
+  status: done
   risk: risky
   branch: m13/1.7a-age-consent-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet finish:sonnet review:sonnet
+  metrics:
+    tool_calls: 641
+    tokens_in: 2134
+    tokens_out: 247460
+    cache_read_tokens: 84777065
+    wall_time_seconds: 549768
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
@@ -9014,9 +9097,31 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: running
+  status: done
   branch: m13/3.9f-cli-db-retrieval
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 1045
+    tokens_in: 3696
+    tokens_out: 262209
+    cache_read_tokens: 132028970
+    wall_time_seconds: 84015
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 3.9g
   milestone: M13
   title: '3.9a review LOWs: apps/cli/src/commands/chat.test.ts SIGINT test asserts process.listenerCount(''SIGINT'') is back to its baseline after the run; apps/cli/src/commands/chat.ts does not print a
@@ -9424,6 +9529,15 @@ tasks:
   status: running
   branch: m13/9.3m-subject-history
   model: plan:sonnet build:sonnet
+- id: 9.3n
+  milestone: M13
+  title: '9.3m review LOWs: apps/web/app/staff/verification-row.tsx keys the subjectHistory list on the array index (key on ts plus from/to instead); apps/web/app/api/staff/verifications route tests gain
+    a case where findSubjectHistoryForStaff (and findLastVerifyForStaff) throws inside enrichQueueRows and the handler still maps it to its 403/500 response.'
+  accept: Both items done, with tests.
+  deps:
+  - 9.3m
+  risk: high
+  status: todo
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

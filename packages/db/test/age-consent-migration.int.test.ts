@@ -9,7 +9,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MIGRATIONS_DIR } from '../src/migrate.js';
+import { migrateDatabase, MIGRATIONS_DIR } from '../src/migrate.js';
 import {
   createDatabase,
   dropDatabase,
@@ -65,7 +65,10 @@ describe.skipIf(!up)(`migration 0014 on Postgres${up ? '' : ` (${SKIP_REASON})`}
       `insert into consents (id, user_id, kind, version, ts) values
          ('cns_pre', 'usr_pre', 'privacy_notice', 'v0', '2026-10-01T00:00:00Z')`,
     );
-    await migrateWith(MIGRATIONS_DIR);
+    // migrateDatabase() (not migrate()): it also runs the post-migrate step that validates the
+    // 0014 NOT VALID CHECK constraints (document-live-class-migration.int.test.ts made the same
+    // swap for its own NOT VALID constraint).
+    await migrateDatabase(TEST_URL);
   }, SLOW_MS);
 
   afterAll(async () => {
@@ -125,5 +128,17 @@ describe.skipIf(!up)(`migration 0014 on Postgres${up ? '' : ` (${SKIP_REASON})`}
            ('cns_bad', 'usr_pre', 'parental', 'v1', 'school')`,
       ),
     ).rejects.toThrow(/consents_granted_by_check/);
+  });
+
+  it('validates both NOT VALID CHECK constraints outside the migration transaction', async () => {
+    const { rows } = await raw.query<{ conname: string; convalidated: boolean }>(
+      `select conname, convalidated from pg_constraint
+        where conname in ('consents_granted_by_check', 'users_birth_year_check')
+        order by conname`,
+    );
+    expect(rows).toEqual([
+      { conname: 'consents_granted_by_check', convalidated: true },
+      { conname: 'users_birth_year_check', convalidated: true },
+    ]);
   });
 });

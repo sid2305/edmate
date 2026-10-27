@@ -120,6 +120,9 @@ export type PostMigrateStep =
  * `documents_teacher_id_live_class_id_live_classes_fk` as `NOT VALID` the same way, replacing
  * `documents_live_class_id_live_classes_id_fk` (that entry above is left in place and is now a
  * no-op, since `isConstraintValidated` treats "no such constraint" as nothing to validate).
+ * Migration 0014 (task 1.7a, 1.7 review deferral) adds `consents_granted_by_check` and
+ * `users_birth_year_check` as `NOT VALID` the same way (a database that already applied the old
+ * version of 0014 keeps its already-valid constraints; these two steps are then a no-op there).
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -180,6 +183,9 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     table: 'documents',
     constraint: 'documents_teacher_id_live_class_id_live_classes_fk',
   },
+  // Migration 0014 (task 1.7a, 1.7 review deferral): both CHECK constraints added NOT VALID.
+  { kind: 'validateConstraint', table: 'consents', constraint: 'consents_granted_by_check' },
+  { kind: 'validateConstraint', table: 'users', constraint: 'users_birth_year_check' },
 ];
 
 /** True once `ALTER TABLE ... VALIDATE CONSTRAINT` has already succeeded for this constraint. */

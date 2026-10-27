@@ -10,6 +10,144 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 1.7a item 5 needs no change · decided by builder · risk: low
+- Decided: `packages/db/src/identity/age.ts` lines 67-70 already carry the exact comment the 1.7
+  review asked for (added in a later 1.7 phase that touched this file for an unrelated reason). No
+  diff to this file in this PR, per the plan.
+- Why: the plan's own "Item 5 is already done" section instructs verify-only; re-read the file and
+  confirmed the comment is present, word for word.
+
+---
+
+### 26 Oct 2026 · 1.7a apps/web/src/auth/** risk · decided by builder · risk: high
+- Decided: logging this decision at `risk: high` per the non-negotiables, naming the
+  `apps/web/src/auth/**` path (items 2 and 4: `age.ts`, `index.ts`).
+- Why: the plan's own "Required reviewers" section calls for this; it is a risky path requiring
+  security-reviewer.
+
+---
+
+### 26 Oct 2026 · 1.7a production-refuses-unsigned-notice consequence · decided by builder · risk: low
+- Decided: recording, per the plan's Open question, that no learner can clear the age gate in a real
+  (non-local) production deployment until a market's privacy notice is signed, and that this is the
+  intended effect of the board's accept line ("production refuses a pending notice"), not a defect.
+- Why: the plan's Open question already analyses this and recommends proceeding; logging it here so
+  it is on record before the pilot gate (GATE/3.10c/B-27 already track getting a notice signed).
+
+---
+
+### 26 Oct 2026 · 1.7a coverage gap in submitAgeAnswer's log fallback · decided by builder · risk: low
+- Decided: added two tests to `apps/web/src/auth/age.test.ts` — "with no log field, a throwing
+  resolve goes to console.error by name only" and the same for an unexpected record failure — to
+  cover the `deps.log ?? ((line) => console.error(line))` default branch in `submitAgeAnswer`'s two
+  catch sites (the first builder's tests always passed a `log` field, so this branch, lines 184 and
+  224, was never exercised and the `@edmate/web` coverage gate failed on `src/auth/**`'s 100%
+  threshold for functions/statements).
+- Why: `packages/harness/src/access/**` and guard logic/subscription state machine aside, `src/auth`
+  carries its own 100% coverage threshold in this repo's vitest config; the fix follows the exact
+  pattern `ageGateView`'s own "with no log field" test already used, no new pattern introduced.
+
+---
+
+### 26 Oct 2026 · 1.7a budget · decided by lead · risk: low
+- Decided: Accept 179 tool calls (harness count) against the plan's 40. The first builder stopped at 116 calls without committing. The lead committed its work in progress, and a fresh builder finished in 63 calls.
+- Why: Six review items across three packages turned out larger than a 40-call budget. The overrun came from the first builder not stopping at the PARTIAL line. Next time, a task this wide is split into phases.
+
+---
+
+### 26 Oct 2026 · 1.7a merge · decided by lead · risk: high
+- Decided: Merge 1.7a. It touches apps/web/src/auth/** (a risky path whose required reviewer is security-reviewer). It also changes migration 0014's CHECK constraints to NOT VALID plus a post-migrate VALIDATE. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved it with no findings.
+- Why: These are the follow-ups to the 1.7 review. A production web app now refuses an unsigned age notice unless AGE_NOTICE_ALLOW_UNSIGNED is exactly 'true'; only the local docker stack sets it. guard.ts behaviour is unchanged; the clearance scan now covers the whole app for student-only pages.
+
+---
+
+### 26 Oct 2026 · 0.20d dry-run call count instead of hard-coded sample count · decided by builder · risk: low
+- Decided: The load-burst self-test finds "the last three timed calls" by first running
+  `expectLinear` once with a counting `run` (clock faked to a constant so no real bound logic
+  misfires) to get the total call count, rather than hard-coding "12 calls" in the test.
+- Why: The plan leaves "how the fake finds 'the last three'" to the builder but asks that the
+  same test code fail on today's sampling and pass on the new one; deriving the count from a dry
+  run (rather than hard-coding a number that depends on the five-pair/three-pair split) keeps the
+  test correct if the pair count ever changes, and it's the exact mechanism the plan suggested
+  (a first pass that records call count, then a second pass with the burst).
+
+---
+
+### 26 Oct 2026 · 0.20d budget · decided by lead · risk: low
+- Decided: Accept 30 tool calls (harness count) against the plan's 20. That is the plan's stop line, and the work finished green.
+- Why: The plan asked for a load-burst self-test that fails on the old sampling and passes on the new. Proving that took extra test runs.
+
+---
+
+### 26 Oct 2026 · 0.20d merge · decided by lead · risk: high
+- Decided: Merge 0.20d. It touches packages/harness/src/pedagogy/**, a risky path, but it changes only modelRequest.test.ts: how the linear-time check samples its timings (5 interleaved small/large pairs) and a new fake-clock self-test. modelRequest.ts, prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it with no findings. The bounds (16x, ratio < 64, 10 s cap, 0.5 ms floor) are unchanged.
+- Why: The test kept flaking in CI (PR #325) because a load burst could land on all the large runs. With interleaving, a burst has to cover most of one size's five samples to change its minimum.
+
+---
+
+### 26 Oct 2026 · 12.4e plain additive index, no CONCURRENTLY · decided by builder · risk: low
+- Decided: used a plain `CREATE INDEX` inside the migration's own transaction (the `0024`/`0033`
+  pattern), not `CREATE INDEX CONCURRENTLY` + `POST_MIGRATE_STEPS` (the `0032` pattern).
+- Why: `agents` is bounded by how many agents a teacher builds — smaller again than `documents`
+  or `live_classes`, which the plan already judged small enough for a plain statement. It does
+  not grow per-turn or per-session like `chunks`, `sessions` or `turn_traces`, so holding the
+  table lock for one `CREATE INDEX` during a migration batch is not the real risk `0032` guards
+  against.
+
+---
+
+### 26 Oct 2026 · 12.4e migration filename vs. journal tag · decided by builder · risk: low
+- Decided: `db:generate` emitted `migrations/0034_silky_mikhail_rasputin.sql` (drizzle-kit's
+  random slug); renamed the file to `migrations/0034_agents_created_at_id_index.sql` and updated
+  the matching `tag` in `migrations/meta/_journal.json` to match, rather than leaving the random
+  slug or hand-editing the SQL content.
+- Why: every existing migration's journal `tag` matches its filename (checked `0033`); `migrate.ts`
+  resolves migrations through drizzle's own `migrate()` against the journal, not a raw directory
+  listing, so a consistent tag/filename pair is the safe rename — no SQL content changed, so this
+  stays inside the "no unrelated diff from `db:generate`" rule.
+
+---
+
+### 26 Oct 2026 · 12.4e budget overrun · decided by lead · risk: low
+- Decided: Accept 50 tool calls against a budget of 20. The work is complete, and database-reviewer approved it with no findings.
+- Why: A turbo gate run went to the background past its timeout, and a duplicate run collided on coverage directories. Briefs already say to run tests in the foreground with a 600000 ms timeout.
+
+---
+
+### 26 Oct 2026 · 3.9f unused chunkDocument import · decided by builder · risk: low
+- Decided: removed the `chunkDocument` import from `dbRetrieval.ts` instead of wiring it in.
+- Why: `indexDocument({ writer, scope, documentId, source: { kind: 'parsed', document, headings:
+  true } })` already chunks internally (same call shape `recall.int.test.ts` uses); importing
+  `chunkDocument` separately was dead code and failed `tsc`'s `noUnusedLocals`. No behaviour
+  change — `seedChatChunks` was already correct without it.
+
+---
+
+### 26 Oct 2026 · 3.9f chat.ts close-on-error path · decided by builder · risk: low
+- Decided: no change needed to the pre-existing `catch (e)` around `buildChatDeps` (line ~205 in
+  `chat.ts`).
+- Why: per the plan's instruction to confirm rather than assume — `setup` is only assigned after
+  `buildChatDeps` returns successfully, and `setup.close` only exists on a `ChatSetup` once
+  `buildDbRetrieval` itself returned successfully (it opens the pool and returns the handle
+  together, never partially). A thrown error inside `buildChatDeps`/`buildDbRetrieval` therefore
+  never reaches a point where a pool handle exists but is unreachable from the catch; the
+  catch path cannot leak a pool. Confirmed by reading `chat.ts`'s catch block and
+  `buildDbRetrieval`'s body: no deviation, no fix needed.
+
+---
+
+### 26 Oct 2026 · 3.9f budget overrun · decided by lead · risk: low
+- Decided: Accept 250 tool calls across three agents against a budget of 48 (about 5x). The work is complete and reviewed.
+- Why: The first builder stalled at 163 calls before running the gate; the lead committed its WIP, and a fresh builder finished it in 61. The pool-leak fix round took 26. Next time, a builder still running at 2x budget is stopped and its WIP handed to a fresh one sooner.
+
+---
+
+### 26 Oct 2026 · 3.9f review LOWs · decided by lead · risk: low
+- Decided: Two review LOWs are wontfix: apps/cli/eslint.config.js turns no-restricted-imports off for test/** (a faithful copy of apps/worker's config), and pnpm-lock.yaml churn beyond apps/cli's new deps (a pnpm dedup side effect; the frozen install passes).
+- Why: Both match existing repo conventions and change no behaviour.
+
+---
+
 ### 26 Oct 2026 · 7.2n critical escalation timing: no change · decided by lead · risk: medium
 - Decided: `packages/queue/src/alertSink.ts` keeps one delay (`ALERT_ESCALATION_MS`, 15 minutes)
   for every level.
