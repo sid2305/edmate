@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · B-59 privacy rights for export, delete and retention · decided by human · risk: high
+- Decided: all five recommendations. (1) Retention periods are placeholders in the worker only, and the jobs stay in dry-run (report, don't delete) until counsel sets the numbers. (2) Account delete anonymises the user, their consents and message text; safety alerts, payments and the audit log stay. (3) A delete is held while a safety alert is open or a payment is disputed. (4) A parent asking on a minor's behalf is a separate task after the pilot. (5) One account-wide export across all teachers, on top of the per-teacher export.
+- Why: the lead's recommendation; it unblocks 13.4b.
+
+### 26 Oct 2026 · B-50 threats to hurt others raise a staff alert · decided by human · risk: high
+- Decided: threats to hurt others and weapons-to-school messages raise a critical misuse alert in the staff inbox, as well as the calm refusal. Board task 7.2m builds it.
+- Why: missing a real threat is the worse failure, and it fits the existing alert kinds.
+
+### 26 Oct 2026 · B-52 consent before uploading a class recording · decided by human · risk: high
+- Decided: a required checkbox ("Everyone heard in this recording agreed to it being used to teach, or I removed their parts") plus the hint to upload a transcript with students' names removed. 11.4 already ships this.
+- Why: cheap, and it puts the duty on the teacher in plain words while keeping recordings usable for the pilot.
+
+### 26 Oct 2026 · B-54 who pays for a 13-17 learner, and unused days on a takedown · decided by human · risk: high
+- Decided: at checkout the payer confirms they are 18+ or the learner's parent or guardian. When a takedown pauses a plan, the unused days are credited on resume, and refunded if the agent is not restored within 30 days.
+- Why: payment providers need an adult buyer; parent accounts are much more work. Feeds 10.3 and 10.8.
+
+### 26 Oct 2026 · B-58 teacher subject edits are audited · decided by human · risk: high
+- Decided: each subject edit writes an audit row (old and new subject only), and staff see the last 10 changes. 9.3m is unblocked.
+- Why: staff can spot a teacher who switches subjects to get past a rejection; no new personal data and no migration.
+
+### 26 Oct 2026 · B-55 number of parallel builders · decided by human · risk: medium
+- Decided: keep three builders at once (no shared packages), and drop to two once the week's usage passes about 70%.
+- Why: three builders merged more with no file clashes, but on 23 Oct they used up the weekly allowance.
+
+### 26 Oct 2026 · B-53 US payment provider · decided by human · risk: low
+- Decided: decide later, when M10 starts. 10.1 Phase C stays blocked.
+- Why: payments come last.
+
+### 26 Oct 2026 · B-51 e2e is a required check · decided by human · risk: medium
+- Decided: the human added `e2e` as a required status check on main.
+- Why: e2e was passing but not enforced.
+
 ### 25 Oct 2026 · 3.9e worker test extraction · decided by builder · risk: low
 - Decided: extracted the worker's guard-warmup logging branch into a small pure helper
   (`logGuardWarmupFailures` in `apps/worker/src/log.ts`, same file as `describeError`/`jsonLog`)
