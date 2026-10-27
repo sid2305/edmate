@@ -63,6 +63,19 @@ const subjectAuditRows = async (tid: string) =>
     )
   ).rows;
 
+/** Waits until some session of this database is blocked on a row lock (the raced update). */
+async function waitForLockWait(): Promise<void> {
+  for (let i = 0; i < 250; i++) {
+    const { rows } = await raw.query<{ n: string }>(
+      `select count(*) as n from pg_stat_activity
+        where datname = current_database() and wait_event_type = 'Lock'`,
+    );
+    if (Number(rows[0]?.n) > 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error('the update never waited on the row lock');
+}
+
 describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
   beforeAll(async () => {
     await createDatabase(dbName);
@@ -610,6 +623,28 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       const before = await subjectAuditRows(teacherId('A'));
       await repos.teacherProfiles.update(A, { subject: '  Maths  ' });
       expect(await subjectAuditRows(teacherId('A'))).toEqual(before);
+    });
+
+    // Fix round 1 (database-reviewer CRITICAL / security-reviewer MEDIUM): `prev`'s SELECT used
+    // to be unlocked, so a writer waiting on the row lock re-applied the UPDATE to the row
+    // version the other transaction just committed (EvalPlanQual), but kept comparing against
+    // `prev`'s stale statement-start read. Session 1 commits subject -> Science while session 2
+    // (blocked on the lock) is mid-way through writing History: the audit trail must show
+    // Science -> History, not the stale Maths -> History (which would lose Science entirely).
+    it('a write that commits while another is blocked on the lock is not lost from the audit trail', async () => {
+      await raw.query('begin');
+      await raw.query(`update teacher_profiles set subject = 'Science' where user_id = $1`, [
+        teacherId('A'),
+      ]);
+      const pending = repos.teacherProfiles.update(A, { subject: 'History' });
+      await waitForLockWait();
+      await raw.query('commit');
+      const row = await pending;
+      expect(row.subject).toBe('History');
+      expect(row.verificationStatus).toBe('pending');
+      expect(await statusOf(teacherId('A'))).toBe('pending');
+      const rows = await subjectAuditRows(teacherId('A'));
+      expect(rows[0]).toEqual({ before: { subject: 'Science' }, after: { subject: 'History' } });
     });
 
     it('two sequential subject changes write two audit rows, newest first', async () => {

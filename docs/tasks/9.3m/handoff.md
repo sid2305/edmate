@@ -182,3 +182,64 @@ is logged `risk: high` accordingly.
 ## Budget
 
 Tool calls used: 48
+
+## Fix round
+
+database-reviewer (CRITICAL) and security-reviewer (MEDIUM) flagged a stale-read race in
+`teacherProfiles.update()`'s subject-change CTE: `prev` (`select subject from teacher_profiles
+where user_id = ...`) was an unlocked read, taken at the single statement's start-of-statement
+snapshot. `upd`'s `UPDATE ... FROM prev` does take the row lock to write, so when two updates to
+the same teacher race, the second blocks on the lock and, once the first commits, Postgres
+read-committed's EvalPlanQual re-applies the `UPDATE` to the just-committed row -- but `prev` is
+not re-evaluated, so it still returns the pre-race snapshot value. Example: session 1 sets
+subject Maths -> Science and commits while session 2 is blocked writing History; after the fix
+round's no-op, session 2's audit row said Maths -> History, silently dropping Science from the
+trail (and, in other orderings, could write a spurious row or skip a real one).
+
+**Fix:** added `for update` to `prev`'s `SELECT`, so it takes the same row lock. A blocked `prev`
+then waits for the lock exactly like `upd` does, and once it proceeds it reads the just-committed
+row version rather than the stale statement-start snapshot. Postgres accepted `FOR UPDATE` directly
+inside the CTE (no need to split into two statements). Nothing else in the query changed.
+
+**Race test (test-first):** added
+`'a write that commits while another is blocked on the lock is not lost from the audit trail'` to
+`packages/db/test/teacher-profiles.int.test.ts`, following the two-connection lock-wait pattern
+already used in `documents.int.test.ts` / `takedowns.int.test.ts` (`raw.query('begin')` + a plain
+`UPDATE` to hold the row lock open, call `repos.teacherProfiles.update(...)` on the pooled
+connection so it blocks, poll `pg_stat_activity.wait_event_type = 'Lock'` until it's waiting, then
+commit the holder and await the pending call). One client (`raw`) is reused for both the held
+transaction and the lock-wait poll, sequentially, matching the existing pattern -- no second
+connection was needed.
+- **Before the fix:** reverted `for update` locally and ran the new test alone -- it failed,
+  asserting `before: { subject: 'Maths' }` (received) vs `{ subject: 'Science' }` (expected): the
+  exact stale read the finding described.
+- **After the fix:** re-applied `for update`; the same test and the full
+  `teacher-profiles.int.test.ts` suite (55 tests) pass.
+
+### Gate
+
+```
+$ TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate \
+  corepack pnpm turbo run typecheck lint test --filter=...@edmate/db
+  17 successful, 17 total (int tests ran, not skipped -- shared dev Postgres was up;
+  teacher-profiles.ts coverage 98.27% lines)
+
+$ corepack pnpm exec prettier --check packages/db/src/repositories/teacher-profiles.ts \
+  packages/db/test/teacher-profiles.int.test.ts
+  All matched files use Prettier code style!
+
+$ python3 .githooks/secret-scan.py --all
+  (clean, no output)
+```
+
+Tool calls used: 24
+
+### Decisions
+
+### 26 Oct 2026 · 9.3m subject-history race fix · decided by builder · risk: low
+- Decided: lock `prev`'s read with `for update` in the same CTE, rather than splitting the
+  statement into a separate `SELECT ... FOR UPDATE` then `UPDATE` inside the transaction.
+- Why: Postgres accepts `FOR UPDATE` on a CTE used this way, so the brief's fallback (split into
+  two statements) wasn't needed; keeping one statement preserves the existing "no separate SELECT,
+  no read-then-write window" property the surrounding comment already relies on, and is the
+  smallest diff that removes the stale read.

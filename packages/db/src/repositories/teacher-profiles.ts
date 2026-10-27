@@ -201,10 +201,16 @@ export function teacherProfilesRepo(db: Db) {
      * languages edits never touch the status.
      *
      * Task 9.3m (B-58): a subject change that *is* a change also writes a `teacher.subject`
-     * audit row (old and new subject only). The pre-update subject is captured by a read-only
-     * CTE sibling to the UPDATE in one statement (so, like the CASE above, there is no separate
-     * `SELECT` and no new read-then-write window), compared to the new subject in application
-     * code, and the audit insert runs in the same transaction as the UPDATE.
+     * audit row (old and new subject only). The pre-update subject is captured by a `SELECT ...
+     * FOR UPDATE` CTE sibling to the UPDATE in one statement: the explicit row lock makes a
+     * concurrent writer block on `prev` (not just on the UPDATE), so once it proceeds it reads
+     * the just-committed row version rather than its statement-start snapshot. Without the lock,
+     * read-committed's EvalPlanQual re-evaluates the UPDATE against the new row version but
+     * leaves the unlocked `prev` read on the stale snapshot, so a waiting writer could compare
+     * against a subject another transaction already changed away from (losing that change from
+     * the audit trail) or write a spurious/duplicate audit row. `prev` is compared to the new
+     * subject in application code, and the audit insert runs in the same transaction as the
+     * UPDATE.
      */
     async update(scope: TeacherScope, patch: TeacherProfileUpdate): Promise<TeacherProfileRow> {
       const method = 'teacherProfiles.update';
@@ -237,7 +243,7 @@ export function teacherProfilesRepo(db: Db) {
             prev_subject: string;
           }>(sql`
             with prev as (
-              select subject from teacher_profiles where user_id = ${teacherId}
+              select subject from teacher_profiles where user_id = ${teacherId} for update
             ), upd as (
               update teacher_profiles
               set subject = ${p.subject},
