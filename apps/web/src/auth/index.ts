@@ -75,7 +75,12 @@ let emailDeps: Promise<AuthConfigDeps['emailSignIn']> | undefined;
  */
 function getAgeContent(): AgeContent {
   const dir = process.env.EDMATE_CONTENT_DIR?.trim() || resolvePath(process.cwd(), '../../content');
-  ageContent ??= loadAgeContent(dir);
+  const production = process.env.NODE_ENV === 'production';
+  // Same S3_ALLOW_HTTP precedent (apps/web/src/storage/presign.ts, docker/compose.yaml): an exact
+  // 'true' string lets the local try-it stack run with NODE_ENV=production and an unsigned notice
+  // (1.7a, lead amendment); any other value, or unset, refuses an unsigned notice in production.
+  const allowUnsigned = process.env.AGE_NOTICE_ALLOW_UNSIGNED === 'true';
+  ageContent ??= loadAgeContent(dir, undefined, production, allowUnsigned);
   return ageContent;
 }
 
