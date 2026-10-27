@@ -47,7 +47,7 @@ import { checkSafeRegex, type TimingOptions } from './safeRegex.js';
 // entirely -- nothing bundler-specific is left for either bundler to misparse.
 let workerFile: { path: string } | undefined;
 
-// Fix round (security review of PR #76): `next build --webpack` still folds `@edmate/content`
+// Fix round (security review of PR #76): `next build` still folds `@edmate/content`
 // into the app's own server chunk even with `serverExternalPackages: ['@edmate/content']`
 // (`apps/web/next.config.ts`) -- that option's "is this under node_modules" check runs on the
 // *resolved* real path, and a pnpm workspace package's real path (`packages/content/dist/**`)

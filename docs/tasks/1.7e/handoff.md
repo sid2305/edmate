@@ -193,3 +193,30 @@ Evidence:
 
 ### Budget
 Phase B tool calls used: 34
+
+## Fix round
+Wording-only fix (code-reviewer MEDIUM, typescript-reviewer LOW): updated stale
+`next build --webpack` mentions left over from the Turbopack switch to say `next build` (no
+behaviour change). Files changed:
+- `apps/web/test/build-smoke.test.ts`
+- `apps/web/test/lighthouse-a11y.test.ts`
+- `apps/web/vitest.build-smoke.config.ts`
+- `apps/web/Dockerfile`
+- `packages/content/src/safeRegexGuard.ts`
+- `packages/gateway/src/pricing/prices.generated.ts`
+- `packages/gateway/scripts/generate-prices.mjs` (generator template for the file above, kept in
+  sync)
+- `packages/gateway/test/pricing/generated.test.ts`
+
+Left `apps/web/next.config.ts` and `apps/web/playwright.config.ts` comments alone (deliberately
+describe `--webpack`/`next dev --webpack` by design) and `packages/gateway/src/pricing/load.ts`'s
+past-tense "once webpack bundled this module" history alone (describes the old bug, not a present
+claim).
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/content`
+— PASS (13/13 tasks). `corepack pnpm exec prettier --check` on changed text files — PASS
+(Dockerfile has no prettier parser, skipped; `lighthouse-a11y.test.ts`'s pre-existing formatting
+warning predates this fix round and is unrelated to the one-line change made here).
+`python3 .githooks/secret-scan.py --all` — PASS, clean.
+
+Fix round tool calls used: 17
