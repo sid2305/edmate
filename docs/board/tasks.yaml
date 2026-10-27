@@ -10449,7 +10449,9 @@ tasks:
   deps:
   - '13.3'
   risk: risky
-  status: planning
+  status: running
+  branch: m13/13.3b-scope-followups
+  model: plan:sonnet build:sonnet
 - id: 12.2h
   milestone: M13
   title: '12.2f review MEDIUM/LOW: packages/db/src/repositories/reports.ts listOpenForStaff''s per-row catch skips bad rows with no signal; return a dropped-row count or log one line per call (counts only,
