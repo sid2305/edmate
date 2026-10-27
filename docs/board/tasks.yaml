@@ -5669,9 +5669,29 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: running
+  status: done
   branch: m13/8.7i-eval-runs-lows
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 404
+    tokens_in: 1384
+    tokens_out: 112396
+    cache_read_tokens: 43141727
+    wall_time_seconds: 2609
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.2f
   milestone: M13
   title: '9.2c review follow-ups (LOW): scope the next-intl Translate double cast in teachers/[slug]/page.tsx and discovery/format.ts to the dynamic skills key only; scorecard.ts guards byKey.get(key) instead
