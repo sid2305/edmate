@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 25 Oct 2026 · 3.9e worker test extraction · decided by builder · risk: low
+- Decided: extracted the worker's guard-warmup logging branch into a small pure helper
+  (`logGuardWarmupFailures` in `apps/worker/src/log.ts`, same file as `describeError`/`jsonLog`)
+  and unit-tested the helper directly, instead of writing a full-mock test that imports
+  `apps/worker/src/index.ts` (which has no tests today and opens real Redis/DB/S3/BullMQ
+  connections at module scope).
+- Why: the plan allows "a small unit test of the branch" when no existing worker test covers the
+  call; mocking every dependency `index.ts` touches (ioredis, bullmq, `@edmate/db`, `@aws-sdk/client-s3`,
+  and a dozen local modules) just to exercise a two-line branch is out of proportion, and the
+  codebase already treats `index.ts` as untestable-by-design (`apps/worker/vitest.config.ts`
+  excludes it from coverage with the same reasoning).
+
+---
+
+### 25 Oct 2026 · 3.9e budget overrun · decided by lead · risk: low
+- Decided: accept 138 tool calls against a plan budget of 35.
+- Why: the builder found and fixed a real test-isolation problem (mocking distressKeywords.js also broke the other two matchers through rulePhrases.ts) and re-ran flaky full gates under machine load; the diff is in scope and three reviewers approved.
+
+---
+
+### 25 Oct 2026 · 3.9e worker helper parameter type · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW that apps/worker/src/log.ts `logGuardWarmupFailures` takes `readonly string[]` instead of `readonly WarmedMatcher[]`.
+- Why: its only caller passes the harness's typed result, and the helper logs names only; not worth a board task.
+
+---
+
+### 25 Oct 2026 · 3.9e merge · decided by lead · risk: high
+- Decided: merge 3.9e; code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+- Why: packages/harness/src/guardrails/warmup.ts is a risky path (reviewers: code-reviewer); the change only reports which matcher threw during warm-up, stays pure and logs no student text.
+
+---
+
 ### 25 Oct 2026 · 3.9g budget · decided by lead · risk: low
 - Decided: accept 26 tool calls against a plan budget of 20.
 - Why: a small overrun on setup and the gate runs; the diff is 13 lines in apps/cli and both reviewers approved with no findings.
