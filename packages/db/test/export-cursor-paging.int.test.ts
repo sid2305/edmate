@@ -6,7 +6,7 @@
 // cases there live here instead, next to the EXPLAIN assertions the index needs.
 // See test/pg.ts for how to start Postgres.
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import { createRepositories, type Repositories } from '../src/index.js';
@@ -51,6 +51,29 @@ const STUDENT_C = 'stu_xcur_c';
 const SCOPE_C = { studentId: STUDENT_C, teacherId: TEACHER_C };
 const SESSION_C1 = 'ses_xcur_c1';
 const SESSION_C2 = 'ses_xcur_c2';
+
+/**
+ * Captures the one SQL statement + bound params the pool's `query` actually receives while
+ * `run` executes, then EXPLAINs that literal statement over `raw` with the same params -- so the
+ * EXPLAIN reflects the repository's real SQL, never a hand-written copy (9.6j).
+ */
+async function captureAndExplain<T>(
+  pool: pg.Pool,
+  raw: pg.Client,
+  run: () => Promise<T>,
+): Promise<{ result: T; text: string; rows: { 'QUERY PLAN': { Plan: PlanNode }[] }[] }> {
+  const spy = vi.spyOn(pool, 'query');
+  const result = await run();
+  expect(spy.mock.calls).toHaveLength(1);
+  const [config, params] = spy.mock.calls[0] as unknown as [string | { text: string }, unknown[]];
+  const text = typeof config === 'string' ? config : config.text;
+  const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
+    `EXPLAIN (FORMAT JSON) ${text}`,
+    params,
+  );
+  spy.mockRestore();
+  return { result, text, rows };
+}
 
 describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
   beforeAll(async () => {
@@ -168,39 +191,42 @@ describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REAS
     expect(plan).not.toContain('"Sort Key"');
   });
 
-  it('messages.listForStudent: EXPLAIN on the per-session seek shows no full Sort over the 10,000-row history', async () => {
-    // Shaped exactly like messagesRepo.listForStudent's bounded per-session query
-    // (packages/db/src/repositories/messages.ts): one session, seeking limit + 1 rows through
-    // the new index, never scanning or sorting the pair's whole 10,000-message history.
-    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
-      `explain (format json)
-           select id, session_id, role, text, sources, created_at
-           from messages where session_id = $1
-           order by created_at asc, id asc limit 3`,
-      ['ses_xcur_1'],
-    );
-    const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
-    const plan = JSON.stringify(top);
-    expect(plan).toContain('messages_session_id_created_at_id_idx');
-    expect(plan).toMatch(/Index( Only)? Scan/);
-    // "no full Sort": a Sort node, if any, is over at most a handful of rows (the bounded
-    // per-session candidate set), never the pair's 10,000-row history.
-    const plannedRows = collectPlannedRows(top);
-    expect(Math.max(...plannedRows, 0)).toBeLessThan(MESSAGE_COUNT);
-  });
+  it(
+    'messages.listForStudent: EXPLAIN on the real statement shows the lateral per-session seek ' +
+      'and an outer scan on the sessions index, no full Sort over the 10,000-row history',
+    async () => {
+      // The real statement messages.listForStudent sends (sessions join + cross join lateral +
+      // outer order/limit), not just a hand-written copy of the inner per-session subquery.
+      const { text, rows } = await captureAndExplain(handle.pool, raw, () =>
+        repos.messages.listForStudent(SCOPE, { limit: 2 }),
+      );
+      expect(text.toLowerCase()).toContain('cross join lateral');
+      const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
+      const plan = JSON.stringify(top);
+      expect(plan).toContain('messages_session_id_created_at_id_idx');
+      expect(plan).toMatch(/Index( Only)? Scan/);
+      // The outer scan (finding this pair's SESSION_COUNT sessions among NOISE_SESSION_COUNT
+      // others) stays on the sessions (teacher_id, student_id) index too, rather than a seq scan
+      // that would run the lateral once per unrelated noise session.
+      expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx');
+      // "no full Sort": every "Plan Rows" figure in the tree stays under the pair's 10,000-message
+      // history -- the lateral's bounded per-session candidate set, never the whole history.
+      const plannedRows = collectPlannedRows(top);
+      expect(Math.max(...plannedRows, 0)).toBeLessThan(MESSAGE_COUNT);
+    },
+  );
 
   it('sessions.listForStudent: a mid-range (page 2+) cursor seeks on the index, no OR Filter', async () => {
     // Task 9.6f review HIGH: the old `or(gt(...), and(eq(...), gt(...)))` cursor makes Postgres
     // plan `Index Cond: teacher_id = … AND student_id = …` plus a `Filter` holding the OR, scanning
     // every earlier row in the pair. The row-value compare folds the cursor into the index too.
-    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
-      `explain (format json)
-           select id, agent_id, agent_version, package_id, package_version, summary, created_at, ended_at
-           from sessions
-           where teacher_id = $1 and student_id = $2 and (created_at, id) > ($3, $4)
-           order by created_at asc, id asc limit 3`,
-      [TEACHER, STUDENT, '2026-01-01T00:05:00.000Z', 'ses_xcur_5'],
+    const { text, rows } = await captureAndExplain(handle.pool, raw, () =>
+      repos.sessions.listForStudent(SCOPE, {
+        after: { createdAt: '2026-01-01T00:05:00.000Z', id: 'ses_xcur_5' },
+        limit: 3,
+      }),
     );
+    expect(text).toMatch(/>\s*\(/); // the row-value cursor compare, not a hand-written OR
     const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
     const plan = JSON.stringify(top);
     expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx');
@@ -211,19 +237,20 @@ describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REAS
   });
 
   it('messages.listForStudent: a mid-range (page 2+) per-session cursor seeks on the index, no OR Filter', async () => {
-    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
-      `explain (format json)
-           select id, session_id, role, text, sources, created_at
-           from messages
-           where session_id = $1 and (created_at, id) > ($2, $3)
-           order by created_at asc, id asc limit 3`,
-      ['ses_xcur_1', '2026-02-01T00:02:00.000Z', 'msg_xcur_120'],
+    const { text, rows } = await captureAndExplain(handle.pool, raw, () =>
+      repos.messages.listForStudent(SCOPE, {
+        after: { createdAt: '2026-02-01T00:02:00.000Z', id: 'msg_xcur_120' },
+        limit: 3,
+      }),
     );
+    expect(text).toMatch(/>\s*\(/); // the row-value cursor compare, not a hand-written OR
     const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
     const plan = JSON.stringify(top);
     expect(plan).toContain('messages_session_id_created_at_id_idx');
     expect(plan).toMatch(/Index( Only)? Scan/);
-    const scan = findIndexScan(top);
+    // The relation filter picks the inner per-session messages seek, not the outer sessions scan
+    // the lateral statement also runs (both are Index (Only) Scans in this plan).
+    const scan = findIndexScan(top, 'messages');
     expect(scan?.['Index Cond']).toMatch(/created_at/);
     expect(scan?.Filter).toBeUndefined();
   });
@@ -348,6 +375,7 @@ interface PlanNode {
   'Node Type'?: string;
   'Plan Rows'?: number;
   'Index Cond'?: string;
+  'Relation Name'?: string;
   Filter?: string;
   Plans?: PlanNode[];
 }
@@ -359,12 +387,23 @@ function collectPlannedRows(node: PlanNode | undefined): number[] {
   return [...own, ...(node.Plans ?? []).flatMap(collectPlannedRows)];
 }
 
-/** The first Index (Only) Scan node anywhere in the plan tree, for its `Index Cond`/`Filter`. */
-function findIndexScan(node: PlanNode | undefined): PlanNode | undefined {
+/**
+ * The first Index (Only) Scan node anywhere in the plan tree, for its `Index Cond`/`Filter`.
+ * `relation`, when given, narrows to the scan over that table (the lateral messages query has
+ * two Index Scans -- the outer sessions seek and the inner per-session messages seek -- and the
+ * cursor assertions below are about the latter).
+ */
+function findIndexScan(node: PlanNode | undefined, relation?: string): PlanNode | undefined {
   if (!node) return undefined;
-  if (node['Node Type']?.includes('Index') && node['Node Type']?.includes('Scan')) return node;
+  if (
+    node['Node Type']?.includes('Index') &&
+    node['Node Type']?.includes('Scan') &&
+    (relation === undefined || node['Relation Name'] === relation)
+  ) {
+    return node;
+  }
   for (const child of node.Plans ?? []) {
-    const found = findIndexScan(child);
+    const found = findIndexScan(child, relation);
     if (found) return found;
   }
   return undefined;
