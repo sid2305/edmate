@@ -10887,9 +10887,9 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2q-upload-hardening
+  model: plan:sonnet build:sonnet
 - id: 8.2r
   milestone: M13
   title: 'Documents list index and 0017 validate-at-scale hygiene (deferred from 8.2a): composite index (teacher_id, created_at desc, id desc) for documents.listForTeacher, and a new migration that re-adds
