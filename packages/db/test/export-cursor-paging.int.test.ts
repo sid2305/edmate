@@ -1,0 +1,266 @@
+// Task 9.6f (9.6a review follow-up): sessions.listForStudent and messages.listForStudent page by
+// (created_at, id) without sorting the whole pair history each page. `repositories.int.test.ts` is
+// out of bounds for this task (another builder owns it, see docs/tasks/9.6f/plan.md's "Scope
+// conflict found while planning"), so the missing messages.listForStudent cases (malformed cursor,
+// exact-boundary next = null, return-key-set) that mirror the existing sessions.listForStudent
+// cases there live here instead, next to the EXPLAIN assertions the index needs.
+// See test/pg.ts for how to start Postgres.
+import pg from 'pg';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { migrateDatabase } from '../src/migrate.js';
+import { createDb, type DbHandle } from '../src/internal.js';
+import { createRepositories, type Repositories } from '../src/index.js';
+import { EXPORT_PAGE_MAX } from '../src/repositories/sessions.js';
+import {
+  createDatabase,
+  dropDatabase,
+  postgresUp,
+  SKIP_REASON,
+  throwawayName,
+  urlFor,
+} from './pg.js';
+
+const up = await postgresUp('export-cursor paging tests');
+const dbName = throwawayName();
+const TEST_URL = urlFor(dbName);
+let handle: DbHandle;
+let raw: pg.Client;
+let repos: Repositories;
+
+const TEACHER = 'tch_xcur_1';
+const STUDENT = 'stu_xcur_1';
+const AGENT = 'agt_xcur_1';
+const SCOPE = { studentId: STUDENT, teacherId: TEACHER };
+const SESSION_COUNT = 12;
+const MESSAGE_COUNT = 10_000;
+const NOISE_SESSION_COUNT = 5_000;
+
+// A second, small pair: for the malformed-cursor, exact-boundary and return-key-set cases, which
+// need a controllable, exactly-known total (the big pair's EXPORT_PAGE_MAX-capped reads can't
+// reach an exact boundary once its own history passes that cap).
+const TEACHER_B = 'tch_xcur_b';
+const STUDENT_B = 'stu_xcur_b';
+const SCOPE_B = { studentId: STUDENT_B, teacherId: TEACHER_B };
+const SESSION_B = 'ses_xcur_b1';
+
+describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
+  beforeAll(async () => {
+    await createDatabase(dbName);
+    await migrateDatabase(TEST_URL);
+    handle = createDb({ DATABASE_URL: TEST_URL });
+    repos = createRepositories(handle.db);
+    raw = new pg.Client({ connectionString: TEST_URL });
+    await raw.connect();
+
+    await raw.query(
+      `insert into users (id, name, locale, market, role) values
+           ($1, 'Export Cursor Teacher', 'en-US', 'US', 'teacher'),
+           ($2, 'Export Cursor Student', 'en-US', 'US', 'student'),
+           ($3, 'Export Cursor Teacher B', 'en-US', 'US', 'teacher'),
+           ($4, 'Export Cursor Student B', 'en-US', 'US', 'student')`,
+      [TEACHER, STUDENT, TEACHER_B, STUDENT_B],
+    );
+    // NOISE_SESSION_COUNT other students of the same teacher, so the sessions table is big
+    // enough overall that the planner prefers the new index over a seq scan + Sort to find this
+    // one pair's SESSION_COUNT rows (a 12-row table never needs an index).
+    await raw.query(
+      `insert into users (id, name, locale, market, role)
+           select 'stu_xcur_noise_' || gs, 'Noise Student ' || gs, 'en-US', 'US', 'student'
+           from generate_series(1, $1) gs`,
+      [NOISE_SESSION_COUNT],
+    );
+    await raw.query(
+      `insert into agents (id, teacher_id, status, created_at, updated_at) values
+           ($1, $2, 'draft', now(), now()),
+           ($3, $4, 'draft', now(), now())`,
+      [AGENT, TEACHER, 'agt_xcur_b', TEACHER_B],
+    );
+    // SESSION_COUNT sessions, already ended (package_id/package_version left null: the
+    // sessions_open_has_package check only requires one of ended_at/package_id), spread one
+    // minute apart so they share no created_at.
+    await raw.query(
+      `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, created_at, ended_at)
+           select 'ses_xcur_' || gs, $1, $2, $3, 1,
+                  timestamp '2026-01-01 00:00:00' + (gs || ' minutes')::interval,
+                  timestamp '2026-01-01 00:00:00' + (gs || ' minutes')::interval
+           from generate_series(1, $4) gs`,
+      [STUDENT, TEACHER, AGENT, SESSION_COUNT],
+    );
+    await raw.query(
+      `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, created_at, ended_at)
+           select 'ses_xcur_noise_' || gs, 'stu_xcur_noise_' || gs, $1, $2, 1,
+                  timestamp '2025-01-01 00:00:00' + (gs || ' minutes')::interval,
+                  timestamp '2025-01-01 00:00:00' + (gs || ' minutes')::interval
+           from generate_series(1, $3) gs`,
+      [TEACHER, AGENT, NOISE_SESSION_COUNT],
+    );
+    await raw.query(
+      `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, created_at, ended_at)
+           values ($1, $2, $3, 'agt_xcur_b', 1, '2026-04-01T00:00:00Z', '2026-04-01T00:00:00Z')`,
+      [SESSION_B, STUDENT_B, TEACHER_B],
+    );
+    // MESSAGE_COUNT messages spread evenly across the SESSION_COUNT sessions, one second apart
+    // within a session so every (session_id, created_at) pair is distinct (no tie-break needed
+    // for the bulk of the seed; the dedicated tie-break rows below cover that).
+    await raw.query(
+      `insert into messages (id, session_id, role, text, created_at)
+           select 'msg_xcur_' || gs,
+                  'ses_xcur_' || (1 + (gs % $1)),
+                  'student',
+                  'bulk ' || gs,
+                  timestamp '2026-02-01 00:00:00' + (gs || ' seconds')::interval
+           from generate_series(1, $2) gs`,
+      [SESSION_COUNT, MESSAGE_COUNT],
+    );
+    // Pair B's small, exactly-known history: 3 messages, two of them tied on created_at.
+    await raw.query(
+      `insert into messages (id, session_id, role, text, created_at) values
+           ($1, $2, 'student', 'b1', '2026-04-01T00:01:00Z'),
+           ($1 || '_tie_b', $2, 'student', 'b2 tie', '2026-04-01T00:02:00Z'),
+           ($1 || '_tie_a', $2, 'student', 'b3 tie', '2026-04-01T00:02:00Z')`,
+      ['msg_xcur_b', SESSION_B],
+    );
+    await raw.query('analyze sessions');
+    await raw.query('analyze messages');
+  });
+
+  afterAll(async () => {
+    await raw?.end();
+    await dropDatabase(dbName);
+    await handle?.close();
+  });
+
+  it('creates the two new additive indexes', async () => {
+    const { rows } = await raw.query<{ tablename: string; indexname: string; indexdef: string }>(
+      `select tablename, indexname, indexdef from pg_indexes
+           where indexname in (
+             'sessions_teacher_id_student_id_created_at_id_idx',
+             'messages_session_id_created_at_id_idx'
+           )`,
+    );
+    const defs = Object.fromEntries(rows.map((r) => [r.indexname, r.indexdef]));
+    expect(defs.sessions_teacher_id_student_id_created_at_id_idx).toMatch(
+      /\(teacher_id, student_id, created_at, id\)/,
+    );
+    expect(defs.messages_session_id_created_at_id_idx).toMatch(/\(session_id, created_at, id\)/);
+  });
+
+  it('sessions.listForStudent: EXPLAIN shows an index scan with no full Sort over the pair', async () => {
+    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: unknown }[] }>(
+      `explain (format json)
+           select id, agent_id, agent_version, package_id, package_version, summary, created_at, ended_at
+           from sessions where teacher_id = $1 and student_id = $2
+           order by created_at asc, id asc limit 3`,
+      [TEACHER, STUDENT],
+    );
+    const plan = JSON.stringify(rows[0]?.['QUERY PLAN']);
+    expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx');
+    expect(plan).toMatch(/Index( Only)? Scan/);
+    expect(plan).not.toContain('"Sort Key"');
+  });
+
+  it('messages.listForStudent: EXPLAIN on the per-session seek shows no full Sort over the 10,000-row history', async () => {
+    // Shaped exactly like messagesRepo.listForStudent's bounded per-session query
+    // (packages/db/src/repositories/messages.ts): one session, seeking limit + 1 rows through
+    // the new index, never scanning or sorting the pair's whole 10,000-message history.
+    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
+      `explain (format json)
+           select id, session_id, role, text, sources, created_at
+           from messages where session_id = $1
+           order by created_at asc, id asc limit 3`,
+      ['ses_xcur_1'],
+    );
+    const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
+    const plan = JSON.stringify(top);
+    expect(plan).toContain('messages_session_id_created_at_id_idx');
+    expect(plan).toMatch(/Index( Only)? Scan/);
+    // "no full Sort": a Sort node, if any, is over at most a handful of rows (the bounded
+    // per-session candidate set), never the pair's 10,000-row history.
+    const plannedRows = collectPlannedRows(top);
+    expect(Math.max(...plannedRows, 0)).toBeLessThan(MESSAGE_COUNT);
+  });
+
+  it(
+    'messages.listForStudent pages every message of every own session, oldest first, stable ' +
+      'across a created_at tie, matching one big unpaginated read page-by-page',
+    async () => {
+      // Two messages sharing a created_at in the same session: tie-break by id.
+      await raw.query(
+        `insert into messages (id, session_id, role, text, created_at) values
+             ('msg_xcur_tie_b', 'ses_xcur_1', 'student', 'tie b', '2026-03-01T00:00:00Z'),
+             ('msg_xcur_tie_a', 'ses_xcur_1', 'student', 'tie a', '2026-03-01T00:00:00Z')`,
+      );
+      // Ground truth: the pair's whole history, read directly (never capped by
+      // EXPORT_PAGE_MAX, unlike the repo's own listForStudent).
+      const { rows: truth } = await raw.query<{ id: string }>(
+        `select m.id from messages m join sessions s on s.id = m.session_id
+             where s.teacher_id = $1 and s.student_id = $2
+             order by m.created_at asc, m.id asc`,
+        [TEACHER, STUDENT],
+      );
+      expect(truth.length).toBeGreaterThan(MESSAGE_COUNT); // bulk + 2 tie rows
+      const tieIdx = truth.findIndex((m) => m.id === 'msg_xcur_tie_a');
+      expect(truth[tieIdx + 1]?.id).toBe('msg_xcur_tie_b');
+
+      let after: { createdAt: string; id: string } | undefined;
+      const paged: { id: string }[] = [];
+      for (;;) {
+        const page = await repos.messages.listForStudent(SCOPE, {
+          ...(after ? { after } : {}),
+          limit: EXPORT_PAGE_MAX,
+        });
+        paged.push(...page.items.map((m) => ({ id: m.id })));
+        if (page.next === null) break;
+        after = page.next;
+      }
+      expect(paged.map((m) => m.id)).toEqual(truth.map((m) => m.id));
+    },
+  );
+
+  it('messages.listForStudent: malformed cursor is invalid, exact boundary is next = null, next is only {createdAt, id}', async () => {
+    // Pair B's whole (exactly-known) history is 3 messages.
+    const whole = await repos.messages.listForStudent(SCOPE_B, { limit: EXPORT_PAGE_MAX });
+    expect(whole.items.map((m) => m.id)).toEqual([
+      'msg_xcur_b',
+      'msg_xcur_b_tie_a',
+      'msg_xcur_b_tie_b',
+    ]);
+
+    // Exact boundary: a limit equal to the total leaves nothing for a next page.
+    const exact = await repos.messages.listForStudent(SCOPE_B, { limit: 3 });
+    expect(exact.items).toHaveLength(3);
+    expect(exact.next).toBeNull();
+
+    // A real next cursor, when there is one, is exactly {createdAt, id}.
+    const short = await repos.messages.listForStudent(SCOPE_B, { limit: 2 });
+    expect(short.next).not.toBeNull();
+    expect(Object.keys(short.next ?? {}).sort()).toEqual(['createdAt', 'id']);
+    expect(short.next).toEqual({ createdAt: '2026-04-01T00:02:00.000Z', id: 'msg_xcur_b_tie_a' });
+
+    await expect(
+      repos.messages.listForStudent(SCOPE_B, {
+        limit: 2,
+        after: { createdAt: 'not a date', id: 'msg_xcur_b' },
+      }),
+    ).rejects.toMatchObject({ kind: 'invalid', method: 'messages.listForStudent' });
+    await expect(
+      repos.messages.listForStudent(SCOPE_B, {
+        limit: 2,
+        after: { createdAt: '2026-04-01T00:01:00Z', id: 'not an id!' },
+      }),
+    ).rejects.toMatchObject({ kind: 'invalid', method: 'messages.listForStudent' });
+  });
+});
+
+/** The shape `explain (format json)`'s nested `Plan` objects share. */
+interface PlanNode {
+  'Plan Rows'?: number;
+  Plans?: PlanNode[];
+}
+
+/** Every `"Plan Rows"` figure anywhere in the plan tree, for a gross bound on scanned/sorted rows. */
+function collectPlannedRows(node: PlanNode | undefined): number[] {
+  if (!node) return [];
+  const own = typeof node['Plan Rows'] === 'number' ? [node['Plan Rows']] : [];
+  return [...own, ...(node.Plans ?? []).flatMap(collectPlannedRows)];
+}

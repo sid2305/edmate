@@ -100,29 +100,56 @@ export function messagesRepo(db: Db) {
       const cursor = after
         ? (() => {
             const at = new Date(after.createdAt);
-            return or(gt(messages.createdAt, at), and(eq(messages.createdAt, at), gt(messages.id, after.id)));
+            return or(
+              gt(messages.createdAt, at),
+              and(eq(messages.createdAt, at), gt(messages.id, after.id)),
+            );
           })()
         : undefined;
-      const rows = await db
-        .select({
-          id: messages.id,
-          sessionId: messages.sessionId,
-          role: messages.role,
-          text: messages.text,
-          sources: messages.sources,
-          createdAt: messages.createdAt,
-        })
-        .from(messages)
-        .innerJoin(sessions, eq(sessions.id, messages.sessionId))
-        .where(
-          and(eq(sessions.studentId, sc.studentId), eq(sessions.teacherId, sc.teacherId), cursor),
-        )
-        .orderBy(asc(messages.createdAt), asc(messages.id))
-        .limit(limit + 1);
+      // Bounded-candidate rewrite (task 9.6f, 9.6a review follow-up): `messages` carries no
+      // teacher_id/student_id (see `ownSession`'s comment above), so a single composite index on
+      // `messages` can't give the pair's whole `(createdAt, id)` order with no Sort when the
+      // WHERE is really on `sessions`'s columns -- the old single join + ORDER BY + LIMIT Sorted
+      // the pair's entire message history every page. This instead (1) finds the pair's session
+      // ids (cheap: `sessions_teacher_id_student_id_idx` already exists), then (2) for each
+      // session, seeks at most `limit + 1` candidate rows at or after the cursor through the new
+      // `messages (session_id, created_at, id)` index (`messages_session_id_created_at_id_idx`,
+      // task 9.6f) -- a bounded per-session scan, not the pair's whole history -- then (3) merges
+      // the small candidate set (at most `sessionCount * (limit + 1)` rows) in memory and takes
+      // the first `limit + 1`.
+      const pairSessions = await db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(and(eq(sessions.studentId, sc.studentId), eq(sessions.teacherId, sc.teacherId)));
+      const perSession = await Promise.all(
+        pairSessions.map(({ id: sid }) =>
+          db
+            .select({
+              id: messages.id,
+              sessionId: messages.sessionId,
+              role: messages.role,
+              text: messages.text,
+              sources: messages.sources,
+              createdAt: messages.createdAt,
+            })
+            .from(messages)
+            .where(and(eq(messages.sessionId, sid), cursor))
+            .orderBy(asc(messages.createdAt), asc(messages.id))
+            .limit(limit + 1),
+        ),
+      );
+      const candidates = perSession.flat();
+      candidates.sort(
+        (a, b) =>
+          a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+      );
+      const rows = candidates.slice(0, limit + 1);
       const page = rows.slice(0, limit);
       const last = page[page.length - 1];
       const next: ExportCursor | null =
-        rows.length > limit && last ? { createdAt: last.createdAt.toISOString(), id: last.id } : null;
+        rows.length > limit && last
+          ? { createdAt: last.createdAt.toISOString(), id: last.id }
+          : null;
       return {
         items: page.map((r) => ({ ...toMessage(r, method), sessionId: r.sessionId })),
         next,

@@ -225,6 +225,17 @@ describe('runPostMigrateSteps', () => {
         indexName: 'turn_traces_created_at_idx',
         sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
       },
+      // Task 9.6f (9.6a review follow-up): the export-cursor keyset-paging indexes.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'sessions_teacher_id_student_id_created_at_id_idx',
+        sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
+      },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'messages_session_id_created_at_id_idx',
+        sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
+      },
     ]);
   });
 });

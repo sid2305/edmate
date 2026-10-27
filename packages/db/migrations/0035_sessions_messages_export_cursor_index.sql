@@ -1,0 +1,14 @@
+-- Task 9.6f (9.6a review follow-up): two additive indexes for sessions.listForStudent and
+-- messages.listForStudent's keyset paging, built by the post-migrate step instead of a plain
+-- CREATE INDEX here (the same pattern as 0010/0028/0032): drizzle 0.45 runs every pending
+-- migration file in one transaction, and a plain CREATE INDEX on sessions or messages (both big,
+-- high-write tables) would hold the table's ACCESS EXCLUSIVE lock for the whole build, where
+-- CONCURRENTLY outside the transaction only needs it briefly. Declared schema-only in
+-- src/schema/learning.ts so a later `db:generate` stays a no-op; built by the post-migrate step
+-- (packages/db/src/migrate.ts's runPostMigrateSteps) with CREATE INDEX CONCURRENTLY:
+--   - sessions_teacher_id_student_id_created_at_id_idx on sessions (teacher_id, student_id,
+--     created_at, id) -- sessions.listForStudent's filter plus its (created_at, id) keyset order,
+--     in one index.
+--   - messages_session_id_created_at_id_idx on messages (session_id, created_at, id) --
+--     messages.listForStudent's per-session bounded candidate seek.
+-- Neither replaces or drops an existing index.

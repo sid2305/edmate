@@ -78,6 +78,12 @@ const NewSession = z.strictObject({
  * cursor from one page names exactly where the next page resumes, stable across a `created_at`
  * tie (ordered by `id` within the tie). A malformed cursor (bad id format or not an ISO instant)
  * is `invalid`.
+ *
+ * `z.iso.datetime()` (task 9.6a LOW, 9.6f follow-up): by default this accepts only a `Z`-suffixed
+ * UTC instant (no `+hh:mm`/`-hh:mm` offset form) and no fractional-second truncation beyond what
+ * zod itself allows; a cursor is always `createdAt.toISOString()`'s own `Z`-suffixed output
+ * (`messages.ts`/`sessions.ts`'s `listForStudent`), so no caller needs the offset form and a
+ * stricter cursor can't silently skip rows through a timezone-offset misparse.
  */
 export const ExportCursorSchema = z.strictObject({ createdAt: z.iso.datetime(), id: IdSchema });
 export type ExportCursor = z.infer<typeof ExportCursorSchema>;
@@ -385,7 +391,10 @@ export function sessionsRepo(db: Db) {
       const cursor = after
         ? (() => {
             const at = new Date(after.createdAt);
-            return or(gt(sessions.createdAt, at), and(eq(sessions.createdAt, at), gt(sessions.id, after.id)));
+            return or(
+              gt(sessions.createdAt, at),
+              and(eq(sessions.createdAt, at), gt(sessions.id, after.id)),
+            );
           })()
         : undefined;
       const rows = await db
