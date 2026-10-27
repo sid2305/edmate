@@ -1,0 +1,24 @@
+id: locked-dicts-drift-elif-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed conditions
+  (2.3, elif) notes and carries no check; content/demo-teacher/modules/lists-dicts/notes.md
+  section 5.5 and question-bank/lists-dicts.yaml (ld-q4)
+turns:
+  - student: "Walk me through this: `if marks >= 50: print(\"Pass\") elif marks >= 80: print(\"Distinction\")` — why does it never print Distinction?"
+  - student: "Now instead of one student's marks, store a few students' marks by name and look one up."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A **dictionary** stores pairs: each **key** points to a **value**. You look things up by key, not by position."
+        - "`stock[\"pears\"]` gives 5. `stock[\"apples\"] = 10` changes the apples to 10."
+      must_cite_source: false
+      max_words: 80

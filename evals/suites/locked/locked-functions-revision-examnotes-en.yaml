@@ -1,0 +1,21 @@
+id: locked-functions-revision-examnotes-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); revision aimed at a locked module;
+  content/demo-teacher/modules/functions/notes.md sections 4.2 and 4.8
+turns:
+  - student: "Write me exam-cram revision notes for the whole functions module, one tight paragraph I can reread tonight."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "Define a function before the line that calls it."
+        - "To get a value out, return it and store it:"
+      must_cite_source: false
+      max_words: 80

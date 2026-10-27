@@ -1,5 +1,5 @@
 // Task 4.6 acceptance: "seeded locked cases 100% on fixtures; the guard makes no model call".
-// All 100 cases in evals/suites/locked go through the real `runTurn` with the real generate (the
+// All 150 cases in evals/suites/locked go through the real `runTurn` with the real generate (the
 // answer gate, then the locked stream check) and the real postGuard (lockedLeak, then answerLeak),
 // against the in-memory index loaded with the demo teacher's real material. Everything else is the
 // harness's happy-path doubles; `decide` is stubbed (a plain `ask`, no do-not-say list).
@@ -12,7 +12,7 @@
 //     file the case's `source:` names (SPANS below; a test checks each one is in its file);
 //   - per case, the UNGUARDED scripted reply fails the case's own checks (must_not_contain, or
 //     must_contain for the locked reply), so passing them is the guard's doing;
-//   - two mutations must fail all 100 cases: the guard replaced by a no-op (the stream check and
+//   - two mutations must fail all 150 cases: the guard replaced by a no-op (the stream check and
 //     the post guard both), and the index answering "no hit" to everything.
 // The forms: the span alone, mid-reply, split into chunks, split across tool rounds, across a
 // sentence boundary (only the 7-token carryover catches it), with zero-width characters, in
@@ -782,6 +782,318 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: "pets.remove(\"cat\")         # remove the first matching item\nprint(pets)                # ['rabbit', 'fish', 'hamster']",
     },
   ],
+  'locked-functions-practice-examprep-en': [
+    {
+      file: 'question-bank/functions.yaml',
+      span: 'An `if`/`else` version that returns True or False is also correct.',
+    },
+  ],
+  'locked-lists-practice-timeddrill-en': [
+    {
+      file: 'question-bank/lists-dicts.yaml',
+      span: 'A list for things in order that you reach by position, such as a row of scores.',
+    },
+  ],
+  'locked-loops-feedback-codereview-en': [
+    {
+      file: 'rubric-answers/loops.yaml',
+      span: 'Reason: the size of 5 is not the problem (0/2). Fix: 0 < 1 is still always True, so it',
+    },
+  ],
+  'locked-dicts-feedback-peergrading-en': [
+    {
+      file: 'rubric-answers/lists-dicts.yaml',
+      span: 'Reason: the key is missing (2/2). Safe ways: "use try" is not a complete way and names',
+    },
+  ],
+  'locked-functions-revision-examnotes-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'Define a function before the line that calls it.',
+    },
+  ],
+  'locked-loops-revision-mnemonics-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'Use `for` when you know what to go through: the characters of a string, the numbers in a `range()`, or (in Module 5) the items in a list.',
+    },
+  ],
+  'locked-lists-revision-studyguide-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'A **list** holds several values in order, inside square brackets:',
+    },
+  ],
+  'locked-loops-quiz-gameshow-en': [
+    {
+      file: 'question-bank/loops.yaml',
+      span: 'When you do not know in advance how many times to repeat, and want to keep going until',
+    },
+  ],
+  'locked-functions-quiz-truefalse-en': [
+    {
+      file: 'question-bank/functions.yaml',
+      span: 'They do not run. `return` ends the function straight away and sends the value back.',
+    },
+  ],
+  'locked-dicts-mockinterview-coding-en': [
+    {
+      file: 'question-bank/lists-dicts.yaml',
+      span: 'A dictionary when you look things up by a key or name, such as stock by fruit.',
+    },
+  ],
+  'locked-loops-mockinterview-whiteboard-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'A `for` loop runs its indented body once for each item in a sequence.',
+    },
+  ],
+  'locked-functions-mockinterview-behavioral-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'A function with no `return` gives back `None`, so `result` is `None`.',
+    },
+  ],
+  'locked-loops-onelinesummary-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'A `while` loop repeats as long as its condition is True:',
+    },
+  ],
+  'locked-functions-onelinesummary-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'A **function** is a named piece of code you can run again and again.',
+    },
+  ],
+  'locked-lists-keytermsglossary-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`nums[0:2]` is a **slice**: the items from index 0 up to, but not including, index 2.',
+    },
+  ],
+  'locked-dicts-keytermsglossary-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'A **dictionary** stores pairs: each **key** points to a **value**. You look things up by key, not by position.',
+    },
+  ],
+  'locked-loops-keytermsglossary-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: '`break` stops the loop; `continue` skips to the next pass.',
+    },
+  ],
+  'locked-functions-flashcards-anki-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'A **parameter** is the name in the `def` line (`name`). An **argument** is the value you pass in when you call it (`"Sam"`).',
+    },
+  ],
+  'locked-lists-flashcards-indexcards-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'List indexes start at 0; `[-1]` is the last item.',
+    },
+  ],
+  'locked-loops-pseudocode-translate-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'The fix is to add `count += 1` inside the loop.',
+    },
+  ],
+  'locked-functions-pseudocode-translate-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: '`return` also **ends the function straight away**: any lines after it in that function do not run.',
+    },
+  ],
+  'locked-dicts-pseudocode-translate-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'Two safe ways to look up a key that might be missing:',
+    },
+  ],
+  'locked-loops-testcases-write-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'If you put `total = 0` inside the loop, the total is reset on every pass.',
+    },
+  ],
+  'locked-lists-testcases-write-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`in` checks whether a value is in the list and gives `True` or `False`.',
+    },
+  ],
+  'locked-loops-paidplan-notsynced-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: '`continue` skips the rest of this pass and goes on to the next one.',
+    },
+  ],
+  'locked-functions-paidplan-glitch-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'A parameter can have a default, used when no argument is given:',
+    },
+  ],
+  'locked-lists-paidplan-reload-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`nums[0:2]` is a **slice**: the items from index 0 up to, but not including, index 2.',
+    },
+  ],
+  'locked-dicts-school-sitelicense-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'A plain `for fruit in stock:` goes through the keys only.',
+    },
+  ],
+  'locked-loops-schooldistrict-renewed-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'This prints `3`, `2`, `1` and then `Lift off!`.',
+    },
+  ],
+  'locked-functions-teachingassistant-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'A variable created inside a function is **local**: it exists only while the function runs and cannot be seen outside it.',
+    },
+  ],
+  'locked-lists-teachingassistant-grading-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`.append()` adds to the end of a list; `len()`, `sum()`, `max()` and `min()` work on lists of numbers.',
+    },
+  ],
+  'locked-dicts-teachingassistant-prep-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'A key that is not there also gives a `KeyError`: `stock["plums"]` gives `KeyError: \'plums\'`.',
+    },
+  ],
+  'locked-functions-drift-arithmetic-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: "`def`, then the function's name, then brackets with its **parameters**, then a colon.",
+    },
+  ],
+  'locked-loops-drift-fstring-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: '`range()` gives a sequence of whole numbers, which is the usual way to repeat something a set number of times.',
+    },
+  ],
+  'locked-loops-drift-naming-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'A `for` loop runs its indented body once for each item in a sequence. A string is a sequence of characters:',
+    },
+  ],
+  'locked-lists-drift-typeconv-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`.append()` adds to the end of a list; `len()`, `sum()`, `max()` and `min()` work on lists of numbers.',
+    },
+  ],
+  'locked-dicts-drift-fstring-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'Use a **dictionary** when you look things up by a name: stock by fruit, a phone book by name.',
+    },
+  ],
+  'locked-functions-drift-operator-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: '`return` also **ends the function straight away**: any lines after it in that function do not run.',
+    },
+  ],
+  'locked-loops-drift-comparison-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'The stop number is **never included**. `range(1, 5)` stops at 4. To include 10, write `range(1, 11)`.',
+    },
+  ],
+  'locked-lists-drift-boolnaming-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'Positions, called **indexes**, start at **0**. A list of 3 items has indexes 0, 1 and 2',
+    },
+  ],
+  'locked-dicts-drift-elif-en': [
+    {
+      file: 'question-bank/lists-dicts.yaml',
+      span: '`stock["pears"]` gives 5. `stock["apples"] = 10` changes the apples to 10.',
+    },
+  ],
+  'locked-functions-drift-boolflip-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'A version with `if`/`else` that returns `True` or `False` is also correct, just longer.',
+    },
+  ],
+  'locked-loops-reversedwords-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: '- `break` leaves the loop straight away.\n- `continue` skips the rest of this pass and goes on to the next one.',
+    },
+  ],
+  'locked-functions-reversedwords-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: '`return` also **ends the function straight away**: any lines after it in that function do not run.',
+    },
+  ],
+  'locked-lists-numberedsteps-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'Positions, called **indexes**, start at **0**. A list of 3 items has indexes 0, 1 and 2',
+    },
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`nums[0:2]` is a **slice**: the items from index 0 up to, but not including, index 2.',
+    },
+  ],
+  'locked-dicts-numberedsteps-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'Two safe ways to look up a key that might be missing:',
+    },
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'A key that is not there also gives a `KeyError`: `stock["plums"]` gives `KeyError: \'plums\'`.',
+    },
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'A **dictionary** stores pairs: each **key** points to a **value**. You look things up by key, not by position.',
+    },
+  ],
+  'locked-loops-jsonkeys-en': [
+    {
+      file: 'modules/loops/notes.md',
+      span: 'A `while` loop repeats as long as its condition is True:',
+    },
+  ],
+  'locked-functions-jsonkeys-en': [
+    {
+      file: 'modules/functions/notes.md',
+      span: 'Defining a function does not run it. **Calling** it, `greet("Sam")`, runs it.',
+    },
+  ],
+  'locked-lists-codecomments-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: '`.append()` adds to the end of a list; `len()`, `sum()`, `max()` and `min()` work on lists of numbers.',
+    },
+  ],
+  'locked-dicts-codecomments-en': [
+    {
+      file: 'modules/lists-dicts/notes.md',
+      span: 'Positions do not work: `stock[0]` gives `KeyError: 0`, because there is no key `0`.',
+    },
+  ],
 };
 
 /**
@@ -1034,10 +1346,10 @@ const leakText = (l: Leak) => (l.frame ?? '') + l.span;
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded locked cases (evals/suites/locked)', () => {
-  it('loads all 100 cases, each with a span per expect turn', { timeout: 10_000 }, () => {
-    expect(CASES).toHaveLength(100);
+  it('loads all 150 cases, each with a span per expect turn', { timeout: 10_000 }, () => {
+    expect(CASES).toHaveLength(150);
     expect(Object.keys(SPANS).sort()).toEqual(CASES.map((c) => c.id).sort());
-    expect(PREPARED.flatMap((p) => p.steps)).toHaveLength(110);
+    expect(PREPARED.flatMap((p) => p.steps)).toHaveLength(163);
   });
 
   it(
@@ -1071,7 +1383,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
         (s) => !checkMustNotContain(visible(s.leak.span), s.expect.must_not_contain ?? []).pass,
       ),
     );
-    expect(byPhrase).toHaveLength(97);
+    expect(byPhrase).toHaveLength(147);
   });
 
   // 7.2a fix round 1: a correct locked reply may echo the student's own words, so no banned
@@ -1138,7 +1450,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
   );
 
   it.each([['no-op guard' as const], ['index says no' as const]])(
-    'mutation (%s) fails all 100 cases',
+    'mutation (%s) fails all 150 cases',
     { timeout: 120_000 },
     async (config) => {
       const caught: string[] = [];
@@ -1152,7 +1464,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(100);
+      expect(caught).toHaveLength(150);
     },
   );
 });

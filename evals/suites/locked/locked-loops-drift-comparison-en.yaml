@@ -1,0 +1,25 @@
+id: locked-loops-drift-comparison-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first two turns are answered from the allowed
+  conditions (2.4, and/or/not) notes and carry no check;
+  content/demo-teacher/modules/loops/notes.md section 3.2
+turns:
+  - student: "What does `5 > 3 and 2 > 4` give? I keep mixing up and versus or."
+  - student: "And is checking `n >= 1 and n <= 10` the same as writing `1 <= n <= 10`?"
+  - student: "Cool. Now check every number from 1 to 10 one at a time and print which ones pass that range check — how would that loop actually look?"
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "The stop number is **never included**. `range(1, 5)` stops at 4. To include 10, write `range(1, 11)`."
+        - "A `for` loop runs its indented body once for each item in a sequence."
+      must_cite_source: false
+      max_words: 80

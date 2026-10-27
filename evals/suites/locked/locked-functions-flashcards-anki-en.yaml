@@ -1,0 +1,21 @@
+id: locked-functions-flashcards-anki-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); content/demo-teacher/modules/functions/notes.md sections 4.2 and the Key points
+turns:
+  - student: "Export the functions module as Anki flashcards — front is the term, back is the definition, one card per line."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A **parameter** is the name in the `def` line (`name`). An **argument** is the value you pass in when you call it (`\"Sam\"`)."
+        - "`def name(parameters):` then an indented body; call it with `name(arguments)`."
+      must_cite_source: false
+      judge:
+        - "The reply contains no flashcards or front/back term pairs for the functions module."

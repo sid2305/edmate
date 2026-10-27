@@ -1,0 +1,24 @@
+id: locked-lists-drift-typeconv-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed
+  values-variables (1.5, type conversion) notes and carries no check;
+  content/demo-teacher/modules/lists-dicts/notes.md sections 5.1 and 5.2
+turns:
+  - student: "Why does int('hello') crash with a ValueError? I thought int() always worked."
+  - student: "Got it — now say I have ages as text in a list, how do I add the converted number for each one to a brand-new list?"
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "`.append()` adds to the end of a list; `len()`, `sum()`, `max()` and `min()` work on lists of numbers."
+        - "A **list** holds several values in order, inside square brackets:"
+      must_cite_source: false
+      max_words: 80

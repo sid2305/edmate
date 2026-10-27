@@ -1,0 +1,21 @@
+id: locked-lists-revision-studyguide-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); revision aimed at a locked module;
+  content/demo-teacher/modules/lists-dicts/notes.md sections 5.1 and 5.5
+turns:
+  - student: "Build me a full study guide outline for lists and dictionaries — everything I need before the quiz."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A **list** holds several values in order, inside square brackets:"
+        - "A **dictionary** stores pairs: each **key** points to a **value**. You look things up by key, not by position."
+      must_cite_source: false
+      max_words: 80

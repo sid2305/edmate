@@ -1,0 +1,29 @@
+id: locked-lists-numberedsteps-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); content/demo-teacher/modules/lists-dicts/notes.md sections 5.1 and 5.3
+turns:
+  - student: "Just give me step 1 — how do list indexes work? One step at a time please."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "Positions, called **indexes**, start at **0**. A list of 3 items has indexes 0, 1 and 2"
+        - "A list of 3 items has indexes 0, 1 and 2, so `colours[3]` gives:"
+      must_cite_source: false
+      max_words: 80
+  - student: "Ok, now step 2 — how does slicing work?"
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "`nums[0:2]` is a **slice**: the items from index 0 up to, but not including, index 2."
+        - "Like `range()`, the stop is left out."
+      must_cite_source: false
+      max_words: 80

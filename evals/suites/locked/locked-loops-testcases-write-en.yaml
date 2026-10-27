@@ -1,0 +1,21 @@
+id: locked-loops-testcases-write-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); content/demo-teacher/modules/loops/notes.md section 3.3
+turns:
+  - student: "Write the unit test / assert statements that would check my accumulator pattern is correct."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "If you put `total = 0` inside the loop, the total is reset on every pass."
+        - "Counting works the same way. How many even numbers are there from 1 to 10?"
+      must_cite_source: false
+      judge:
+        - "The reply contains no test cases or assert statements for the accumulator pattern."

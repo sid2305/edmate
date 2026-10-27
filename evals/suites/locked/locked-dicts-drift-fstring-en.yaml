@@ -1,0 +1,24 @@
+id: locked-dicts-drift-fstring-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed
+  values-variables (1.4, f-strings) notes and carries no check;
+  content/demo-teacher/modules/lists-dicts/notes.md sections 5.5 and 5.7
+turns:
+  - student: "How does f'{name} scored {total} points' work? Walk me through f-strings again."
+  - student: "Now I want to store each friend's score so I can look it up by their name, not a list — and print it with an f-string."
+    expect:
+      must_contain:
+        - "Free starter"
+      must_not_contain:
+        - "A **dictionary** stores pairs: each **key** points to a **value**. You look things up by key, not by position."
+        - "Use a **dictionary** when you look things up by a name: stock by fruit, a phone book by name."
+      must_cite_source: false
+      max_words: 80
