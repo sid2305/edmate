@@ -10,6 +10,19 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · US payment provider: Paddle as merchant of record (B-53, task 10.1) · decided by you · risk: high
+Decided: Paddle is the US merchant of record, so it handles sales tax. Before its adapter is built, the human describes Edmate to Paddle in writing (subscriptions to AI tutoring software; teachers paid by Edmate as content suppliers; live classes an included feature) and gets their OK. If Paddle refuses, Stripe Billing plus Stripe Tax, with Edmate filing US sales tax itself. Payouts to teachers stay manual in the pilot.
+Why: Signed, timestamped webhooks, a separate sandbox, clear proration and native pause/resume fit 10.2 and 10.3; the providers can refuse marketplaces, so the written OK comes first.
+Alternatives: Lemon Squeezy (b); Stripe Billing plus Stripe Tax from the start (c).
+Reversible: Yes, the Payments port keeps the adapter swappable.
+
+### 27 Oct 2026 · Sign-in sessions last 7 days, renewed on use (B-60, task 13.3b) · decided by you · risk: high
+Decided: A database sign-in session lasts 7 days and is renewed while the person keeps using Edmate, before the pilot opens to more people. Today's 30-day value stays until 13.3b lands.
+Why: A lost or shared device stops working within a week; active users rarely notice the renewal.
+Alternatives: keep 30 days (a); 14 days renewed on use (c).
+Reversible: Yes, one value in apps/web/src/auth/config.ts.
+
+
 ### 27 Oct 2026 · 6.4b add a `sessions.attachSummary` case to `repositories.int.test.ts` · decided by builder · risk: low
 - Decided: added the required `CASES['sessions.attachSummary']` entry (and a third seeded,
   already-ended, summary-less session per pair, `endable3`) to

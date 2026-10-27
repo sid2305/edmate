@@ -68,14 +68,15 @@ decisions:
     recommendation: Subscriptions + split payouts to teachers; compare fees
     answer: Razorpay in India (UPI AutoPay, Route split payouts); a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax; both behind the one Payments port
   mor-provider:
-    status: open
+    status: decided
     question: 'US merchant of record: Paddle or Lemon Squeezy, and has it accepted Edmate''s model in writing? (B-53)'
     options:
     - Paddle
     - Lemon Squeezy
     - Stripe Billing + Stripe Tax (fallback if refused)
     recommendation: Paddle; get its written OK before 10.1 Phase C
-    answer: null
+    answer: a) Paddle as the US merchant of record; the human gets Paddle's written OK on Edmate's business model before the adapter is built; fallback (c) Stripe Billing + Stripe Tax if refused (human,
+      27 Oct 2026, B-53)
   revenue-share:
     status: open
     question: Edmate's revenue share and floor price per package
@@ -11038,7 +11039,8 @@ tasks:
 - id: 0.20h
   milestone: M13
   title: 'local e2e failures found by 0.20g (pass in CI): full-flow.spec.ts "discover: search, open the teacher page, choose a package" times out in 10 of 10 fresh local runs, and teacher-packages-walkthrough.spec.ts
-    "create the first/second package from preset" fails in 6 of 10; find out whether the cause is local data left in the dev database or a real bug, and fix the test setup or the code; also (0.20g review MEDIUM/LOW) give each warm-up fetch in apps/web/e2e/global-setup.ts an AbortSignal.timeout so a hung route cannot stall globalSetup, and run the two warm-ups with Promise.all'
+    "create the first/second package from preset" fails in 6 of 10; find out whether the cause is local data left in the dev database or a real bug, and fix the test setup or the code; also (0.20g review
+    MEDIUM/LOW) give each warm-up fetch in apps/web/e2e/global-setup.ts an AbortSignal.timeout so a hung route cannot stall globalSetup, and run the two warm-ups with Promise.all'
   accept: the cause is written in the handoff; both specs pass 5 fresh local runs in a row, and CI e2e stays green.
   deps:
   - 0.20g
