@@ -10,6 +10,51 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 9.4f apiError cache-control fix in-PR · decided by lead · risk: high
+- Decided: the HIGH (security-reviewer, typescript-reviewer) on `apps/web/src/auth/errors.ts` was fixed in one fix round: `apiError` now builds a real `Headers` and calls `set('cache-control', 'no-store')`, so a caller's `Cache-Control` in any case is replaced. The code-reviewer MEDIUM (an overstated doc comment) and the typescript-reviewer LOW on `packages/db/src/repositories/README.md` (lockRole returns `Role | null`; the calling method throws) were fixed in the same round. Both reviewers re-checked and approved.
+- Why: a cached error response could leak one student's error to another behind a shared cache; the old compile-time guard caught only the exact lowercase key.
+
+---
+
+### 26 Oct 2026 · 9.4f dev-mode /api/health check deferred to 1.7e · decided by lead · risk: low
+- Decided: the security-reviewer LOW on the item-1 wontfix (board 1.7e's acceptance covers only the production `next build` path, not the dev-mode `bullmq`/`@edmate/queue` break at `/api/health`) is deferred to 1.7e; the lead adds that check to 1.7e's board entry at closeout.
+- Why: the Playwright `--webpack` flag stays until 1.7e proves both the production and the dev-mode paths work without it.
+
+---
+
+### 26 Oct 2026 · 9.4f Playwright --webpack · decided by builder · risk: low
+- Decided: Wontfix. No new board id; point to the existing owner, board task 1.7e ("Turbopack for
+  apps/web (1.7b trial)", `status: todo`).
+- Why: the real blocker is webpack's dev compile of `@edmate/queue`'s `bullmq` import breaking
+  `/api/health` (`next.config.ts` / `packages/queue`), not `playwright.config.ts` itself. 1.7e
+  already owns finding and fixing that upstream problem; duplicating it here would split the
+  work across two board items for no benefit.
+
+---
+
+### 26 Oct 2026 · 9.4f ports.ts reads users.market twice · decided by builder · risk: low
+- Decided: Wontfix, re-confirmed from 9.4e's disposition; left on the board with no new id.
+- Why: `opts.learnerClear(studentId)` and `opts.studentMarket(studentId)` in
+  `packages/db/src/repositories/ports.ts` are still two separate `identity` calls on a
+  `subscription` resolve, each reading `users.market` (`identity/store.ts`'s `learnerStatus` /
+  `getMarket`). A real fix needs a new combined identity method and a reshaped
+  `EntitlementStoreOptions`, touching two risky paths (`identity/store.ts`, `ports.ts`) plus 7+
+  `packages/db/test` access fixtures, for one extra indexed PK `SELECT` (sub-ms cost). Nothing
+  has changed since 9.4e; same reasoning holds.
+
+---
+
+### 26 Oct 2026 · 9.4f risky paths touched · decided by builder · risk: high
+- Decided: this task touches two risky-path globs from `.claude/skills/merge-gate/risk-paths.txt`
+  — `apps/web/src/auth/**` (`errors.ts`, item 4) and `packages/db/src/repositories/**`
+  (`README.md`, item 6) — so `security-reviewer` (plus `code-reviewer`, always required) must
+  review this PR per the group's reviewer requirement, and `review.md` must name them.
+- Why: standing rule (CLAUDE.md non-negotiable 6; plan's "Risky paths touched" section) — logging
+  this at closeout even though item 6 is doc-only and item 4 is an additive, backward-compatible
+  type narrowing with no runtime behaviour change, because both files sit under a risky glob.
+
+---
+
 ### 26 Oct 2026 · 1.7i budget overrun (39 vs 15) · decided by lead · risk: low
 - Decided: accept 39 harness-counted tool calls against a 15-call budget (2.6x); no rework.
 - Why: the change is a two-line reorder. The extra calls went to the web gate auto-backgrounding and the builder polling its log. Both reviewers approved with no findings.
