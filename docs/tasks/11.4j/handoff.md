@@ -36,6 +36,10 @@ All six 11.4d review findings fixed in `apps/worker/src/ingest/ffmpegChunker.ts`
 - Decided: used `vi.mock('node:fs/promises', ...)` wrapping the real module (spreading `actual` and wrapping only `readFile` in `vi.fn`) instead of `vi.spyOn`, which vitest rejects for this ESM module ("Cannot redefine property: readFile").
 - Why: the plan's item 5 said "via a spy or a counter in the fake" without naming the exact mechanism; this is the standard vitest pattern for spying on a non-configurable ESM export while leaving every other export (and the real filesystem behaviour) untouched for the rest of the suite.
 
+### 27 Oct 2026 · 11.4j budget overrun accepted · decided by lead · risk: low
+- Decided: accept 57 harness-counted tool calls against a 45-call budget (1.27x).
+- Why: all six plan items landed within the plan's file list, and both reviewers approved with no blocking finding. The two security LOWs (comments only) go to 11.4k.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker` — all 11 tasks passed (typecheck, lint, test for `@edmate/worker` and its dependency builds). `@edmate/worker:test`: 47 test files, 491 tests passed, including `src/ingest/ffmpegChunker.test.ts` (28 tests). `ffmpegChunker.ts` coverage: 89.47% stmts / 83.52% branch / 95.23% funcs / 94.11% lines (package threshold is 80% on all four; passes).
 - `corepack pnpm exec prettier --check` on both changed files — found formatting issues on first pass (ran `--write`, then `--check` passed clean); re-ran the full gate's lint/test after formatting to confirm no regression.
