@@ -257,6 +257,39 @@ describe('logUnmetered (task 3.9a follow-up: never a raw console.error)', () => 
   });
 });
 
+describe('buildChatDeps retrieval switch (3.9f)', () => {
+  it('with no DATABASE_URL, keeps the in-memory retrieval path and leaves setup.close undefined', async () => {
+    const gateway = scriptedChatGateway();
+    const setup = await buildChatDeps({
+      env: {},
+      market: 'global',
+      packageId: 'free',
+      source: 'teacher_preview',
+      gateway,
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
+    expect(setup.close).toBeUndefined();
+
+    const input: TurnInput = {
+      agentId: setup.agentId,
+      sessionId: setup.sessionId,
+      studentId: setup.studentId,
+      kind: 'message',
+      text: 'What is a variable?',
+      lang: 'en',
+      clientTs: new Date().toISOString(),
+    };
+    const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
+    const events = await collect(run.events);
+    const result = await run.finished;
+    expect(
+      events.filter((e) => e.type === 'error'),
+      JSON.stringify(result.trace?.steps),
+    ).toEqual([]);
+    expect(events.at(-1)?.type).toBe('done');
+  });
+});
+
 describe('memoryProfileStore', () => {
   it('starts every student x teacher pair empty and keeps applyEvidence safe with no events', async () => {
     const store = memoryProfileStore();
