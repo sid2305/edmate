@@ -2,7 +2,7 @@
 // Task 11.4 Phase C: the "Add recording" form for one live class that has started. The teacher
 // picks a caption/transcript/audio file, one module from the class's attached packages (Q4), a
 // title (the citation students see), and ticks the 12.3c rights declaration and the recording
-// consent line (Q2, pending the human as B-52). Then: client pre-check (`needsSmallerFile`),
+// consent line (Q2, pending the human as B-52). Then:
 // create (with `liveClassId` and `rightsDeclared: true`), PUT with progress, complete.
 // Lessons ("UI state and server replies"): one busy flag, every call in try/catch/finally, every
 // server payload through `safeParse` with a fallback, and the form resets after success and failure.
@@ -14,7 +14,6 @@ import {
   completeDocument as defaultComplete,
   contentTypeFor,
   createDocument as defaultCreate,
-  needsSmallerFile,
   putFile as defaultPutFile,
   RECORDING_ACCEPT,
   RECORDING_UPLOAD_EXTS,
@@ -42,14 +41,14 @@ const TicketSchema = z.object({
 });
 const CompleteSchema = z.object({ status: z.enum(['processing', 'ready']) });
 
-type ErrorKey = 'unsupported_type' | 'media_too_large' | 'title' | 'not_found' | 'upload_failed' | 'generic';
+type ErrorKey = 'unsupported_type' | 'title' | 'not_found' | 'upload_failed' | 'generic';
 /** A server refusal shows the server's own fixed message (ADR-0014), else our words for its code. */
 type Failure = { key: ErrorKey } | { message: string };
 
 const RECORDING_TYPES = new Set(
-  CLIENT_UPLOAD_TYPES.filter((t) => (RECORDING_UPLOAD_EXTS as readonly string[]).includes(t.ext)).map(
-    (t) => t.contentType,
-  ),
+  CLIENT_UPLOAD_TYPES.filter((t) =>
+    (RECORDING_UPLOAD_EXTS as readonly string[]).includes(t.ext),
+  ).map((t) => t.contentType),
 );
 
 export function RecordingUpload({
@@ -107,10 +106,6 @@ export function RecordingUpload({
     const contentType = contentTypeFor(file);
     if (contentType === null || !RECORDING_TYPES.has(contentType)) {
       setFailure({ key: 'unsupported_type' });
-      return;
-    }
-    if (needsSmallerFile(file, contentType)) {
-      setFailure({ key: 'media_too_large' });
       return;
     }
     const title = sourceTitle.trim();
@@ -224,7 +219,11 @@ export function RecordingUpload({
         </p>
         <p>
           <label htmlFor={moduleSelectId}>{t('moduleLabel')}</label>
-          <select id={moduleSelectId} value={moduleId} onChange={(e) => setModuleId(e.target.value)}>
+          <select
+            id={moduleSelectId}
+            value={moduleId}
+            onChange={(e) => setModuleId(e.target.value)}
+          >
             <option value="">{t('chooseModule')}</option>
             {moduleIds.map((m) => (
               <option key={m} value={m}>

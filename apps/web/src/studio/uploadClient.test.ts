@@ -2,21 +2,19 @@
 // Task 8.2 Phase 4: the browser side of the studio document API. Fetch is stubbed (rule 4); the
 // PUT runs over a fake XMLHttpRequest. Written red before uploadClient.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MAX_UNSPLIT_MEDIA_BYTES, UPLOAD_TYPES, isRecordingType, uploadTypeFor } from './files';
+import { UPLOAD_TYPES, isRecordingType } from './files';
 import { LINK_REFUSAL_MESSAGE } from './routes';
 import {
   ACCEPT,
   CLIENT_UPLOAD_TYPES,
   RECORDING_ACCEPT,
   RECORDING_UPLOAD_EXTS,
-  UNSPLIT_MEDIA_MAX_BYTES,
   addLink,
   completeDocument,
   contentTypeFor,
   createDocument,
   deleteDocument,
   listDocuments,
-  needsSmallerFile,
   putFile,
   replaceDocument,
 } from './uploadClient';
@@ -90,27 +88,6 @@ describe('recording types (task 11.4 Phase B)', () => {
     for (const ext of RECORDING_UPLOAD_EXTS) expect(parts).toContain(`.${ext}`);
     expect(parts).not.toContain('.pdf');
     expect(parts).not.toContain('application/pdf');
-  });
-
-  it('pins UNSPLIT_MEDIA_MAX_BYTES to the server MAX_UNSPLIT_MEDIA_BYTES (24 MB)', () => {
-    expect(UNSPLIT_MEDIA_MAX_BYTES).toBe(24 * 1024 * 1024);
-    expect(UNSPLIT_MEDIA_MAX_BYTES).toBe(MAX_UNSPLIT_MEDIA_BYTES);
-  });
-
-  it('needsSmallerFile flags only m4a/mp4/webm over the cap', () => {
-    const big = 25 * 1024 * 1024;
-    const small = 10 * 1024 * 1024;
-    expect(needsSmallerFile(new File(['x'], 'a.mp4', { type: 'video/mp4' }), 'video/mp4')).toBe(
-      false,
-    );
-    const bigMp4 = new File([new Uint8Array(big)], 'a.mp4', { type: 'video/mp4' });
-    expect(needsSmallerFile(bigMp4, 'video/mp4')).toBe(true);
-    const bigMp3 = new File([new Uint8Array(big)], 'a.mp3', { type: 'audio/mpeg' });
-    expect(needsSmallerFile(bigMp3, 'audio/mpeg')).toBe(false);
-    const smallWebm = new File([new Uint8Array(small)], 'a.webm', { type: 'video/webm' });
-    expect(needsSmallerFile(smallWebm, 'video/webm')).toBe(false);
-    expect(needsSmallerFile(new File(['x'], 'a.pdf'), null)).toBe(false);
-    expect(uploadTypeFor('video/webm')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
   });
 });
 
@@ -239,9 +216,15 @@ describe('the JSON calls', () => {
     });
   });
 
-  it('a refused link carries the server\'s fixed message through', async () => {
+  it("a refused link carries the server's fixed message through", async () => {
     stubFetch(
-      reply(400, { error: { code: 'validation', message: LINK_REFUSAL_MESSAGE.youtube_unsupported, retryable: false } }),
+      reply(400, {
+        error: {
+          code: 'validation',
+          message: LINK_REFUSAL_MESSAGE.youtube_unsupported,
+          retryable: false,
+        },
+      }),
     );
     await expect(
       addLink({ moduleId: 'm1', url: 'https://youtu.be/x', rightsDeclared: true }),

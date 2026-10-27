@@ -15,7 +15,6 @@ import * as files from './files';
 import {
   MAX_DOCUMENT_UPLOAD_BYTES,
   MAX_MEDIA_UPLOAD_BYTES,
-  MAX_UNSPLIT_MEDIA_BYTES,
   isLinkKey,
   uploadTypeOfKey,
 } from './files';
@@ -476,14 +475,13 @@ describe('POST /api/studio/documents (create, task 11.4 Phase B: class recording
     expect(s.backend.storage.createUploadUrl).not.toHaveBeenCalled();
   });
 
-  it('a 30 MB video/mp4 is 413 with the new words, with or without liveClassId', async () => {
+  it('a 30 MB video/mp4 is 201 (11.4i: the chunker splits it, over 24 MB is no longer refused), with or without liveClassId', async () => {
     const s = setup();
     const without = await s.h.create(
       req('POST', '/x', { ...NEW_PDF, contentType: 'video/mp4', byteSize: 30 * 1024 * 1024 }),
       ctx(ASHA),
     );
-    expect(without.status).toBe(413);
-    expect((await json(without)).error?.message).toMatch(/24 MB/);
+    expect(without.status).toBe(201);
     const withClass = await s.h.create(
       req('POST', '/x', {
         ...NEW_PDF,
@@ -493,28 +491,27 @@ describe('POST /api/studio/documents (create, task 11.4 Phase B: class recording
       }),
       ctx(ASHA),
     );
-    expect(withClass.status).toBe(413);
-    expect((await json(withClass)).error?.message).toMatch(/24 MB/);
-    expect(s.rows.size).toBe(0);
+    expect(withClass.status).toBe(201);
   });
 
   it('picks the message from the splittable flag, not from the byte cap (task 11.4f)', async () => {
-    // A document type whose cap happens to equal MAX_UNSPLIT_MEDIA_BYTES, with transcribe: false
-    // and splittable: false. If `newFile` still chose the message by comparing maxBytes, this
+    // A document type whose cap happens to equal a fake 1 MB limit, with transcribe: false and
+    // splittable: false. If `newFile` still chose the message by comparing maxBytes, this
     // would get MSG.mediaTooLarge instead of MSG.tooLarge.
+    const FAKE_CAP = 1_000_000;
     const spy = vi.spyOn(files, 'uploadTypeFor').mockReturnValue({
       contentType: PDF,
       ext: 'pdf',
       fileKind: 'pdf',
       chunkKind: 'material',
-      maxBytes: MAX_UNSPLIT_MEDIA_BYTES,
+      maxBytes: FAKE_CAP,
       transcribe: false,
       splittable: false,
     });
     try {
       const s = setup();
       const res = await s.h.create(
-        req('POST', '/x', { ...NEW_PDF, byteSize: MAX_UNSPLIT_MEDIA_BYTES + 1 }),
+        req('POST', '/x', { ...NEW_PDF, byteSize: FAKE_CAP + 1 }),
         ctx(ASHA),
       );
       expect(res.status).toBe(413);
