@@ -7105,8 +7105,9 @@ tasks:
   deps:
   - '13.4'
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/13.4b-account-export-delete
+  model: plan:lead build:sonnet
 - id: 13.4c
   milestone: M13
   title: '13.4 Phase B review follow-ups (before retention leaves dry run): apps/worker/src/retention/workers.ts purgeTable logs the rows already deleted when a later call fails, and passes purgeLimit into
@@ -9269,7 +9270,8 @@ tasks:
 - id: 9.3m
   milestone: M13
   title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write
-    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). B-58 answered (human, 26 Oct 2026): audit each subject edit, show staff the last 10 changes; design start in docs/tasks/9.3k/plan.md.'
+    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). B-58 answered (human, 26 Oct 2026): audit each subject edit,
+    show staff the last 10 changes; design start in docs/tasks/9.3k/plan.md.'
   accept: editing a subject writes one teacher.subject audit row; a staff view test shows a teacher's past subject changes on a queue row; db and web typecheck, lint and test green.
   deps:
   - 9.3k
