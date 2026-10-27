@@ -12,8 +12,9 @@ Isolation between teachers and between students is enforced here, not by Postgre
    (`teacherProfiles.listPendingForStaff`, `reports.listOpenForStaff` / `.review`,
    `safetyAlerts.listForStaff` / `.acknowledge`, `takedowns.create` / `.lift` /
    `.listActiveForStaff`, the regulated-subjects `listForStaff` / `setSubject` / `setApproval`)
-   takes the acting user's own id `by` first, checked with `role-lock.ts`'s `lockRole` (not
-   staff right now is `scope`, never an existence check on anyone else); and (b)
+   takes the acting user's own id `by` first, checked with `role-lock.ts`'s `lockRole`, which
+   returns `null` if `by` is not staff right now and never checks for the existence of any other
+   user; the calling repository method then throws `RepositoryError('scope')`; and (b)
    `subscriptions.listLiveForStudent` / `.listUnavailableForStudent` take the signed-in student's
    own `studentId` alone, because they read across every teacher by design (a per-teacher
    `StudentScope` can't express that) — same `IdSchema` guard as every other id here, just with
