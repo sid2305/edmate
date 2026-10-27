@@ -31,6 +31,7 @@ export {
   corrections,
   courses,
   documents,
+  mistakeTagProposals,
   modules,
   styleCards,
   teacherEvalCases,

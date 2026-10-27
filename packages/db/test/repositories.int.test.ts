@@ -1095,6 +1095,93 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 6.3a: proposed mistake tags, aggregated per teacher (no student scope -- the allow-list
+  // itself is per-teacher). Every write is untargeted (a teacher can only ever touch its own
+  // rows), same shape as `styleCards.create` above.
+  'mistakeProposals.record': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope, actor) =>
+      r.mistakeProposals.record(scope, [
+        {
+          tag: `[${actor}] mp record ${++counter}`,
+          count: 1,
+          lastSeen: '2026-10-27T10:00:00.000Z',
+        },
+      ]),
+    verify: async (r, actor) => {
+      for (const t of TEACHERS) {
+        const rows = await r.mistakeProposals.listPending(tScope(t));
+        const owners = rows.flatMap((row) => markers(row.tag));
+        if (t === actor) {
+          expect(owners, `${t} sees its own proposal`).toContain(actor);
+        } else {
+          expect(owners, `${t} reading ${actor}'s proposal`).not.toContain(actor);
+        }
+      }
+    },
+  },
+  'mistakeProposals.listPending': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.mistakeProposals.listPending(scope),
+    random: (r, _scope, rid) => r.mistakeProposals.listPending({ teacherId: rid }),
+    owners: (rows: { tag: string }[]) => rows.flatMap((row) => markers(row.tag)),
+  },
+  'mistakeProposals.approve': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: async (r, scope, actor) => {
+      const tag = `[${actor}] mp approve ${++counter}`;
+      await r.mistakeProposals.record(scope, [
+        { tag, count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+      ]);
+      const res = await r.mistakeProposals.approve(scope, tag);
+      return { tag, ...res };
+    },
+    verify: async (r, actor, result) => {
+      const { tag, card } = result as {
+        tag: string;
+        approved: boolean;
+        card: { mistakeTags: string[] } | null;
+      };
+      expect(card?.mistakeTags).toContain(tag);
+      for (const t of TEACHERS) {
+        const latest = await r.styleCards.latest(tScope(t));
+        if (t === actor) {
+          expect(latest?.mistakeTags, `${t}'s own card gets the approved tag`).toContain(tag);
+        } else {
+          expect(latest?.mistakeTags ?? [], `${t} sees ${actor}'s approved tag`).not.toContain(tag);
+        }
+      }
+    },
+  },
+  'mistakeProposals.reject': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: async (r, scope, actor) => {
+      const tag = `[${actor}] mp reject ${++counter}`;
+      await r.mistakeProposals.record(scope, [
+        { tag, count: 1, lastSeen: '2026-10-27T10:00:00.000Z' },
+      ]);
+      await r.mistakeProposals.reject(scope, tag);
+      return { tag };
+    },
+    verify: async (r, _actor, result) => {
+      const { tag } = result as { tag: string };
+      for (const t of TEACHERS) {
+        const rows = await r.mistakeProposals.listPending(tScope(t));
+        expect(
+          rows.some((row) => row.tag === tag),
+          `${t} still sees the rejected tag as pending`,
+        ).toBe(false);
+      }
+    },
+  },
   'packageVersions.getById': {
     scope: 'teacher',
     op: 'read',

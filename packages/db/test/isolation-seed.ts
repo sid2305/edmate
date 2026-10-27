@@ -108,6 +108,12 @@ export async function seed(db: Db): Promise<void> {
     await db
       .insert(s.styleCards)
       .values({ id: ids.styleCard(t), teacherId: tid, version: 1, text: `[${t}] style` });
+    await db.insert(s.mistakeTagProposals).values({
+      teacherId: tid,
+      tag: `[${t}] proposal`,
+      count: 1,
+      lastSeen: new Date('2026-10-17T10:00:00Z'),
+    });
     await db
       .insert(s.agents)
       .values({ id: ids.agent(t), teacherId: tid, status: 'live', liveVersion: 1 });

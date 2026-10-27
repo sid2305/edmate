@@ -19,6 +19,8 @@ export const DATA_MODEL_TABLES = [
   'chunks',
   'teacher_material_revisions',
   'style_cards',
+  // Task 6.3a: proposed mistake tags, pending teacher approval.
+  'mistake_tag_proposals',
   'agents',
   'agent_versions',
   'packages',

@@ -11,6 +11,7 @@ import { insightsRepo } from './insights.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { liveClassesRepo } from './live-classes.js';
 import { messagesRepo } from './messages.js';
+import { mistakeProposalsRepo } from './mistake-proposals.js';
 import { modulesRepo } from './modules.js';
 import { notificationsRepo } from './notifications.js';
 import { coursesRepo, outlineRepo } from './outline.js';
@@ -87,6 +88,7 @@ export function createRepositories(db: Db) {
     safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
     takedowns: guardAll('takedowns', takedownsRepo(db)),
     regulatedSubjects: guardAll('regulatedSubjects', regulatedSubjectsRepo(db)),
+    mistakeProposals: guardAll('mistakeProposals', mistakeProposalsRepo(db)),
   };
 }
 
@@ -105,6 +107,13 @@ export { studentScope, teacherScope, type StudentScope, type TeacherScope } from
 export type { AuditRow, TeacherProfileRow, TeacherQuestionForTeacher } from './map.js';
 export type { ModuleListItem } from './modules.js';
 export { STYLE_CARD_LIMITS, type StyleCardDraftInput } from './style-cards.js';
+export {
+  MISTAKE_PROPOSAL_PATCH_MAX,
+  MISTAKE_PROPOSALS_MAX,
+  MISTAKE_PROPOSALS_LIST_MAX,
+  type ProposedMistakeTagInput,
+  type MistakeProposalRow,
+} from './mistake-proposals.js';
 export {
   GROUPS_MAX_LIMIT,
   GROUP_QUESTIONS_MAX,
