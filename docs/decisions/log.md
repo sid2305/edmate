@@ -10,6 +10,127 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 13.regate budget overrun · decided by lead · risk: low
+- Decided: accept 296 tool calls (Phases A 96, B 92, B2 48, fix round 60, harness counts) against a plan budget of 115 (2.6x); no rework.
+- Why: Phase B stopped PARTIAL only because 9.2g was not yet on main, so B2 repeated setup; the fix round added three int tests for a real HIGH. The plan's budget did not cover a cross-package task with a worker wiring phase. Future cross-package plans budget each phase separately.
+
+---
+
+### 27 Oct 2026 · 13.regate Phase B PARTIAL finished by Phase B2 · decided by lead · risk: low
+- Decided: Phase B's PARTIAL (waiting on 9.2g in packages/db/src/index.ts) is closed by Phase B2, which wired `regate` into `openDatabase` and the worker after 9.2g merged; the top Status line is DONE.
+- Why: the left-to-do list in Phase B was exactly B2's scope, and B2's gate is green.
+
+---
+
+### 27 Oct 2026 · 13.regate a stale open run frees the agent only at a new material revision · decided by lead · risk: high
+- Decided: in packages/db/src/repositories/publish.ts `regateRepo(db).liveAgentsWithMaterialChange()`, a queued or running gate run blocks candidacy only while younger than `startRun`'s stale rule (deadline + `STALE_RUN_GRACE_MS`); the one-attempt-per-material-revision check stays status-independent, so a stale run at the current revision still counts as that revision's attempt.
+- Why: the review HIGH showed an unbounded open-run check could exclude an agent forever after a worker crash; keeping one automatic attempt per revision (the lead answer in the plan) caps judge cost even when a run goes stale.
+
+---
+
+### 27 Oct 2026 · 13.regate eval_runs index for the sweep deferred · decided by lead · risk: low
+- Decided: the review MEDIUM (database-reviewer, security-reviewer) asking for a partial index on eval_runs covering the gate suite's passed, published runs for the sweep's candidate query is deferred to board task 13.regatea.
+- Why: pilot data is small and the sweep runs every 15 minutes in the worker, off any request path; the index needs its own migration and review.
+
+---
+
+### 27 Oct 2026 · 13.regate pins reuses `GateUnavailableReason`, not its own four-reason copy · decided by builder · risk: low
+
+- Decided: `PinsUnavailableReason = GateUnavailableReason | 'prompt_pack_unsigned'`
+  (`apps/worker/src/gate/input.ts`'s existing type), not a hand-written union repeating
+  `dev_model` / `provider_key` / `judge_model` / `judge_provider`.
+- Why: `gateModelsFromEnv`'s declared return type is the full `GateUnavailableReason` (it shares
+  the type with the gate's other unavailable reasons, like `content_missing`, even though it only
+  ever produces the model-related four); a narrower hand-written union fails `tsc` the moment that
+  function's result is passed through, and the plan's own text for `pins.ts` says the judge piece
+  is literally `gateModelsFromEnv(env)`'s judge — reusing its reason type keeps the two in sync
+  without a cast.
+
+---
+
+### 27 Oct 2026 · 13.regate sweep's repo deps narrowed per-method, not per-repo · decided by builder · risk: low
+
+- Decided: `RegateSweepDeps.repos` is `{styleCards: Pick<Repositories['styleCards'], 'latest'>,
+  courses: Pick<Repositories['courses'], 'ensureDefault'>, publish: Pick<Repositories['publish'],
+  'startRun' | 'finishRun'>}`, not the plan text's literal `Pick<Repositories, 'styleCards' |
+  'courses' | 'publish'>`.
+- Why: `Pick` at the `Repositories` level picks whole sub-repo objects (`styleCards`'s `get`,
+  `latest` and `create` all at once), which would force every fake in `sweep.test.ts` to also
+  implement unused methods (`get`, `create`) just to satisfy the type — the opposite of "a narrow
+  injected interface" the brief and rule 4 ask for. Nested `Pick`s (the same shape
+  `apps/web/src/studio/publish.ts`'s `PublishBackend.repos` already uses) keep the fakes to only
+  the three methods the sweep actually calls.
+
+---
+
+### 27 Oct 2026 · 13.regate a candidate with no style card is skipped, not a hard failure · decided by builder · risk: low
+
+- Decided: `styleCards.latest(scope)` returning `null` is treated as a skip
+  (`style_card_required`, no write), not passed through to `courses.ensureDefault`/`startRun` to
+  fail there.
+- Why: not spec'd (a live agent has necessarily published once, so it should always have a style
+  card) but cheap to guard explicitly rather than rely on `startRun`'s own `styleCardId` lookup to
+  fail some other way for a `null` id; matches the style of `apps/web/src/studio/publish.ts`'s own
+  `style_card_required` check on the manual-publish path.
+
+---
+
+### 27 Oct 2026 · 13.regate no index.test.ts for the worker wiring · decided by builder · risk: low
+
+- Decided: no new test file for `apps/worker/src/index.ts`'s regate wiring.
+- Why: the brief asked to add a test "if the worker index has a test pattern for the other
+  scheduled jobs" and to say so otherwise. Checked `apps/worker/src/index.ts`'s existing wiring
+  for the cost alarm, weekly insights and retention jobs (each built and reviewed in earlier
+  tasks): none has a corresponding `index.test.ts`, so there is no pattern to extend. The sweep
+  job's own logic is already fully tested in isolation (`apps/worker/src/regate/*.test.ts`, 17
+  tests, Phase B); this phase only wires fakes-free, scripted singletons that match the shape of
+  the retention/cost-alarm wiring already in the file.
+
+---
+
+### 26 Oct 2026 · 13.regate standalone regate repo, not a `publishRepo` method · decided by builder · risk: high
+
+- Decided: `liveAgentsWithMaterialChange` is exported as a standalone `regateRepo(db)` factory
+  (same shape as `repositories/retention.ts`'s `retentionRepo`), not a method on the object
+  `publishRepo` returns, and `openDatabase`'s return type is **not** extended with a `regate`
+  field in this phase.
+- Why: the plan asked for "one method on the existing publish repo" (`repos.publish.…`). Adding
+  it there makes it part of `Repositories`/`RepositoryMethod`, which forces two edits to files
+  explicitly off-limits this phase (owned by the concurrent 9.2g builder): `scope.test.ts`'s
+  bad-scope grid would need a no-argument exemption (like `subscriptions.activeCountByPackage`),
+  and — the one that actually can't be worked around — `test/repositories.int.test.ts`'s
+  `CASES: Record<RepositoryMethod, IsolationCase>` fails `tsc` without a new entry for the
+  method, and that file is explicitly off-limits (shared with 9.2g). `retention.ts` hit the same
+  tension in task 13.4 and resolved it the same way: a cross-account scheduled-job read, kept out
+  of `createRepositories` entirely, exported standalone, wired into `openDatabase` only. I
+  followed that precedent for the method itself, but stopped short of the `openDatabase` wiring
+  because that return object's *shape* is also pinned by an exhaustive-keys assertion in the same
+  off-limits `repositories.int.test.ts` (`expect(Object.keys(opened).sort()).toEqual([...])`) —
+  adding a `regate` key breaks that assertion too. Phase B (apps/worker) needs the live `db`
+  handle either way to call `enqueueGate`'s queue, so it is better placed to decide how it
+  constructs `regateRepo(db)` (directly, or by extending `openDatabase` once 9.2g's edits to that
+  file have landed and the key list can be updated in the same PR). Logged `risk: high` per the
+  plan's own risk-paths note for this unscoped cross-teacher read (same reviewer set as 13.5:
+  **security-reviewer** required, **code-reviewer** plus, **database-reviewer**/
+  **typescript-reviewer** recommended).
+
+---
+
+### 27 Oct 2026 · 9.2h budget overrun · decided by lead · risk: low
+- Decided: accept 48 tool calls against a budget of 25 (1.92x); no rework.
+- Why: the work stayed inside the two planned files plus one int test, and all three reviewers approved with no findings; the plan's budget was set too low for a db int test plus a web client test.
+
+---
+
+### 27 Oct 2026 · 9.2h client.ts risky-path review · decided by builder · risk: high
+- Decided: `apps/web/app/staff/**` is a risky path per the plan; `review.md` for this PR must
+  name `security-reviewer` (plus `code-reviewer` and `typescript-reviewer`) as required
+  reviewers for the `client.ts`/`client.test.ts` change before merge.
+- Why: the plan itself calls this out; logging it here per non-negotiable 6/8 so the merge gate
+  can check it.
+
+---
+
 ### 27 Oct 2026 · 9.2g security-review LOWs deferred · decided by lead · risk: low
 - Decided: defer both security-review LOWs to new board task 9.2h: a Postgres int test for the staff queue reads with a NULL display name (coalesce to slug), and `.min(1)` on `displayName` in the staff client's `QueueItemSchema`.
 - Why: neither is reachable today (slug is never empty and the coalesce is the same one 9.2d's public reads already use); four reviewers approved with no blocking finding.

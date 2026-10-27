@@ -727,6 +727,18 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       expect(await repos.teacherProfiles.listPendingForStaff(STAFF)).toEqual([]);
     });
 
+    it('a profile with a NULL display name shows the slug in both staff reads', async () => {
+      await raw.query(
+        `insert into teacher_profiles (id, user_id, slug, subject) values ($1, $2, $3, 'Maths')`,
+        ['tp-no-name', teacherId('A'), 'ms-alpha'],
+      );
+      const pending = await repos.teacherProfiles.listPendingForStaff(STAFF);
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.displayName).toBe('ms-alpha');
+      const found = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-alpha');
+      expect(found?.displayName).toBe('ms-alpha');
+    });
+
     it('never exceeds STAFF_QUEUE_MAX_LIMIT rows: the oldest ones come back', async () => {
       const total = STAFF_QUEUE_MAX_LIMIT + 1;
       const ids = Array.from({ length: total }, (_, i) => `tch_cap_${String(i).padStart(3, '0')}`);
