@@ -6839,9 +6839,32 @@ tasks:
   deps:
   - 12.2e
   risk: high
-  status: running
+  status: done
   branch: m13/12.2f-report-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1112
+    tokens_in: 3948
+    tokens_out: 283893
+    cache_read_tokens: 134437327
+    wall_time_seconds: 9266
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 12.2g
   milestone: M12
   title: '12.2e review follow-ups in apps/web/app/staff/reports: a stale poll must not bring back a dismissed report or lifted takedown (generation ref); a 400 on an action says "already actioned or no
