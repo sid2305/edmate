@@ -407,6 +407,57 @@ describe('redactPersonalData', () => {
     });
   });
 
+  // 8.7p item 1 (typescript-reviewer MEDIUM, deferred from 8.7m): a phone candidate that starts
+  // inside an exempt span (on a <letter><digit>+ run right before a trailing space) must not pull
+  // the span's tail into the redacted phone region; the span's own text must survive unchanged.
+  it.each([
+    ['a report row id', `rp_${'a'.repeat(39)}1`],
+    ['a UUID', '12345678-1234-4234-8234-a23456789012'],
+    ['a bare hex digest', `${'a'.repeat(31)}2`],
+  ])('keeps %s intact when a phone candidate starts on its trailing digit run', (_label, span) => {
+    const input = `${span} 555-010-0199`;
+    const out = redactPersonalData({ note: input }) as { note: string };
+    expect(out.note).toContain(span);
+    expect(out.note).not.toMatch(/5550100199|555-010-0199/);
+    expect(out.note).toContain(REDACTED);
+  });
+
+  it('keeps an exempt span intact and still redacts the phone next to it (property test, seeded)', () => {
+    /** Seeded PRNG (mulberry32): deterministic, so a differential failure is reproducible. */
+    function mulberry32(seed: number): () => number {
+      let a = seed;
+      return () => {
+        a |= 0;
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    const rand = mulberry32(0x7a5c11);
+    for (let i = 0; i < 2000; i += 1) {
+      const kind = i % 3;
+      const digitRun = 1 + Math.floor(rand() * 10);
+      let span: string;
+      if (kind === 0) {
+        const prefixLen = 40 - 1 - digitRun;
+        span = `rp_${'f'.repeat(prefixLen)}a${'1'.repeat(digitRun)}`;
+      } else if (kind === 1) {
+        const letterRun = 12 - digitRun;
+        const lastGroup = `${'f'.repeat(Math.max(letterRun - 1, 0))}a${'1'.repeat(digitRun)}`;
+        span = `12345678-1234-4234-8234-${lastGroup}`;
+      } else {
+        const prefixLen = 32 - 1 - digitRun;
+        span = `${'f'.repeat(prefixLen)}a${'1'.repeat(digitRun)}`;
+      }
+      const phoneDigits = Array.from({ length: 10 }, () => Math.floor(rand() * 10)).join('');
+      const input = `${span} ${phoneDigits}`;
+      const out = redactPersonalData(input) as string;
+      expect(out).toContain(span);
+      expect(out).not.toContain(phoneDigits);
+    }
+  });
+
   it('keeps a __proto__ key as data, without touching the prototype', () => {
     const input = JSON.parse('{"__proto__":{"email":"e","polluted":true},"ok":1}') as unknown;
     const out = redactPersonalData(input) as Record<string, unknown>;
@@ -480,7 +531,10 @@ describe('redactEmails linear time (8.7o)', () => {
   // Unicode letters and digits included (é, Ж, ٣): the local-part and domain character classes
   // are `\p{L}`/`\p{N}`, not ASCII-only, so an ASCII-only fuzz alphabet gives false confidence
   // (typescript-reviewer HIGH, 8.7o fix round).
-  const ALPHABET = 'abcABC012._%+-@ éЖ٣';
+  // A lone low surrogate ('\udc00') and a lone high surrogate ('\ud800') are included so the
+  // 50,000-draw fuzz below has a chance of catching a regression in the 8.7p surrogate-pair check
+  // (unpaired surrogates are valid, if unusual, JS string content; they must not throw).
+  const ALPHABET = 'abcABC012._%+-@ éЖ٣\udc00\ud800';
 
   function randomString(rand: () => number, maxLength: number): string {
     const length = Math.floor(rand() * (maxLength + 1));
@@ -558,6 +612,14 @@ describe('redactEmails linear time (8.7o)', () => {
   it('does not step past `pos` on a lone low surrogate at the string start', () => {
     const s = '\udc00@a.bc';
     expect(() => redactEmails(s)).not.toThrow();
+    expect(redactEmails(s)).toBe(s.replace(OLD_EMAIL, REDACTED));
+  });
+
+  // 8.7p item 2 (typescript-reviewer LOW, deferred from 8.7o): a lone low surrogate inside a
+  // local-part run (not at the string start) must stop the left-walk right there, not step one
+  // further left without checking the preceding unit is really a high surrogate.
+  it('does not swallow a lone low surrogate mid-local-part into the character before it', () => {
+    const s = 'z\udc00x@a.bc';
     expect(redactEmails(s)).toBe(s.replace(OLD_EMAIL, REDACTED));
   });
 
