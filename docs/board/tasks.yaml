@@ -7034,9 +7034,29 @@ tasks:
   deps:
   - 7.2h
   risk: high
-  status: running
+  status: done
   branch: m13/7.2m-threat-alerts
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 91
+    tokens_in: 312
+    tokens_out: 23533
+    cache_read_tokens: 6097791
+    wall_time_seconds: 1771
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 1
 - id: 7.2n
   milestone: M13
   title: '7.2m review LOWs: export MISUSE_CODES from packages/harness/src/guardrails/moderationIn.ts and import it in packages/evals/src/moderationJailbreak.test.ts instead of a local copy; decide whether
@@ -7118,9 +7138,30 @@ tasks:
   deps:
   - '13.4'
   risk: high
-  status: running
+  status: done
   branch: m13/13.4b-account-export-delete
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 577
+    tokens_in: 2006
+    tokens_out: 105750
+    cache_read_tokens: 79434327
+    wall_time_seconds: 80834
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 2
+    human_questions: 2
 - id: 13.4c
   milestone: M13
   title: '13.4 Phase B review follow-ups (before retention leaves dry run): apps/worker/src/retention/workers.ts purgeTable logs the rows already deleted when a later call fails, and passes purgeLimit into
