@@ -130,7 +130,10 @@ export type PostMigrateStep =
  * high-write tables, same reasoning as the package-pin and open-session indexes above. Migration
  * 0036 (task 12.1c, 12.1a review follow-up) adds `teacher_profiles_pending_created_at_id_idx` the
  * same schema-only way: `listPendingForStaff`'s `verification_status = 'pending'` filter plus its
- * (created_at, id) keyset order, in one partial index.
+ * (created_at, id) keyset order, in one partial index. Migration 0038 (task 13.regatea, 13.regate
+ * review deferral) adds `eval_runs_gate_passed_agent_id_published_at_id_idx` the same schema-only
+ * way: `regateRepo`'s `last` CTE's `suite = 'gate' and status = 'passed' and published_at is not
+ * null` filter plus its `order by agent_id, published_at desc, id desc`, in one partial index.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -212,6 +215,12 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'teacher_profiles_pending_created_at_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "teacher_profiles_pending_created_at_id_idx" ON "teacher_profiles" USING btree ("created_at","id") WHERE "teacher_profiles"."verification_status" = 'pending'`,
+  },
+  // Migration 0038 (task 13.regatea, 13.regate review deferral): regateRepo's candidate scan.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'eval_runs_gate_passed_agent_id_published_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "eval_runs_gate_passed_agent_id_published_at_id_idx" ON "eval_runs" USING btree ("agent_id","published_at" DESC NULLS FIRST,"id" DESC NULLS FIRST) WHERE "eval_runs"."suite" = 'gate' and "eval_runs"."status" = 'passed' and "eval_runs"."published_at" is not null`,
   },
 ];
 
