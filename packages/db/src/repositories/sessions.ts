@@ -306,8 +306,14 @@ export function sessionsRepo(db: Db) {
      * (`last_summary` is left untouched). The session row still ends (`{ ended: true }`): ending a
      * session is independent of whether its summary is trusted (same precedent 6.5's `reset`
      * itself relies on). No profile row yet, or a `NULL` watermark, behaves exactly as before.
-     * This read is a plain `SELECT` (no lock) — sequential-correct only, same "theoretical today"
-     * framing as 6.5's own Q2, not a hardened concurrent guarantee.
+     * This read is locked `FOR UPDATE`, same lock order as `reset` (sessions row, then the
+     * `learner_profiles` row) so the two can never deadlock (40P01). It is belt-and-braces: the
+     * session row's own `UPDATE ... WHERE ... endedAt IS NULL` above already serialises this call
+     * against `reset`'s own `UPDATE` of every open session for the pair — whichever of the two
+     * transactions reaches that row first holds it until commit, and if `reset` wins, this call's
+     * own update then matches no open row and `closed.length !== 1`, so the watermark read below
+     * never runs at all. The `FOR UPDATE` on `learner_profiles` just makes that ordering explicit
+     * at the second row too, rather than relying only on the first.
      */
     async end(
       scope: StudentScope,
@@ -337,7 +343,8 @@ export function sessionsRepo(db: Db) {
                   eq(learnerProfiles.studentId, sc.studentId),
                 ),
               )
-              .limit(1);
+              .limit(1)
+              .for('update');
             const stale =
               profile?.memoryResetAt != null &&
               closed[0] !== undefined &&
