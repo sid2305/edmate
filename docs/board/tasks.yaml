@@ -7095,8 +7095,9 @@ tasks:
   deps:
   - 7.2k
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/7.2l-moderation-lows
+  model: plan:sonnet build:sonnet
 - id: 7.2m
   milestone: M13
   title: 'B-50 (human, 26 Oct 2026): threats to hurt others and weapons-to-school messages also raise a staff alert (kind misuse, level critical) in the 12.5 inbox, as well as the calm refusal. Route the
