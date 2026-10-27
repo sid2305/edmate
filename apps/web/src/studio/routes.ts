@@ -43,6 +43,7 @@ export interface StudioBackend {
     | 'create'
     | 'updateStatus'
     | 'markProcessingIfStorageKey'
+    | 'failIfStorageKey'
     | 'delete'
     | 'startReplace'
   >;
@@ -357,21 +358,24 @@ const complete: Work = async (b, scope, _req, ctx) => {
   const stored = await b.storage.head(key);
   if (!stored) return apiError('validation', MSG.notUploaded, 409);
   const size = stored.contentLength;
+  // Task 8.2q fix round 1: every write `complete` makes after this `head()` read is compared on
+  // `key`, not a plain `updateStatus`/`markFailed` -- a `replace` landing at any point from here
+  // on would otherwise silently fail or process the *new* document under the stale request's
+  // identity. `updated: false` means a replace (or a delete) won the race; nothing here is the
+  // old row's to mark anymore, so this request answers 409 and touches nothing else.
   if (size === undefined || size < 1 || size > type.maxBytes) {
-    await markFailed(b, scope, id, 'input_too_large');
+    const failed = await b.documents.failIfStorageKey(scope, id, key, 'input_too_large');
+    if (!failed.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
     await dropObject(b, key);
     return tooLarge(MSG.tooLarge);
   }
   if (stored.contentType !== type.contentType) {
-    await markFailed(b, scope, id, 'unsupported_type');
+    const failed = await b.documents.failIfStorageKey(scope, id, key, 'unsupported_type');
+    if (!failed.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
     await dropObject(b, key);
     return validation(MSG.type);
   }
-  // `processing` first: the worker's own `ready` write is refused from `uploading`. Task 8.2q:
-  // a compare-and-set on `key`, not a plain `updateStatus` -- a `replace` landing between this
-  // request's `head()` read above and this write would otherwise silently process the old file
-  // under the new key's identity. `updated: false` means a replace won the race; nothing here is
-  // the old row's to mark anymore, so this request answers 409 and touches nothing else.
+  // `processing` first: the worker's own `ready` write is refused from `uploading`.
   const marked = await b.documents.markProcessingIfStorageKey(scope, id, key);
   if (!marked.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
   // Task 8.2n: the needs-transcription rule lives on the upload type, not here.
@@ -387,7 +391,8 @@ const complete: Work = async (b, scope, _req, ctx) => {
     );
   } catch (error) {
     b.log.error('studio.enqueue_failed', { error: errorName(error) });
-    await markFailed(b, scope, id, 'enqueue_failed');
+    const failed = await b.documents.failIfStorageKey(scope, id, key, 'enqueue_failed');
+    if (!failed.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
     return apiError('provider_error', MSG.unavailable, 503);
   }
   return ok({ documentId: id, status: 'processing' }, 202);

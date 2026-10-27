@@ -119,6 +119,15 @@ function memoryBackend() {
         delete r.failureReason;
         return { updated: true };
       },
+      async failIfStorageKey({ teacherId }, id, expectedStorageKey, failureReason) {
+        const r = mine(teacherId, id);
+        if (!r || r.storageKey !== expectedStorageKey || !STATUS_FROM.failed!.includes(r.status)) {
+          return { updated: false };
+        }
+        r.status = 'failed';
+        r.failureReason = failureReason;
+        return { updated: true };
+      },
       async delete({ teacherId }, id) {
         const r = mine(teacherId, id);
         if (!r) throw notFound('documents.delete');
@@ -977,22 +986,61 @@ describe('POST /api/studio/documents/:id/complete', () => {
     // A retry goes through: failed -> processing is allowed.
     expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(202);
   });
+
+  // Task 8.2q fix round 1 (security-reviewer HIGH): a replace landing between `head()` and any
+  // of `complete`'s own failure writes must not flip the *replaced* document to failed under the
+  // stale request's code. Each of the three failure writes is now a `failIfStorageKey` compare-
+  // and-set; a lost race (`{ updated: false }`, faked here the same way the processing-write race
+  // tests above fake `markProcessingIfStorageKey`) answers the same 409 and leaves the row alone.
+  it('a replace landing before the input_too_large write leaves the replaced row untouched (409)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    s.objects.set(row.storageKey!, {
+      contentLength: MAX_DOCUMENT_UPLOAD_BYTES + 1,
+      contentType: PDF,
+    });
+    s.backend.documents.failIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.status).toBe('uploading');
+    expect(s.deleted).toEqual([]);
+    expect(s.enqueued).toHaveLength(0);
+  });
+
+  it('a replace landing before the unsupported_type write leaves the replaced row untouched (409)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    s.objects.set(row.storageKey!, { contentLength: 10, contentType: 'text/html' });
+    s.backend.documents.failIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.status).toBe('uploading');
+    expect(s.deleted).toEqual([]);
+    expect(s.enqueued).toHaveLength(0);
+  });
+
+  it('a replace landing before the enqueue_failed write leaves the replaced row untouched (409)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    vi.mocked(s.backend.enqueue).mockRejectedValueOnce(new Error('redis down at host'));
+    s.backend.documents.failIfStorageKey = async () => ({ updated: false });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toMatchObject({ code: 'validation' });
+    expect(row.status).toBe('processing');
+    expect(s.logs).toEqual([{ event: 'studio.enqueue_failed', fields: { error: 'Error' } }]);
+  });
 });
 
 describe('complete: failure marking races', () => {
-  it('a delete racing the failed write is fine (still 503); any other error is 500', async () => {
+  it('a storage/db error from a failure write surfaces as 500, not swallowed', async () => {
     const s = setup();
     const { documentId } = await uploaded(s);
     vi.mocked(s.backend.enqueue).mockRejectedValue(new Error('down'));
-    const update = s.backend.documents.updateStatus;
-    s.backend.documents.updateStatus = async (...a) => {
-      if (a[2] === 'failed') throw new RepositoryError('not_found', 'documents.updateStatus');
-      return update(...a);
-    };
-    expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(503);
-    s.backend.documents.updateStatus = async (...a) => {
-      if (a[2] === 'failed') throw new RepositoryError('failed', 'documents.updateStatus');
-      return update(...a);
+    s.backend.documents.failIfStorageKey = async () => {
+      throw new RepositoryError('failed', 'documents.failIfStorageKey');
     };
     expect((await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(500);
   });

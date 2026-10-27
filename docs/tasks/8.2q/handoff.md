@@ -181,6 +181,51 @@ State after this phase: `packages/db` and `apps/worker` both typecheck and test 
 whose signing and cleanup both fail no longer leaves a permanently stuck `uploading` row -- the
 next sweep run fails it.
 
+## Fix round 1
+
+Security-reviewer HIGH: `complete`'s new compare-and-set (`markProcessingIfStorageKey`) only
+closed the replace-during-complete race for the processing-transition write. The three other
+writes `complete` makes after its own `head()` read -- `markFailed(..., 'input_too_large')`
+(line 361), `markFailed(..., 'unsupported_type')` (line 366), and `markFailed(..., 'enqueue_failed')`
+after a successful CAS (line 390) -- still called `documents.updateStatus` with no storageKey
+compare, so a `replace` landing at any of those points silently flipped the *replaced* document to
+`failed` under the stale request's failure code.
+
+All three now call the existing key-compared `documents.failIfStorageKey(scope, id, key, code)`
+(8.2i) instead of `markFailed`/`updateStatus`. A lost race (`{ updated: false }` -- another
+teacher's row, a mismatched key, or a status outside `STATUS_FROM.failed`) answers the same 409
+`MSG.replacedDuringUpload` the processing-write CAS already uses, and touches nothing else: no
+`dropObject` (the `replace` that won the race already dropped the old object itself), no further
+write. `StudioBackend.documents`'s `Pick<...>` gains `failIfStorageKey`.
+
+**Scope note on the finding's line list**: the finding's four line numbers (361, 366, 390, 436)
+included line 436, which is `addLink`'s own `enqueue_failed` `markFailed` call, not `complete`'s.
+`replace` refuses outright on a link-keyed row (`MSG.linkReplace`, `routes.ts:453-455`), so a link
+document created by `addLink` can never be the target of a concurrent `replace` -- the race this
+fix closes cannot occur there. Left `addLink`'s `markFailed` call unchanged; fixed only the three
+call sites inside `complete`, matching the finding's own prose ("every write `complete` makes..."
+and the brief's "complete must not fail a document that was replaced while it ran").
+
+Files: `apps/web/src/studio/routes.ts`, `apps/web/src/studio/routes.test.ts`.
+
+Red then green: the memory backend's `documents.failIfStorageKey` fake was added first (same
+compare-and-set shape as `markProcessingIfStorageKey`'s fake); without the production-code change,
+three new tests -- one per failure code, each overriding `failIfStorageKey` to return
+`{ updated: false }` to simulate a replace landing mid-request -- failed red (the route still
+called `updateStatus` unconditionally, so the response stayed 413/400/503 with the row marked
+`failed`, not the 409 lost-race answer). After switching the three call sites to
+`failIfStorageKey`, all three pass green: 409, `validation` code, row untouched (`uploading` for
+the two pre-CAS cases, `processing` for the post-CAS enqueue case), nothing deleted/enqueued extra.
+The existing non-race failure tests (`fails an object over the cap...`, `fails an object whose
+stored type differs...`, `an enqueue failure marks the document failed...`) still pass unchanged,
+since their storageKey still matches. `complete: failure marking races`'s old two-case test (which
+exercised `updateStatus` throwing `not_found`/other) no longer applies now that `failIfStorageKey`
+returns `{ updated: false }` instead of throwing for a missing/raced row -- replaced with a single
+case asserting a genuine thrown error (not a `{ updated: false }` outcome) still surfaces as 500,
+not swallowed.
+
+State after this round: `routes.test.ts` has 90 tests, all green.
+
 ## Decisions
 
 ### 27 Oct 2026 · 8.2q markProcessingIfStorageKey and the widened sweep filter · decided by builder · risk: high
@@ -216,6 +261,18 @@ next sweep run fails it.
 - Why: `onAddLink` is the only handler in this file with a `finally`-set busy flag; without this
   second guard, a return inside the guard above still lets the unmount-time `setLinkBusy(false)`
   run and the React warning the test checks for would still fire.
+
+### 27 Oct 2026 · 8.2q fix round 1: addLink's own `markFailed` call left unchanged · decided by builder · risk: low
+- Decided: fixed only `complete`'s three `markFailed` call sites (lines 361, 366, 390) to use
+  `failIfStorageKey`; left `addLink`'s `enqueue_failed` `markFailed` call (line 436) as plain
+  `updateStatus`, even though the security-reviewer finding's line list named it alongside the
+  other three.
+- Why: `replace` refuses a link-keyed row outright (`MSG.linkReplace`), so a document `addLink`
+  creates can never be the target of the replace-during-complete race this fix closes -- there is
+  no second request that could change its `storageKey` out from under `addLink`'s own write. The
+  finding and the fix brief both describe the race as specific to `complete` ("complete must not
+  fail a document that was replaced while it ran"); the 436 reference in the raw finding's line
+  list appears to be a copy artifact from grepping every `markFailed` call site, not a second bug.
 
 ## Gate
 
@@ -254,7 +311,21 @@ next sweep run fails it.
   the formatting pass (57 tests, unchanged behaviour).
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
+## Fix round 1 Gate
+
+- `corepack pnpm --filter @edmate/web exec vitest run src/studio/routes.test.ts`: 90 tests, all
+  green.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...`: typecheck and lint green;
+  3 test-suite failures under machine load, all `Test timed out in 5000ms` in files this task never
+  touched (`app/learn/[agentId]/page.test.tsx`, `app/teacher/live-classes/RecordingUpload.test.tsx`,
+  `app/learn/[agentId]/plan/page.test.tsx`) -- re-run each alone (`vitest run -t clearance
+  app/learn`, `vitest run app/teacher/live-classes/RecordingUpload.test.tsx`, `vitest run -t axe
+  app/learn`) and all passed clean.
+- `corepack pnpm exec prettier --check` on the two changed files: clean.
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
 ## Budget
 
 Phases B, C, E tool calls used: 64
 Phases A, D tool calls used: 95
+Fix tool calls used: 26
