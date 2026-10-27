@@ -5,17 +5,28 @@
 // synthetic, silent MP4 generated inside the test and never committed, and that the chunker's
 // output ingests through `createWhisperTranscriber` with a fake `fetch` (rule 4: no real model
 // call).
+import { EventEmitter } from 'node:events';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import type * as FsPromises from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createWhisperTranscriber, Secret, TranscriberError } from '@edmate/gateway';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// Spies on `readFile` for the "stops reading further pieces" test below. ESM modules are
+// non-configurable, so the only way to count calls is a `vi.mock` wrapping the real
+// implementation (every other export passes straight through, unchanged).
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 import {
   createFfmpegChunker,
   createRealRunner,
+  drain,
   type ProcessResult,
   type ProcessRunner,
 } from './ffmpegChunker.js';
@@ -239,15 +250,19 @@ describe('createFfmpegChunker: failure paths and cleanup', () => {
     await expect(stat(dirs[0]!)).rejects.toThrow();
   });
 
-  it('an oversized total output trips the running-total guard, reads no further pieces, and cleans up', async () => {
+  it('an oversized total output trips the running-total guard, stops reading further pieces, and cleans up', async () => {
     const big = fakeWav(600); // each piece well over the tiny cap below once two are summed
     const { run, dirs } = captureDir(fakeRunnerWriting([big, big, big]));
     const chunker = createFfmpegChunker({ run, maxOutputBytes: big.byteLength + 10 });
+    const fsp = await import('node:fs/promises');
+    const readSpy = vi.mocked(fsp.readFile);
+    readSpy.mockClear();
     const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
     expect(err.code).toBe('input_too_large');
     expect(err.retryable).toBe(false);
-    const leftoverNames = await readdir(dirs[0]!).catch(() => []);
-    expect(leftoverNames.length).toBeLessThan(3); // stopped before reading every piece
+    // The running-total check runs before each piece is read: the first piece (under the cap) is
+    // read, the second piece crosses it and throws before it (or any later piece) is ever read.
+    expect(readSpy).toHaveBeenCalledTimes(1);
     await expect(stat(dirs[0]!)).rejects.toThrow();
   });
 
@@ -257,6 +272,158 @@ describe('createFfmpegChunker: failure paths and cleanup', () => {
     const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
     expect(err.code).toBe('validation');
     await expect(stat(dirs[0]!)).rejects.toThrow();
+  });
+
+  it('aborts while ffmpeg is still running once the on-disk pieces cross the output cap, and clears the watch timer', async () => {
+    const big = fakeWav(2_048);
+    let abortSeen = false;
+    const sizeWatchRunner: ProcessRunner = async (_bin, args, opts) => {
+      const outPattern = args.at(-1)!;
+      const dir = outPattern.slice(0, outPattern.lastIndexOf('/'));
+      // Writes well past the cap before the runner is even asked to settle, then only resolves
+      // once the size watch aborts it -- mirroring ffmpeg still writing pieces mid-run.
+      await writeFile(join(dir, 'piece-000.wav'), big);
+      await writeFile(join(dir, 'piece-001.wav'), big);
+      return new Promise<ProcessResult>((resolve) => {
+        opts.signal.addEventListener('abort', () => {
+          abortSeen = true;
+          resolve({ code: null });
+        });
+      });
+    };
+    const { run, dirs } = captureDir(sizeWatchRunner);
+    const chunker = createFfmpegChunker({
+      run,
+      maxOutputBytes: big.byteLength + 10,
+      outputWatchMs: 5,
+    });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('input_too_large');
+    expect(err.retryable).toBe(false);
+    expect(abortSeen).toBe(true); // the dedicated size controller fired, not the timeout
+    await expect(stat(dirs[0]!)).rejects.toThrow();
+  });
+
+  it('a spawn failure (ENOENT) is a non-retryable provider_error, not validation', async () => {
+    const notStarted: ProcessRunner = async () => {
+      const err = new Error('spawn ffmpeg ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      throw err;
+    };
+    const { run } = captureDir(notStarted);
+    const chunker = createFfmpegChunker({ run });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('provider_error');
+    expect(err.retryable).toBe(false);
+    expect(err.message).toContain('ENOENT');
+  });
+
+  it('a spawn failure (EACCES) is a non-retryable provider_error too', async () => {
+    const notStarted: ProcessRunner = async () => {
+      const err = new Error('spawn ffmpeg EACCES') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    };
+    const { run } = captureDir(notStarted);
+    const chunker = createFfmpegChunker({ run });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('provider_error');
+    expect(err.retryable).toBe(false);
+  });
+
+  it('a rejection with no known spawn-failure code stays a validation error', async () => {
+    const { run } = captureDir(async () => {
+      throw new Error('some other ffmpeg failure, possibly carrying attacker-chosen bytes');
+    });
+    const chunker = createFfmpegChunker({ run });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('validation');
+    expect(err.retryable).toBe(false);
+    // Only the error's code/name may ever reach a message -- never its own message or a path.
+    expect(err.message).not.toContain('possibly carrying attacker-chosen bytes');
+  });
+});
+
+describe('createFfmpegChunker: wavDurationMs bounds checks', () => {
+  function u32(v: number): number[] {
+    return [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+  }
+  function str(s: string): number[] {
+    return Array.from(s, (c) => c.charCodeAt(0));
+  }
+  function bytes(...parts: readonly number[][]): Uint8Array {
+    return new Uint8Array(parts.flat());
+  }
+
+  it('a truncated fmt chunk (declared size runs past the buffer) is unreadable, not a wrong duration', async () => {
+    // RIFF/WAVE header + an 8-byte "fmt " chunk header declaring size 16, then nothing: the
+    // chunk's own 16-byte body never arrives before the buffer ends.
+    const truncated = bytes(str('RIFF'), u32(100), str('WAVE'), str('fmt '), u32(16));
+    const { run } = captureDir(fakeRunnerWriting([truncated]));
+    const chunker = createFfmpegChunker({ run });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('validation');
+  });
+
+  it('a fmt chunk whose declared size points past the end ends the walk as unreadable', async () => {
+    const fmtBody = new Array(20).fill(0) as number[];
+    const [b0, b1, b2, b3] = u32(32_000);
+    fmtBody[8] = b0!;
+    fmtBody[9] = b1!;
+    fmtBody[10] = b2!;
+    fmtBody[11] = b3!;
+    // The fmt header's own 16 bytes fit, so byteRate is read, but its declared size (1000) sends
+    // the walk past the end of the buffer before any "data" chunk is ever found.
+    const oversizedFmt = bytes(
+      str('RIFF'),
+      u32(1_000),
+      str('WAVE'),
+      str('fmt '),
+      u32(1_000),
+      fmtBody,
+    );
+    const { run } = captureDir(fakeRunnerWriting([oversizedFmt]));
+    const chunker = createFfmpegChunker({ run });
+    const err = await failure(() => chunker(new Uint8Array(10), 'video/mp4', 1_000_000));
+    expect(err.code).toBe('validation');
+  });
+
+  it('a data header landing exactly at the end of the buffer (no body) is a valid zero-length piece', async () => {
+    const fmtBody = new Array(16).fill(0) as number[];
+    const [b0, b1, b2, b3] = u32(32_000);
+    fmtBody[8] = b0!;
+    fmtBody[9] = b1!;
+    fmtBody[10] = b2!;
+    fmtBody[11] = b3!;
+    const dataAtEnd = bytes(
+      str('RIFF'),
+      u32(1_000),
+      str('WAVE'),
+      str('fmt '),
+      u32(16),
+      fmtBody,
+      str('data'),
+      u32(100),
+    );
+    const { run } = captureDir(fakeRunnerWriting([dataAtEnd]));
+    const chunker = createFfmpegChunker({ run });
+    const chunks = await chunker(new Uint8Array(10), 'video/mp4', 1_000_000);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]!.durationMs).toBe(0);
+  });
+});
+
+describe('ffmpegChunker: drain', () => {
+  it('attaches an error listener to a drained stream, so a stream error never throws', () => {
+    const stream = new EventEmitter();
+    expect(() => {
+      drain(stream as unknown as NodeJS.ReadableStream);
+      stream.emit('error', new Error('EPIPE'));
+    }).not.toThrow();
+  });
+
+  it('is a no-op for a null stream', () => {
+    expect(() => drain(null)).not.toThrow();
   });
 });
 
@@ -283,6 +450,20 @@ describe('createRealRunner: SIGTERM then SIGKILL', () => {
     expect(() => process.kill(pid, 0)).toThrow(); // ESRCH: the process is gone
     await fs.rm(pidFile, { force: true });
   }, 15_000);
+
+  it('removes its abort listener once the child exits normally, so a later abort does not try to kill it', async () => {
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const runner = createRealRunner(1_000);
+    const result = await runner(process.execPath, ['-e', 'process.exit(0)'], {
+      signal: controller.signal,
+    });
+    expect(result.code).toBe(0);
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    removeSpy.mockRestore();
+    // The listener is gone: aborting afterwards is a no-op, not an attempt to kill a dead child.
+    expect(() => controller.abort()).not.toThrow();
+  });
 });
 
 describe('createFfmpegChunker: happy path', () => {
