@@ -259,6 +259,14 @@ describe('runPostMigrateSteps', () => {
         indexName: 'evidence_events_teacher_id_student_id_ts_id_idx',
         sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
       },
+      // Task 8.2p: the stuck-processing sweep's candidate scan index.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'documents_processing_updated_at_id_idx',
+        sql: expect.stringMatching(
+          /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"status" = 'processing'/,
+        ),
+      },
     ]);
   });
 });

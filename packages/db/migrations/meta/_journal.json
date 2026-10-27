@@ -281,6 +281,13 @@
       "when": 1793529600000,
       "tag": "0039_evidence_events_ts_id_index",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793529600001,
+      "tag": "0040_documents_processing_sweep_index",
+      "breakpoints": true
     }
   ]
 }
