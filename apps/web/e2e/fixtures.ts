@@ -65,7 +65,11 @@ async function withDb<T>(fn: (db: ReturnType<typeof openDatabase>) => Promise<T>
 }
 
 /** Issues a session token for `userId` and sets it as a cookie on `context`. */
-async function signInSession(context: BrowserContext, baseURL: string, userId: string): Promise<void> {
+async function signInSession(
+  context: BrowserContext,
+  baseURL: string,
+  userId: string,
+): Promise<void> {
   const token = randomBytes(24).toString('hex');
   await withDb(({ identity }) =>
     identity.createSession(token, userId, new Date(Date.now() + 86_400_000)),
@@ -102,7 +106,10 @@ export async function signInAsTeacher(
  * A brand-new student, 15 years old, with no parental consent on record: `learnerStatus` is
  * `parent_needed` (the age gate, task 1.7; `DEFAULT_AGE_POLICY` requires consent under 18).
  */
-export async function signInAsParentNeeded(context: BrowserContext, baseURL: string): Promise<void> {
+export async function signInAsParentNeeded(
+  context: BrowserContext,
+  baseURL: string,
+): Promise<void> {
   const user: IdentityUser = await withDb(async ({ identity }) => {
     const created = await identity.createStudent({
       email: `e2e-parent-needed-${randomBytes(4).toString('hex')}@example.invalid`,
@@ -129,7 +136,10 @@ export async function signInAsParentNeeded(context: BrowserContext, baseURL: str
  * compare-and-start page for real. Returns the created user id (`teacherQuestions.open`'s scope
  * needs it).
  */
-export async function signInAsFreshStudent(context: BrowserContext, baseURL: string): Promise<string> {
+export async function signInAsFreshStudent(
+  context: BrowserContext,
+  baseURL: string,
+): Promise<string> {
   const user: IdentityUser = await withDb(async ({ identity }) => {
     const created = await identity.createStudent({
       email: `e2e-fresh-student-${randomBytes(4).toString('hex')}@example.invalid`,
@@ -175,7 +185,11 @@ export async function mockTurns(page: Page, bodies: readonly string[]): Promise<
         `mockTurns: turn request #${at + 1} has no scripted fixture (only ${bodies.length} ` +
         'provided) -- likely a double-send (postOnce re-running act after a slow hydration) or ' +
         'a test sending more turns than it scripted; add one fixture per expected send.';
-      await route.fulfill({ status: 500, headers: { 'content-type': 'text/plain' }, body: message });
+      await route.fulfill({
+        status: 500,
+        headers: { 'content-type': 'text/plain' },
+        body: message,
+      });
       throw new Error(message);
     }
     const body = bodies[at]!;
