@@ -11078,9 +11078,9 @@ tasks:
   deps:
   - 13.3b
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.3c-seven-day-sessions
+  model: plan:lead build:sonnet
 - id: 11.4j
   milestone: M13
   title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
