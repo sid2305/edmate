@@ -1227,7 +1227,14 @@ class Turn {
     if (ctx === undefined || this.turnSkill !== 'practice') return undefined;
     if (ctx.attempt !== 'correct' && ctx.attempt !== 'wrong') return undefined;
     const topicId = this.loadedHelp?.help.practiceTopicId;
-    if (topicId === undefined || !/^[A-Za-z0-9_-]{1,128}$/.test(topicId)) return undefined;
+    if (topicId === undefined) {
+      this.trace.addGuards([{ name: 'evidenceSkip', ok: false, action: 'no_topic' }]);
+      return undefined;
+    }
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(topicId)) {
+      this.trace.addGuards([{ name: 'evidenceSkip', ok: false, action: 'bad_topic_id' }]);
+      return undefined;
+    }
     return [
       {
         studentId: e.entitlement.studentId,
