@@ -180,7 +180,9 @@ export function discoveryRepo(db: Db) {
       return { teachers, hasMore: rows.length > DISCOVERY_PAGE_SIZE };
     },
 
-    /** A verified teacher's public page by slug; null if missing or private; `scope` if malformed. */
+    /** A verified teacher's public page by slug; null if missing or private; `scope` if malformed.
+     * `bio` here is the full, untruncated text -- unlike `search`'s card, which cuts it at
+     * `SEARCH_CARD_BIO_MAX`; the teacher's own page is where the whole bio belongs. */
     async teacherBySlug(input: unknown): Promise<PublicTeacherPage | null> {
       const method = 'discovery.teacherBySlug';
       const r = TeacherBySlugInput.safeParse(input);

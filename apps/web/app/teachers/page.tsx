@@ -1,7 +1,10 @@
 // Task 9.2 Phase B: the public teacher search page. Anonymous access -- `requireRole` is never
 // called -- and server-rendered: no client component, no client fetch, a plain GET search form.
-// A repository error propagates (scope decision 5: no try/catch turning it into "no teachers
-// found"); the only guarded path is the rate limiter, which fails open by design (see rateLimit.ts).
+// A `RepositoryError` with `kind === 'scope'` is caught and rendered as an empty result (scope
+// decision 5: a scope error must never be distinguishable from "not found"); every other error
+// still propagates. The rate limiter is the other guarded path, and fails open by design (see
+// rateLimit.ts).
+import { RepositoryError } from '@edmate/db';
 import { getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { currentPrincipal, serverDatabase } from '../../src/auth';
@@ -54,11 +57,21 @@ export default async function TeachersPage({ searchParams }: TeachersPageProps) 
   }
 
   const { repos } = serverDatabase();
-  const result = await repos.discovery.search({
-    ...(params.q ? { q: params.q } : {}),
-    ...(params.language ? { language: params.language } : {}),
-    page: params.page,
-  });
+  const result = await repos.discovery
+    .search({
+      ...(params.q ? { q: params.q } : {}),
+      ...(params.language ? { language: params.language } : {}),
+      page: params.page,
+    })
+    .catch((error: unknown) => {
+      // 9.2a scope decision: a scope error must never be distinguishable from "not found" --
+      // render the same empty state a genuinely empty search gets. Any other error still
+      // propagates; this isn't a blanket try/catch.
+      if (error instanceof RepositoryError && error.kind === 'scope') {
+        return { teachers: [], hasMore: false };
+      }
+      throw error;
+    });
 
   return (
     <AppShell {...shellProps}>

@@ -3,15 +3,7 @@
 // dropped rather than thrown (this page is anonymous and public; a typo'd URL should show the
 // default list, not an error page). The one-letter mismatch is intentional: the URL parameter is
 // `lang` (short, user-facing); the repository's own field is `language`.
-import { DISCOVERY_MAX_PAGE, DISCOVERY_QUERY_MAX_LENGTH } from '@edmate/db';
-
-/**
- * Mirrors `packages/db/src/repositories/teacher-profiles.ts`'s `LanguageTag` zod schema, which
- * isn't exported from `@edmate/db`'s root barrel (it's an internal, read-only reuse by
- * `discovery.ts`). A copy here is only ever a pre-filter: a value that slips past it but fails the
- * repository's own schema still comes back as a `scope` error there, never SQL.
- */
-const LANGUAGE_RE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
+import { DISCOVERY_MAX_PAGE, DISCOVERY_QUERY_MAX_LENGTH, LanguageTag } from '@edmate/db';
 
 export interface DiscoveryParams {
   q?: string;
@@ -33,7 +25,7 @@ export function parseDiscoveryParams(searchParams: RawSearchParams): DiscoveryPa
   if (q) result.q = q.slice(0, DISCOVERY_QUERY_MAX_LENGTH);
 
   const language = first(searchParams.lang)?.trim();
-  if (language && LANGUAGE_RE.test(language)) result.language = language;
+  if (language && LanguageTag.safeParse(language).success) result.language = language;
 
   const pageRaw = first(searchParams.page)?.trim();
   if (pageRaw !== undefined && pageRaw !== '') {
