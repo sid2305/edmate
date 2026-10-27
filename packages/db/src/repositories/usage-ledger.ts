@@ -419,6 +419,11 @@ export function usageLedgerRepo(db: Db) {
       if (!r.success) throw new RepositoryError('scope', method);
       const from = new Date(r.data.since);
       const to = r.data.until ? new Date(r.data.until) : undefined;
+      // task 13.5a finding 1: an `until` at or before `since` is a caller error (a reversed or
+      // zero-width window), never a silent empty result.
+      if (to !== undefined && to.getTime() <= from.getTime()) {
+        throw new RepositoryError('invalid', method);
+      }
       const where = and(
         gte(usageLedger.createdAt, from),
         to ? lt(usageLedger.createdAt, to) : undefined,

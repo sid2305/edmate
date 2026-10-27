@@ -10,6 +10,67 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 13.5a guard boundary and span cap · decided by builder · risk: high
+- Decided: used the lead amendment's values verbatim — `until <= since` rejects (not strictly
+  `<`), and `MAX_SPAN_MS` is 366 days as a named constant in `handlers.ts`.
+- Why: the lead amendment at the end of the plan superseded the plan's own "builder's call" open
+  questions; following it exactly avoids a second round of review on a value the lead already
+  picked. Flagged `risk: high` per non-negotiable 6 (this task touches the money/cost-dashboard
+  read path named in the plan's risky-paths section: `packages/db/src/repositories/**` and
+  `apps/web/app/api/staff/**`); required reviewers per the lead amendment are
+  `security-reviewer` (required), `code-reviewer` and `typescript-reviewer`; `database-reviewer`
+  is skipped (no schema or query-shape change).
+
+---
+
+### 26 Oct 2026 · 13.5a budget overrun · decided by lead · risk: low
+- Decided: accept 79 tool calls against a budget of 40 (about 2x). The work is complete, and all three reviewers approved it.
+- Why: the overrun came from the int-test cross-check plus prettier churn in handlers.ts and route.test.ts; this is not worth a re-run. Future briefs for staff-route follow-ups should budget 60.
+
+---
+
+### 26 Oct 2026 · 13.5a merge of usage-ledger.ts and api/staff/cost · decided by lead · risk: high
+- Decided: merge. This touches packages/db/src/repositories/usage-ledger.ts and apps/web/app/api/staff/cost/handlers.ts (risk paths). security-reviewer, code-reviewer and typescript-reviewer all approved it with no blocking findings.
+- Why: it adds the `until <= since` guard, the 366-day span cap and narrower error mapping (`scope` now returns 500, not 400); staff-only access is unchanged.
+
+---
+
+### 26 Oct 2026 · 13.5a unbounded Promise.all fan-out · decided by lead · risk: low
+- Decided: wontfix for now. apps/web/app/api/staff/cost/handlers.ts loadCostRows runs Promise.all over every teacher and live package with no concurrency cap.
+- Why: at pilot scale there are only a handful of teachers, and the plan asked for this change. Revisit it (add a limiter) when the teacher count grows past the pilot.
+
+---
+
+### 26 Oct 2026 · 8.7p item-1 clip region includes the separator · decided by builder · risk: low
+- Decided: when a raw `PHONE_CANDIDATE` match is clipped at an exempt span's boundary, the
+  redacted `REDACTED` region covers from the span's end to the match's end — including any
+  separator character (e.g. the single space between an id and a phone number) that sits between
+  them. The id/UUID/digest text itself is always left untouched; only the separator plus the
+  phone text is replaced, so output looks like `rp_<hex40>[redacted]` rather than
+  `rp_<hex40> [redacted]`.
+- Why: the plan's accept line only required "the id/UUID/digest text unchanged and `${REDACTED}`
+  in place of the phone" — it did not pin down whether a separator between them survives as
+  literal text. Keeping the separator as literal text would require a second, separate clip rule
+  for "boundary characters immediately after a span before the phone proper starts," which the
+  plan did not ask for and which adds complexity without changing the safety property (no exempt
+  span text is ever redacted, no phone digit ever survives). Tests were written to check both
+  invariants (`toContain(span)`, `not.toMatch(phone digits)`) rather than pin exact spacing, so
+  this choice does not need a test change if the lead prefers the other spacing later.
+
+---
+
+### 26 Oct 2026 · 8.7p budget · decided by lead · risk: low
+- Decided: Accept 91 tool calls (harness count: build 35, fix round 56) against the plan's 30.
+- Why: The fix round replaced the quadratic span clip and added an adversarial timing test that had to fail on the old code first. The first build ran slightly over.
+
+---
+
+### 26 Oct 2026 · 8.7p merge · decided by lead · risk: high
+- Decided: Merge 8.7p. It touches packages/db/src/repositories/redact-json.ts, a risky path whose required reviewer is security-reviewer. security-reviewer found a HIGH: redactString's clip loop scanned every exempt span for every phone-shaped match, which is quadratic on a crafted audit payload. The fix sorts and merges the spans once and walks them with forward-only pointers. security-reviewer re-reviewed it. On the adversarial payload, the old code took about 17 s and the new code about 62 ms. Over 20,000 fuzz strings the output is byte-for-byte the same as the old code's. code-reviewer and typescript-reviewer approved the original change.
+- Why: Audit redaction must stay correct (surrogate-safe email clipping, ids and digests not mistaken for phone numbers) and run in linear time. The remaining defence, capping input size before redaction in storable(), is task 8.7q.
+
+---
+
 ### 26 Oct 2026 · 9.3m the new audit write and its lock-order/no-read-then-write-window property · decided by builder · risk: high
 - Decided: `teacherProfiles.update()` now writes a `teacher.subject` audit row (old/new subject
   only) when a patch changes the stored subject, captured in the same statement as the UPDATE (a
