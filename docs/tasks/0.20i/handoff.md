@@ -24,7 +24,10 @@ src/pedagogy/modelRequest.test.ts`), all 88 tests passing each time:
 5. 14.64s
 
 ## Decisions
-None.
+
+### 27 Oct 2026 · 0.20i approve the test-only change under packages/harness/src/pedagogy · decided by lead · risk: high
+- Decided: Merge 0.20i. It changes only modelRequest.test.ts (packages/harness/src/pedagogy/): the backtracking self-test now asserts on k + 1, not on a repeat of the run that tripped the ceiling. No source file changes. code-reviewer (required for the group) approved.
+- Why: The old self-test failed CI on two unrelated PRs (385, 387) on 27 Oct 2026 when the repeat run landed just under the 2 s ceiling. The new run is about twice as slow, so it has margin, and the worst case (about 16 s) fits the 30 s timeout.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` — 4 successful, 4 total.
