@@ -17,7 +17,14 @@ import {
   DISCOVERY_SEED_TABLES,
   type DiscoverySeedTable,
 } from './discovery-seed.js';
-import * as discoverySchema from './schema/index.js';
+import {
+  agents,
+  agentVersions,
+  packages,
+  packageVersions,
+  teacherProfiles,
+  users,
+} from './schema/index.js';
 
 /** `pnpm --filter @edmate/db db:migrate`. Returns the process exit code. */
 export async function runMigrateCli(
@@ -55,9 +62,7 @@ const USAGE =
   '  exactly one of --email or --user-id is required.\n' +
   '  --reason is stored in audit_log; put no personal details in it.';
 
-type UserTarget =
-  | { kind: 'email'; email: string }
-  | { kind: 'userId'; userId: string };
+type UserTarget = { kind: 'email'; email: string } | { kind: 'userId'; userId: string };
 
 type GrantArgs = UserTarget & {
   role: Role;
@@ -603,9 +608,7 @@ export async function runHealthReportCli(
     );
     return 0;
   } catch (err) {
-    log(
-      `db:health-report: failed: ${redact(err instanceof Error ? err.message : String(err))}`,
-    );
+    log(`db:health-report: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
     return 1;
   } finally {
     await handle?.close().catch(() => undefined);
@@ -652,17 +655,57 @@ export async function runSeedDiscoveryCli(
   const seed = buildDiscoverySeed(n);
   const { db, close } = createDb({ DATABASE_URL: url });
   try {
-    const inserted = {} as Record<DiscoverySeedTable, number>;
-    await db.transaction(async (tx) => {
-      for (const table of DISCOVERY_SEED_TABLES) {
-        const t = discoverySchema[table];
-        const rows = await tx
-          .insert(t)
-          .values(seed[table] as never)
-          .onConflictDoNothing({ target: t.id })
-          .returning({ id: t.id });
-        inserted[table] = rows.length;
-      }
+    const inserted: Record<DiscoverySeedTable, number> = await db.transaction(async (tx) => {
+      const insertedUsers = (
+        await tx
+          .insert(users)
+          .values(seed.users)
+          .onConflictDoNothing({ target: users.id })
+          .returning({ id: users.id })
+      ).length;
+      const insertedTeacherProfiles = (
+        await tx
+          .insert(teacherProfiles)
+          .values(seed.teacherProfiles)
+          .onConflictDoNothing({ target: teacherProfiles.id })
+          .returning({ id: teacherProfiles.id })
+      ).length;
+      const insertedAgents = (
+        await tx
+          .insert(agents)
+          .values(seed.agents)
+          .onConflictDoNothing({ target: agents.id })
+          .returning({ id: agents.id })
+      ).length;
+      const insertedAgentVersions = (
+        await tx
+          .insert(agentVersions)
+          .values(seed.agentVersions)
+          .onConflictDoNothing({ target: agentVersions.id })
+          .returning({ id: agentVersions.id })
+      ).length;
+      const insertedPackages = (
+        await tx
+          .insert(packages)
+          .values(seed.packages)
+          .onConflictDoNothing({ target: packages.id })
+          .returning({ id: packages.id })
+      ).length;
+      const insertedPackageVersions = (
+        await tx
+          .insert(packageVersions)
+          .values(seed.packageVersions)
+          .onConflictDoNothing({ target: packageVersions.id })
+          .returning({ id: packageVersions.id })
+      ).length;
+      return {
+        users: insertedUsers,
+        teacherProfiles: insertedTeacherProfiles,
+        agents: insertedAgents,
+        agentVersions: insertedAgentVersions,
+        packages: insertedPackages,
+        packageVersions: insertedPackageVersions,
+      };
     });
     const total = DISCOVERY_SEED_TABLES.reduce((sum, t) => sum + inserted[t], 0);
     log(

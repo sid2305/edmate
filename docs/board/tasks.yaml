@@ -3305,9 +3305,29 @@ tasks:
   deps:
   - 0.20d
   risk: low
-  status: running
+  status: done
   branch: m13/0.20e-leak-slo-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 354
+    tokens_in: 1216
+    tokens_out: 130418
+    cache_read_tokens: 37576457
+    wall_time_seconds: 1878
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -5041,9 +5061,32 @@ tasks:
   deps:
   - 9.2a
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/9.2e-discovery-followups
+  metrics:
+    tool_calls: 588
+    tokens_in: 2110
+    tokens_out: 195982
+    cache_read_tokens: 69326295
+    wall_time_seconds: 6012
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 12.1a
   milestone: M12
   title: Staff verification queue read in packages/db (12.1 Phase A)
@@ -5626,9 +5669,29 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: running
+  status: done
   branch: m13/8.7i-eval-runs-lows
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 404
+    tokens_in: 1384
+    tokens_out: 112396
+    cache_read_tokens: 43141727
+    wall_time_seconds: 2609
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.2f
   milestone: M13
   title: '9.2c review follow-ups (LOW): scope the next-intl Translate double cast in teachers/[slug]/page.tsx and discovery/format.ts to the dynamic skills key only; scorecard.ts guards byKey.get(key) instead
@@ -5801,6 +5864,16 @@ tasks:
   status: running
   branch: m13/9.6f-export-cursor-index
   model: plan:sonnet build:sonnet
+- id: 9.6g
+  milestone: M13
+  title: '9.6f database-review follow-ups: packages/db/test/export-cursor-paging.int.test.ts EXPLAINs the real cross join lateral statement messages.listForStudent sends (outer scan stays on the sessions (teacher_id, student_id) index, no per-noise-session
+    lateral), not a hand-written copy (MEDIUM); the mid-range cursor EXPLAIN tests run the SQL the repositories build instead of parallel hand-written SQL, so a future query edit cannot pass them while losing the index seek (LOW).'
+  accept: the EXPLAIN tests run the repositories' own SQL and assert the index seek for both the lateral messages query and the sessions cursor.
+  deps:
+  - 9.6f
+  status: todo
+  branch: null
+  model: null
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -7095,8 +7168,29 @@ tasks:
   deps:
   - 7.2k
   risk: high
-  status: todo
-  branch: null
+  status: done
+  branch: m13/7.2l-moderation-lows
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 531
+    tokens_in: 1738
+    tokens_out: 186016
+    cache_read_tokens: 57780245
+    wall_time_seconds: 13771
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 7.2m
   milestone: M13
   title: 'B-50 (human, 26 Oct 2026): threats to hurt others and weapons-to-school messages also raise a staff alert (kind misuse, level critical) in the 12.5 inbox, as well as the calm refusal. Route the
@@ -8236,7 +8330,7 @@ tasks:
         deferred: 1
         wontfix: 0
     human_questions: 0
-- id: 13.4e
+- id: 13.4f
   milestone: M13
   title: '13.4d review MEDIUMs: apps/web/src/export/accountExport.ts builds one export section per row of subscriptions.listAllForStudent, so a student who re-subscribed to the same teacher gets duplicate
     teacher entries that each re-read the same history; group by (teacherId, agentId), keep the latest periodEnd, and cap the number of pairs with a truncated flag like the other sections. packages/db/src/identity/store.ts
@@ -8245,7 +8339,20 @@ tasks:
   deps:
   - 13.4d
   risk: high
+  status: running
+  branch: m13/13.4f-export-dedupe
+  model: plan:sonnet build:sonnet
+- id: 13.4g
+  milestone: M13
+  title: '13.4f review follow-ups: apps/web/src/export/accountExport.ts dedupe keeps the first row on an exact periodEnd tie (strict >), and listAllForStudent orders only by agent id, so an ended row can beat the live row for the same
+    (teacherId, agentId); break ties toward the non-ended row (then a stable key) and add a tie test (code-reviewer MEDIUM). packages/db/src/identity/store.ts parseConsentRow is exported and throws a raw ZodError when called outside
+    the guarded store methods; note that it must stay behind guarded, or wrap its error (security-reviewer LOW).'
+  accept: on an exact periodEnd tie the export keeps the non-ended subscription, shown by a test; parseConsentRow's error contract is documented or wrapped.
+  deps:
+  - 13.4f
   status: todo
+  branch: null
+  model: null
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -8254,9 +8361,30 @@ tasks:
   deps:
   - 8.7p
   risk: high
-  status: running
+  status: done
   branch: m13/8.7q-audit-precap
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 205
+    tokens_in: 736
+    tokens_out: 37185
+    cache_read_tokens: 14808246
+    wall_time_seconds: 3439
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -8332,7 +8460,9 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.4e-chat-followups
+  model: plan:sonnet build:sonnet
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
@@ -9057,9 +9187,9 @@ tasks:
   accept: the listed changes are in and the ingest tests pass
   deps:
   - '5.2'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/5.2a-video-type-lows
+  model: plan:lead build:sonnet
 - id: 3.4d
   milestone: M13
   title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore
@@ -9632,7 +9762,9 @@ tasks:
   deps:
   - 9.3m
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.3n-staff-history-lows
+  model: plan:lead build:sonnet
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

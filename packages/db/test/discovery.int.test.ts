@@ -20,7 +20,14 @@ import {
   RepositoryError,
 } from '../src/index.js';
 import { searchQuery } from '../src/repositories/discovery.js';
-import { createDatabase, dropDatabase, postgresUp, SKIP_REASON, throwawayName, urlFor } from './pg.js';
+import {
+  createDatabase,
+  dropDatabase,
+  postgresUp,
+  SKIP_REASON,
+  throwawayName,
+  urlFor,
+} from './pg.js';
 
 const up = await postgresUp('discovery tests');
 const dbName = throwawayName();
@@ -36,7 +43,12 @@ const AGENT_CONFIG = {
   styleCardId: 'decoy-style',
   promptPackVersion: '1.0.0',
   languages: ['en'],
-  modelPolicy: { tiers: { small: { provider: 'anthropic', model: 'x' }, main: { provider: 'anthropic', model: 'x' } } },
+  modelPolicy: {
+    tiers: {
+      small: { provider: 'anthropic', model: 'x' },
+      main: { provider: 'anthropic', model: 'x' },
+    },
+  },
 };
 const packageConfig = (id: string, agentId: string, teacherId: string, amountMinor = 0) =>
   ({
@@ -196,26 +208,29 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
     await dropDatabase(dbName);
   }, 30_000);
 
+  // Default planner settings: this proves the join-driven statement really never Seq Scans
+  // `teacher_profiles` on its own, not merely that the alternative was switched off.
   it('the real search statement never falls back to a sequential scan of teacher_profiles', async () => {
-    const textPlan = await explain(searchQuery(handle.db, { q: 'finance', page: 1 }));
+    const textPlan = await explainDefault(searchQuery(handle.db, { q: 'finance', page: 1 }));
     expect(textPlan).not.toMatch(/"Node Type":"Seq Scan","[^}]*"Relation Name":"teacher_profiles"/);
-    const langPlan = await explain(searchQuery(handle.db, { language: 'en', page: 1 }));
+    const langPlan = await explainDefault(searchQuery(handle.db, { language: 'en', page: 1 }));
     expect(langPlan).not.toMatch(/"Node Type":"Seq Scan","[^}]*"Relation Name":"teacher_profiles"/);
   });
 
   // The join's own index (teacher_profiles_user_id_key, one row per user) legitimately beats the
   // GIN index at this seed's small scale, so the GIN only shows up in the plan once it is the
   // single remaining access path: a direct predicate on the generated column / the array, with no
-  // join to drive from. That still proves the index exists, is valid and is usable.
+  // join to drive from. That still proves the index exists, is valid and is usable, hence
+  // `enable_seqscan = off` here (not claiming the planner would pick it unforced).
   it('the search and language GIN indexes exist and are usable on their own', async () => {
-    const textPlan = await explain({
+    const textPlan = await explainSeqscanOff({
       toSQL: () => ({
         sql: `select user_id from teacher_profiles where search @@ to_tsquery('simple', $1)`,
         params: ["'finance':*"],
       }),
     });
     expect(textPlan).toContain('teacher_profiles_search_idx');
-    const langPlan = await explain({
+    const langPlan = await explainSeqscanOff({
       toSQL: () => ({
         sql: `select user_id from teacher_profiles where languages @> array[$1]::text[]`,
         params: ['en'],
@@ -224,16 +239,33 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
     expect(langPlan).toContain('teacher_profiles_languages_idx');
   });
 
-  async function explain(query: { toSQL(): { sql: string; params: unknown[] } }) {
+  /** The query's JSON `EXPLAIN` plan, run inside a rolled-back transaction with the given
+   * `enable_seqscan` setting (never committing, never changing the session default). */
+  async function explainWith(
+    query: { toSQL(): { sql: string; params: unknown[] } },
+    seqscanOff: boolean,
+  ) {
     const { sql: text, params } = query.toSQL();
     await raw.query('BEGIN');
     try {
-      await raw.query('SET LOCAL enable_seqscan = off');
+      if (seqscanOff) await raw.query('SET LOCAL enable_seqscan = off');
       const { rows } = await raw.query(`EXPLAIN (FORMAT JSON) ${text}`, params);
       return JSON.stringify(rows[0]['QUERY PLAN']);
     } finally {
       await raw.query('ROLLBACK');
     }
+  }
+
+  /** Default planner settings -- proves an access path was really chosen, not merely left as the
+   * only option. */
+  function explainDefault(query: { toSQL(): { sql: string; params: unknown[] } }) {
+    return explainWith(query, false);
+  }
+
+  /** `enable_seqscan = off` -- proves an index exists and is usable standalone, even when a
+   * smaller join-driven index would otherwise win at this seed's scale. */
+  function explainSeqscanOff(query: { toSQL(): { sql: string; params: unknown[] } }) {
+    return explainWith(query, true);
   }
 
   it('one SQL statement per search (no N+1)', async () => {
@@ -262,7 +294,9 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
     console.log(
       `discovery.search timings (ms): p50=${p50.toFixed(1)} p95=${p95.toFixed(1)} max=${max.toFixed(1)}`,
     );
-    expect(max, 'gross-regression guard only, never a tight bound (lessons.md)').toBeLessThan(5_000);
+    expect(max, 'gross-regression guard only, never a tight bound (lessons.md)').toBeLessThan(
+      5_000,
+    );
   }, 30_000);
 
   it('only public teachers are ever reachable; decoys never appear, by search or by slug', async () => {
@@ -313,7 +347,16 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
     );
     const page = await repos.discovery.teacherBySlug({ slug: teachers[0]!.slug });
     expect(Object.keys(page!).sort()).toEqual(
-      ['agentIds', 'bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
+      [
+        'agentIds',
+        'bio',
+        'displayName',
+        'hasFree',
+        'languages',
+        'packageCount',
+        'slug',
+        'subject',
+      ].sort(),
     );
     expect(page!.agentIds.length).toBeLessThanOrEqual(5);
   });
@@ -339,13 +382,7 @@ describe.skipIf(!up)(`discovery on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
   });
 
   it('tsquery syntax and quotes in q never throw', async () => {
-    const weird = [
-      `o'Brien`,
-      `back\\slash`,
-      `&|!():*`,
-      '🙂🙃',
-      'x'.repeat(100),
-    ];
+    const weird = [`o'Brien`, `back\\slash`, `&|!():*`, '🙂🙃', 'x'.repeat(100)];
     for (const q of weird) {
       await expect(repos.discovery.search({ q })).resolves.toMatchObject({});
     }

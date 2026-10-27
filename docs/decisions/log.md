@@ -10,6 +10,138 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 7.2l budget overrun · decided by lead · risk: low
+- Decided: accept 105 tool calls against a plan budget of 25.
+- Why: most of the extra calls polled a backgrounded gate run, which the brief forbids. The diff is small and both reviewers checked every pattern alternative before and after. The next harness briefs repeat the foreground-only rule.
+
+---
+
+### 26 Oct 2026 · 7.2l merge of the moderation guard changes · decided by lead · risk: high
+- Decided: merge the packages/harness/src/guardrails changes. The Devanagari past and habitual forms of the weapons-conceal and vapes-sell rules stay fail-closed (they block without an intent marker). The alternatives are reordered longest-first, and MISUSE_CODES is frozen.
+- Why: the pilot is English-only, and Devanagari is a safety-net table, as in 7.2j and 7.2k. A false block on a factual Hindi sentence is a smaller harm than a miss. code-reviewer and typescript-reviewer confirmed that every pattern matches the same set and that no behaviour changed beyond the new test.
+
+---
+
+### 26 Oct 2026 · 8.7i no new v8 ignore for RunShape.createdAt · decided by builder · risk: low
+- Decided: did not add a `/* v8 ignore next */` comment for the new `createdAt: z.date()` field,
+  despite the plan's wording suggesting one.
+- Why: `stored()`'s single `if (!r.success) throw` branch is shared across every `RunShape`
+  field and is already reachable (and covered by the existing "a corrupted stored row is
+  integrity" test) via other fields; there is no separate, newly-unreachable branch tied to
+  `createdAt` alone for v8 to flag. Confirmed by re-running coverage before/after: `publish.ts`
+  stayed at 100/98.82/100/100 with the same single uncovered line (shifted by the comment reword),
+  so no ignore was needed to keep the gate green.
+
+---
+
+### 26 Oct 2026 · 8.7i risk: high — publish.ts/README.md are risk paths · decided by builder · risk: high
+- Decided: this PR touches `packages/db/src/repositories/publish.ts` and
+  `packages/db/src/repositories/README.md`, both matched by
+  `.claude/skills/merge-gate/risk-paths.txt`'s `packages/db/src/repositories/**` glob; required
+  reviewer is security-reviewer (per the plan's "Risk paths touched" section).
+- Why: non-negotiable 6 — risky paths need a named reviewer and a logged `risk: high` decision at
+  merge, even for a comment-reword + defensive-validation change with no behaviour change on
+  reachable inputs.
+
+---
+
+### 26 Oct 2026 · 8.7i budget overrun · decided by lead · risk: low
+- Decided: accept 51 tool calls against a plan budget of 40.
+- Why: the builder also ran the dependents gate (--filter=...@edmate/db) against the shared dev database. The diff is small and both reviewers approved it with no findings.
+
+---
+
+### 26 Oct 2026 · 8.7i merge of publish.ts and the repositories README · decided by lead · risk: high
+- Decided: merge the packages/db/src/repositories/publish.ts change (RunShape validates createdAt; comment rewording) and the README note.
+- Why: security-reviewer and code-reviewer approved with no findings. No query, scope filter or migration changed.
+
+---
+
+### 26 Oct 2026 · board: duplicate 13.4e id renamed to 13.4f · decided by lead · risk: low
+- Decided: the board entry for the 13.4d review MEDIUMs (account export dedupe and cap; zod-parse grantedBy) is now 13.4f. 13.4e stays the 13.4b payment-dispute hold, which this log already names. docs/tasks/13.4d/review.md now cites `deferred 13.4f`.
+- Why: board.py resolves an id to its first match, so the second 13.4e could never be set done. The 13.4e this log already names keeps its id.
+
+### 26 Oct 2026 · 9.2e budget overrun · decided by lead · risk: low
+- Decided: accept 128 tool calls (harness count across both phases and the fix round) against the plan's 80.
+- Why: builders run about 2x their self-reports, and Phase 2 hit int-test contention on the shared dev database. Each phase stayed under the 150-call ceiling.
+
+---
+
+### 26 Oct 2026 · 9.2e merge of discovery.ts and the repositories barrel · decided by lead · risk: high
+- Decided: merge the changes to packages/db/src/repositories/discovery.ts (comment) and packages/db/src/repositories/index.ts (the `LanguageTag` type re-export).
+- Why: security-reviewer and database-reviewer ran on this risk path and found no CRITICAL or HIGH issue. The barrel change adds a type only, and the gate covered the dependents (--filter=...@edmate/db).
+
+---
+
+### 26 Oct 2026 · 9.2e searchParams lang length · decided by lead · risk: low
+- Decided: wontfix the LOW on apps/web/src/discovery/searchParams.ts: no extra length cap on `lang`.
+- Why: `LanguageTag` limits `lang` to letters, digits and hyphens. The value only reaches the query as a bound parameter, and the URL length limit already bounds it, so a long tag costs one cheap no-match search. Low impact before the pilot.
+
+---
+
+### 26 Oct 2026 · 9.2e rate-limit timeout values · decided by builder · risk: low
+- Decided: `connectTimeout` and `commandTimeout` are both 1000 ms (not the plan's illustrative
+  "~10 s" ceiling, just a bound well under it).
+- Why: the plan only specifies that a hang must be bounded well below ~10 s; 1 s keeps the public
+  `/teachers` page responsive even during a Redis outage (the limiter fails open on any store
+  error per the existing module doc), without being so short it risks spurious timeouts under
+  normal load. No spec or existing convention named an exact number, so this is logged rather than
+  escalated.
+
+---
+
+### 26 Oct 2026 · 0.20e budget overrun · decided by lead · risk: low
+- Decided: accept 32 tool calls against a plan budget of 15.
+- Why: the regression proof needed extra SLO runs against the shared dev database, and each run is slow. The diff is one test file.
+
+---
+
+### 26 Oct 2026 · 8.7q pre-cap uses the same constant, no headroom · decided by builder · risk: high
+- Decided: the pre-check in `storable()` reuses `AUDIT_JSON_MAX_LENGTH` (10,000) itself, not a
+  larger threshold with headroom for redaction growth.
+- Why: every caller's `before`/`after` is a small, fixed structured shape, so a raw value already
+  over the cap is abnormal regardless of content; refusing it early costs nothing legitimate.
+  Redaction only grows a value by a few characters per match, never needing more headroom than the
+  cap already allows, because the unchanged post-redaction check is what enforces the final
+  stored-value limit. A value that is mostly personal-data text and over the cap raw, but would
+  have redacted down under the cap, is now rejected pre-redaction instead of accepted -- an
+  intentional, simplest-MVP behaviour change, not a silent one. This is the plan's own decision
+  (see docs/tasks/8.7q/plan.md), recorded here per the board's `risk: high` entry (8.7p's deferred
+  finding).
+
+---
+
+### 26 Oct 2026 · 8.7q added a third coverage test, within the allowed test file · decided by builder · risk: low
+- Decided: added a third unit test (the "under pre-cap raw, over cap after redaction" case) beyond
+  the plan's two acceptance tests, to keep `src/repositories/**` at 100% statement coverage.
+- Why: making the pre-cap and post-redaction checks share one constant means the only existing
+  test that previously exercised the post-redaction-over-cap branch
+  (`packages/db/test/repositories.int.test.ts`'s `BIG` oversized-value case, out of bounds for
+  this task) now trips the new pre-check instead, leaving the unchanged post-redaction branch
+  uncovered. Rather than touch the out-of-bounds int test file, added one more case inside the
+  allowed `audit.test.ts` that is under the pre-cap raw but grows past it after redaction, so the
+  post-redaction check line stays covered without touching anything out of bounds.
+
+---
+
+### 26 Oct 2026 · 8.7q budget overrun · decided by lead · risk: low
+- Decided: accept 51 tool calls against a budget of 20 (2.5x). The change is one line plus tests, and both reviewers approved it.
+- Why: most of the overrun came from the turbo gate going to the background at the 120 s Bash timeout and then waiting on it. Future briefs tell builders to run the gate with a 600000 ms Bash timeout in the foreground; this brief already said so.
+
+---
+
+### 26 Oct 2026 · 8.7q merge of audit.ts · decided by lead · risk: high
+- Decided: merge. packages/db/src/repositories/audit.ts (a risk path) now rejects an oversized plain value with RepositoryError invalid before redactPersonalData runs. security-reviewer and code-reviewer approved it.
+- Why: this is strictly tighter. The post-redaction check is unchanged, the error message carries no payload, and the spy test proves redaction never runs on oversized input.
+
+---
+
+### 26 Oct 2026 · 8.7q review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix both LOWs: the length-tied third test in packages/db/test/audit.test.ts, and the gate filter recorded in docs/tasks/8.7q/handoff.md.
+- Why: the test fails loudly if either constant changes. The gate filter needs no change because audit.ts exports no new type and CI runs every package.
+
+---
+
 ### 26 Oct 2026 · 13.4d open question (B-59 (5) scope) · decided by lead · risk: medium
 - Decided: use the literal reading of B-59 (5). The export includes the student's full consent
   history and every subscription they ever had, including subscriptions with a teacher whose
