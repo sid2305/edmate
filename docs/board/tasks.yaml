@@ -3041,9 +3041,9 @@ tasks:
   deps:
   - '6.4'
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.4a-session-end
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 5.8c
   milestone: M5
   title: 'Sign the prompt packs per B-36 and B-38 (human answers, 21 Oct 2026): reviewed_by: sid2305 on feedback@1.1.0, frame@1.1.0, set@1.2.0, frame@1.2.0 and set@1.3.0 (B-37 defaults, all a, are already
