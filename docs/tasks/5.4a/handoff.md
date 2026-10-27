@@ -58,6 +58,14 @@ Closed MEDIUM #2 and LOW #3, #4, #5, #6 from the 5.4 review (deferred list), in
 
 ## Decisions
 
+### 27 Oct 2026 · 5.4a access filter and retrieval paths reviewed · decided by lead · risk: high
+- Decided: merge 5.4a. It changes packages/harness/src/access/** and packages/db/src/repositories/** (scopedRetrieval.ts parses each chunk once through a non-strict view of the contracts schema; retrieval.ts caps the leak-candidate text). security-reviewer, code-reviewer and typescript-reviewer all approved with no findings.
+- Why: every required reviewer ran; the cap rejects an oversized batch rather than cutting it, and the leak check fails closed on that rejection.
+
+### 27 Oct 2026 · 5.4a budget overrun · decided by lead · risk: low
+- Decided: accept 151 tool calls (harness count: Phase A 63, Phase B 88; the builders reported 29 and 61) against about 70 planned, about 2.2x.
+- Why: Phase B's db gate takes about 5 minutes and the builder polled it in the foreground. Later db briefs allow a background gate run and budget the wait.
+
 ### 27 Oct 2026 · 5.4a nested source schema also needs a non-strict view · decided by builder · risk: low
 - Decided: `ChunkFields` nests a non-strict `z.object(SourceRefSchema.shape)` for the `source`
   field, not `ChunkSchema.shape.source` (the strict `SourceRefSchema`) directly.
@@ -67,6 +75,33 @@ Closed MEDIUM #2 and LOW #3, #4, #5, #6 from the 5.4 review (deferred list), in
   parse failure instead of a silently-dropped key, breaking a review-approved passing test. The
   plan's Q2 answer (non-strict, `z.object(ChunkSchema.shape)`) only covers the top level; this is
   the one-level-deeper extension the plan's Design section didn't spell out.
+
+### 27 Oct 2026 · 5.4a no folders added to the audit's file walk · decided by builder · risk: low
+- Decided: `sourceFiles()`'s walked folders stay `src` (packages) and `src`/`app` (apps); no
+  package's `scripts`/`bin` folder is added to the walk.
+- Why: checked every top-level non-`src`/`app` folder in the repo (`find packages apps -maxdepth 2
+  -type d`, excluding `node_modules`/`dist`/`.turbo`): `packages/db/scripts`,
+  `packages/gateway/scripts`, `packages/harness/scripts`, `apps/web/scripts`, `apps/cli/bin` each
+  hold exactly one dev/build-tooling script (a demo-embedding recorder, a sandbox magic-link
+  script, a price generator, a load-test runner, the CLI's launcher) — none is shipped
+  application code that could reach a chunk at runtime, so walking them would scan tooling the
+  audit is meant to exempt, not close a gap. Per the plan's Q4 answer.
+
+### 27 Oct 2026 · 5.4a `LEAK_CANDIDATES_TOTAL_CHARS_MAX` needs its own re-export line · decided by builder · risk: low
+- Decided: added `LEAK_CANDIDATES_TOTAL_CHARS_MAX` to `packages/db/src/repositories/index.ts`'s
+  explicit named re-export list from `retrieval.ts`, alongside `LEAK_CANDIDATE_MAX_LENGTH` and
+  `LEAK_CANDIDATES_MAX`.
+- Why: this package's repositories barrel re-exports by explicit name, not `export *`; the plan's
+  Design section didn't call this file out, but a new exported const from `retrieval.ts` needs its
+  own line here or `packages/db/src/index.ts`'s `export * from './repositories/index.js'` never
+  sees it. Not in the plan's "Files to modify" list, but a one-line addition inside the existing
+  export block of an already-touched area (not a new file, not a behavior or signature change) —
+  caught by a failing test import, not a new design decision, so handled in-flight.
+
+- Risk: high (this task's own board risk is `risky`; `packages/db/src/repositories/**` is a risky
+  path per `.claude/skills/merge-gate/risk-paths.txt`'s "access filter" group) — `review.md` must
+  name **security-reviewer** (plus code-reviewer, typescript-reviewer) for `retrieval.ts`'s
+  changes, per the plan's "Risky paths touched" section.
 
 ## Gate
 
@@ -86,7 +121,7 @@ Closed MEDIUM #2 and LOW #3, #4, #5, #6 from the 5.4 review (deferred list), in
 
 ## Budget
 
-Phase A tool calls used: 29
+Phase A tool calls used: 63 (harness count; the builder reported 29)
 
 ## Phase B
 
@@ -172,32 +207,7 @@ Closed MEDIUM/LOW findings #1, #7, #8, #9 (audit rules), #10, #11 (`retrieval.ts
 
 ### Phase B decisions
 
-### 27 Oct 2026 · 5.4a no folders added to the audit's file walk · decided by builder · risk: low
-- Decided: `sourceFiles()`'s walked folders stay `src` (packages) and `src`/`app` (apps); no
-  package's `scripts`/`bin` folder is added to the walk.
-- Why: checked every top-level non-`src`/`app` folder in the repo (`find packages apps -maxdepth 2
-  -type d`, excluding `node_modules`/`dist`/`.turbo`): `packages/db/scripts`,
-  `packages/gateway/scripts`, `packages/harness/scripts`, `apps/web/scripts`, `apps/cli/bin` each
-  hold exactly one dev/build-tooling script (a demo-embedding recorder, a sandbox magic-link
-  script, a price generator, a load-test runner, the CLI's launcher) — none is shipped
-  application code that could reach a chunk at runtime, so walking them would scan tooling the
-  audit is meant to exempt, not close a gap. Per the plan's Q4 answer.
-
-### 27 Oct 2026 · 5.4a `LEAK_CANDIDATES_TOTAL_CHARS_MAX` needs its own re-export line · decided by builder · risk: low
-- Decided: added `LEAK_CANDIDATES_TOTAL_CHARS_MAX` to `packages/db/src/repositories/index.ts`'s
-  explicit named re-export list from `retrieval.ts`, alongside `LEAK_CANDIDATE_MAX_LENGTH` and
-  `LEAK_CANDIDATES_MAX`.
-- Why: this package's repositories barrel re-exports by explicit name, not `export *`; the plan's
-  Design section didn't call this file out, but a new exported const from `retrieval.ts` needs its
-  own line here or `packages/db/src/index.ts`'s `export * from './repositories/index.js'` never
-  sees it. Not in the plan's "Files to modify" list, but a one-line addition inside the existing
-  export block of an already-touched area (not a new file, not a behavior or signature change) —
-  caught by a failing test import, not a new design decision, so handled in-flight.
-
-- Risk: high (this task's own board risk is `risky`; `packages/db/src/repositories/**` is a risky
-  path per `.claude/skills/merge-gate/risk-paths.txt`'s "access filter" group) — `review.md` must
-  name **security-reviewer** (plus code-reviewer, typescript-reviewer) for `retrieval.ts`'s
-  changes, per the plan's "Risky paths touched" section.
+Moved to the top `## Decisions` section.
 
 ### Phase B gate
 
@@ -225,4 +235,4 @@ Closed MEDIUM/LOW findings #1, #7, #8, #9 (audit rules), #10, #11 (`retrieval.ts
 
 ### Phase B budget
 
-Phase B tool calls used: 61
+Phase B tool calls used: 88 (harness count; the builder reported 61)
