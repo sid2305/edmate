@@ -1,6 +1,6 @@
 # Handoff: 6.3c
 
-Status: PARTIAL (Phase A done; Phase B left)
+Status: DONE (Phase A; Phase B moved to board task 6.3d by lead decision)
 
 ## Phase A
 
@@ -92,6 +92,18 @@ no-op/in-memory adapters.
   Core contracts block byte-for-byte (whitespace normalised); leaving the build plan unchanged
   turns the gate red. ADR-0015 records the same rule ("the Core contracts block and spec-types.ts
   change together").
+
+### 27 Oct 2026 · 6.3c approve ADR-0017 and the helpState touch · decided by lead · risk: high
+- Decided: ADR-0017 (two optional `ProfileStore` methods, `applyMistakes` and `recordProposedMistakes`) is Accepted, and the `practiceMistakeTag` field in `packages/harness/src/pedagogy/helpState.ts` is approved. Architect, security-reviewer, typescript-reviewer and code-reviewer all approved Phase A with no CRITICAL, HIGH or MEDIUM findings.
+- Why: the tag comes only from the teacher's practice item, is length-bounded like `practiceTopicId`, is scoped from the turn's own entitlement, and an adapter without the methods is a tested no-op, so the change is additive and safe to ship before the db adapter.
+
+### 27 Oct 2026 · 6.3c merge Phase A alone; Phase B becomes 6.3d · decided by lead · risk: low
+- Decided: 6.3c merges with Phase A (contracts, ADR, harness). Phase B (the `profileStoreFor` db adapter plus the app adapters in apps/worker, apps/web and apps/cli) moves to new board task 6.3d, which carries the rest of 6.3c's acceptance: a wrong practice answer records the tags on the learner profile.
+- Why: Phase A is reviewed and complete on its own (the new port methods are optional, so nothing breaks before an adapter exists), and merging it now unblocks 6.4c, which edits the same runner.ts and practice.ts, instead of holding both behind the db work.
+
+### 27 Oct 2026 · 6.3c Phase A budget overrun accepted · decided by lead · risk: low
+- Decided: accept 130 tool calls (harness count; the handoff's self-count is 78) against the plan's 85 for Phase A.
+- Why: the overrun came from syncing the build plan's Core contracts block (spec-drift test) and running the contracts dependents gate; the work is complete and reviewed clean.
 
 ## Gate
 

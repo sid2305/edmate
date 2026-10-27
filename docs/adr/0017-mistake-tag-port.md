@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (27 Oct 2026). Task 6.3c Phase A. Reviewed by architect, security-reviewer and typescript-reviewer; the lead approves and logs it `risk: high`.
+Accepted (27 Oct 2026). Task 6.3c (the db adapter follows in 6.3d). Reviewed by architect, security-reviewer and typescript-reviewer; the lead approved it with a `risk: high` decision.
 
 ## Date
 
