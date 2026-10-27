@@ -1,0 +1,8 @@
+-- Task 13.regatea (13.regate review deferral): a partial index on eval_runs backing
+-- regateRepo(db).liveAgentsWithMaterialChange's `last` CTE scan (newest passed, published gate
+-- run per agent_id). Declared in src/schema/operations.ts so a later `db:generate` stays a no-op
+-- (the same pattern as 0036's teacher_profiles pending index); built by the post-migrate step
+-- (packages/db/src/migrate.ts's runPostMigrateSteps) with CREATE INDEX CONCURRENTLY, not by this
+-- file: drizzle 0.45 runs every pending migration file in one transaction, and a plain CREATE
+-- INDEX here would hold eval_runs's ACCESS EXCLUSIVE lock for the build, where CONCURRENTLY
+-- outside the transaction only needs it briefly -- eval_runs is written by every gate run.

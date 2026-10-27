@@ -244,6 +244,14 @@ describe('runPostMigrateSteps', () => {
           /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"verification_status" = 'pending'/,
         ),
       },
+      // Task 13.regatea (13.regate review deferral): regateRepo's candidate scan index.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'eval_runs_gate_passed_agent_id_published_at_id_idx',
+        sql: expect.stringMatching(
+          /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"suite" = 'gate'/,
+        ),
+      },
     ]);
   });
 });
