@@ -1,6 +1,6 @@
 # Handoff: 1.4e
 
-Status: PARTIAL (Part 1 done, fix round 1 applied; Part 2 is the lead's sandbox run)
+Status: DONE (Part 1; Part 2, the sandbox run, moved to task 1.4f by the lead)
 
 ## Summary
 Part 1 only, per the plan. Each caller to `whenReady` now keeps its own deadline instead of
@@ -46,6 +46,18 @@ inheriting the first caller's `timeoutMs`.
   caller's timeout removes only its own callback. Memory is now bounded by callers currently
   waiting, not by every caller since the outage began. Same listener-per-instance and
   per-caller-timeout behaviour as before; `RedisNotReadyError` unchanged.
+
+### 27 Oct 2026 · 1.4e Part 2 split into task 1.4f · decided by lead · risk: low
+- Decided: merge 1.4e with Part 1 only. The sandbox magic-link run (Part 2, part of the acceptance line) moves to a new task 1.4f, which waits on blocker B-61 (who rebuilds the local stack on current code).
+- Why: Part 2 needs the human; holding a reviewed sign-in fix for it would block other apps/web/src/auth work. The acceptance's sandbox clause is carried by 1.4f.
+
+### 27 Oct 2026 · 1.4e approve the per-caller timeout in apps/web/src/auth · decided by lead · risk: high
+- Decided: merge the apps/web/src/auth/redis-ready.ts change. security-reviewer (required), typescript-reviewer and code-reviewer reviewed it; the security CRITICAL (callbacks piling up on a never-settling promise during a long outage) was fixed in fix round 1 with a set of per-caller callbacks, and security-reviewer re-checked and approved it.
+- Why: each caller now keeps its own deadline, memory is bounded by callers in flight, and src/auth keeps 100% statement coverage.
+
+### 27 Oct 2026 · 1.4e budget overrun accepted · decided by lead · risk: low
+- Decided: accept 102 tool calls against a budget of 30 (build 47, fix round 55 by harness count; the agents reported 22 and 27).
+- Why: the fix round redesigned the waiting logic and added three tests; the work is reviewed and complete.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` — green (exit 0; ran the
@@ -110,7 +122,7 @@ handoff, as instructed.
 - `corepack pnpm exec prettier --check` on both changed files — clean.
 - `python3 .githooks/secret-scan.py --all` — clean (no output).
 
-Fix tool calls used: 27
+Fix tool calls used: 27 (harness count 55; build harness count 47; total 102, see the lead budget decision)
 
 ## Budget
 Tool calls used: 22
