@@ -655,50 +655,57 @@ export async function runSeedDiscoveryCli(
   const seed = buildDiscoverySeed(n);
   const { db, close } = createDb({ DATABASE_URL: url });
   try {
-    const inserted = {} as Record<DiscoverySeedTable, number>;
-    await db.transaction(async (tx) => {
-      inserted.users = (
+    const inserted: Record<DiscoverySeedTable, number> = await db.transaction(async (tx) => {
+      const insertedUsers = (
         await tx
           .insert(users)
           .values(seed.users)
           .onConflictDoNothing({ target: users.id })
           .returning({ id: users.id })
       ).length;
-      inserted.teacherProfiles = (
+      const insertedTeacherProfiles = (
         await tx
           .insert(teacherProfiles)
           .values(seed.teacherProfiles)
           .onConflictDoNothing({ target: teacherProfiles.id })
           .returning({ id: teacherProfiles.id })
       ).length;
-      inserted.agents = (
+      const insertedAgents = (
         await tx
           .insert(agents)
           .values(seed.agents)
           .onConflictDoNothing({ target: agents.id })
           .returning({ id: agents.id })
       ).length;
-      inserted.agentVersions = (
+      const insertedAgentVersions = (
         await tx
           .insert(agentVersions)
           .values(seed.agentVersions)
           .onConflictDoNothing({ target: agentVersions.id })
           .returning({ id: agentVersions.id })
       ).length;
-      inserted.packages = (
+      const insertedPackages = (
         await tx
           .insert(packages)
           .values(seed.packages)
           .onConflictDoNothing({ target: packages.id })
           .returning({ id: packages.id })
       ).length;
-      inserted.packageVersions = (
+      const insertedPackageVersions = (
         await tx
           .insert(packageVersions)
           .values(seed.packageVersions)
           .onConflictDoNothing({ target: packageVersions.id })
           .returning({ id: packageVersions.id })
       ).length;
+      return {
+        users: insertedUsers,
+        teacherProfiles: insertedTeacherProfiles,
+        agents: insertedAgents,
+        agentVersions: insertedAgentVersions,
+        packages: insertedPackages,
+        packageVersions: insertedPackageVersions,
+      };
     });
     const total = DISCOVERY_SEED_TABLES.reduce((sum, t) => sum + inserted[t], 0);
     log(

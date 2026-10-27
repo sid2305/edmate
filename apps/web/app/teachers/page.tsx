@@ -1,7 +1,9 @@
 // Task 9.2 Phase B: the public teacher search page. Anonymous access -- `requireRole` is never
 // called -- and server-rendered: no client component, no client fetch, a plain GET search form.
-// A repository error propagates (scope decision 5: no try/catch turning it into "no teachers
-// found"); the only guarded path is the rate limiter, which fails open by design (see rateLimit.ts).
+// A `RepositoryError` with `kind === 'scope'` is caught and rendered as an empty result (scope
+// decision 5: a scope error must never be distinguishable from "not found"); every other error
+// still propagates. The rate limiter is the other guarded path, and fails open by design (see
+// rateLimit.ts).
 import { RepositoryError } from '@edmate/db';
 import { getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';

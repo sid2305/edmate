@@ -129,3 +129,36 @@ doesn't exist yet.
 ## Budget (Phase 2)
 
 Phase 2 tool calls used: 27
+
+## Fix round
+
+Fixed exactly the two review findings:
+
+- `packages/db/src/cli.ts` (HIGH, typescript-reviewer): `runSeedDiscoveryCli`'s
+  `const inserted = {} as Record<DiscoverySeedTable, number>` cast is gone. The transaction
+  callback now returns a `Record<DiscoverySeedTable, number>` built as one object literal
+  (`{ users: insertedUsers, teacherProfiles: insertedTeacherProfiles, ... }`) from six typed
+  `const` locals computed inside the transaction; `db.transaction(...)`'s result is assigned
+  directly to `inserted` with that exact type annotation, so a new entry added to
+  `DISCOVERY_SEED_TABLES` without a matching object-literal property is now a tsc error instead of
+  a silent `undefined`/`NaN` at runtime. Behaviour and the logged total are unchanged.
+- `apps/web/app/teachers/page.tsx` (MEDIUM, code-reviewer): reworded the header comment (lines
+  1-5) to say a `RepositoryError` with `kind === 'scope'` is caught and rendered as an empty
+  result (per the 9.2a scope decision), and every other error still propagates -- matching the
+  `.catch` added earlier in this task. Comment-only change.
+
+### Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web` --
+  the first run failed one `@edmate/cli#test` file (`chatDbRetrieval.int.test.ts`: a hook timeout,
+  then on retry a dropped Postgres connection, "terminating connection due to administrator
+  command") -- unrelated to either file this fix round touches, consistent with the Phase 2
+  handoff's note above about shared-Postgres contention with other concurrent builders. A
+  narrower re-run, `--filter=@edmate/db --filter=@edmate/web` (excluding the `@edmate/cli`
+  dependent entirely), was clean: 13/13 tasks successful, `@edmate/db` tests at 100% line coverage
+  on `cli.ts` and the rest of the package.
+- `corepack pnpm exec prettier --check` on `packages/db/src/cli.ts` and
+  `apps/web/app/teachers/page.tsx` -- clean, no `--write` needed.
+- `python3 .githooks/secret-scan.py --all` -- clean, no output.
+
+Fix round tool calls used: 11
