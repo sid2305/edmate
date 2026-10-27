@@ -97,16 +97,13 @@ export interface SkillInput {
   control?: RolePlayControl;
   /**
    * `rolePlayStep`'s result when the caller already ran it (decidePolicy runs it before the
-   * coverage gate, 5.8). It must come from the same persona, help and control; absent, it is
-   * computed here.
+   * coverage gate, 5.8), with the persona id it was computed for (5.8b, defence in depth, like
+   * `compose.ts`'s role-play bug check; 5.8f, one field so a caller cannot pass one without the
+   * other). It must come from the same persona, help and control; absent, it is computed here.
+   * `skillStep` throws on a mismatch with `ctx.persona.id` rather than silently teaching the
+   * wrong persona.
    */
-  rolePlayStep?: RolePlayStep;
-  /**
-   * The persona id `rolePlayStep` above was computed for (5.8b, defence in depth, like
-   * `compose.ts`'s role-play bug check). Required alongside `rolePlayStep`; `skillStep` throws on
-   * a mismatch with `ctx.persona.id` rather than silently teaching the wrong persona.
-   */
-  rolePlayStepPersonaId?: string;
+  readonly rolePlayStepFor?: { readonly step: RolePlayStep; readonly personaId: string };
 }
 
 /**
@@ -127,11 +124,11 @@ export function skillStep(i: SkillInput): SkillStep {
   // A bug, never a content error (5.8b, defence in depth, like compose.ts's role-play check): a
   // passed-in rolePlayStep must have been computed for this persona, or the student would be
   // taught with another persona's state.
-  if (i.rolePlayStep !== undefined && i.rolePlayStepPersonaId !== persona.id) {
+  if (i.rolePlayStepFor !== undefined && i.rolePlayStepFor.personaId !== persona.id) {
     throw new Error('skillStep: rolePlayStep was computed for a different persona');
   }
   const r =
-    i.rolePlayStep ??
+    i.rolePlayStepFor?.step ??
     rolePlayStep({
       persona,
       help: i.help,

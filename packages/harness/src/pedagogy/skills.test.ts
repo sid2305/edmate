@@ -4,7 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { PERSONA_QUESTIONS_MAX } from './helpState.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from './policy.js';
 import { rolePlayStep } from './roleplay.js';
-import { pauseHasExtraText, rolePlayControl, selectSkill, skillStep } from './skills.js';
+import {
+  pauseHasExtraText,
+  rolePlayControl,
+  selectSkill,
+  skillStep,
+  type SkillInput,
+} from './skills.js';
 import { ctxWith, helpWith, turnOf } from './testing.js';
 
 const ALL: Skill[] = [
@@ -512,9 +518,21 @@ describe('role-play phases through skillStep (5.8, ADR-0013 §1)', () => {
         turn: turnOf('message', 'mock_interview'),
         help: at(2),
         skill: 'mock_interview',
-        rolePlayStep: r,
-        rolePlayStepPersonaId: 'per_test_02',
+        rolePlayStepFor: { step: r, personaId: 'per_test_02' },
       }),
     ).toThrow(/rolePlayStep was computed for a different persona/);
+  });
+
+  it('5.8f: a caller cannot pass a role-play step without its persona id (type-level)', () => {
+    const r = rolePlayStep({ persona: demoPersona, help: at(2) });
+    const bad: SkillInput = {
+      ctx: ctxWith({ entitlement: { skills: ALL }, persona: demoPersona }),
+      turn: turnOf('message', 'mock_interview'),
+      help: at(2),
+      skill: 'mock_interview',
+      // @ts-expect-error rolePlayStepFor requires personaId alongside step (5.8f)
+      rolePlayStepFor: { step: r },
+    };
+    expect(bad).toBeDefined();
   });
 });

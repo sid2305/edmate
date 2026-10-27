@@ -147,7 +147,7 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
       help,
       skill,
       ...control,
-      ...(rp === undefined ? {} : { rolePlayStep: rp.step, rolePlayStepPersonaId: rp.personaId }),
+      ...(rp === undefined ? {} : { rolePlayStepFor: rp }),
     }),
     {
       allowPracticeRelease: true,
