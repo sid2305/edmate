@@ -252,6 +252,7 @@
       "ready": "Ready",
       "failed": "Failed"
     },
+    "takenDownBadge": "Removed by Edmate staff",
     "replace": "Replace",
     "replaceLabel": "Replace {title}",
     "delete": "Delete",

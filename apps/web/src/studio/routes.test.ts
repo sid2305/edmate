@@ -1,7 +1,12 @@
 // Task 8.2 Phase 3: the studio document API's handlers over a memory backend (no S3, no Redis, no
 // database; rule 4). The teacher always comes from the session's principal: every route has a test
 // where another teacher's document id is `not_found`, with nothing written, deleted or enqueued.
-import { RepositoryError, type DocumentInput, type DocumentRow, type Repositories } from '@edmate/db';
+import {
+  RepositoryError,
+  type DocumentInput,
+  type DocumentRow,
+  type Repositories,
+} from '@edmate/db';
 import type { IngestJob } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -89,6 +94,7 @@ function memoryBackend() {
           status: 'uploading',
           createdAt: at,
           updatedAt: at,
+          takenDown: false,
         });
         return { id: d.id };
       },
@@ -232,7 +238,10 @@ describe('POST /api/studio/documents (create)', () => {
 
   it('files a caption file as a transcript chunk under its own extension (task 8.2c)', async () => {
     const s = setup();
-    const vtt = await s.h.create(req('POST', '/x', { ...NEW_PDF, contentType: 'text/vtt' }), ctx(ASHA));
+    const vtt = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, contentType: 'text/vtt' }),
+      ctx(ASHA),
+    );
     expect(vtt.status).toBe(201);
     expect(s.rows.get('doc_1')).toMatchObject({ kind: 'transcript' });
     expect(s.rows.get('doc_1')!.storageKey).toMatch(/\.vtt$/);
@@ -360,7 +369,7 @@ describe('POST /api/studio/documents (create, task 11.4 Phase B: class recording
     expect(s.createCalls.at(-1)).toMatchObject({ liveClassId: 'lc_asha' });
   });
 
-  it("a plain document type with liveClassId is 400, nothing written (only transcript-kind types may carry it)", async () => {
+  it('a plain document type with liveClassId is 400, nothing written (only transcript-kind types may carry it)', async () => {
     const s = setup();
     const res = await s.h.create(
       req('POST', '/x', { ...NEW_PDF, liveClassId: 'lc_asha' }),
@@ -446,7 +455,10 @@ const LINK_URL = 'https://example.org/lesson-one';
 describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('creates a processing row under a .link key, enqueues the job, and titles it from the host', async () => {
     const s = setup();
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     expect(res.status).toBe(202);
     const body = await json(res);
     expect(body).toEqual({ documentId: 'doc_1', status: 'processing' });
@@ -469,7 +481,12 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('uses a given title over the host default', async () => {
     const s = setup();
     await s.h.addLink(
-      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, sourceTitle: 'Week 1 reading', rightsDeclared: true }),
+      req('POST', '/x', {
+        moduleId: 'm_asha',
+        url: LINK_URL,
+        sourceTitle: 'Week 1 reading',
+        rightsDeclared: true,
+      }),
       ctx(ASHA),
     );
     expect(s.rows.get('doc_1')!.sourceTitle).toBe('Week 1 reading');
@@ -497,7 +514,11 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('refuses a YouTube link with its own fixed words, 400, nothing written', async () => {
     const s = setup();
     const res = await s.h.addLink(
-      req('POST', '/x', { moduleId: 'm_asha', url: 'https://www.youtube.com/watch?v=x', rightsDeclared: true }),
+      req('POST', '/x', {
+        moduleId: 'm_asha',
+        url: 'https://www.youtube.com/watch?v=x',
+        rightsDeclared: true,
+      }),
       ctx(ASHA),
     );
     expect(res.status).toBe(400);
@@ -505,13 +526,18 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
     expect(body.error?.code).toBe('validation');
     // Task 8.2n: the exact Q1 words (8.2c Phase C), so a revert to the old words fails here.
     expect(body.error?.message).toBe(LINK_REFUSAL_MESSAGE.youtube_unsupported);
-    expect(LINK_REFUSAL_MESSAGE.youtube_unsupported).toMatch(/^YouTube links can't be added\. Upload your video's caption file/);
+    expect(LINK_REFUSAL_MESSAGE.youtube_unsupported).toMatch(
+      /^YouTube links can't be added\. Upload your video's caption file/,
+    );
     expect(s.rows.size).toBe(0);
   });
 
   it("answers another teacher's module as not_found, writes and enqueues nothing", async () => {
     const s = setup();
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     expect(res.status).toBe(404);
     expect(s.rows.size).toBe(0);
     expect(s.enqueued).toEqual([]);
@@ -519,7 +545,10 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
 
   it('refuses a missing or false rights declaration (400), nothing written', async () => {
     const s = setup();
-    const missing = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const missing = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }),
+      ctx(ASHA),
+    );
     expect(missing.status).toBe(400);
     expect((await json(missing)).error?.code).toBe('validation');
     const declaredFalse = await s.h.addLink(
@@ -550,18 +579,30 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
     s.backend.enqueue = vi.fn(async () => {
       throw new TypeError('redis down');
     });
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     expect(res.status).toBe(503);
-    expect(s.rows.get('doc_1')).toMatchObject({ status: 'failed', failureReason: 'enqueue_failed' });
+    expect(s.rows.get('doc_1')).toMatchObject({
+      status: 'failed',
+      failureReason: 'enqueue_failed',
+    });
   });
 
   it('is rate-limited per teacher: the 21st link in the window is 429, nothing written', async () => {
     const s = setup();
     for (let i = 0; i < 20; i += 1) {
-      const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+      const res = await s.h.addLink(
+        req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+        ctx(ASHA),
+      );
       expect(res.status).toBe(202);
     }
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     expect(res.status).toBe(429);
     expect((await json(res)).error?.code).toBe('rate_limited');
     expect(s.rows.size).toBe(20);
@@ -570,16 +611,25 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it("doesn't share a rate-limit bucket between teachers", async () => {
     const s = setup();
     for (let i = 0; i < 20; i += 1) {
-      await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+      await s.h.addLink(
+        req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+        ctx(ASHA),
+      );
     }
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL, rightsDeclared: true }), ctx(BEN));
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL, rightsDeclared: true }),
+      ctx(BEN),
+    );
     expect(res.status).toBe(202);
   });
 
   it('a rate-limit store error fails closed: 503, nothing written, no URL logged', async () => {
     const s = setup();
     s.backend.linkRateLimit = failingLinkRateLimiter(new RangeError('redis unreachable'));
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     expect(res.status).toBe(503);
     expect((await json(res)).error?.code).toBe('provider_error');
     expect(s.rows.size).toBe(0);
@@ -591,7 +641,10 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
 
   it('the list view never includes the URL or the storage key', async () => {
     const s = setup();
-    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     const res = await s.h.list(req('GET', '/x'), ctx(ASHA));
     const body = await json(res);
     const text = JSON.stringify(body);
@@ -620,7 +673,18 @@ describe('GET /api/studio/documents (list)', () => {
       status: 'uploading',
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
+      takenDown: false,
     });
+  });
+
+  it('carries takenDown through from the repository row (task 12.2f Phase C)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    row.takenDown = true;
+    const { documents } = (await (await s.h.list(req('GET', '/x'), ctx(ASHA))).json()) as {
+      documents: Record<string, unknown>[];
+    };
+    expect(documents[0]).toMatchObject({ id: documentId, takenDown: true });
   });
 
   it('filters by moduleId, and a teacherId in the query changes nothing', async () => {
@@ -887,7 +951,10 @@ describe('DELETE /api/studio/documents/:id', () => {
 
   it('a link row deletes no S3 object (there is none)', async () => {
     const s = setup();
-    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: 'doc_1' }));
     expect(res.status).toBe(204);
     expect(s.backend.storage.deleteObject).not.toHaveBeenCalled();
@@ -940,7 +1007,11 @@ describe('POST /api/studio/documents/:id/replace', () => {
 
   it('refuses a plain document for a class recording (409), row unchanged, nothing deleted (task 8.2o)', async () => {
     const s = setup();
-    const { documentId, row } = await uploaded(s, { contentType: 'text/vtt', byteSize: 20, liveClassId: 'lc_asha' });
+    const { documentId, row } = await uploaded(s, {
+      contentType: 'text/vtt',
+      byteSize: 20,
+      liveClassId: 'lc_asha',
+    });
     row.status = 'ready';
     const before = { ...row };
     const res = await s.h.replace(
@@ -949,7 +1020,10 @@ describe('POST /api/studio/documents/:id/replace', () => {
     );
     expect(res.status).toBe(409);
     const body = await json(res);
-    expect(body.error).toMatchObject({ code: 'validation', message: REPLACE_REFUSAL_MESSAGE.recording });
+    expect(body.error).toMatchObject({
+      code: 'validation',
+      message: REPLACE_REFUSAL_MESSAGE.recording,
+    });
     expect(body.uploadUrl).toBeUndefined();
     expect(row).toEqual(before);
     expect(s.linked.has(documentId)).toBe(true);
@@ -977,6 +1051,7 @@ describe('POST /api/studio/documents/:id/replace', () => {
       status: 'ready',
       createdAt: at,
       updatedAt: at,
+      takenDown: false,
     };
     s.rows.set(note.id, { ...note });
     const res = await s.h.replace(
@@ -1011,12 +1086,21 @@ describe('POST /api/studio/documents/:id/replace', () => {
     const { documentId } = await uploaded(s);
     const c = ctx(ASHA, { id: documentId });
     expect(
-      (await s.h.replace(req('POST', '/x', { contentType: 'text/html', byteSize: 1, rightsDeclared: true }), c)).status,
+      (
+        await s.h.replace(
+          req('POST', '/x', { contentType: 'text/html', byteSize: 1, rightsDeclared: true }),
+          c,
+        )
+      ).status,
     ).toBe(400);
     expect(
       (
         await s.h.replace(
-          req('POST', '/x', { contentType: PDF, byteSize: MAX_DOCUMENT_UPLOAD_BYTES + 1, rightsDeclared: true }),
+          req('POST', '/x', {
+            contentType: PDF,
+            byteSize: MAX_DOCUMENT_UPLOAD_BYTES + 1,
+            rightsDeclared: true,
+          }),
           c,
         )
       ).status,
@@ -1089,7 +1173,10 @@ describe('POST /api/studio/documents/:id/replace', () => {
 
   it('refuses to replace a link: delete it and add it again instead', async () => {
     const s = setup();
-    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
+    await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }),
+      ctx(ASHA),
+    );
     const res = await s.h.replace(
       req('POST', '/x', { contentType: PDF, byteSize: 1, rightsDeclared: true }),
       ctx(ASHA, { id: 'doc_1' }),
@@ -1231,9 +1318,7 @@ describe('through the real guard and ROUTE_POLICY', () => {
         .status,
     ).toBe(403);
     expect(g.rows.size).toBe(0);
-    expect(
-      (await g.addLink(call('POST', '/api/studio/links', 'asha', body))).status,
-    ).toBe(202);
+    expect((await g.addLink(call('POST', '/api/studio/links', 'asha', body))).status).toBe(202);
   });
 
   it("DELETE is open to teachers, scoped to the session: Ben can't delete Asha's document", async () => {

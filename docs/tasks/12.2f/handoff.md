@@ -212,3 +212,129 @@ Test Files  1 passed (1)
 ### Budget
 
 Phase B tool calls used: 29
+
+## Phase C
+
+Phase C status: DONE
+
+### Summary
+
+Extends the "Removed by Edmate staff" fact (already computed for the staff report query's
+`citedDocuments`) to the teacher's own upload centre, end to end, read-only:
+
+- `packages/db/src/repositories/map.ts` — `DocumentRowSchema` gains `takenDown: z.boolean()` (not
+  optional: a document is never ambiguously taken down); `toDocumentRow`'s input type and build
+  both carry it through.
+- `packages/db/src/repositories/chunks.ts` — `documentColumns` (the one column map shared by both
+  `documents.get` and `documents.listForTeacher`, confirmed as the only two `toDocumentRow(...)`
+  call sites) adds `takenDown` using the existing `notTakenDown` import, the same expression
+  `reports.ts`'s staff query already uses: `` sql<boolean>`not ${notTakenDown(documents.id)}`.mapWith(Boolean) ``.
+- `apps/web/src/studio/routes.ts` — `view(row: DocumentRow)` (the upload centre's GET shape) adds
+  `takenDown: row.takenDown`.
+- `apps/web/src/studio/uploadClient.ts` — `DocumentView` adds `takenDown: boolean`.
+- `apps/web/app/teacher/uploads/UploadsView.tsx` — each document row shows a
+  `uploads.takenDownBadge` ("Removed by Edmate staff") span when `d.takenDown`, alongside (not
+  replacing) its existing `status.${d.status}` text.
+- `apps/web/messages/en.json` — one new key, `uploads.takenDownBadge`, appended inside the existing
+  `uploads` block (verified the diff adds only this key).
+
+Two test-fixture-only fixes outside the plan's listed files, needed for the gate to type-check
+(both are plain object literals of `DocumentRow`/`DocumentView` that needed the new required
+field, no behaviour assertions changed):
+- `packages/db/test/documents.int.test.ts` — the one `toEqual<DocumentRow>(...)` literal gains
+  `takenDown: false`.
+- `apps/web/app/teacher/live-classes/LiveClassesView.test.tsx` — the local `view(over)` factory's
+  default object gains `takenDown: false`.
+
+### Red-then-green evidence
+
+**`packages/db/test/repositories.int.test.ts`** — new test `'documents.get and listForTeacher
+carry takenDown: false until an active takedown, true while active, false once lifted'`. Red
+(before the `map.ts`/`chunks.ts` production change):
+```
+AssertionError: expected undefined to be false // Object.is equality
+ ❯ test/repositories.int.test.ts:4915:33
+```
+Green, after the fix:
+```
+Test Files  1 passed (1)
+     Tests  1 passed | 189 skipped (190)
+```
+
+**`apps/web/src/studio/routes.test.ts`** — new test `'carries takenDown through from the
+repository row (task 12.2f Phase C)'`. Red (routes.ts's `view()` change stashed out):
+```
+- Expected
++ Received
+  {
+    "id": "doc_1",
+-   "takenDown": true,
+  }
+```
+Green, after reapplying:
+```
+Test Files  1 passed (1)
+     Tests  80 passed (80)
+```
+
+**`apps/web/app/teacher/uploads/UploadsView.test.tsx`** — new test `'shows a "Removed by Edmate
+staff" badge only for a taken-down document, alongside its status (task 12.2f Phase C)'`. Red
+(`UploadsView.tsx` and `en.json` changes stashed out):
+```
+Error: expect(element).toHaveTextContent()
+Expected element to have text content:
+  Removed by Edmate staff
+Received:
+  Algebra notes.pdfReadyReplaceDelete
+```
+Green, after reapplying:
+```
+Test Files  3 passed (3)
+     Tests  134 passed (134)
+```
+(ran together with `routes.test.ts` and `LiveClassesView.test.tsx`, all green)
+
+### Decisions
+
+### 27 Oct 2026 · 12.2f Phase C two extra test-fixture fixes · decided by builder · risk: low
+- Decided: `packages/db/test/documents.int.test.ts` (one `toEqual<DocumentRow>` literal) and
+  `apps/web/app/teacher/live-classes/LiveClassesView.test.tsx` (one `DocumentView` factory
+  default) each needed `takenDown: false` added to a plain fixture literal once the field became
+  required; both are outside the plan's "Files to create/modify" list but are type-only, no new
+  assertion and no production-file change, so this stays a fixture fix, not scope creep per the
+  plan's exit condition about files turning up outside the list.
+- Why: `DocumentRowSchema`/`DocumentView` making `takenDown` a required (not optional) field,
+  exactly as the plan specified ("not optional -- a document is never ambiguously taken-down"),
+  means every existing literal of that shape across the whole workspace must supply it; `tsc
+  --noEmit` surfaced these two during the gate run, and both were one-line, no-behaviour-change
+  fixes.
+
+### 27 Oct 2026 · 12.2f risky-path reviewers (Phase C) · decided by lead/plan, logged by builder · risk: high
+- Decided: Phase C touches `packages/db/src/repositories/map.ts` and `chunks.ts` (risky path
+  `packages/db/src/repositories/**`), which requires **security-reviewer** (code-reviewer always
+  required) per `.claude/skills/merge-gate/risk-paths.txt`, as the plan's "Risky paths touched"
+  section already states. The `apps/web/src/studio/**` and `apps/web/messages/en.json` files
+  touched match no risk-paths.txt glob.
+- Why: standing rule (non-negotiable 6 / 8) — logging it here so the merge gate finds the required
+  `risk: high` decision for this path.
+
+### Gate
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run
+  typecheck lint test --filter=@edmate/db --filter=@edmate/web` — **13 of 13 tasks successful**
+  (typecheck, lint, test for both packages and their shared deps). `@edmate/db` test: 100% branch/
+  statement/function/line coverage on `src/repositories/**` (the package threshold). `@edmate/web`
+  test: 170 test files passed, 2683 tests passed, 11 skipped (the same pre-existing skips, no new
+  ones). The known-flaky `src/auth/index.guard-only.test.ts` passed on this run (8538ms, no
+  re-run needed); an earlier run (with a second gate invocation racing the same test Postgres
+  concurrently, now known to be the cause) showed two unrelated int-test failures from that DB
+  contention, not from this change -- the clean single run above is the one that counts.
+- `corepack pnpm exec prettier --check` then `--write` then `--check` again on every file this
+  phase touched — clean (five files needed a `--write` pass for consistent formatting; re-run
+  after confirmed `All matched files use Prettier code style!`, and the affected test files were
+  re-run green after the formatting pass).
+- `python3 .githooks/secret-scan.py --all` — clean, no output.
+
+### Budget
+
+Phase C tool calls used: 44

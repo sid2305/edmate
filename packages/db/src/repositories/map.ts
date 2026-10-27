@@ -221,12 +221,16 @@ const DocumentRowSchema = z.strictObject({
   rightsDeclaredAt: z.iso.datetime().optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  takenDown: z.boolean(),
 });
 
 /**
  * A documents row as its teacher sees it in the upload centre (task 8.2). No contract type exists
  * for it (same precedent as AuditRow). `rightsDeclaredAt` is when the teacher last declared they
- * hold the rights to the file (task 12.3b); absent for a document stored before that.
+ * hold the rights to the file (task 12.3b); absent for a document stored before that. `takenDown`
+ * (task 12.2f Phase C) is never ambiguous -- a document is always either actively taken down by
+ * staff or not, same expression the staff report query already computes (`takedowns.ts`'s
+ * `notTakenDown`).
  */
 export type DocumentRow = z.infer<typeof DocumentRowSchema>;
 
@@ -243,6 +247,7 @@ export function toDocumentRow(
     rightsDeclaredAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
+    takenDown: boolean;
   },
   method: string,
 ): DocumentRow {
@@ -260,6 +265,7 @@ export function toDocumentRow(
       ...(row.rightsDeclaredAt === null ? {} : { rightsDeclaredAt: iso(row.rightsDeclaredAt) }),
       createdAt: iso(row.createdAt),
       updatedAt: iso(row.updatedAt),
+      takenDown: row.takenDown,
     },
     method,
   );
