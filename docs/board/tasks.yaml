@@ -11264,3 +11264,13 @@ tasks:
   status: running
   branch: m13/11.4k-chunker-comments
   model: plan:lead build:sonnet
+- id: 0.20i
+  milestone: M13
+  title: 'harness timing flake: modelRequest.test.ts "expectUnderCeiling still fails on a deliberately backtracking regex (self-test)" finds the first k whose regex run passes the 2 s ceiling, then re-runs that same k inside expectUnderCeiling, which can land just under the ceiling (failed CI on PRs 385 and 387, 27 Oct 2026); assert on k + 1 (about twice as slow) so the check has margin'
+  accept: the self-test asserts on a run with clear margin over the ceiling; it stays inside its 30 s timeout; @edmate/harness typecheck, lint and test green.
+  deps:
+  - 0.20f
+  risk: low
+  status: running
+  branch: m13/0.20i-backtrack-selftest
+  model: plan:lead build:sonnet
