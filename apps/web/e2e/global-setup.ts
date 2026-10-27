@@ -40,6 +40,46 @@ const DEMO_TEACHER_ID = 'demo-teacher';
 /** A throwaway e2e-only staff account, never seeded in `seed.ts`. */
 const E2E_STAFF_EMAIL = 'e2e-staff@example.invalid';
 
+/** Mirrors `playwright.config.ts`'s own `EDMATE_E2E_PORT ?? 3111` default (same duplicated-default
+ * pattern already used for `TEST_DATABASE_URL` above) -- not imported, to avoid a new import cycle
+ * between this file and `playwright.config.ts`. */
+const PORT = Number(process.env.EDMATE_E2E_PORT ?? 3111);
+const BASE_URL = `http://localhost:${PORT}`;
+
+/** The seeded demo agent's package id (`DEMO_AGENT`, `apps/web/e2e/fixtures.ts`). Not imported
+ * from `fixtures.ts`: that file already imports *from* `global-setup.ts` (`TEST_DATABASE_URL`), so
+ * importing back would create a cycle. Literal, commented as mirroring that constant. */
+const DEMO_AGENT_ID = 'demo-agent';
+
+/**
+ * Task 0.20g: `chat.spec.ts`'s first test is the first visitor in the whole e2e run of
+ * `GET /learn/[agentId]` and `POST /api/sessions` -- both routes' auth checks run *after*
+ * `next dev` compiles their full import graph on first visit, so the first real test pays that
+ * cold-compile cost right before its own bare 5 s assertion. Warming both here (in `globalSetup`,
+ * which Playwright's `webServer` plugin has already started and waited on by the time user
+ * `globalSetup` runs) pays that cost once, before any spec file runs, without raising any test's
+ * timeout. Both calls are unauthenticated on purpose -- the expensive part is the module compile,
+ * which happens before either route's auth check, so a 401/404/redirect response is expected and
+ * fine; the real tests still exercise these routes for real afterwards. Best-effort: a warm-up
+ * failure must never fail the run, so every error is swallowed with a one-line warning.
+ */
+async function warmRoutes(): Promise<void> {
+  try {
+    await fetch(`${BASE_URL}/learn/${DEMO_AGENT_ID}`);
+  } catch (error) {
+    console.warn('e2e global setup: warm-up GET /learn failed (non-fatal)', error);
+  }
+  try {
+    await fetch(`${BASE_URL}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+  } catch (error) {
+    console.warn('e2e global setup: warm-up POST /api/sessions failed (non-fatal)', error);
+  }
+}
+
 function run(script: string): void {
   const result = spawnSync(process.execPath, [join(DB_DIST, script)], {
     env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
@@ -76,4 +116,5 @@ export default async function globalSetup(): Promise<void> {
   run('migrate.js');
   run('seed.js');
   await verifyDemoTeacher();
+  await warmRoutes();
 }
