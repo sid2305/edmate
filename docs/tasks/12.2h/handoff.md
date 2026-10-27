@@ -81,3 +81,44 @@ Status: DONE
 
 ## Budget
 Tool calls used: 92 (harness count; the builder reported 53)
+
+## Fix round 1
+CI's `node` job on PR #362 failed `@edmate/db#test`: coverage for statements (99.96%) didn't meet
+the `src/repositories/**` 100% threshold. The one uncovered statement was the new rethrow in
+`listOpenForStaff` (`packages/db/src/repositories/reports.ts:254`,
+`if (!isSkippableReportRowError(e)) throw e;`): `toStaffReportRow` can only ever throw
+`RepositoryError('integrity', ...)` today, so the integration suite never reaches that branch.
+
+Per the plan's fallback (no cheap real test exists without changing `toStaffReportRow`'s
+production code to add a second throw site), added the repo's existing convention right above the
+rethrow, matching `packages/db/src/repositories/publish.ts:559`'s style:
+
+```
+/* v8 ignore next -- toStaffReportRow only throws integrity errors today; the rule is unit-tested via isSkippableReportRowError */
+if (!isSkippableReportRowError(e)) throw e;
+```
+
+The rethrow behaviour itself is unchanged; the rule is still unit-tested through
+`isSkippableReportRowError` in `packages/db/test/reports.test.ts` (unchanged in this round).
+
+### Coverage evidence
+`corepack pnpm --filter @edmate/db exec vitest run --coverage` (Postgres already up on 55432, so
+the integration suite and its 100% `src/repositories/**` threshold ran):
+
+```
+ src/repositories  |     100 |    98.48 |     100 |     100 |
+  reports.ts       |     100 |    93.18 |     100 |     100 | 174,292-296
+```
+
+`reports.ts` statements are 100% (the only remaining gaps are branches 93.18%, under the
+`src/repositories/**` branch threshold of 90%, unaffected by this change). 86 test files passed,
+1810 tests passed, 4 skipped, exit code 0.
+
+### Gate
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` → 8/8 tasks successful, exit
+  code 0.
+- `corepack pnpm exec prettier --check packages/db/src/repositories/reports.ts` → passes.
+- `python3 .githooks/secret-scan.py --all` → clean, no output.
+
+### Budget
+Fix round tool calls used: 13

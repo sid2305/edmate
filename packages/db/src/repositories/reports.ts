@@ -251,6 +251,7 @@ export function reportsRepo(db: Db) {
             // category was removed from REPORT_CATEGORIES) — that's the one case we skip, so one
             // bad row drops out of the queue instead of hiding every row. Anything else rethrows
             // for the whole batch instead of silently disappearing.
+            /* v8 ignore next -- toStaffReportRow only throws integrity errors today; the rule is unit-tested via isSkippableReportRowError */
             if (!isSkippableReportRowError(e)) throw e;
             skipped += 1;
           }
