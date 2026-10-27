@@ -15,7 +15,10 @@ constructs a `transcriber` with anything beyond `transcribe`, so the narrower ty
 everywhere already covered by the gate below.
 
 ## Decisions
-None — both changes were spelled out exactly in the plan.
+
+### 26 Oct 2026 · 5.2a real-transcriber timing check split to 5.2b · decided by lead · risk: low
+- Decided: the third 5.2 review LOW (a real-transcriber timing check against the 15-minute budget) is not part of 5.2a; it is board task 5.2b, run by a human.
+- Why: it needs a real model call, which tests may not make; the two type LOWs are done here.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=...@edmate/ingest` — `@edmate/ingest`
@@ -29,4 +32,4 @@ None — both changes were spelled out exactly in the plan.
 - `python3 .githooks/secret-scan.py --all` — clean.
 
 ## Budget
-Tool calls used: 11
+Tool calls used: 16 (harness count; the builder reported 11)
