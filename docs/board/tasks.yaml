@@ -9219,6 +9219,16 @@ tasks:
   status: running
   branch: m13/1.7d-build-smoke-hardening
   model: plan:lead build:sonnet
+- id: 1.7i
+  milestone: M13
+  title: '1.7d review follow-up (code-reviewer MEDIUM): apps/web/test/build-smoke.test.ts assigns eraseStudent only after identity.createSession succeeds, so a createSession failure leaks the student row
+    on the shared dev Postgres; assign the cleanup right after createStudent returns'
+  accept: a createSession failure in build-smoke still erases the student row (shown by a test or a clear code path); web typecheck, lint and test green.
+  deps:
+  - 1.7d
+  status: todo
+  branch: null
+  model: null
 - id: 1.7e
   milestone: M13
   title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain
