@@ -13,6 +13,8 @@ import {
   type GateRunSummary,
   PublishRefusedError,
   type PublishPins,
+  regateRepo,
+  type RegateRepo,
   type Repositories,
   RepositoryError,
   type StoredScorecard,
@@ -31,6 +33,7 @@ const dbName = throwawayName();
 const TEST_URL = urlFor(dbName);
 let handle: DbHandle;
 let repos: Repositories;
+let regate: RegateRepo;
 let raw: pg.Client;
 
 let n = 0;
@@ -248,6 +251,7 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
     await migrateDatabase(TEST_URL);
     handle = createDb({ DATABASE_URL: TEST_URL });
     repos = createRepositories(handle.db);
+    regate = regateRepo(handle.db);
     raw = new pg.Client({ connectionString: TEST_URL });
     await raw.connect();
     await raw.query(
@@ -1204,6 +1208,170 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       expect((await failure(repos.publish.changedSinceLastPublish({ teacherId: '' }))).kind).toBe(
         'scope',
       );
+    });
+  });
+
+  describe('liveAgentsWithMaterialChange', () => {
+    /** +1 on the teacher's material revision (same upsert `bumpMaterial` above uses). */
+    async function bump(t: T): Promise<void> {
+      await raw.query(
+        `insert into teacher_material_revisions (id, teacher_id, revision)
+         values ($1, $2, 1)
+         on conflict (teacher_id) do update set revision = teacher_material_revisions.revision + 1`,
+        [`tmr_${t.teacherId}`, t.teacherId],
+      );
+    }
+
+    /**
+     * A failed attempt at the current revision (B-40-style) resolves a candidate so it stops
+     * matching the exact-list assertions of later tests in this file -- this is an unscoped,
+     * cross-suite system read, so every other test's own live, changed agents are candidates
+     * too until something (a run, or this helper standing in for one) resolves them.
+     */
+    async function resolveCandidate(t: T): Promise<void> {
+      const run = await repos.publish.startRun(scope(t), pins(t));
+      await repos.publish.markRunning(scope(t), run.id);
+      await repos.publish.finishRun(scope(t), {
+        runId: run.id,
+        status: 'failed',
+        summary: summary(),
+      });
+    }
+
+    it('is [] when no agent is live', async () => {
+      const t = await makeTeacher();
+      await bump(t);
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
+    it('lists a live agent whose material changed since its last passed/published run, and excludes one that has not changed', async () => {
+      const changed = await makeTeacher();
+      await publish(changed);
+      await bump(changed);
+      const unchanged = await makeTeacher();
+      await publish(unchanged);
+
+      const rows = await regate.liveAgentsWithMaterialChange();
+      expect(rows).toEqual([{ teacherId: changed.teacherId, agentId: changed.agentId }]);
+      expect(rows.some((r) => r.agentId === unchanged.agentId)).toBe(false);
+      await resolveCandidate(changed);
+    });
+
+    it('excludes a live agent with an open (queued/running) run, even though material changed', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t);
+      await repos.publish.startRun(scope(t), pins(t));
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
+    it("includes a candidate whose only open run is stale (same rule as startRun's: a material-only run's 15 min deadline + 15 min grace) and at an older revision than the current one -- a crashed worker or a failed enqueue/finishRun must not strand it", async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t); // revision 1: a candidate.
+      const run = await repos.publish.startRun(scope(t), pins(t)); // open, basis.materialRevision = 1.
+      expect(run.changes).toEqual(['material']);
+      await bump(t); // revision 2: the open run is now at an older revision.
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '31 minutes' where id = $1`,
+        [run.id],
+      );
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([
+        { teacherId: t.teacherId, agentId: t.agentId },
+      ]);
+      await resolveCandidate(t);
+    });
+
+    it('excludes a live agent whose open run is fresh (not stale), even at an older revision', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t); // revision 1.
+      const run = await repos.publish.startRun(scope(t), pins(t)); // open, basis.materialRevision = 1.
+      await bump(t); // revision 2: the open run is now at an older revision, but still fresh.
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '25 minutes' where id = $1`,
+        [run.id],
+      );
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
+    it('excludes a stale open run at the current revision: the attempt was already made', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t); // revision 1: a candidate.
+      const run = await repos.publish.startRun(scope(t), pins(t)); // open, basis.materialRevision = 1 = current.
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '31 minutes' where id = $1`,
+        [run.id],
+      );
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
+    it('excludes a draft and a suspended agent, even with changed material', async () => {
+      const draft = await makeTeacher({ status: 'draft' });
+      await bump(draft);
+      const suspended = await makeTeacher();
+      await publish(suspended);
+      await bump(suspended);
+      await raw.query(`update agents set status = 'suspended' where id = $1`, [suspended.agentId]);
+
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+    });
+
+    it("is unscoped: another teacher's changed live agent appears too, not just the caller's own (this is a system read, never called with a scope)", async () => {
+      const a = await makeTeacher();
+      await publish(a);
+      await bump(a);
+      const b = await makeTeacher();
+      await publish(b);
+      await bump(b);
+
+      const rows = await regate.liveAgentsWithMaterialChange();
+      expect(rows.map((r) => r.agentId).sort()).toEqual([a.agentId, b.agentId].sort());
+      await resolveCandidate(a);
+      await resolveCandidate(b);
+    });
+
+    it('does not re-list a candidate once a run has started at the current revision, but does once material changes again', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      await bump(t);
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([
+        { teacherId: t.teacherId, agentId: t.agentId },
+      ]);
+
+      // A regate attempt at this revision ends failed (B-40-style) -- no further attempt until
+      // material changes again (lead answer Q2: one automatic attempt per material revision).
+      await resolveCandidate(t);
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([]);
+
+      await bump(t);
+      expect(await regate.liveAgentsWithMaterialChange()).toEqual([
+        { teacherId: t.teacherId, agentId: t.agentId },
+      ]);
+      await resolveCandidate(t);
+    });
+
+    it('caps at the given limit, oldest-changed-first', async () => {
+      const first = await makeTeacher();
+      await publish(first);
+      await bump(first);
+      await raw.query(
+        `update teacher_material_revisions set updated_at = now() - interval '1 hour' where teacher_id = $1`,
+        [first.teacherId],
+      );
+      const second = await makeTeacher();
+      await publish(second);
+      await bump(second);
+
+      const rows = await regate.liveAgentsWithMaterialChange(1);
+      expect(rows).toEqual([{ teacherId: first.teacherId, agentId: first.agentId }]);
+      await resolveCandidate(first);
+      await resolveCandidate(second);
     });
   });
 

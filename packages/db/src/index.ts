@@ -10,7 +10,9 @@ import {
 import {
   createRepositories,
   retentionRepo,
+  regateRepo,
   type RetentionRepo,
+  type RegateRepo,
   type Repositories,
 } from './repositories/index.js';
 
@@ -20,7 +22,13 @@ export type { FileChunkKind } from './repositories/chunks.js';
 export * from './identity/index.js';
 export { migrateDatabase, MIGRATIONS_DIR } from './migrate.js';
 export type { DbEnv } from './client.js';
-export { applyBkt, BKT_DEFAULTS, foldMastery, type BktParams, type MasteryEntry } from './mastery.js';
+export {
+  applyBkt,
+  BKT_DEFAULTS,
+  foldMastery,
+  type BktParams,
+  type MasteryEntry,
+} from './mastery.js';
 
 export interface OpenDatabaseOptions {
   /** The identity store's age rule and notice versions (1.7; the web wires them from content). */
@@ -36,6 +44,8 @@ export function openDatabase(
   identity: IdentityStore;
   /** Task 13.4 (Phase A): the scheduled retention jobs (apps/worker's Phase B calls these). */
   retention: RetentionRepo;
+  /** Task 13.regate: the regate sweep's candidate list (apps/worker's Phase B calls this). */
+  regate: RegateRepo;
   close: () => Promise<void>;
 } {
   const { db, close } = createDb(env);
@@ -43,6 +53,7 @@ export function openDatabase(
     repos: createRepositories(db),
     identity: createIdentityStore(db, options.identity),
     retention: retentionRepo(db),
+    regate: regateRepo(db),
     close,
   };
 }
