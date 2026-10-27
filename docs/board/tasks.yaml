@@ -9792,9 +9792,39 @@ tasks:
   - 9.2d
   - 9.3e
   risk: medium
-  status: running
+  status: done
   branch: m13/9.2g-staff-display-name
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 470
+    tokens_in: 1622
+    tokens_out: 135376
+    cache_read_tokens: 54209991
+    wall_time_seconds: 1707
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 9.2h
+  milestone: M13
+  title: '9.2g security-review LOWs: a Postgres int test for listPendingForStaff and findBySlugForStaff with a NULL teacher_profiles.display_name (coalesces to the slug); .min(1) on displayName in apps/web/app/staff/client.ts
+    QueueItemSchema to match the db row schema'
+  accept: db and web typecheck, lint and test green; the int test inserts a profile with a NULL display name and sees the slug in both staff reads
+  deps:
+  - 9.2g
+  risk: medium
+  status: todo
 - id: 5.6f
   milestone: M13
   title: '5.6b plan Q5 follow-up (pilot-blocking): release the practice key on a turn that is graded correct, so a confirmation that restates the key ("Yes, B is right!") is not replaced by the safe hint;
