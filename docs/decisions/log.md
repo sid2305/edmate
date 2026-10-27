@@ -10,6 +10,71 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 9.3g merge of db repositories and staff consoles · decided by lead · risk: high
+- Decided: merge the setVerification stale-row audit and staff action (`packages/db/src/repositories/teacher-profiles.ts`), lift's returned agent status (`packages/db/src/repositories/takedowns.ts`, `README.md`), and the staff API handlers and consoles (`apps/web/app/api/staff/**`, `apps/web/app/staff/**`), all risky paths.
+- Why: security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved with no findings above LOW; staff-only gating is unchanged, the audit writes share the state change's transaction, and the new lock-order tests are real two-connection races.
+
+---
+
+### 27 Oct 2026 · 9.3g budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (208 harness tool calls across two phases against a budget of 140; the builders reported 80 to 120).
+- Why: Phase A added two forced-order race tests and knock-on test fixes, and the full db and web gates were re-run around the known shared-Postgres flake; both phases stayed on scope.
+
+---
+
+### 27 Oct 2026 · 9.3g stale-row staff action keeps the create shape · decided by lead · risk: low
+- Decided: wontfix the LOW that `packages/db/src/repositories/teacher-profiles.ts` appends a `create` staff action and a `takedown.create` audit row to an already existing takedown in the stale-active-row branch.
+- Why: the plan asked it to mirror `takeDownAgentInTx`'s shape, and `takedowns.countUpheld` counts distinct takedown rows, so nothing is double counted.
+
+---
+
+### 27 Oct 2026 · 9.3g export VerificationResultRow · decided by builder · risk: low
+- Decided: exported the new `VerificationResultRow` interface from `teacher-profiles.ts` (the plan
+  only said "define a local interface").
+- Why: `packages/db`'s declaration build (`tsc -p tsconfig.build.json`) fails with TS4058 if an
+  exported function's inferred return type uses an unexported type name (`createRepositories`'s
+  return type includes it). Exporting the interface is the minimal fix; it does not change
+  `map.ts`'s shared `TeacherProfileRowSchema`/`toTeacherProfile`, and no other caller's return type
+  changed.
+
+---
+
+### 27 Oct 2026 · 9.3g knock-on test fixes outside the plan's file list · decided by builder · risk: low
+- Decided: updated `packages/db/test/repositories.int.test.ts` (one `toEqual` on `takedowns.lift`)
+  and `packages/db/test/verify-teacher-cli.test.ts` (the fake `setVerification`'s return type/value)
+  to match the new additive fields, instead of leaving the gate red.
+- Why: both files assert the exact resolved-value shape of `lift`/`setVerification` and fail to
+  typecheck or pass once those shapes gained fields; the plan's file list did not anticipate every
+  caller, but fixing the assertions (not the behaviour) is the only way to keep
+  `--filter=...@edmate/db` green, and both changes were adding a field to an expectation, not
+  changing what was being tested.
+
+---
+
+### 27 Oct 2026 · 9.3g lock-order test outcomes decided from the real code, not assumed · decided by builder · risk: low
+- Decided: the `setVerification(safety)` vs `publish.goLive` two-connection test's "rejection
+  queued first" branch asserts `goLive` fails with `RepositoryError('scope')`, not
+  `PublishRefusedError('suspended')`; the `agentsTakenDown` count in the "already taken down twice"
+  teacher-profiles test is `1`, not `2`.
+- Why: both are `publish.ts`'s own lock order (`lockVerified` reads the profile `FOR SHARE` before
+  the agent) and `setVerification`'s own `status = 'live'` filter (an agent already suspended by an
+  earlier call is no longer selected) -- not open questions, confirmed by running the test red
+  first with the plan-writer's natural guess and reading the actual failure.
+
+---
+
+### 27 Oct 2026 · 9.3g reports Notice became a typed value, not a boolean · decided by builder · risk: low
+- Decided: `StaffReportsView`'s `notice` state changed from `boolean` to
+  `{ kind: 'done' } | { kind: 'liftedAgentDraft' } | null`, same shape idea as `StaffQueueView`'s
+  own `Notice` type (the plan names this as the expected approach but leaves the exact type to the
+  builder).
+- Why: the plain `done` text and the new draft-specific text need to coexist per-action, and a
+  boolean can't carry which one to show; every existing call site that set `setNotice(true)` or
+  `setNotice(false)` was updated to the typed equivalent, no behaviour change for dismiss, document
+  takedown, agent takedown, or a document/`live`-agent lift (all still render `done`).
+
+---
+
 ### 27 Oct 2026 · 8.2i merge of db repositories and ADR-0014 · decided by lead · risk: high
 - Decided: merge the `failIfStorageKey` compare-and-set (`packages/db/src/repositories/chunks.ts`), the new `ingestSweep` repository (`packages/db/src/repositories/ingestSweep.ts`, `index.ts`), the worker's stuck-ingest sweep and pinned-transport Host header, and the ADR-0014 wording change (`docs/adr/0014-web-link-egress.md`), all risky paths.
 - Why: security-reviewer, architect, typescript-reviewer, code-reviewer and database-reviewer reviewed the branch; both HIGHs were fixed in one round and the reviewers who raised them approved the fix; the index MEDIUM is deferred to 8.2p.

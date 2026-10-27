@@ -593,7 +593,7 @@ tasks:
   accept: a user who signed up by link can then sign in with Google on the same verified address; an unverified Google email never links; auth tests pass
   deps:
   - '1.4'
-  status: todo
+  status: planning
   risk: risky
 - id: '1.5'
   milestone: M1
@@ -3039,7 +3039,7 @@ tasks:
   deps:
   - '6.4'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 5.8c
@@ -10024,9 +10024,30 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/9.3g-staff-lift-followups
+  metrics:
+    tool_calls: 988
+    tokens_in: 3508
+    tokens_out: 263828
+    cache_read_tokens: 113175077
+    wall_time_seconds: 6341
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.2g
   milestone: M13
   title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students
