@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 3.4d budget overrun (59 vs 45) · decided by lead · risk: low
+- Decided: accept the build at 59 harness-counted tool calls against a 45-call budget (1.31x); no rework.
+- Why: the extra calls went to a mutation check on the locked-precedence test and a prettier pass; the scope stayed at the three planned files and both reviewers approved with no findings.
+
+---
+
+### 26 Oct 2026 · 3.4d mergeByScore id tie-break · decided by builder · risk: low
+- Decided: `mergeByScore`'s equal-score tie-break is now explicit (ascending id) instead of
+  relying on stable-sort insertion order; only ties can change order, matching 3.4c's plan text.
+- Why: the plan's acceptance text ("mergeByScore ties are ordered by id") needed an explicit rule
+  rather than an implicit dependency on which search (`own`/`ctx`) found a chunk first.
+
+---
+
 ### 26 Oct 2026 · 1.7d budget overrun (149 vs 40) · decided by lead · risk: low
 - Decided: accept 149 tool calls against the 40 budget.
 - Why: the gate includes a full production build plus build-smoke, which the builder ran several times while making the cleanup reliable; the change stayed inside the plan's files and all three reviewers approved (one MEDIUM deferred). Future build-smoke tasks get a budget of about 80.
