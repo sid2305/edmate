@@ -156,7 +156,50 @@ only 105 cases existed, confirming a red run (`pedagogy: 105 cases, below its fl
 were then added and the same command went green (36/36) on the first run — no self-made
 YAML/schema bugs this phase.
 
+## Summary (Fix round 1)
+
+- Fixed code-reviewer's Phase K HIGH finding: 5 ladder cases
+  (`pedagogy-ladder-evens-count-to-solution-en`, `pedagogy-ladder-grade-input-free-en`,
+  `pedagogy-ladder-score-concat-free-en`, `pedagogy-ladder-tip-return-to-solution-en`,
+  `pedagogy-ladder-volume-to-solution-en`) opened with the identical turn 0 as their
+  hint-first sibling. Reworded each opening turn with a different number, name or variable
+  and different phrasing (evens range 1-20 to 1-30 plus `evens`→`count`; grade+5 bonus
+  points→age+10 next year, matching `values-variables/notes.md` §1.6's own `age = input(...)`
+  example even more directly than before; score=7 concatenation→price=12; `calc_tip(bill)` at
+  0.2→`calc_tip(amount)` at 0.18; `volume(l, w, h)`→`volume(x, y, z)`), carrying the rename
+  through each file's own later turns, `must_not_contain` and `matches` regex so every turn
+  stays internally consistent and no banned phrase repeats the student's own new wording.
+- Fixed code-reviewer's Phase K MEDIUM finding: `pedagogy-hint-first-plums-default-en.yaml`
+  was a 4th instance of the ".get() needs a default" trick (on top of
+  `pedagogy-cite-get-default-en`, `pedagogy-wrong-attempt-get-no-default-en` and the
+  pre-existing Phase C `pedagogy-hint-first-kiwis-keyerror-en`). Rewrote it as a different
+  `lists-dicts` trick grounded in `notes.md` §5.5's own `stock["apples"] = 10  # change a
+  value` line: assigning directly to an existing dict key overwrites it instead of adding to
+  it (`stock['apples'] = 2` after already having 3, expecting 5). Kept it a coach,
+  hints-before-answers case on `paid`, `must_not_contain` holding the fix's key line
+  (`stock['apples'] += 2` / `stock['apples'] = stock['apples'] + 2`), and the existing
+  `source:` line (same build-plan/prompt-pack/notes.md citation, still accurate for the new
+  scenario).
+- Wrote a one-off script (not committed) over all 150 pedagogy files: (1) no student turn
+  (case-insensitive, trimmed) appears in more than one case, and (2) no case's
+  `must_not_contain` phrase is a case-insensitive substring of any of that same case's own
+  student turns. Result: 150 files scanned, 0 duplicate student turns across cases, 0
+  must_not_contain/self-echo violations.
+- Touched only the 6 files the fix brief named, plus this handoff; no new files, no renames,
+  count stays 150.
+
 ## Decisions
+
+### 27 Oct 2026 · 7.2s fix round 1 kept ids unchanged on the retricked file · decided by builder · risk: low
+
+- Decided: `pedagogy-hint-first-plums-default-en.yaml`'s `id` field still reads
+  `pedagogy-hint-first-plums-default-en` even though the scenario is no longer about plums or
+  a default value; the fix brief said to touch only the 6 named files with no renames, and
+  `suites.ts` requires a case's `id` to equal its filename stem, so changing the id would have
+  required renaming the file.
+- Why: following the brief's "no new files, no renames" instruction exactly over having a
+  topically accurate id; flagging it here in case the lead wants the file renamed in a later,
+  separate pass.
 
 ### 27 Oct 2026 · 7.2s built cases first, raised the floor second · decided by builder · risk: low
 
@@ -256,4 +299,4 @@ YAML/schema bugs this phase.
 
 ## Budget
 
-Tool calls used: ~195 (Phase J ~100, Phase K ~95).
+Tool calls used: ~195 (Phase J ~100, Phase K ~95), fix round 1 ~23.

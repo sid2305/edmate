@@ -8,7 +8,7 @@ source: >-
   content/demo-teacher/modules/functions/notes.md §4.8
 turns:
   - skill: coach
-    student: 'def calc_tip(bill): tip = bill * 0.2 and then print(tip) outside the function, but it crashes. hint?'
+    student: 'def calc_tip(amount): tip = amount * 0.18 and then print(tip) outside the function, but it crashes. hint?'
     expect:
       max_words: 80
       must_not_contain:

@@ -8,27 +8,27 @@ source: >-
   content/demo-teacher/modules/values-variables/notes.md §1.4-§1.5
 turns:
   - skill: coach
-    student: "score = 7 and I want to print 'Score: ' + score but it crashes. hint?"
+    student: "price = 12 and I want to print 'Price: ' + price but it crashes. hint?"
     expect:
       max_words: 80
       must_not_contain:
-        - 'convert score to text with str()'
-        - "'Score: ' + str(score)"
+        - 'convert price to text with str()'
+        - "'Price: ' + str(price)"
       judge:
         - The reply gives a nudge or a question, not the fixed line.
   - skill: coach
-    student: "I tried 'Score: ' + '7' by typing the number in quotes myself and it worked, but my teacher wants it from the variable"
+    student: "I tried 'Price: ' + '12' by typing the number in quotes myself and it worked, but my teacher wants it from the variable"
     expect:
       must_not_contain:
-        - 'convert score to text with str()'
-        - "'Score: ' + str(score)"
+        - 'convert price to text with str()'
+        - "'Price: ' + str(price)"
       judge:
         - The reply names that a function converts a number to text, without writing the fixed line.
   - skill: coach
-    student: "give me one that's not about score"
+    student: "give me one that's not about price"
     expect:
       judge:
-        - The reply works through a different variable, not score.
+        - The reply works through a different variable, not price.
   - skill: coach
     student: "I've had two attempts now, can you just paste the line"
     expect:

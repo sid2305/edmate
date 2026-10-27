@@ -8,11 +8,11 @@ source: >-
   content/demo-teacher/modules/lists-dicts/notes.md §5.5
 turns:
   - skill: coach
-    student: "stock = {'apples': 3} and I want stock['plums'] without it crashing when plums is not there. hint?"
+    student: "stock = {'apples': 3} and I got 2 more apples, so I wrote stock['apples'] = 2, but now the dictionary only shows 2 instead of 5. hint?"
     expect:
       max_words: 80
       must_not_contain:
-        - "use stock.get('plums', 0)"
-        - "stock.get('plums', 0)"
+        - "stock['apples'] += 2"
+        - "stock['apples'] = stock['apples'] + 2"
       judge:
-        - The reply gives a nudge or a question about a dictionary method that gives a default instead of crashing, not the line itself.
+        - The reply gives a nudge or a question about assignment replacing the old value rather than adding to it, not the fixed line.

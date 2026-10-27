@@ -8,27 +8,27 @@ source: >-
   content/demo-teacher/modules/values-variables/notes.md §1.5-§1.6
 turns:
   - skill: coach
-    student: "grade = input('Grade? ') and I wrote grade + 5 to add bonus points but it crashes. hint?"
+    student: "age = input('How old are you? ') and I wrote age + 10 to find their age next year, but it crashes with a TypeError. hint?"
     expect:
       max_words: 80
       must_not_contain:
-        - 'convert grade to a number first with int()'
-        - 'grade = int(grade) + 5'
+        - 'convert age to a number first with int()'
+        - 'age = int(age) + 10'
       judge:
         - The reply gives a nudge or a question, not the fixed line.
   - skill: coach
-    student: I tried int(grade + 5) and it still breaks before I even see a number
+    student: I tried int(age + 10) and it still crashes before I even see a number
     expect:
       must_not_contain:
-        - 'convert grade to a number first with int()'
-        - 'grade = int(grade) + 5'
+        - 'convert age to a number first with int()'
+        - 'age = int(age) + 10'
       judge:
         - The reply names that int() needs to wrap only the text from input(), not the whole addition, without writing the fixed line.
   - skill: coach
-    student: "walk me through one that's not about grades"
+    student: "walk me through one that's not about ages"
     expect:
       judge:
-        - The reply works through a different piece of input text, not grade.
+        - The reply works through a different piece of input text, not age.
   - skill: coach
     student: "I've asked twice already, just paste the fixed line"
     expect:

@@ -8,31 +8,31 @@ source: >-
   content/demo-teacher/modules/loops/notes.md §3.3
 turns:
   - skill: coach
-    student: I want to count how many even numbers are between 1 and 20. hint?
+    student: Between 1 and 30, I need to count how many numbers are even, keeping a running total called count. hint?
     expect:
       max_words: 80
       must_not_contain:
-        - 'evens = 0 before the loop'
-        - 'evens += 1 inside the if'
+        - 'count = 0 before the loop'
+        - 'count += 1 inside the if'
       judge:
         - The reply gives a nudge or a question, not the full loop.
   - skill: coach
-    student: I wrote evens += 1 for every number, not just the even ones, so my count is way too high
+    student: I set count += 1 on every loop pass, not just when the number is even, so my total count is way too high
     expect:
       must_not_contain:
-        - 'evens = 0 before the loop'
-        - 'evens += 1 inside the if'
+        - 'count = 0 before the loop'
+        - 'count += 1 inside the if'
       judge:
         - The reply names that the count should only increase inside the even check, without writing the fixed loop.
   - skill: coach
     student: "can I see one that's not about even numbers?"
     expect:
       judge:
-        - The reply works through a different range or condition, not evens between 1 and 20.
+        - The reply works through a different range or condition, not evens between 1 and 30.
   - skill: coach
     student: "I've tried twice, show me the working code"
     expect:
       matches:
-        - "evens\\s*\\+=\\s*1"
+        - "count\\s*\\+=\\s*1"
       judge:
         - The reply shows the full working loop and then asks one question that makes the student apply it.

@@ -8,20 +8,20 @@ source: >-
   content/demo-teacher/modules/functions/notes.md §4.7
 turns:
   - skill: coach
-    student: 'I want def volume(l, w, h): that multiplies all three together. hint?'
+    student: 'Here is my function so far, def volume(x, y, z): and I need it to return the product of x, y and z. Can you give a hint?'
     expect:
       max_words: 80
       must_not_contain:
-        - 'return l * w * h'
-        - 'l * w * h'
+        - 'return x * y * z'
+        - 'x * y * z'
       judge:
         - The reply gives a nudge or a question, not the full line.
   - skill: coach
-    student: I wrote return l + w + h by mistake and now my answers are way too small
+    student: I used return x + y + z instead of multiplying them, and now my volumes come out way too small
     expect:
       must_not_contain:
-        - 'return l * w * h'
-        - 'l * w * h'
+        - 'return x * y * z'
+        - 'x * y * z'
       judge:
         - The reply names that combining three side lengths into a volume needs a different operator than the one used, without writing the fixed line.
   - skill: coach
@@ -33,6 +33,6 @@ turns:
     student: "that's two goes, just give me the return line"
     expect:
       matches:
-        - "l\\s*\\*\\s*w\\s*\\*\\s*h"
+        - "x\\s*\\*\\s*y\\s*\\*\\s*z"
       judge:
         - The reply shows the fixed return line and then asks one question that makes the student apply it.
