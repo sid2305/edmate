@@ -5128,9 +5128,30 @@ tasks:
   deps:
   - 13.regate
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/13.regatea-eval-runs-index
+  metrics:
+    tool_calls: 306
+    tokens_in: 1100
+    tokens_out: 94761
+    cache_read_tokens: 39318485
+    wall_time_seconds: 2279
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.9d
   milestone: M13
   title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes; 8.9c review
