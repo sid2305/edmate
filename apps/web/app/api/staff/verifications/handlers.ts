@@ -16,7 +16,12 @@
 // the queue after a safety rejection now see that history instead of a blank row. `enrichQueueRows`
 // is the one helper both callers (and `page.tsx`'s server-rendered first paint) share, so they can
 // never drift from each other; `decide` is byte-for-byte unchanged.
-import { RepositoryError, type Repositories, type TeacherVerificationQueueRow } from '@edmate/db';
+import {
+  RepositoryError,
+  SUBJECT_HISTORY_MAX_LIMIT,
+  type Repositories,
+  type TeacherVerificationQueueRow,
+} from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { describeError } from '../../../../src/auth/describe-error';
@@ -57,6 +62,13 @@ export interface LastDecision {
   ts: string;
 }
 
+/** Task 9.3m (B-58): one past subject change on this teacher's row, old to new, dated. */
+export interface SubjectChange {
+  from: string;
+  to: string;
+  ts: string;
+}
+
 /** What the console shows for one pending teacher (no row id, no status: they're all pending). */
 export interface QueueItem {
   teacherId: string;
@@ -68,12 +80,15 @@ export interface QueueItem {
   activeTakedowns: TakedownSummary[];
   /** Task 9.3h: the teacher's last verify/reject decision, or null before any decision. */
   lastDecision: LastDecision | null;
+  /** Task 9.3m (B-58): the teacher's last 10 subject changes, newest first (empty when none). */
+  subjectHistory: SubjectChange[];
 }
 
 export function toQueueItem(
   row: TeacherVerificationQueueRow,
   activeTakedowns: TakedownSummary[] = [],
   lastDecision: LastDecision | null = null,
+  subjectHistory: SubjectChange[] = [],
 ): QueueItem {
   return {
     teacherId: row.teacherId,
@@ -83,6 +98,7 @@ export function toQueueItem(
     email: row.email,
     activeTakedowns,
     lastDecision,
+    subjectHistory,
   };
 }
 
@@ -95,8 +111,12 @@ export function toLookupItem(
   row: TeacherVerificationQueueRow,
   activeTakedowns: TakedownSummary[] = [],
   lastDecision: LastDecision | null = null,
+  subjectHistory: SubjectChange[] = [],
 ): LookupItem {
-  return { ...toQueueItem(row, activeTakedowns, lastDecision), verificationStatus: row.verificationStatus };
+  return {
+    ...toQueueItem(row, activeTakedowns, lastDecision, subjectHistory),
+    verificationStatus: row.verificationStatus,
+  };
 }
 
 /**
@@ -110,7 +130,13 @@ export async function enrichQueueRows(
   repos: Pick<Repositories, 'takedowns' | 'audit'>,
   by: string,
   rows: TeacherVerificationQueueRow[],
-): Promise<(TeacherVerificationQueueRow & { activeTakedowns: TakedownSummary[]; lastDecision: LastDecision | null })[]> {
+): Promise<
+  (TeacherVerificationQueueRow & {
+    activeTakedowns: TakedownSummary[];
+    lastDecision: LastDecision | null;
+    subjectHistory: SubjectChange[];
+  })[]
+> {
   const active = await repos.takedowns.listActiveForStaff(by);
   const byTeacher = new Map<string, TakedownSummary[]>();
   for (const t of active) {
@@ -121,11 +147,15 @@ export async function enrichQueueRows(
   }
   return Promise.all(
     rows.map(async (row) => {
-      const decision = await repos.audit.findLastVerifyForStaff(by, row.teacherId);
+      const [decision, subjectHistory] = await Promise.all([
+        repos.audit.findLastVerifyForStaff(by, row.teacherId),
+        repos.audit.findSubjectHistoryForStaff(by, row.teacherId, SUBJECT_HISTORY_MAX_LIMIT),
+      ]);
       return {
         ...row,
         activeTakedowns: byTeacher.get(row.teacherId) ?? [],
         lastDecision: decision === null ? null : { status: decision.status, ts: decision.ts },
+        subjectHistory,
       };
     }),
   );
@@ -172,7 +202,9 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
         const rows = await repos.teacherProfiles.listPendingForStaff(ctx.principal.userId);
         const enriched = await enrichQueueRows(repos, ctx.principal.userId, rows);
         return ok({
-          teachers: enriched.map((r) => toQueueItem(r, r.activeTakedowns, r.lastDecision)),
+          teachers: enriched.map((r) =>
+            toQueueItem(r, r.activeTakedowns, r.lastDecision, r.subjectHistory),
+          ),
         });
       } catch (error) {
         if (error instanceof RepositoryError) {
@@ -195,7 +227,14 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
         const [enriched] = await enrichQueueRows(repos, ctx.principal.userId, [row]);
         /* v8 ignore next -- enrichQueueRows always returns one row per input row */
         if (!enriched) return ok({ teacher: null });
-        return ok({ teacher: toLookupItem(row, enriched.activeTakedowns, enriched.lastDecision) });
+        return ok({
+          teacher: toLookupItem(
+            row,
+            enriched.activeTakedowns,
+            enriched.lastDecision,
+            enriched.subjectHistory,
+          ),
+        });
       } catch (error) {
         if (error instanceof RepositoryError) {
           switch (error.kind) {

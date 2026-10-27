@@ -29,6 +29,13 @@ const LastDecisionSchema = z
   })
   .nullable();
 
+/** Task 9.3m (B-58): one past subject change on this teacher's row, old to new, dated. */
+const SubjectChangeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  ts: z.string(),
+});
+
 export const QueueItemSchema = z.object({
   teacherId: z.string().min(1),
   slug: z.string().min(1),
@@ -37,6 +44,7 @@ export const QueueItemSchema = z.object({
   email: z.string().nullable(),
   activeTakedowns: z.array(TakedownSummarySchema),
   lastDecision: LastDecisionSchema,
+  subjectHistory: z.array(SubjectChangeSchema),
 });
 export const QueueSchema = z.array(QueueItemSchema);
 export type QueueItem = z.infer<typeof QueueItemSchema>;
@@ -140,7 +148,11 @@ export async function decide(
   if (res === null) return FAILED;
   if (!res.ok) return { ok: false, code: (await responseError(res)).code };
   const body = await readBody(res, DecisionReply);
-  if (body === null || body.teacherId !== input.teacherId || body.verificationStatus !== input.status) {
+  if (
+    body === null ||
+    body.teacherId !== input.teacherId ||
+    body.verificationStatus !== input.status
+  ) {
     return FAILED;
   }
   return { ok: true, verificationStatus: body.verificationStatus };

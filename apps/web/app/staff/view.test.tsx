@@ -21,6 +21,7 @@ const ASHA: QueueItem = {
   email: 'asha@example.test',
   activeTakedowns: [],
   lastDecision: null,
+  subjectHistory: [],
 };
 const BEN: QueueItem = {
   teacherId: 'tch_b',
@@ -30,10 +31,10 @@ const BEN: QueueItem = {
   email: null,
   activeTakedowns: [],
   lastDecision: null,
+  subjectHistory: [],
 };
 
-const SAFETY_LABEL =
-  "Safety concern: also stop every student's access to this teacher's agent now";
+const SAFETY_LABEL = "Safety concern: also stop every student's access to this teacher's agent now";
 const SAFETY_HINT =
   'Use this only for a safety reason. Students who already subscribed lose access at once; a paperwork rejection leaves them until their plan ends.';
 
@@ -59,7 +60,10 @@ describe('StaffQueueView', () => {
   });
 
   it('approve: sends the decision, the row leaves the list, a notice shows', async () => {
-    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'verified' as const }));
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'verified' as const,
+    }));
     renderIntl(<StaffQueueView initial={[ASHA, BEN]} decide={decide} />);
     fireEvent.click(within(rowOf('asha-math')).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(screen.queryByRole('listitem', { name: 'asha-math' })).toBeNull());
@@ -74,14 +78,19 @@ describe('StaffQueueView', () => {
   });
 
   it('reject with a reason: the reason is sent and the row leaves', async () => {
-    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'rejected' as const,
+    }));
     renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
     const row = rowOf('asha-math');
     fireEvent.change(within(row).getByLabelText('Reason (optional)'), {
       target: { value: 'Name does not match' },
     });
     fireEvent.click(within(row).getByRole('button', { name: 'Reject' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('asha-math was rejected.'));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('asha-math was rejected.'),
+    );
     expect(decide).toHaveBeenCalledWith({
       teacherId: 'tch_a',
       status: 'rejected',
@@ -92,7 +101,10 @@ describe('StaffQueueView', () => {
   });
 
   it('safety concern + Reject sends `safety: true` and shows the safety notice (9.3e)', async () => {
-    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'rejected' as const,
+    }));
     renderIntl(<StaffQueueView initial={[ASHA, BEN]} decide={decide} />);
     const row = rowOf('asha-math');
     const box = within(row).getByRole('checkbox', { name: SAFETY_LABEL });
@@ -114,7 +126,10 @@ describe('StaffQueueView', () => {
   });
 
   it('Approve never sends the safety flag, even with the box ticked (9.3e)', async () => {
-    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'verified' as const }));
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'verified' as const,
+    }));
     renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
     const row = rowOf('asha-math');
     fireEvent.click(within(row).getByRole('checkbox', { name: SAFETY_LABEL }));
@@ -131,14 +146,19 @@ describe('StaffQueueView', () => {
   });
 
   it('a safety box ticked then unticked is a plain rejection (9.3e)', async () => {
-    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'rejected' as const,
+    }));
     renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
     const row = rowOf('asha-math');
     const box = within(row).getByRole('checkbox', { name: SAFETY_LABEL });
     fireEvent.click(box);
     fireEvent.click(box);
     fireEvent.click(within(row).getByRole('button', { name: 'Reject' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('asha-math was rejected.'));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('asha-math was rejected.'),
+    );
     expect(screen.getByRole('status')).not.toHaveTextContent('no longer available');
     expect(decide).toHaveBeenCalledWith(expect.objectContaining({ safety: false }));
   });
@@ -154,18 +174,24 @@ describe('StaffQueueView', () => {
   });
 
   it.each([
-    ['forbidden', "You can't verify this teacher: it may be your own profile, or your staff access changed."],
+    [
+      'forbidden',
+      "You can't verify this teacher: it may be your own profile, or your staff access changed.",
+    ],
     ['not_found', 'That teacher was not found. Reload the list.'],
     ['validation', 'Check the reason (up to 500 characters) and try again.'],
     ['provider_error', 'Something went wrong. Try again.'],
-  ] as const)('an error reply (%s) keeps the row, shows a message and re-enables the buttons', async (code, message) => {
-    const decide = vi.fn(async () => ({ ok: false as const, code }));
-    renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
-    fireEvent.click(within(rowOf('asha-math')).getByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message));
-    expect(within(rowOf('asha-math')).getByRole('button', { name: 'Approve' })).toBeEnabled();
-    expect(within(rowOf('asha-math')).getByRole('button', { name: 'Reject' })).toBeEnabled();
-  });
+  ] as const)(
+    'an error reply (%s) keeps the row, shows a message and re-enables the buttons',
+    async (code, message) => {
+      const decide = vi.fn(async () => ({ ok: false as const, code }));
+      renderIntl(<StaffQueueView initial={[ASHA]} decide={decide} />);
+      fireEvent.click(within(rowOf('asha-math')).getByRole('button', { name: 'Approve' }));
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(message));
+      expect(within(rowOf('asha-math')).getByRole('button', { name: 'Approve' })).toBeEnabled();
+      expect(within(rowOf('asha-math')).getByRole('button', { name: 'Reject' })).toBeEnabled();
+    },
+  );
 
   it('a decide call that throws still resets the busy flag', async () => {
     const decide = vi.fn(async () => {
@@ -215,7 +241,9 @@ describe('StaffQueueView', () => {
     for (let i = 0; i < 2; i += 1) {
       fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
       await waitFor(() =>
-        expect(screen.getByRole('alert')).toHaveTextContent('Could not load the verification queue.'),
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'Could not load the verification queue.',
+        ),
       );
       expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled();
       // The last good list stays on screen.
@@ -242,6 +270,25 @@ describe('StaffQueueView', () => {
     const row = rowOf('asha-math');
     expect(within(row).getByText('None')).toBeInTheDocument();
     expect(within(row).getByText('No previous decision')).toBeInTheDocument();
+  });
+
+  it('shows "No previous subject changes" when a teacher has none (9.3m, B-58)', () => {
+    renderIntl(<StaffQueueView initial={[ASHA]} />);
+    expect(within(rowOf('asha-math')).getByText('No previous subject changes')).toBeInTheDocument();
+  });
+
+  it('shows the subject-change history on a queue row (9.3m, B-58)', () => {
+    const withSubjectHistory: QueueItem = {
+      ...ASHA,
+      subjectHistory: [
+        { from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' },
+        { from: 'Biology', to: 'Math', ts: '2026-10-18T00:00:00.000Z' },
+      ],
+    };
+    renderIntl(<StaffQueueView initial={[withSubjectHistory]} />);
+    const row = rowOf('asha-math');
+    expect(within(row).getByText('Math to Physics on Oct 20, 2026')).toBeInTheDocument();
+    expect(within(row).getByText('Biology to Math on Oct 18, 2026')).toBeInTheDocument();
   });
 
   it('shows the active takedown count and the last decision line (9.3h)', () => {
@@ -302,7 +349,7 @@ describe('StaffQueueView: find a teacher by slug (9.3f)', () => {
     expect(within(row).getByRole('checkbox', { name: SAFETY_LABEL })).toBeInTheDocument();
   });
 
-  it('shows a found teacher\'s active takedowns and last decision (9.3h review follow-up, 9.3k)', async () => {
+  it("shows a found teacher's active takedowns and last decision (9.3h review follow-up, 9.3k)", async () => {
     const withHistory = {
       ...VERIFIED,
       activeTakedowns: [
@@ -324,7 +371,10 @@ describe('StaffQueueView: find a teacher by slug (9.3f)', () => {
 
   it('safety concern + Reject on the found row sends safety: true, clears it, shows rejectedSafety', async () => {
     const findTeacherBySlug = vi.fn(async () => ({ ok: true as const, teacher: VERIFIED }));
-    const decide = vi.fn(async () => ({ ok: true as const, verificationStatus: 'rejected' as const }));
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'rejected' as const,
+    }));
     renderIntl(
       <StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} decide={decide} />,
     );
@@ -391,7 +441,10 @@ describe('StaffQueueView: find a teacher by slug (9.3f)', () => {
   });
 
   it('a find error reply shows the message and does not crash', async () => {
-    const findTeacherBySlug = vi.fn(async () => ({ ok: false as const, code: 'provider_error' as const }));
+    const findTeacherBySlug = vi.fn(async () => ({
+      ok: false as const,
+      code: 'provider_error' as const,
+    }));
     renderIntl(<StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} />);
     fireEvent.change(screen.getByLabelText('Find a teacher by their profile URL'), {
       target: { value: 'asha-math' },
