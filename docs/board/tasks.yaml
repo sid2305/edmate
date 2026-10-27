@@ -9190,6 +9190,15 @@ tasks:
   status: running
   branch: m13/5.2a-video-type-lows
   model: plan:lead build:sonnet
+- id: 5.2b
+  milestone: M13
+  title: 'Real-transcriber timing check for video ingestion (third 5.2 review LOW, split from 5.2a): packages/db/test/video-ingest.int.test.ts times a scripted transcriber, so it cannot show a real transcription fits the 15-minute budget; a human runs one real recording through the production transcriber with the 8.2 timeouts and records the time (no real model calls in tests).'
+  accept: a recorded timing for one real recording against the 15-minute budget, with the timeouts tuned if it does not fit.
+  deps:
+  - 5.2a
+  status: todo
+  branch: null
+  model: null
 - id: 3.4d
   milestone: M13
   title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore
