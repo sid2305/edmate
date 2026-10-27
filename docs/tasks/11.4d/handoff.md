@@ -1,0 +1,36 @@
+# Handoff: 11.4d
+
+Status: PARTIAL (Phase A done; Phase B left)
+
+## Phase A
+
+**Files changed:**
+- `apps/worker/src/ingest/ffmpegChunker.ts` (new): exports `createFfmpegChunker(opts?): AudioChunker`. Delegates `audio/mpeg`/`audio/wav` (and anything else) to `defaultChunker` unchanged; for `audio/mp4`/`video/mp4`/`video/webm` it runs one `ffmpeg` process (`child_process.spawn`, `shell: false`, fixed argv) to re-encode and split the recording into numbered 16 kHz mono 16-bit PCM WAV pieces in a per-call `fs.mkdtemp` temp directory, reads them back in filename order (local RIFF/`data`-chunk reader for `durationMs`), enforces a wall-clock timeout (`AbortSignal.timeout`) and a running-total output-size guard (reused `DEFAULT_MAX_DOWNLOAD_BYTES`), and always removes the temp directory in a `finally`. `opts.run` lets tests inject a fake process runner (mirrors how `whisper.ts` injects `fetch`); `opts.ffmpegPath`, `opts.timeoutMs`, `opts.maxOutputBytes` override defaults.
+- `apps/worker/src/ingest/ffmpegChunker.test.ts` (new): unit tests with a fake `ProcessRunner` (argv shape / no-shell / nothing from `mimeType` or the raw bytes in argv; scope delegation to `defaultChunker`; non-zero exit → non-retryable `validation`; a hanging runner + small `timeoutMs` → retryable `provider_error`; an oversized running total → non-retryable `input_too_large`, stopping before reading every piece; no output pieces → `validation`; a happy path with 3 fake WAV pieces → correct, monotonically increasing `offsetMs`/`durationMs`; every failure/success path asserts the real temp directory is gone via `fs.stat`). One `describe.runIf(FFMPEG_PRESENT)` block (checked once, synchronously, via `spawnSync('ffmpeg', ['-version'])`, inside a `try`/`catch` so it never throws when ffmpeg is absent) with two opt-in tests against real ffmpeg: (a) a synthetic tone MP4 (generated with `ffmpeg -f lavfi -i sine=...`, never committed) split with an artificially small `maxBytes`, asserting more than one piece, each ≤ `maxBytes`, offsets monotonic, total duration within one segment of the source; (b) the same synthetic MP4 run through `createWhisperTranscriber(fakeKeys, { chunker: createFfmpegChunker(), fetch: fakeFetch })` with a local fake `fetch` (download leg serves the MP4 bytes, transcription leg serves a scripted Whisper-shaped `verbose_json` response per call) — no real model or network call — asserting a stitched transcript whose segments cover the pieces in order and `transcriptionCalls > 1`.
+- `docs/adr/0016-ffmpeg-chunker.md` (new): the ADR, Status "Proposed", following `0015-payments-port.md`'s heading order; passes `python3 docs/adr/check-headings.py`.
+
+**Red then green:** wrote the full test suite first against a stub `createFfmpegChunker` that threw `not implemented yet (red phase)`; ran `vitest run src/ingest/ffmpegChunker.test.ts` and confirmed all 11 tests failed (red). Restored the real implementation and reran the same file: all 11 passed (green). Re-ran again after wiring into the full gate below; still 11/11.
+
+**ffmpeg on this machine:** `ffmpeg -version` succeeded (ffmpeg 4.2.3, Homebrew build on macOS). Both opt-in tests ran (not skipped) and passed. Whether GitHub's hosted `ubuntu-latest` runner has ffmpeg on `PATH` is unverified here (Q4, plan); the lead should check the next CI run's log for this file's pass/skip line.
+
+**State after this phase:** `createFfmpegChunker` exists, is fully unit-tested without needing ffmpeg installed, and is proven against real ffmpeg on this machine. Nothing calls it yet — `apps/worker/src/ingest/gateway.ts` is unchanged, so `createIngestGateway` still composes the transcriber with no chunker (Phase B's job). The ADR is written from this plan's own Decision section (the architect has not yet reviewed it; this handoff does not claim that review happened).
+
+## Decisions
+
+### 27 Oct 2026 · 11.4d ffmpeg chunker (ADR-0016) · decided by builder · risk: high
+- Decided: `apps/worker`'s Docker image gains a new system binary (`ffmpeg`), a tech-stack change under rule 2. The ADR (`docs/adr/0016-ffmpeg-chunker.md`) is written and set to Status "Proposed", naming architect, security-reviewer and typescript-reviewer as the required reviewers.
+- Why: the gap closed here (MP4/WebM/M4A recordings can't be split for Whisper's upload limit the way WAV/MP3 already are) needs a general audio decoder, which is out of scope for a hand-written parser; ffmpeg is the established tool and the plan's Lead answers (27 Oct 2026) already confirms this ADR's scope (Q1-Q5). This decision itself is not final until the architect, security-reviewer and typescript-reviewer review `review.md` and the lead approves — this entry records the builder's side (rule 2's requirement that an ADR exists before the code it governs ships), not that approval.
+
+No other decision the plan didn't already make was needed in Phase A.
+
+## Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker...` — **green.** (First attempt hit two small lint errors — an unused `err` binding and a stray duplicate expression statement in the test file — fixed, then the full filtered run passed: 38/38 tasks successful, including `@edmate/db:test` at 99%+ coverage and `@edmate/worker:test`.)
+- `apps/worker` `vitest run --coverage` (standalone, to read `ffmpegChunker.ts`'s own numbers): 461/461 tests passed. `src/ingest/ffmpegChunker.ts`: 86.51% statements, 80% branches, 91.66% functions, 88.23% lines — above the repo's 80% new-code bar. The few uncovered lines are the `spawn` constructor's synchronous-throw catch branch and one `fmt`-chunk edge in the local WAV reader, both defensive paths not exercised by the fake-runner tests.
+- `python3 docs/adr/check-headings.py` — **green** (no output, exit 0).
+- `corepack pnpm exec prettier --check` on `docs/adr/0016-ffmpeg-chunker.md`, `apps/worker/src/ingest/ffmpegChunker.ts`, `apps/worker/src/ingest/ffmpegChunker.test.ts` — **green** ("All matched files use Prettier code style!").
+- `python3 .githooks/secret-scan.py --all` — **green.**
+
+## Budget
+
+Phase A tool calls used: 72
