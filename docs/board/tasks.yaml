@@ -9238,7 +9238,7 @@ tasks:
   - 1.7b
   status: done
   branch: m13/1.7d-build-smoke-hardening
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
   metrics:
     tool_calls: 376
     tokens_in: 1310
