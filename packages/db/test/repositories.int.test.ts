@@ -377,6 +377,35 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 8.2i: the atomic compare-and-set `failWith` (apps/worker) and the stuck-processing
+  // sweeper use. Unlike updateStatus, a mismatch (wrong teacher, wrong storageKey, wrong current
+  // status, missing row) never throws -- `{ updated: false }` -- so the cross-actor grid's
+  // throw-expecting `expectFailsClosed` does not apply here; isolation is asserted in verify
+  // instead (`owns: () => true` skips the generic cross-actor loop).
+  'documents.failIfStorageKey': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope, actor) =>
+      r.documents.failIfStorageKey(scope, repDoc(actor), `[${actor}] rep`, 'provider_error'),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ updated: true });
+      const mine = await r.documents.get(tScope(actor), repDoc(actor));
+      expect(mine?.status).toBe('failed');
+      expect(mine?.failureReason).toBe('provider_error');
+      const other = otherTeacher(actor);
+      const cross = await r.documents.failIfStorageKey(
+        tScope(other),
+        repDoc(actor),
+        `[${actor}] rep`,
+        'provider_error',
+      );
+      expect(cross).toEqual({ updated: false });
+      const unaffected = await r.documents.get(tScope(actor), repDoc(actor));
+      expect(unaffected?.status).toBe('failed');
+      expect(unaffected?.failureReason).toBe('provider_error');
+    },
+  },
   'documents.delete': {
     scope: 'teacher',
     op: 'write',

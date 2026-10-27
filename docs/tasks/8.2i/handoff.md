@@ -1,9 +1,109 @@
 # Handoff: 8.2i
 
-Status: DONE (Phase C)
+Status: DONE (Phases A and C)
 
 ## Decisions
 None.
+
+## Phase A
+
+Summary of what changed:
+- `packages/db/src/repositories/chunks.ts` (`documentsRepo`): added `failIfStorageKey(scope, id,
+  expectedStorageKey, failureReason)` — one UPDATE that checks the row still holds
+  `expectedStorageKey` and is still `uploading`/`processing` (`STATUS_FROM.failed`) and writes
+  `status: 'failed'` in the same statement. A storageKey mismatch, a wrong current status, a
+  missing row or another teacher's row all return `{ updated: false }`, never a throw (unlike
+  `updateStatus`, which keeps its own `not_found` throw — this is a new method, not a behaviour
+  change to that one). A genuine db error still throws.
+- `packages/db/test/documents.int.test.ts`: new `describe('failIfStorageKey', ...)` block — a
+  match (storageKey + status + reason all written), a storageKey mismatch (no-op, row unchanged),
+  a wrong current status (`ready`, no-op), a missing/other-teacher id (no-op, not a throw), a bad
+  failure reason (rejected `invalid` before any SQL), and that it does not bump the material
+  revision.
+- `packages/db/test/repositories.int.test.ts`: added a `documents.failIfStorageKey` case to the
+  isolation `CASES` table (next to `documents.updateStatus`, before `documents.delete`). Since the
+  method never throws on a mismatch, the shared cross-actor grid's `expectFailsClosed` (which
+  assumes a throw) does not apply; `owns: () => true` skips that generic loop and the isolation
+  check — another teacher's call against the same row and storage key is `{ updated: false }`,
+  leaving the row's `failed` state untouched — is asserted directly inside `verify`.
+- `apps/worker/src/ingest/processor.ts` (`failWith`): now calls `failIfStorageKey` once instead of
+  `documents.get` followed by `documents.updateStatus`, closing the window the 8.2h handoff flagged
+  (a replace landing between the re-read and the write). The doc comment above `failWith` is
+  reworded to describe the one atomic statement.
+- `apps/worker/src/ingest/processor.test.ts`: the in-memory `documents` fake gained
+  `failIfStorageKey`, mirroring the real repo's compare-and-set (storageKey match, status in
+  `['uploading', 'processing']`, else `{ updated: false }`). The two tests that exercised the old
+  re-read-then-write race now exercise the new atomic write instead: `'a db outage on the last
+  attempt is rethrown as-is'` overrides `failIfStorageKey` (was `updateStatus`) to reject, and `'a
+  db outage on the re-read before the failed write is rethrown for a retry'` is renamed `'a db
+  outage on the atomic failed write is rethrown for a retry'` and overrides `failIfStorageKey`
+  directly (was a two-call `get` override) — same rethrow-for-retry assertion in both. Every other
+  8.2h test exercising `failWith` (replace mid-flight, deleted row, web-link cases) needed no
+  change: they only assert on `mem.getRow()`/outcome, not on which repo method was called.
+
+Red-then-green evidence:
+```
+$ corepack pnpm --filter=@edmate/worker exec vitest run src/ingest/processor.test.ts
+Error: Failed to resolve... (mem.repos.documents.failIfStorageKey is not a function)
+Test Files  1 failed (1)
+```
+(before adding `failIfStorageKey` to the fake and to `processor.ts`'s `failWith`; the real-repo
+`documents.int.test.ts` tests failed the same way — `TypeError: repos.documents.failIfStorageKey is
+not a function` — before `chunks.ts`'s method existed.)
+```
+$ corepack pnpm --filter=@edmate/worker exec vitest run src/ingest/processor.test.ts
+Test Files  1 passed (1)
+     Tests  49 passed (49)
+
+$ corepack pnpm --filter=@edmate/db exec vitest run test/documents.int.test.ts
+Test Files  1 passed (1)
+     Tests  51 passed (51)
+
+$ corepack pnpm --filter=@edmate/db exec vitest run test/repositories.int.test.ts
+Test Files  1 passed (1)
+     Tests  191 passed (191)
+```
+
+### Decisions
+
+#### 27 Oct 2026 · 8.2i isolation case for a method that never throws · decided by builder · risk: low
+- Decided: `documents.failIfStorageKey`'s `CASES` entry uses `owns: () => true` to skip the shared
+  cross-actor grid (which calls `expectFailsClosed`, always expecting a throw) and instead asserts
+  cross-teacher isolation directly inside `verify` (one teacher's call against another's document,
+  checked to be `{ updated: false }` with the row left unchanged).
+- Why: the plan itself calls out that this method "returns `{ updated: boolean }` instead of
+  throwing `not_found`", which is exactly what the generic grid's `expectFailsClosed` cannot
+  express (it asserts a `RepositoryError` was thrown and nothing was written). `owns: () => true`
+  is the existing pattern this file already uses for every other case whose cross-actor behaviour
+  doesn't fit that generic throw-and-check-nothing-written shape (e.g. `courses.ensureDefault`,
+  `styleCards.create`).
+
+### Gate
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/db --filter=@edmate/worker
+Tasks:    14 successful, 14 total
+```
+```
+$ corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/worker...
+Tasks:    37 successful, 44 total
+Failed:   @edmate/cli#test (test/chatDbRetrieval.int.test.ts: Postgres connection terminated by
+  "administrator command", FATAL 57P01 -- resource contention on the shared dev Postgres from
+  other work in flight, not any file this phase touched: apps/cli is out of this phase's files,
+  and `corepack pnpm --filter=@edmate/cli exec vitest run test/chatDbRetrieval.int.test.ts
+  src/commands/chat/sameTopic.test.ts` passes cleanly in isolation. The narrower
+  `--filter=@edmate/db --filter=@edmate/worker` run above (no dependents) is green with no flakes.)
+```
+```
+$ corepack pnpm exec prettier --check packages/db/src/repositories/chunks.ts packages/db/test/repositories.int.test.ts packages/db/test/documents.int.test.ts apps/worker/src/ingest/processor.ts apps/worker/src/ingest/processor.test.ts
+All matched files use Prettier code style!
+```
+```
+$ python3 .githooks/secret-scan.py --all
+(clean; no output)
+```
+
+### Budget
+Phase A tool calls used: 32
 
 ## Phase C
 

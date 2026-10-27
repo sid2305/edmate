@@ -418,6 +418,44 @@ export function documentsRepo(db: Db) {
     },
 
     /**
+     * Task 8.2i: atomically marks the scope's document `failed` with `failureReason`, but only
+     * if it still holds `expectedStorageKey` and is still `uploading` or `processing`
+     * (`STATUS_FROM.failed`) -- the check and the write are the one UPDATE below, closing the
+     * window a re-read-then-write would leave open (a replace landing between the two). A
+     * storageKey mismatch, a wrong current status, a missing row and another teacher's row all
+     * look like one ordinary "someone else owns this now" outcome here, not an error: this
+     * returns `{ updated: false }` rather than throwing `not_found` (unlike `updateStatus`, which
+     * keeps its own throw -- this is a new method, not a behaviour change to that one). A genuine
+     * db error still throws, unwrapped as elsewhere in this file (no `translateWrite` needed: a
+     * plain UPDATE can't violate a foreign key or unique constraint the way an insert can).
+     */
+    async failIfStorageKey(
+      scope: TeacherScope,
+      id: string,
+      expectedStorageKey: string,
+      failureReason: string,
+    ): Promise<{ updated: boolean }> {
+      const method = 'documents.failIfStorageKey';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema, id, method);
+      const key = parseArg(StorageKeyArgSchema, expectedStorageKey, method);
+      const reason = parseArg(FailureReasonSchema, failureReason, method);
+      const [row] = await db
+        .update(documents)
+        .set({ status: 'failed', failureReason: reason, updatedAt: sql`now()` })
+        .where(
+          and(
+            eq(documents.id, docId),
+            eq(documents.teacherId, teacherId),
+            eq(documents.storageKey, key),
+            inArray(documents.status, [...STATUS_FROM.failed]),
+          ),
+        )
+        .returning({ id: documents.id });
+      return { updated: row !== undefined };
+    },
+
+    /**
      * Deletes the scope's document and its chunks and bumps the material revision, in one
      * transaction: the next retrieval search (and leakCheck) no longer sees it. The row is locked
      * first, so a concurrent chunk insert waits and then finds no document. Returns the storage
