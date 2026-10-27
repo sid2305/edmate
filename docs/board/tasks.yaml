@@ -5626,7 +5626,9 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: todo
+  status: running
+  branch: m13/8.7i-eval-runs-lows
+  model: plan:sonnet build:sonnet
 - id: 9.2f
   milestone: M13
   title: '9.2c review follow-ups (LOW): scope the next-intl Translate double cast in teachers/[slug]/page.tsx and discovery/format.ts to the dynamic skills key only; scorecard.ts guards byKey.get(key) instead
@@ -8213,7 +8215,9 @@ tasks:
     human_questions: 0
 - id: 13.4e
   milestone: M13
-  title: '13.4d review MEDIUMs: apps/web/src/export/accountExport.ts builds one export section per row of subscriptions.listAllForStudent, so a student who re-subscribed to the same teacher gets duplicate teacher entries that each re-read the same history; group by (teacherId, agentId), keep the latest periodEnd, and cap the number of pairs with a truncated flag like the other sections. packages/db/src/identity/store.ts listConsentsForStudent casts row.grantedBy to self or parent; parse it with a zod enum instead.'
+  title: '13.4d review MEDIUMs: apps/web/src/export/accountExport.ts builds one export section per row of subscriptions.listAllForStudent, so a student who re-subscribed to the same teacher gets duplicate
+    teacher entries that each re-read the same history; group by (teacherId, agentId), keep the latest periodEnd, and cap the number of pairs with a truncated flag like the other sections. packages/db/src/identity/store.ts
+    listConsentsForStudent casts row.grantedBy to self or parent; parse it with a zod enum instead.'
   accept: a student with two subscriptions to one teacher gets one teacher entry; the pair count is capped with a truncated flag; a bad grantedBy value fails loud in a test.
   deps:
   - 13.4d
