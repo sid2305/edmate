@@ -3098,9 +3098,9 @@ tasks:
   deps:
   - '6.5'
   risk: risky
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 7.3a
   milestone: M13
   title: 'Per-agent suite generator: Hindi (Devanagari), romanised Hindi and Hinglish variants of the locked templates, as a safety net after the English-only pilot.'
@@ -3359,6 +3359,15 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 6.5c
+  milestone: M13
+  title: '6.5a plan Q3: the worker''s JOB.evidence processor (apps/worker/src/commit/processors.ts) folds mastery in a second, unlocked transaction after evidenceEvents.append; move it onto appendAndFold
+    so the append and the fold share the profile-row lock, as 6.2 did for profileStoreFor.applyEvidence'
+  accept: a concurrent test shows two evidence jobs for one learner fold both events; worker and db gates green
+  deps:
+  - 6.5a
+  risk: medium
+  status: todo
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
@@ -9824,7 +9833,9 @@ tasks:
   deps:
   - 9.2g
   risk: medium
-  status: todo
+  status: running
+  branch: m13/9.2h-staff-queue-lows
+  model: plan:lead build:sonnet
 - id: 5.6f
   milestone: M13
   title: '5.6b plan Q5 follow-up (pilot-blocking): release the practice key on a turn that is graded correct, so a confirmation that restates the key ("Yes, B is right!") is not replaced by the safe hint;
