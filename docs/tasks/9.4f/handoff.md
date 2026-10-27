@@ -53,6 +53,14 @@ see Decisions below. No file outside the plan's "Files to create/modify" list wa
 
 ## Decisions
 
+### 26 Oct 2026 · 9.4f apiError cache-control fix in-PR · decided by lead · risk: high
+- Decided: the HIGH (security-reviewer, typescript-reviewer) on `apps/web/src/auth/errors.ts` was fixed in one fix round: `apiError` now builds a real `Headers` and calls `set('cache-control', 'no-store')`, so a caller's `Cache-Control` in any case is replaced. The code-reviewer MEDIUM (an overstated doc comment) and the typescript-reviewer LOW on `packages/db/src/repositories/README.md` (lockRole returns `Role | null`; the calling method throws) were fixed in the same round. Both reviewers re-checked and approved.
+- Why: a cached error response could leak one student's error to another behind a shared cache; the old compile-time guard caught only the exact lowercase key.
+
+### 26 Oct 2026 · 9.4f dev-mode /api/health check deferred to 1.7e · decided by lead · risk: low
+- Decided: the security-reviewer LOW on the item-1 wontfix (board 1.7e's acceptance covers only the production `next build` path, not the dev-mode `bullmq`/`@edmate/queue` break at `/api/health`) is deferred to 1.7e; the lead adds that check to 1.7e's board entry at closeout.
+- Why: the Playwright `--webpack` flag stays until 1.7e proves both the production and the dev-mode paths work without it.
+
 ### 26 Oct 2026 · 9.4f Playwright --webpack · decided by builder · risk: low
 - Decided: Wontfix. No new board id; point to the existing owner, board task 1.7e ("Turbopack for
   apps/web (1.7b trial)", `status: todo`).
@@ -122,6 +130,6 @@ Fixed two follow-up findings:
 
 ## Budget
 
-Tool calls used: 19
+Tool calls used: 33 (harness count; the builder reported 19)
 
-Fix round tool calls used: 11
+Fix round tool calls used: 26 (harness count; the fixer reported 11). Total 59 against a budget of 55, within 1.2x.
