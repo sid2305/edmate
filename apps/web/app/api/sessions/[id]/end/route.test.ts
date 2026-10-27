@@ -33,12 +33,24 @@ interface SessionRow {
   summary: string | null;
 }
 
+function errorNameOf(error: unknown): string {
+  return error instanceof Error ? error.constructor.name : typeof error;
+}
+
 function message(role: Message['role'], text: string): Message {
   return { id: `msg_${role}_${text}`, role, text, createdAt: new Date().toISOString() };
 }
 
 /** A memory agents + sessions + messages backend with the real rules, plus a stub drafter. */
-function memory(options: { summary?: string; gatewayFails?: boolean; history?: Message[] } = {}) {
+function memory(
+  options: {
+    summary?: string;
+    gatewayFails?: boolean;
+    attachSummaryFails?: boolean;
+    historyFails?: unknown;
+    history?: Message[];
+  } = {},
+) {
   const liveAgents = new Map<string, string>([['agt_1', 'tch_1']]);
   const sessions = new Map<string, SessionRow>([
     [
@@ -86,12 +98,33 @@ function memory(options: { summary?: string; gatewayFails?: boolean; history?: M
     },
   );
 
-  const historyFn = vi.fn(async (): Promise<Message[]> => history);
+  const attachSummary = vi.fn(
+    async (
+      scope: { studentId: string; teacherId: string },
+      sessionId: string,
+      summary: string,
+    ): Promise<{ attached: boolean }> => {
+      const m = 'sessions.attachSummary';
+      if (options.attachSummaryFails === true) throw new RepositoryError('invalid', m);
+      const row = sessions.get(sessionId);
+      if (!row || row.studentId !== scope.studentId || row.teacherId !== scope.teacherId) {
+        throw new RepositoryError('not_found', m);
+      }
+      if (row.endedAt === null || row.summary !== null) return { attached: false };
+      row.summary = summary;
+      return { attached: true };
+    },
+  );
 
-  const repos = { sessions: { get, end }, messages: { history: historyFn } } as unknown as Pick<
-    Repositories,
-    'sessions' | 'messages'
-  >;
+  const historyFn = vi.fn(async (): Promise<Message[]> => {
+    if (options.historyFails !== undefined) throw options.historyFails;
+    return history;
+  });
+
+  const repos = {
+    sessions: { get, end, attachSummary },
+    messages: { history: historyFn },
+  } as unknown as Pick<Repositories, 'sessions' | 'messages'>;
 
   const gateway = vi.fn(async (): Promise<Pick<ModelGateway, 'generateObject'>> => {
     if (options.gatewayFails === true) throw new Error('no provider key');
@@ -109,7 +142,7 @@ function memory(options: { summary?: string; gatewayFails?: boolean; history?: M
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
   };
   const h = createSessionEndHandlers(backend);
-  return { h, agents, get, end, historyFn, gateway, sessions, logs };
+  return { h, agents, get, end, attachSummary, historyFn, gateway, sessions, logs };
 }
 
 const ctx = (principal: Principal = STUDENT, id = 'ses_1'): RoleContext => ({
@@ -143,7 +176,13 @@ describe('POST: end a session', () => {
       'ses_1',
       SUMMARY_HISTORY_LIMIT,
     );
+    // Task 6.4b: end() is the claim, called with undefined; attachSummary carries the summary.
     expect(m.end).toHaveBeenCalledWith(
+      { studentId: 'stu_1', teacherId: 'tch_1' },
+      'ses_1',
+      undefined,
+    );
+    expect(m.attachSummary).toHaveBeenCalledWith(
       { studentId: 'stu_1', teacherId: 'tch_1' },
       'ses_1',
       'Covered fractions.',
@@ -161,6 +200,7 @@ describe('POST: end a session', () => {
       'ses_1',
       undefined,
     );
+    expect(m.attachSummary).not.toHaveBeenCalled();
   });
 
   it('a gateway failure never blocks ending the session: ends with no summary, logs only the name', async () => {
@@ -172,6 +212,7 @@ describe('POST: end a session', () => {
       'ses_1',
       undefined,
     );
+    expect(m.attachSummary).not.toHaveBeenCalled();
     expect(m.logs).toEqual([
       { event: 'sessions.end.summarize_failed', fields: { error: 'Error' } },
     ]);
@@ -191,8 +232,57 @@ describe('POST: end a session', () => {
     expect(await res.json()).toEqual({ ok: true });
     expect(m.gateway).not.toHaveBeenCalled();
     expect(m.end).not.toHaveBeenCalled();
+    expect(m.attachSummary).not.toHaveBeenCalled();
     expect(m.sessions.get('ses_1')?.summary).toBe('old one');
   });
+
+  it('two concurrent end requests for one session run the summarizer once; the second answers without a model call', async () => {
+    const m = memory({ summary: 'Covered fractions.' });
+    const [res1, res2] = await Promise.all([
+      m.h.end(post(VALID), ctx()),
+      m.h.end(post(VALID), ctx()),
+    ]);
+    expect(await res1.json()).toEqual({ ok: true });
+    expect(await res2.json()).toEqual({ ok: true });
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    // The claim is atomic: end() ran twice (both calls attempt it), but only the winner went on
+    // to read history and call the gateway/summarizer.
+    expect(m.historyFn).toHaveBeenCalledTimes(1);
+    expect(m.gateway).toHaveBeenCalledTimes(1);
+    expect(m.attachSummary).toHaveBeenCalledTimes(1);
+    expect(m.sessions.get('ses_1')?.summary).toBe('Covered fractions.');
+  });
+
+  it('an attachSummary failure still returns ok() with the summary unstored, logged by name only', async () => {
+    const m = memory({ summary: 'Covered fractions.', attachSummaryFails: true });
+    const res = await m.h.end(post(VALID), ctx());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(m.sessions.get('ses_1')?.summary).toBeNull();
+    expect(m.logs).toEqual([
+      { event: 'sessions.end.attach_failed', fields: { error: 'RepositoryError' } },
+    ]);
+  });
+
+  it.each([
+    ['a RepositoryError', new RepositoryError('failed', 'messages.history')],
+    ['a plain Error', new Error('pg says person@example.test')],
+  ])(
+    'a messages.history failure (%s) after a successful claim still returns ok(), stays ended, never summarises, logs by name only',
+    async (_label, thrown) => {
+      const m = memory({ historyFails: thrown });
+      const res = await m.h.end(post(VALID), ctx());
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(m.sessions.get('ses_1')?.endedAt).not.toBeNull();
+      expect(m.gateway).not.toHaveBeenCalled();
+      expect(m.attachSummary).not.toHaveBeenCalled();
+      expect(m.logs).toEqual([
+        { event: 'sessions.end.history_failed', fields: { error: errorNameOf(thrown) } },
+      ]);
+    },
+  );
 
   it('an agent that is not live (suspended, draft or unknown) is 404, nothing ended', async () => {
     const m = memory();
