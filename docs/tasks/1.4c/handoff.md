@@ -135,6 +135,10 @@ answers were followed as given, with no deviation.
 - Decided: merge 1.4c. This replaces the Google-provider part of the 1.3 decision (18 Oct 2026) that kept `allowDangerousEmailAccountLinking` false. The flag is now true on the Google provider only, and Edmate's `signIn` callback refuses the link unless Google reports `email_verified` true, the existing user's `emailVerifiedAt` is set, and that user has no Google account linked yet. The email-link provider is unchanged.
 - Why: the lead and the security reviewer checked the installed `@auth/core` 0.41.3 and confirmed that `signIn` runs before `handleLoginOrRegister` links anything, so a refusal writes nothing; flow tests against the real handlers prove the linked same-user case and every refusal. The unique `(user_id, provider)` index backs the app check. Security, database, code and typescript reviewers approved with LOW notes only.
 
+### 27 Oct 2026 · 1.4c review LOWs left as is · decided by lead · risk: low
+- Decided: wontfix the three review LOWs: in `apps/web/src/auth/config.ts`, no Google self-link while signed in (the shared-device rule), and `hasLinkedAccount` not try/caught; in `packages/db/src/identity/store.ts`, the `sql\`1\`` select style.
+- Why: each fails closed or is style only, and each matches the existing pattern in its file; none is a takeover path.
+
 ## Gate
 
 ```
