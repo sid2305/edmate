@@ -10,6 +10,34 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.5b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 44 tool calls against the plan's budget of 35 (1.26x).
+- Why: one phase, three approving reviews with no findings, and the extra calls went on prettier passes and on running the web gate; no scope was added.
+
+---
+
+### 27 Oct 2026 · 6.5b review and risk level · decided by lead · risk: low
+- Decided: merge with code-reviewer, typescript-reviewer and security-reviewer, all APPROVE with no findings; no `risk: high` entry, since no changed path matches `risk-paths.txt`.
+- Why: the page's scope resolution is an access check, so security-reviewer ran anyway; it confirmed the page and the route now refuse the same cases with no database read before the guard.
+
+---
+
+### 27 Oct 2026 · 6.5b closes the three 6.5 review LOWs · decided by builder · risk: low
+- Decided: the memory page now resolves its scope through the same `studentTurnScope` helper the
+  route uses, instead of a second hand-built scope object; a new test exercises the real wired
+  `memoryHandlers` export (not just the factory) against a mocked `serverDatabase()`; code
+  comments on both the route file and `routes.ts`'s `reset` handler document that a reset with no
+  profile row still ends any open session.
+- Why: closes three LOW findings from the 6.5 review with no behaviour change -- same scope
+  values, same responses, same `packages/db` contract. No risky-path match per
+  `.claude/skills/merge-gate/risk-paths.txt` (`apps/web/app/learn/**` and `apps/web/src/memory/**`
+  are not listed groups); the board's `risk: risky` tag reflects that this task closes out LOWs on
+  6.5 itself (which was `risk: high`), not a new risky-path touch here. No `risk: high` decision
+  needed. Lead-recommended reviewers: code-reviewer, typescript-reviewer, and security-reviewer
+  (page's scope resolution is an access check, even though not glob-matched).
+
+---
+
 ### 27 Oct 2026 · 6.5a sessions.end reads the watermark FOR UPDATE · decided by lead · risk: high
 - Decided: fix in this PR the security-reviewer HIGH (database-reviewer MEDIUM) that `sessions.end` read `memory_reset_at` without a lock; it now reads it `FOR UPDATE` in the sessions-then-profile order `reset` uses, and the comment explains that `end`'s own session-row UPDATE already serialises it against `reset`.
 - Why: a pre-reset summary surviving a reset is exactly what this task exists to prevent; the change is one clause, and security- and database-reviewer re-reviewed every interleaving.
