@@ -132,6 +132,10 @@ budget.
 - Decided: accept 198 harness-counted tool calls against 60 (45 planned plus 15 for the sweep-index addition), about 3.3x.
 - Why: the lead added the sweep index mid-build, and the Postgres EXPLAIN tests needed several rounds to force index plans on small fixtures. The builder reported about 63 calls, so self-counts are unreliable here. Later migration tasks with EXPLAIN tests should plan about 120 calls, or split the EXPLAIN tests into their own phase.
 
+### 27 Oct 2026 · 8.2r journal timestamp left as it is · decided by lead · risk: low
+- Decided: wontfix the database LOW in _journal.json (packages/db/migrations/meta/): entry 41's `when` is earlier than entries 39 and 40.
+- Why: drizzle applies migrations by idx, not by `when`, and rewriting a committed journal entry adds risk for no gain.
+
 ## Gate
 - `corepack pnpm --filter @edmate/db exec tsc --noEmit -p .` — pre-existing unrelated errors in
   other test files (missing built `@edmate/contracts`/`@edmate/harness` types when run directly,
