@@ -11,6 +11,7 @@ import {
   reportRowId,
   RepositoryError,
 } from '../src/index.js';
+import { isSkippableReportRowError } from '../src/repositories/reports.js';
 
 const handle = createDb({ DATABASE_URL: 'postgres://u:p@127.0.0.1:1/none' });
 const repos = createRepositories(handle.db);
@@ -81,6 +82,30 @@ describe('reports.file rejects before any SQL', () => {
       kind: 'invalid',
       method: 'reports.file',
     });
+  });
+});
+
+describe("listOpenForStaff's per-row catch skips integrity errors only", () => {
+  // The int test (reports.int.test.ts) covers the real path end to end (a bad stored category is
+  // skipped). toStaffReportRow's only throw site always raises `integrity`, so there is no way to
+  // force a non-integrity error through that path without changing production code; this tests
+  // the rethrow rule itself.
+  it('is skippable for a RepositoryError with kind integrity', () => {
+    expect(
+      isSkippableReportRowError(new RepositoryError('integrity', 'reports.listOpenForStaff')),
+    ).toBe(true);
+  });
+
+  it.each([
+    [
+      'a RepositoryError of another kind',
+      new RepositoryError('failed', 'reports.listOpenForStaff'),
+    ],
+    ['a plain Error', new Error('boom')],
+    ['a non-error throw', 'boom'],
+    ['undefined', undefined],
+  ])('rethrows for %s', (_l, e) => {
+    expect(isSkippableReportRowError(e)).toBe(false);
   });
 });
 
