@@ -102,7 +102,8 @@ export const GROUNDING_JUDGE_SYSTEM =
 
 /** A verdict longer than this is not the strict JSON object, so it is not read. */
 const MAX_VERDICT_LENGTH = 200;
-const VerdictSchema = z.strictObject({ grounded: z.boolean() });
+export const GroundingVerdictSchema = z.strictObject({ grounded: z.boolean() });
+const VerdictSchema = GroundingVerdictSchema;
 
 /** True only for the strict JSON `{"grounded": true}` (whitespace around it allowed). */
 export function parseGroundingVerdict(text: string | undefined): boolean {
@@ -236,10 +237,7 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
       // D: the judge, on the text the student would see.
       const subject = fix.text;
       // 5.6b: the same answer context, without the student's text (a chunk is not their code).
-      const keys = compileAnswerKeys(
-        x.decision.mustNotReveal,
-        answerKeyOptions(x, false),
-      );
+      const keys = compileAnswerKeys(x.decision.mustNotReveal, answerKeyOptions(x, false));
       const chunks = x.ctx.retrieved.filter((c) => !keys.leaks(c.text));
       let answer: string | undefined;
       let usage: Usage[] = [];

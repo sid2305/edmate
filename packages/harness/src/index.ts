@@ -6,3 +6,4 @@ export * from './pedagogy/index.js';
 export * from './guardrails/index.js';
 export * from './tools/index.js';
 export * from './memory/index.js';
+export { RouteIntentVerdictSchema } from './routing/modelFallback.js';

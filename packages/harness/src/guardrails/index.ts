@@ -30,6 +30,7 @@ export {
   DEFAULT_GENERIC_DISCLAIMER,
   disclaimerFor,
   personalDirective,
+  AdviceVerdictSchema,
 } from './adviceGuard.js';
 export {
   askTeacherReplyText,
@@ -40,6 +41,7 @@ export {
   groundingJudgeRequest,
   parseGroundingVerdict,
   PREMISE_CORRECTION_REPLY,
+  GroundingVerdictSchema,
 } from './grounding.js';
 export {
   type GuardBlockCause,
