@@ -54,6 +54,18 @@ const nextConfig: NextConfig = {
   agentRules: false,
   // Self-contained server bundle for the Docker image (apps/web/Dockerfile, task 0.2).
   output: 'standalone',
+  // 1.7e, Phase B tried adding `@edmate/queue`/`bullmq`/`ioredis`/`pg` here to fix `next dev
+  // --webpack`'s `/api/health` 500 (`instrumentation.ts` -> `src/auth/index.ts` ->
+  // `rate-limit.ts` -> `@edmate/queue` -> `bullmq`, and separately -> `packages/db` -> `pg`). It
+  // didn't work and was reverted: webpack dev's own log names the failing compile target
+  // `/instrumentation` (distinct from any route/page bundle), and adding entries here only ever
+  // moved which import in that same chain hit a wall next (first bullmq's `crypto` import, then --
+  // once that was added too -- `pg`'s `fs` import); it never cleared it, which means
+  // `serverExternalPackages` (documented as applying to server/route bundles) isn't reaching
+  // whatever compiles `/instrumentation`. See `apps/web/playwright.config.ts`'s own comment and
+  // `docs/tasks/1.7e/handoff.md` (Phase B) for the full finding; a real fix would need to touch
+  // `instrumentation.ts` or `src/auth/*` (how `@edmate/queue`/`pg` get imported there), both out of
+  // this task's scope.
   serverExternalPackages: ['@edmate/content'],
   outputFileTracingIncludes: {
     '/**': ['../../packages/content/dist/**'],

@@ -83,3 +83,113 @@ infrastructure) and the brief forbids running `docker`/`docker compose` from thi
 
 ## Budget
 Phase A tool calls used: 21
+
+## Phase B
+
+Status: PARTIAL
+
+Dev-mode bug not fixed: the fix this plan expected to try (`serverExternalPackages`) was tried and
+confirmed not to clear it, as the plan's own exit condition (b) anticipates. Calling this `DONE`
+would be accurate per the letter of exit condition (b) (exact error quoted, comment rewritten, not
+left stale), but the result is the same crash as before with no code change that fixes it, so
+`PARTIAL` with the full finding below gives the lead the clearer signal that the dev-mode bug
+itself is still open for a follow-up task (see Decisions).
+
+### Setup note
+First re-ran Phase A's `build-smoke` with `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate`
+set (brief step), since Phase A's handoff reported a local SASL/credentials failure. With that
+variable correctly exported, `corepack pnpm turbo run build-smoke --filter=@edmate/web --force`
+**runs (not skipped) and passes**: `3 passed (3)` across `test/build-smoke.test.ts` and
+`test/lighthouse-a11y.test.ts`. Phase A's reported SASL failure was this worktree's shell not
+having `TEST_DATABASE_URL` exported when it ran that command, not a real Postgres/credentials gap
+or a bundler regression — the local Postgres at that address was reachable and correct all along.
+
+### Summary
+Reproduced 9.4a's finding against today's `main` (after Phase A's Turbopack-build switch):
+`next dev --webpack -p <port>` with the same env Playwright's `webServer` sets, then `GET
+/api/health`, returns **500**, `Module not found: Can't resolve 'crypto'` from
+`bullmq/dist/esm/classes/bun-redis-client.js`, reached via `instrumentation.ts -> src/auth/index.ts
+-> src/auth/rate-limit.ts -> @edmate/queue -> bullmq` (red, matches 9.4a and the plan).
+
+Tried the plan's first fix: added `@edmate/queue`, `bullmq`, `ioredis` to
+`apps/web/next.config.ts`'s `serverExternalPackages`. Re-ran the same repro: the `crypto` error on
+bullmq was gone, but `/api/health` still 500'd, now on `Module not found: Can't resolve 'fs'` from
+`pg-connection-string` (`packages/db` -> `pg` -> `pg-connection-string`, same
+`instrumentation.ts -> src/auth/index.ts` chain, a second static import `serverExternalPackages`
+also wasn't reaching). Added `pg` to the same list too and re-ran again: identical `fs` error,
+unchanged — adding `pg` had no effect at all. Conclusion: `serverExternalPackages` is not reaching
+whatever webpack dev compiles for the target it names `○ Compiling /instrumentation ...` in its own
+log (distinct from any route/page bundle); it is documented as a server/route-bundle option, and it
+already demonstrably works for `@edmate/content` on *those* bundles (next.config.ts's own existing
+comment) — just not on this one. The narrowest fix the plan named does not work here; I did not
+widen into `src/auth/rate-limit.ts` or `instrumentation.ts` to try a different shape of fix (e.g. a
+fully dynamic import), per Q4 and the plan's files-to-modify list, so I reverted the
+`serverExternalPackages` additions (`@edmate/content` only, as before Phase B) rather than leave a
+non-functional change in place, and rewrote both `next.config.ts`'s and
+`apps/web/playwright.config.ts`'s comments to state this finding instead of 9.4a's older,
+narrower one.
+
+Confirmed the unaffected side: `next dev` (Turbopack, the plain command with no `--webpack`, same
+env) started and `GET /api/health` returned `200 {"status":"ok"}`. Per Q2 (Phase A moved the build
+to Turbopack too), `playwright.config.ts`'s `webServer.command` stays plain `next dev` (no flag
+added) — not as a leftover placeholder waiting on a webpack fix, but because nothing in `apps/web`
+still needs webpack for dev or build.
+
+### Changed
+- `apps/web/next.config.ts` — comment only (describes the Phase B finding: tried-and-reverted
+  `serverExternalPackages` entries, names the real remaining blocker). No functional change; the
+  `serverExternalPackages` value is unchanged from Phase A (`['@edmate/content']`).
+- `apps/web/playwright.config.ts` — `webServer`'s comment rewritten (Question 2: no `--webpack`
+  added, since Phase A moved the build to Turbopack too; states the current, real finding instead
+  of 9.4a's older one). `command` itself unchanged (`next dev -p <port>`, already no `--webpack`).
+- `docs/tasks/1.7e/handoff.md` — this section.
+
+Evidence:
+- Before any fix (`next dev --webpack -p 3112`, `GET /api/health`): `HTTP_STATUS=500`,
+  `"message":"Module not found: Can't resolve 'crypto'\n> 1 | import { createHash } from
+  'crypto';\n ... Import trace ... bullmq/dist/esm/classes/index.js ... packages/queue/dist/index.js
+  ./src/auth/rate-limit.ts ./src/auth/index.ts ./instrumentation.ts"`.
+- After adding `@edmate/queue`/`bullmq`/`ioredis` to `serverExternalPackages` (`-p 3113`):
+  `HTTP_STATUS=500`, `"message":"Module not found: Can't resolve 'fs'\n ... const fs =
+  config.sslcert || config.sslkey || config.sslrootcert ? require('fs') : null ... Import trace ...
+  pg/lib/connection-parameters.js ... packages/db/dist/client.js ./src/auth/index.ts
+  ./instrumentation.ts"` — the bullmq error is gone; a different import in the same chain fails
+  instead.
+- After also adding `pg` (`-p 3114`): `HTTP_STATUS=500`, identical `fs`/`pg-connection-string`
+  error, unchanged by the addition.
+- Turbopack, unaffected (`next dev -p 3115`, no `--webpack`): `HTTP_STATUS=200`,
+  `{"status":"ok"}`.
+- Every dev server started above was `kill`ed and confirmed gone (`ps aux | grep "next dev"`
+  empty) before moving to the next trial or returning.
+
+### Decisions
+
+#### 26 Oct 2026 · 1.7e Phase B dev-mode bullmq/pg break not fixed · decided by builder · risk: low
+- Decided: Leave `next dev --webpack`'s `/api/health` crash unfixed; revert the
+  `serverExternalPackages` additions tried during this phase (back to Phase A's
+  `['@edmate/content']`) since they had no effect, and keep Turbopack as the Playwright/dev default
+  rather than adding `--webpack` back.
+- Why: the plan's one named fix (`serverExternalPackages`) demonstrably doesn't reach whatever
+  webpack dev compiles as `/instrumentation`; clearing it would need touching `instrumentation.ts`
+  or `src/auth/rate-limit.ts` (how `@edmate/queue`/`pg` are imported there), and the plan (Q4) says
+  stop and raise that rather than widen scope into those files without the lead's sign-off. Since
+  Phase A already moved the production build to Turbopack, nothing in `apps/web` needs webpack for
+  either build or dev anymore, so there is no remaining reason to chase this webpack-only bug for
+  its own sake — a follow-up task only matters if something later needs webpack again.
+- Open for the lead: a possible fast follow-up task, narrowly scoped to `instrumentation.ts`/
+  `src/auth/rate-limit.ts` (e.g. making the `@edmate/queue` import fully dynamic, mirroring
+  `instrumentation.ts`'s existing `./src/auth` dynamic import), if dev-mode webpack parity is ever
+  needed again. Not started here (Q4; risky-path files, needs sign-off first).
+
+### Gate
+- `corepack pnpm turbo run typecheck lint test build --filter=@edmate/web` with
+  `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate` — **PASS**.
+- `corepack pnpm turbo run build-smoke --filter=@edmate/web --force` (same env) — **PASS**, runs
+  (not skipped), `3 passed (3)`. Confirms the brief's required re-check: Phase A's SASL failure was
+  a missing env var in that run's shell, not a real gap.
+- `corepack pnpm exec prettier --check apps/web/next.config.ts apps/web/playwright.config.ts` —
+  **PASS**.
+- `python3 .githooks/secret-scan.py --all` — **PASS**, clean.
+
+### Budget
+Phase B tool calls used: 34
