@@ -11032,9 +11032,9 @@ tasks:
   deps:
   - 11.4d
   risk: low
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4i-media-cap-lift
+  model: plan:sonnet build:sonnet
 - id: 6.4b
   milestone: M13
   title: 'Session-end summary cost race (6.4a security MEDIUM): concurrent POSTs to apps/web/app/api/sessions/[id]/end can each run an unmetered summarize before one write lands; add a per-session in-flight
@@ -11340,11 +11340,11 @@ tasks:
   title: 'local dev e2e hang found by 0.20h: in next dev, the Edge Runtime warning for node:worker_threads (packages/content safeRegexGuard.js, line 31) brings up the Next dev overlay portal, which intercepts
     clicks, so teacher-packages-walkthrough.spec.ts retries the Save click until its 900 s timeout; find why the guard reaches the Edge bundle and keep it Node-only, and set a Playwright actionTimeout so
     a blocked click fails fast'
-  accept: teacher-packages-walkthrough.spec.ts passes 5 fresh local runs against next dev; no node:worker_threads Edge warning in the dev server log; apps/web and @edmate/content typecheck, lint and test
-    green.
+  accept: teacher-packages-walkthrough.spec.ts passes 5 fresh local runs against next dev (including its at-cap rename path); no node:worker_threads Edge warning in the dev server log; the global-setup.ts
+    WARM_UP_TIMEOUT_MS comment is corrected (0.20h review); apps/web and @edmate/content typecheck, lint and test green.
   deps:
   - 0.20h
   risk: low
-  status: todo
+  status: planning
   branch: null
   model: null
