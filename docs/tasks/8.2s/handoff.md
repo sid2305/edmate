@@ -36,7 +36,6 @@ Red-then-green evidence (drizzle-kit `db:generate`, no database needed):
 No live index change and no new migration file, as the plan specifies.
 
 ## Decisions
-None.
 
 ### 27 Oct 2026 · 8.2s budget overrun accepted · decided by lead · risk: low
 - Decided: Accept 49 tool calls (harness count) against a plan budget of 20.
