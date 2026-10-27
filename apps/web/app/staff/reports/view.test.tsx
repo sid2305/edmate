@@ -65,7 +65,9 @@ describe('StaffReportsView', () => {
   });
 
   it('announces the open-report count in an aria-live region', () => {
-    renderIntl(<StaffReportsView initialReports={[REPORT, REPORT_WITH_DOC]} initialTakedowns={[]} />);
+    renderIntl(
+      <StaffReportsView initialReports={[REPORT, REPORT_WITH_DOC]} initialTakedowns={[]} />,
+    );
     const region = document.querySelector('[aria-live="polite"]');
     expect(region).toHaveTextContent('2 open reports');
   });
@@ -139,7 +141,11 @@ describe('StaffReportsView', () => {
   it('take down the agent, confirmed: creates the agent takedown linked to the report', async () => {
     const createTakedown = vi.fn(async () => ({ ok: true as const, id: 'tkd_new' }));
     renderIntl(
-      <StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} createTakedown={createTakedown} />,
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        createTakedown={createTakedown}
+      />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Take down this agent' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
@@ -164,18 +170,17 @@ describe('StaffReportsView', () => {
 
   it('a message that is gone shows the fallback line, not a crash', () => {
     renderIntl(
-      <StaffReportsView initialReports={[report({ id: 'rp_5', message: null })]} initialTakedowns={[]} />,
+      <StaffReportsView
+        initialReports={[report({ id: 'rp_5', message: null })]}
+        initialTakedowns={[]}
+      />,
     );
     expect(screen.getByText('This message is no longer available.')).toBeInTheDocument();
   });
 
   it('while any action is in flight every button is disabled', async () => {
     renderIntl(
-      <StaffReportsView
-        initialReports={[REPORT]}
-        initialTakedowns={[]}
-        reviewReport={never}
-      />,
+      <StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} reviewReport={never} />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
@@ -188,30 +193,51 @@ describe('StaffReportsView', () => {
     ['not_found', 'That was not found. Reload the list.'],
     ['validation', 'This was already actioned or is no longer open. Reload the list.'],
     ['provider_error', 'Something went wrong. Try again.'],
-  ] as const)('an error reply (%s) keeps the row and re-enables the button', async (code, message) => {
-    const reviewReport = vi.fn(async () => ({ ok: false as const, code }));
-    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} reviewReport={reviewReport} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
-    await waitFor(() => expect(screen.getByText(message)).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
-  });
+  ] as const)(
+    'an error reply (%s) keeps the row and re-enables the button',
+    async (code, message) => {
+      const reviewReport = vi.fn(async () => ({ ok: false as const, code }));
+      renderIntl(
+        <StaffReportsView
+          initialReports={[REPORT]}
+          initialTakedowns={[]}
+          reviewReport={reviewReport}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
+      await waitFor(() => expect(screen.getByText(message)).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
+    },
+  );
 
   it('a thrown review call still resets the busy flag', async () => {
     const reviewReport = vi.fn(async () => {
       throw new Error('boom');
     });
-    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} reviewReport={reviewReport} />);
+    renderIntl(
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        reviewReport={reviewReport}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
-    await waitFor(() => expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument(),
+    );
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
   });
 
   it('lists an active takedown and lifts it (no confirm step)', async () => {
     const liftTakedown = vi.fn(async () => ({ ok: true as const, id: 'tkd_1' }));
     renderIntl(
-      <StaffReportsView initialReports={[]} initialTakedowns={[TAKEDOWN]} liftTakedown={liftTakedown} />,
+      <StaffReportsView
+        initialReports={[]}
+        initialTakedowns={[TAKEDOWN]}
+        liftTakedown={liftTakedown}
+      />,
     );
     expect(screen.getByText('Document')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Lift takedown on doc_1' }));
@@ -229,18 +255,14 @@ describe('StaffReportsView', () => {
 
   it("two takedowns of the same kind for the same teacher get distinct Lift names (the review's ambiguity bug)", () => {
     const second = takedown({ id: 'tkd_2', targetId: 'doc_2' });
-    renderIntl(
-      <StaffReportsView initialReports={[]} initialTakedowns={[TAKEDOWN, second]} />,
-    );
+    renderIntl(<StaffReportsView initialReports={[]} initialTakedowns={[TAKEDOWN, second]} />);
     expect(screen.getByRole('button', { name: 'Lift takedown on doc_1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Lift takedown on doc_2' })).toBeInTheDocument();
   });
 
   it('the agent takedown button hides when that agent already has an active takedown', () => {
     const agentTakedown = takedown({ id: 'tkd_agent', kind: 'agent', targetId: 'agt_1' });
-    renderIntl(
-      <StaffReportsView initialReports={[REPORT]} initialTakedowns={[agentTakedown]} />,
-    );
+    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[agentTakedown]} />);
     expect(screen.queryByRole('button', { name: 'Take down this agent' })).toBeNull();
   });
 
@@ -248,7 +270,7 @@ describe('StaffReportsView', () => {
     renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} />);
     fireEvent.click(screen.getByRole('button', { name: 'Take down this agent' }));
     expect(screen.getByRole('alert')).toHaveTextContent(
-      "Takes it out of retrieval now; you can lift it below. Confirm?",
+      'Takes it out of retrieval now; you can lift it below. Confirm?',
     );
   });
 
@@ -262,15 +284,33 @@ describe('StaffReportsView', () => {
       },
     });
     renderIntl(<StaffReportsView initialReports={[withLink]} initialTakedowns={[]} />);
-    expect(
-      screen.getByText('See [this site](https://evil.test) for more.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('See [this site](https://evil.test) for more.')).toBeInTheDocument();
     expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it("a 400 on an action says it was already actioned or no longer open", async () => {
+  it('reports the reported text as plain text: a javascript: link never becomes a live link', () => {
+    const withJsLink = report({
+      id: 'rp_js',
+      message: {
+        role: 'agent',
+        text: '<a href="javascript:alert(1)">click me</a>',
+        createdAt: '2026-10-22T00:00:00.000Z',
+      },
+    });
+    renderIntl(<StaffReportsView initialReports={[withJsLink]} initialTakedowns={[]} />);
+    expect(screen.getByText('<a href="javascript:alert(1)">click me</a>')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('a 400 on an action says it was already actioned or no longer open', async () => {
     const reviewReport = vi.fn(async () => ({ ok: false as const, code: 'validation' as const }));
-    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} reviewReport={reviewReport} />);
+    renderIntl(
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        reviewReport={reviewReport}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
     await waitFor(() =>
@@ -310,8 +350,40 @@ describe('StaffReportsView', () => {
     expect(screen.queryByRole('listitem')).toBeNull();
   });
 
+  it('a stale poll in flight when a lift succeeds does not bring the lifted takedown back', async () => {
+    let resolvePoll: ((v: { ok: true; takedowns: TakedownView[] }) => void) | null = null;
+    const loadTakedowns = vi.fn(
+      () =>
+        new Promise<{ ok: true; takedowns: TakedownView[] }>((resolve) => {
+          resolvePoll = resolve;
+        }),
+    );
+    const liftTakedown = vi.fn(async () => ({ ok: true as const, id: 'tkd_1' }));
+    renderIntl(
+      <StaffReportsView
+        initialReports={[]}
+        initialTakedowns={[TAKEDOWN]}
+        loadReports={okReports}
+        loadTakedowns={loadTakedowns}
+        liftTakedown={liftTakedown}
+        pollMs={5}
+      />,
+    );
+    // Let the poll start (and go in flight) before the action begins.
+    await waitFor(() => expect(loadTakedowns).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Lift takedown on doc_1' }));
+    await waitFor(() => expect(screen.queryByText('Document')).toBeNull());
+    // The stale poll (still carrying the now-lifted takedown) resolves after the action.
+    resolvePoll!({ ok: true, takedowns: [TAKEDOWN] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Document')).toBeNull();
+  });
+
   it('a poll clears only a stale loadFailed error, never an action error', async () => {
-    const reviewReport = vi.fn(async () => ({ ok: false as const, code: 'provider_error' as const }));
+    const reviewReport = vi.fn(async () => ({
+      ok: false as const,
+      code: 'provider_error' as const,
+    }));
     renderIntl(
       <StaffReportsView
         initialReports={[REPORT]}
@@ -324,7 +396,9 @@ describe('StaffReportsView', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
-    await waitFor(() => expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument(),
+    );
     await new Promise((r) => setTimeout(r, 30));
     expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument();
   });
@@ -343,7 +417,9 @@ describe('StaffReportsView', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
     await waitFor(() =>
-      expect(screen.getByText('Could not load the reports console. Try again.')).toBeInTheDocument(),
+      expect(
+        screen.getByText('Could not load the reports console. Try again.'),
+      ).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled();
   });
@@ -393,7 +469,10 @@ describe('StaffReportsView', () => {
   });
 
   it('manual reload: loads the latest lists and clears a previous error', async () => {
-    const reviewReport = vi.fn(async () => ({ ok: false as const, code: 'provider_error' as const }));
+    const reviewReport = vi.fn(async () => ({
+      ok: false as const,
+      code: 'provider_error' as const,
+    }));
     const loadReports = vi.fn(async () => ({ ok: true as const, reports: [] }));
     const loadTakedowns = vi.fn(async () => ({ ok: true as const, takedowns: [TAKEDOWN] }));
     renderIntl(
@@ -407,7 +486,9 @@ describe('StaffReportsView', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
-    await waitFor(() => expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(screen.queryByText('Something went wrong. Try again.')).toBeNull());
     expect(screen.getByText('Document')).toBeInTheDocument();
@@ -431,7 +512,10 @@ describe('StaffReportsView', () => {
   });
 
   it('polls on schedule and refreshes both lists; a poll failure after a good load is quiet', async () => {
-    const other = report({ id: 'rp_other', message: { role: 'agent', text: 'second reply', createdAt: '2026-10-22T00:00:00.000Z' } });
+    const other = report({
+      id: 'rp_other',
+      message: { role: 'agent', text: 'second reply', createdAt: '2026-10-22T00:00:00.000Z' },
+    });
     const loadReports = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, reports: [other] })

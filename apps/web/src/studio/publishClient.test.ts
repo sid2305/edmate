@@ -36,10 +36,16 @@ afterEach(() => {
 });
 
 describe('loadLatestRun / startPublish: normal round-trip', () => {
-  it('loadLatestRun parses a well-formed run', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(200, { run: RUN }));
+  it('loadLatestRun parses a well-formed run and its agent status', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(200, { run: RUN, agentStatus: 'live' }));
     const result = await loadLatestRun();
-    expect(result).toEqual({ ok: true, value: RUN });
+    expect(result).toEqual({ ok: true, value: { run: RUN, agentStatus: 'live' } });
+  });
+
+  it('loadLatestRun defaults agentStatus to null when the server omits it (no run yet)', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(200, { run: null }));
+    const result = await loadLatestRun();
+    expect(result).toEqual({ ok: true, value: { run: null, agentStatus: null } });
   });
 
   it('startPublish parses a well-formed {runId}', async () => {
@@ -72,7 +78,12 @@ describe('failure(): error bodies via safeParse', () => {
       jsonResponse(409, { error: { code: 'validation' }, reason: 'style_card_required' }),
     );
     const result = await startPublish();
-    expect(result).toEqual({ ok: false, status: 409, code: 'validation', reason: 'style_card_required' });
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      code: 'validation',
+      reason: 'style_card_required',
+    });
   });
 
   it('an extra unknown field is ignored, not merged into the result', async () => {
@@ -85,7 +96,9 @@ describe('failure(): error bodies via safeParse', () => {
   });
 
   it('a malformed body (wrong types) falls back to provider_error, no reason', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(500, { error: { code: 123 }, reason: true }));
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(500, { error: { code: 123 }, reason: true }),
+    );
     const result = await startPublish();
     expect(result).toEqual({ ok: false, status: 500, code: 'provider_error' });
   });

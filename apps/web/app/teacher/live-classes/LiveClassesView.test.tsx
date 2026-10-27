@@ -111,7 +111,9 @@ describe('LiveClassesView', () => {
     fillForm();
     const button = screen.getByRole('button', { name: 'Schedule class' });
     fireEvent.click(button);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Try again.'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Try again.'),
+    );
     expect(button).not.toBeDisabled();
   });
 
@@ -315,7 +317,9 @@ describe('LiveClassesView', () => {
   // unanswered ask-the-teacher questions.
   describe('question queues (task 11.2b)', () => {
     it('shows the empty state for both queues when there are none', () => {
-      renderIntl(<LiveClassesView classes={[]} packages={PACKAGES} studentQueue={[]} askQueue={[]} />);
+      renderIntl(
+        <LiveClassesView classes={[]} packages={PACKAGES} studentQueue={[]} askQueue={[]} />,
+      );
       expect(screen.getByText('No pre-class questions yet.')).toBeInTheDocument();
       expect(screen.getByText('No unanswered questions right now.')).toBeInTheDocument();
     });
@@ -352,7 +356,9 @@ describe('LiveClassesView', () => {
               groupId: 'g2',
               count: 2,
               oldestAt: '2026-10-19T00:00:00.000Z',
-              questions: [{ id: 'q1', text: 'How do fractions work?', createdAt: '2026-10-19T00:00:00.000Z' }],
+              questions: [
+                { id: 'q1', text: 'How do fractions work?', createdAt: '2026-10-19T00:00:00.000Z' },
+              ],
             },
           ]}
         />,
@@ -423,6 +429,7 @@ describe('LiveClassesView', () => {
       status: 'ready',
       createdAt: NOW,
       updatedAt: NOW,
+      takenDown: false,
       ...over,
     });
     type ListResult = ApiResult<DocumentView[]>;
@@ -435,15 +442,24 @@ describe('LiveClassesView', () => {
       renderIntl(
         <LiveClassesView classes={[PAST, FUTURE]} packages={PKGS} recordings={[]} now={NOW} />,
       );
-      expect(screen.getByRole('button', { name: 'Add a recording to Past class' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Add a recording to Past class' }),
+      ).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Add a recording to Future class' })).toBeNull();
     });
 
     it('a class starting exactly now can take a recording; without now, none can', () => {
       const { unmount } = renderIntl(
-        <LiveClassesView classes={[cls({ startsAt: NOW })]} packages={PKGS} recordings={[]} now={NOW} />,
+        <LiveClassesView
+          classes={[cls({ startsAt: NOW })]}
+          packages={PKGS}
+          recordings={[]}
+          now={NOW}
+        />,
       );
-      expect(screen.getByRole('button', { name: 'Add a recording to Past class' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Add a recording to Past class' }),
+      ).toBeInTheDocument();
       unmount();
       renderIntl(<LiveClassesView classes={[PAST]} packages={PKGS} />);
       expect(screen.queryByRole('button', { name: 'Add a recording to Past class' })).toBeNull();
@@ -469,7 +485,12 @@ describe('LiveClassesView', () => {
           now={NOW}
           recordings={[
             rec({}),
-            rec({ documentId: 'doc_2', sourceTitle: 'Second part', status: 'failed', failureReason: 'unsupported' }),
+            rec({
+              documentId: 'doc_2',
+              sourceTitle: 'Second part',
+              status: 'failed',
+              failureReason: 'unsupported',
+            }),
             rec({ liveClassId: 'lc_other', documentId: 'doc_3', sourceTitle: 'Elsewhere' }),
           ]}
           listDocuments={vi.fn()}
@@ -486,9 +507,10 @@ describe('LiveClassesView', () => {
 
     it('polls while a recording is processing, updates it to ready, then stops', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
-      const listDocuments = vi.fn(
-        async (): Promise<ListResult> => ({ ok: true, value: [view({ status: 'ready' })] }),
-      );
+      const listDocuments = vi.fn(async (): Promise<ListResult> => ({
+        ok: true,
+        value: [view({ status: 'ready' })],
+      }));
       renderIntl(
         <LiveClassesView
           classes={[PAST]}
@@ -549,7 +571,10 @@ describe('LiveClassesView', () => {
     });
 
     it.each<[string, () => Promise<ListResult>]>([
-      ['a malformed payload', async () => ({ ok: true, value: [{ id: 5 }] as unknown as DocumentView[] })],
+      [
+        'a malformed payload',
+        async () => ({ ok: true, value: [{ id: 5 }] as unknown as DocumentView[] }),
+      ],
       ['a refused call', async () => ({ ok: false, status: 500, code: 'provider_error' })],
       ['a thrown call', async () => Promise.reject(new Error('bad json'))],
     ])('%s keeps the last good view and keeps polling', async (_name, impl) => {
@@ -576,15 +601,13 @@ describe('LiveClassesView', () => {
 
     it('shows a failed status with its reason after a poll, ignoring other documents', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
-      const listDocuments = vi.fn(
-        async (): Promise<ListResult> => ({
-          ok: true,
-          value: [
-            view({ status: 'failed', failureReason: 'input_too_large' }),
-            view({ id: 'doc_unrelated', sourceTitle: 'Unrelated notes' }),
-          ],
-        }),
-      );
+      const listDocuments = vi.fn(async (): Promise<ListResult> => ({
+        ok: true,
+        value: [
+          view({ status: 'failed', failureReason: 'input_too_large' }),
+          view({ id: 'doc_unrelated', sourceTitle: 'Unrelated notes' }),
+        ],
+      }));
       renderIntl(
         <LiveClassesView
           classes={[PAST]}
@@ -604,9 +627,10 @@ describe('LiveClassesView', () => {
 
     it('stops polling after the poll cap and tells the teacher to check back later (11.4g)', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
-      const listDocuments = vi.fn(
-        async (): Promise<ListResult> => ({ ok: true, value: [view({ status: 'processing' })] }),
-      );
+      const listDocuments = vi.fn(async (): Promise<ListResult> => ({
+        ok: true,
+        value: [view({ status: 'processing' })],
+      }));
       renderIntl(
         <LiveClassesView
           classes={[PAST]}
@@ -621,7 +645,9 @@ describe('LiveClassesView', () => {
       });
       const callsAtCap = listDocuments.mock.calls.length;
       expect(callsAtCap).toBeGreaterThan(0);
-      await waitFor(() => expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument(),
+      );
       await act(async () => {
         await vi.advanceTimersByTimeAsync(RECORDING_POLL_MS * 5);
       });
@@ -631,15 +657,17 @@ describe('LiveClassesView', () => {
     it('a row past the poll cap does not stop a newer row from polling to completion (11.4g fix round)', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const docStatus: Record<string, 'processing' | 'ready'> = { doc_1: 'processing' };
-      const listDocuments = vi.fn(
-        async (): Promise<ListResult> => ({
-          ok: true,
-          value: Object.entries(docStatus).map(([id, status]) => view({ id, status })),
-        }),
-      );
+      const listDocuments = vi.fn(async (): Promise<ListResult> => ({
+        ok: true,
+        value: Object.entries(docStatus).map(([id, status]) => view({ id, status })),
+      }));
       const createDocument = vi.fn(async () => ({
         ok: true as const,
-        value: { documentId: 'doc_new', uploadUrl: 'https://bucket.example.test/p', uploadHeaders: {} },
+        value: {
+          documentId: 'doc_new',
+          uploadUrl: 'https://bucket.example.test/p',
+          uploadHeaders: {},
+        },
       }));
       const putFile = vi.fn(async () => undefined);
       const completeDocument = vi.fn(async () => ({
@@ -661,7 +689,9 @@ describe('LiveClassesView', () => {
         await vi.advanceTimersByTimeAsync(RECORDING_POLL_MAX_MS + RECORDING_POLL_MS);
       });
       const callsAtCap = listDocuments.mock.calls.length;
-      await waitFor(() => expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument(),
+      );
 
       // A brand-new recording (doc_new) must get its own full poll window even while doc_1 is
       // still stuck past its cap.
@@ -670,7 +700,9 @@ describe('LiveClassesView', () => {
         target: { files: [new File(['WEBVTT'], 'c.vtt', { type: 'text/vtt' })] },
       });
       fireEvent.change(screen.getByLabelText('Module'), { target: { value: 'mod_3' } });
-      fireEvent.click(screen.getByLabelText('I confirm I hold the rights to upload this material.'));
+      fireEvent.click(
+        screen.getByLabelText('I confirm I hold the rights to upload this material.'),
+      );
       fireEvent.click(screen.getByLabelText(/Everyone heard in this recording agreed/));
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Upload recording' }));
@@ -694,7 +726,11 @@ describe('LiveClassesView', () => {
     it('a new upload appears under its class with its status', async () => {
       const createDocument = vi.fn(async () => ({
         ok: true as const,
-        value: { documentId: 'doc_new', uploadUrl: 'https://bucket.example.test/p', uploadHeaders: {} },
+        value: {
+          documentId: 'doc_new',
+          uploadUrl: 'https://bucket.example.test/p',
+          uploadHeaders: {},
+        },
       }));
       const putFile = vi.fn(async () => undefined);
       const completeDocument = vi.fn(async () => ({
@@ -716,7 +752,9 @@ describe('LiveClassesView', () => {
         target: { files: [new File(['WEBVTT'], 'c.vtt', { type: 'text/vtt' })] },
       });
       fireEvent.change(screen.getByLabelText('Module'), { target: { value: 'mod_3' } });
-      fireEvent.click(screen.getByLabelText('I confirm I hold the rights to upload this material.'));
+      fireEvent.click(
+        screen.getByLabelText('I confirm I hold the rights to upload this material.'),
+      );
       fireEvent.click(screen.getByLabelText(/Everyone heard in this recording agreed/));
       fireEvent.click(screen.getByRole('button', { name: 'Upload recording' }));
       await waitFor(() => expect(completeDocument).toHaveBeenCalled());

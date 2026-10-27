@@ -4897,6 +4897,44 @@ describe.skipIf(!up)(
       return cases;
     }
 
+    // Task 12.2f Phase C: the teacher-facing document read (`documents.get` and
+    // `documents.listForTeacher`) now carries `takenDown`, the same boolean the staff report
+    // query already computes (reports.int.test.ts's `citedDocuments`), so the upload centre can
+    // show a "Removed by Edmate staff" badge. A fixture of its own, lifted at the end, so it
+    // doesn't affect any other test's view of teacher A's documents.
+    it('documents.get and listForTeacher carry takenDown: false until an active takedown, true while active, false once lifted', async () => {
+      const docId = 'doc_12_2f_takedown';
+      await repos.documents.create(tScope('A'), {
+        id: docId,
+        moduleId: ids.module('A', 1),
+        kind: 'material',
+        sourceTitle: '[A] takedown badge fixture',
+        rightsDeclared: true,
+      });
+      const before = await repos.documents.get(tScope('A'), docId);
+      expect(before?.takenDown).toBe(false);
+      const listedBefore = (await repos.documents.listForTeacher(tScope('A'), {
+        moduleId: ids.module('A', 1),
+      })) as (DocRow & { takenDown: boolean })[];
+      expect(listedBefore.find((d) => d.id === docId)?.takenDown).toBe(false);
+
+      const { id: takedownId } = await repos.takedowns.create(ISO_STAFF, {
+        kind: 'document',
+        targetId: docId,
+        category: 'copyright',
+      });
+      const during = await repos.documents.get(tScope('A'), docId);
+      expect(during?.takenDown).toBe(true);
+      const listedDuring = (await repos.documents.listForTeacher(tScope('A'), {
+        moduleId: ids.module('A', 1),
+      })) as (DocRow & { takenDown: boolean })[];
+      expect(listedDuring.find((d) => d.id === docId)?.takenDown).toBe(true);
+
+      await repos.takedowns.lift(ISO_STAFF, takedownId, {});
+      const after = await repos.documents.get(tScope('A'), docId);
+      expect(after?.takenDown).toBe(false);
+    });
+
     // Task 9.3c: a teacher rejected (or never verified) after publishing can't be started by
     // typing the URL. A fixture of its own (not A/B, whose verification status churns across the
     // grid above), so this is self-contained.

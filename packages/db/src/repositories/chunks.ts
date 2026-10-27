@@ -192,6 +192,9 @@ const documentColumns = {
   rightsDeclaredAt: documents.rightsDeclaredAt,
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
+  // Task 12.2f Phase C: the same expression the staff report query uses (reports.ts), so the
+  // teacher's own upload centre can show a "Removed by Edmate staff" badge.
+  takenDown: sql<boolean>`not ${notTakenDown(documents.id)}`.mapWith(Boolean),
 };
 
 const ChunkDraftSchema = z.strictObject({

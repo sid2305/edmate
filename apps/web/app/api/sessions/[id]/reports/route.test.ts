@@ -5,7 +5,12 @@
 import { RepositoryError, type Repositories } from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
-import { createGuard, type CookieReader, type Principal, type RoleContext } from '../../../../../src/auth/guard';
+import {
+  createGuard,
+  type CookieReader,
+  type Principal,
+  type RoleContext,
+} from '../../../../../src/auth/guard';
 import { MAX_BODY_BYTES } from '../../../../../src/studio/routes';
 import type { AgentOwners } from '../../../../../src/turn/scope';
 import { createSessionReportsHandlers } from './handlers';
@@ -50,19 +55,28 @@ function memory() {
       const id = `rp_${scope.studentId}_${input.messageId}`;
       const already = filed.some((f) => f.id === id);
       if (already) return { id, created: false };
-      filed.push({ id, reporterId: scope.studentId, messageId: input.messageId, category: input.category });
+      filed.push({
+        id,
+        reporterId: scope.studentId,
+        messageId: input.messageId,
+        category: input.category,
+      });
       return { id, created: true };
     },
   );
 
   const logs: { event: string; fields?: Record<string, string> }[] = [];
-  const repos = { reports: { file } } as unknown as Pick<Repositories, 'reports'>;
+  const record = vi.fn(async () => ({ written: true }));
+  const repos = { reports: { file }, safetyAlerts: { record } } as unknown as Pick<
+    Repositories,
+    'reports' | 'safetyAlerts'
+  >;
   const h = createSessionReportsHandlers({
     agents,
     repos: () => repos,
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
   });
-  return { h, agents, file, filed, logs };
+  return { h, agents, file, filed, record, logs };
 }
 
 const ctx = (principal: Principal = STUDENT, id = 'ses_1'): RoleContext => ({
@@ -104,6 +118,43 @@ describe('POST: file a report', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(m.filed).toHaveLength(1);
+  });
+
+  it('a new report also pages the trust inbox with a fixed, non-PII excerpt', async () => {
+    const m = memory();
+    const res = await m.h.file(post(VALID), ctx());
+    expect(res.status).toBe(201);
+    expect(m.record).toHaveBeenCalledTimes(1);
+    expect(m.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'info',
+        kind: 'other',
+        studentId: 'stu_1',
+        teacherId: 'tch_1',
+        sessionId: 'ses_1',
+        excerptRedacted: 'A student reported a harmful reply.',
+      }),
+    );
+  });
+
+  it('a duplicate report does not page the trust inbox a second time', async () => {
+    const m = memory();
+    await m.h.file(post(VALID), ctx());
+    m.record.mockClear();
+    const res = await m.h.file(post(VALID), ctx());
+    expect(res.status).toBe(200);
+    expect(m.record).not.toHaveBeenCalled();
+  });
+
+  it('a safetyAlerts.record failure still returns the report success and logs only the error name', async () => {
+    const m = memory();
+    m.record.mockRejectedValueOnce(new RangeError('boom'));
+    const res = await m.h.file(post(VALID), ctx());
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(m.logs).toEqual([
+      { event: 'sessions.reports.alert_failed', fields: { error: 'RangeError' } },
+    ]);
   });
 
   it('an agent that is not live (suspended, draft or unknown) is 404, nothing filed', async () => {
@@ -186,10 +237,10 @@ describe('POST: file a report', () => {
 
   it('the default logger writes to console.error', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const repos = { reports: { file: async () => Promise.reject(new RangeError('x')) } } as unknown as Pick<
-      Repositories,
-      'reports'
-    >;
+    const repos = {
+      reports: { file: async () => Promise.reject(new RangeError('x')) },
+      safetyAlerts: { record: async () => ({ written: true }) },
+    } as unknown as Pick<Repositories, 'reports' | 'safetyAlerts'>;
     const h = createSessionReportsHandlers({
       agents: { owner: async () => ({ teacherId: 'tch_1' }) },
       repos: () => repos,

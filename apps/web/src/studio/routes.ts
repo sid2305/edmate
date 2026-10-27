@@ -196,6 +196,9 @@ function view(row: DocumentRow) {
     ...(row.failureReason === undefined ? {} : { failureReason: row.failureReason }),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    // Task 12.2f Phase C: whether Edmate staff have taken this document down (a separate axis
+    // from `status`, the upload lifecycle -- a document can be `ready` and taken down at once).
+    takenDown: row.takenDown,
   };
 }
 
@@ -370,7 +373,10 @@ const addLink: Work = async (b, scope, req) => {
   // `uploading`.
   await b.documents.updateStatus(scope, id, 'processing');
   try {
-    await b.enqueue({ teacherId: scope.teacherId, documentId: id, fileKind: 'web', url: checked.url }, key);
+    await b.enqueue(
+      { teacherId: scope.teacherId, documentId: id, fileKind: 'web', url: checked.url },
+      key,
+    );
   } catch (error) {
     b.log.error('studio.enqueue_failed', { error: errorName(error) });
     await markFailed(b, scope, id, 'enqueue_failed');
