@@ -10236,9 +10236,32 @@ tasks:
   deps:
   - 1.4d
   risk: low
-  status: running
+  status: done
   branch: m13/1.4e-redis-ready-timeout
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 817
+    tokens_in: 2874
+    tokens_out: 218423
+    cache_read_tokens: 94865984
+    wall_time_seconds: 4346
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        CRITICAL: 1
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: 5.6g
   milestone: M13
   title: '5.6b review MEDIUM and LOWs: packages/harness/src/pipeline/generate/streamGate.ts:301-316 ruleOutCompletes/commitRuledOut judge the released window plus the piece (like keys.leaks), not the bare

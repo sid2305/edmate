@@ -10,6 +10,46 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 1.4e timeout design · decided by builder · risk: low
+- Decided: the shared "ready" entry has no timeout of its own; only individual callers time
+  out via their own `setTimeout`. The `ready` listener (and the WeakMap entry) is removed when
+  the last still-waiting caller has either settled (via `ready`) or timed out.
+- Why: the plan's second test case (a longer-timeout caller still resolving after the
+  shorter-timeout first caller has timed out) is impossible if the shared entry carries the
+  first caller's timeout, since that would reject it and every remaining waiter with it. The plan
+  named this as the preferred, simplest option, and it also removes the "un-awaited rejection"
+  risk entirely, since the entry itself never rejects.
+  **Updated (fix round 1):** the original shape used one shared `Promise` with `.then()`
+  reactions per caller, kept alive by a `waiters` counter; a caller's timeout only decremented the
+  counter and left its `.then()` reaction attached, so during a long outage with sign-ins arriving
+  faster than `timeoutMs`, `waiters` never reached 0 and the entry (plus every reaction ever
+  attached) lived for the whole outage — unbounded memory growth (security-reviewer, HIGH). Fix
+  round 1 replaces the shared `Promise` with a `Set<() => void>` of per-caller settle callbacks on
+  the entry: the single `ready` listener calls and clears every callback in the set, and a
+  caller's timeout removes only its own callback. Memory is now bounded by callers currently
+  waiting, not by every caller since the outage began. Same listener-per-instance and
+  per-caller-timeout behaviour as before; `RedisNotReadyError` unchanged.
+
+---
+
+### 27 Oct 2026 · 1.4e Part 2 split into task 1.4f · decided by lead · risk: low
+- Decided: merge 1.4e with Part 1 only. The sandbox magic-link run (Part 2, part of the acceptance line) moves to a new task 1.4f, which waits on blocker B-61 (who rebuilds the local stack on current code).
+- Why: Part 2 needs the human; holding a reviewed sign-in fix for it would block other apps/web/src/auth work. The acceptance's sandbox clause is carried by 1.4f.
+
+---
+
+### 27 Oct 2026 · 1.4e approve the per-caller timeout in apps/web/src/auth · decided by lead · risk: high
+- Decided: merge the apps/web/src/auth/redis-ready.ts change. security-reviewer (required), typescript-reviewer and code-reviewer reviewed it; the security CRITICAL (callbacks piling up on a never-settling promise during a long outage) was fixed in fix round 1 with a set of per-caller callbacks, and security-reviewer re-checked and approved it.
+- Why: each caller now keeps its own deadline, memory is bounded by callers in flight, and src/auth keeps 100% statement coverage.
+
+---
+
+### 27 Oct 2026 · 1.4e budget overrun accepted · decided by lead · risk: low
+- Decided: accept 102 tool calls against a budget of 30 (build 47, fix round 55 by harness count; the agents reported 22 and 27).
+- Why: the fix round redesigned the waiting logic and added three tests; the work is reviewed and complete.
+
+---
+
 ### 27 Oct 2026 · 6.4a end route reads repos directly, not TurnBackend · decided by builder · risk: low
 - Decided: `apps/web/app/api/sessions/[id]/end/route.ts` reads the transcript and session row via
   `serverDatabase().repos.messages.history` / `.repos.sessions`, not by widening
