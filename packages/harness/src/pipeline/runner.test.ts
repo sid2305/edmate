@@ -833,7 +833,13 @@ describe('runTurn with the real decide (3.6)', () => {
     expect(rec?.decision).toMatchObject({ move: 'hint', rung: 2, mustNotReveal: [ANSWER_KEY] });
     expect(rec?.next).toEqual({
       rung: 2,
-      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY], lockedStopped: false },
+      help: {
+        stuckTurns: 0,
+        attemptLogged: false,
+        pendingCheck: false,
+        answerKey: [ANSWER_KEY],
+        lockedStopped: false,
+      },
     });
     expect(rec?.promptPack).toEqual({
       set: FIXTURE_PROMPT_PACK_VERSION,
@@ -1080,7 +1086,9 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
       t.clock,
     );
     expect(events.some((e) => e.type === 'safety')).toBe(false);
-  }, 2_000);
+    // Wider than the other tests here (0.20f): this one flaked at the 2000ms bound under CI/local
+    // load even though it does the same work as its neighbours (PR #369 background, 6.4a Phase A).
+  }, 15_000);
 
   it('soft keyword + classifier false → a normal reply (no alert)', async () => {
     const t = deps({

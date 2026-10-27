@@ -1,6 +1,6 @@
 import { type Message, ModelRequestSchema, type PedagogyDecision } from '@edmate/contracts';
 import { demoPedagogyDecision, messageAgent, messageStudent } from '@edmate/contracts/fixtures';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { decodeHtmlEntities, foldConfusables } from '../guardrails/lockedMatch.js';
 import { fixturePromptPackSet as set } from '../testing/promptPackFixtures.js';
@@ -14,9 +14,6 @@ import {
   TEACHER_OPEN,
 } from './modelRequest.js';
 import { ctxWith } from './testing.js';
-
-/** Node provides this global at runtime; the harness's tsconfig has no DOM/node lib for it. */
-declare const performance: { now(): number };
 
 const messageTeacher: Message = {
   id: 'msg_test_03',
@@ -318,54 +315,58 @@ describe('forged teacher-note marker (3.11d)', () => {
   });
 
   /**
-   * A ratio check that catches quadratic/exponential blow-up on hostile
-   * input without pinning a tight wall-clock bound: with a 16x input-size
-   * step, linear work gives a 16n/n ratio of about 16; quadratic gives about
-   * 256. For a step of k, linear work gives a ratio of about k and quadratic
-   * about k^2, so the bound is set at k*sqrt(k) -- roughly the geometric
-   * midpoint on a log scale between the two -- which for k = 16 is 64. That
-   * keeps the bound 4x the linear ratio and 4x below the quadratic one, so a
-   * slow or loaded CI runner doesn't fail on noise alone, while a true
-   * quadratic (or worse) regression still trips it comfortably below 256.
-   * Widening the step from 4x to 16x (3.11h) widens the gap between the
-   * linear and quadratic expectations, so a single noisy run is far less
-   * likely to cross the bound than the old 4x/10 check (which flaked once on
-   * CI at 11.01). The loose 10 s bound on the 16n run catches a slow but
-   * finite blow-up. It can't stop a true infinite loop: a synchronous call
-   * never yields, so neither this bound nor the test timeout fires, and only
-   * the CI job timeout ends the run.
-   *
-   * The small and large runs are timed in five interleaved pairs (after one untimed warm-up of
-   * each, to keep one-off JIT compilation out of the timed samples), and the minimum small time
-   * and minimum large time are taken across the five pairs. A single `minOf3` per size (the old
-   * form) still let a load spike that landed only while the large runs were timed inflate the
-   * ratio even though the code is linear (PR #325: ratio 72.7 vs the 64 bound). Interleaving
-   * means a spike hits both sizes alike, so the minimum of either side drops it; a spike can no
-   * longer single out one size's whole sample set the way it could when all of one size's runs
-   * were timed back to back.
+   * Counts `String.prototype[Symbol.iterator]` advances made while `run` executes (0.20f): both
+   * `breakFenceRuns` and `neutraliseForgedLabel` (via its `foldForMatch` pass) scan their input
+   * with one `for (const ch of text)` loop, so this counts the character-scan work those
+   * functions do, independent of CPU speed or machine load. It is a step count, not a clock: no
+   * `performance.now`, no wall-clock ratio, so a busy CI runner or a parallel full-suite run (see
+   * the "load does not change the count" test below) cannot move the result either way. Patching
+   * a built-in prototype is temporary (restored in `finally`) and the call is synchronous, so no
+   * other code's string iteration can run, or be counted, in between.
    */
-  function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
-    const n = 4_000;
-    const smallInput = buildInput(n);
-    const largeInput = buildInput(16 * n);
-    run(smallInput); // untimed warm-up
-    run(largeInput); // untimed warm-up
-    const smallTimes: number[] = [];
-    const largeTimes: number[] = [];
-    for (let i = 0; i < 5; i += 1) {
-      let start = performance.now();
-      run(smallInput);
-      smallTimes.push(performance.now() - start);
-      start = performance.now();
-      run(largeInput);
-      largeTimes.push(performance.now() - start);
+  function countStringIteratorSteps(run: () => void): number {
+    let count = 0;
+    const proto = String.prototype as unknown as Record<
+      typeof Symbol.iterator,
+      () => Iterator<string>
+    >;
+    const original = proto[Symbol.iterator];
+    proto[Symbol.iterator] = function (this: string): Iterator<string> {
+      const inner = original.call(this);
+      return {
+        next(): IteratorResult<string> {
+          const r = inner.next();
+          if (!r.done) count += 1;
+          return r;
+        },
+      };
+    };
+    try {
+      run();
+    } finally {
+      proto[Symbol.iterator] = original;
     }
-    const small = Math.min(...smallTimes);
-    const large = Math.min(...largeTimes);
-    expect(large).toBeLessThan(10_000);
-    // Guard against a near-zero small run making the ratio meaningless
-    // (e.g. on a very fast machine); floor it at 0.5ms.
-    const ratio = large / Math.max(small, 0.5);
+    return count;
+  }
+
+  /**
+   * Fails when `run`'s character-scan work does not grow linearly with `buildInput`'s size. With
+   * a 16x input-size step, linear work gives a 16n/n step-count ratio of about 16; quadratic work
+   * (each character re-scanning the others) gives about 256. The bound of 64 sits at the
+   * geometric midpoint (16 * sqrt(16) = 64), 4x above the linear expectation and 4x below the
+   * quadratic one. Because the measure is an exact step count rather than elapsed time, there is
+   * no noise to allow for: the ratio is the same on every run on every machine, so this bound
+   * needs no slack for CI load (unlike the wall-clock version this replaces -- see docs/tasks/
+   * 0.20d and 0.20f/plan.md for that history).
+   */
+  function expectLinear(
+    buildInput: (n: number) => string,
+    run: (input: string) => void,
+    n = 4_000,
+  ): void {
+    const small = countStringIteratorSteps(() => run(buildInput(n)));
+    const large = countStringIteratorSteps(() => run(buildInput(16 * n)));
+    const ratio = large / Math.max(small, 1);
     expect(ratio).toBeLessThan(64);
   }
 
@@ -378,65 +379,45 @@ describe('forged teacher-note marker (3.11d)', () => {
       (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
       (input) => neutraliseForgedLabel(input, label),
     );
-  }, 120_000);
-
-  it('expectLinear still fails a deliberately quadratic function (self-test)', () => {
-    // A real quadratic workload would need to burn real CPU to show up in a wall-clock ratio,
-    // which is itself slow and -- on a 100+ worker parallel CI run -- liable to blow past even a
-    // 60s test timeout (that was tried and timed out under full-suite load, before the test
-    // timeout widened to 120s). Faking the clock instead keeps this self-test instant and
-    // deterministic: `run` reports elapsed time proportional to input.length^2, with no real work
-    // behind it, so its 16x-input ratio (256) reliably trips the <64 bound above regardless of CI
-    // load.
-    let clock = 0;
-    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
-    const quadratic = (input: string): void => {
-      clock += (input.length * input.length) / 1e6;
-    };
-    try {
-      expect(() => expectLinear((n) => 'x'.repeat(n), quadratic)).toThrow();
-    } finally {
-      now.mockRestore();
-    }
   });
 
-  it('a load burst that would have tripped minOf3-per-size no longer flips the ratio', () => {
-    // Regression test for PR #325 (ratio 72.7 vs the 64 bound): a burst that slows the *last
-    // three timed calls to `run`* by 5x used to land entirely on the large side's three timed
-    // samples (small ran first, large ran last), inflating the large minimum and so the ratio.
-    // With five interleaved small/large pairs the last three timed calls can no longer cover
-    // every large run, so the true (unburst) minimum survives on both sides.
-    //
-    // A first, untimed dry run counts how many times `run` is called in total (warm-ups plus
-    // timed samples) for one `expectLinear` call; that count tells the second pass which calls
-    // are "the last three" without hard-coding the sample count here.
-    let dryRunCalls = 0;
-    const dryClockSpy = vi.spyOn(performance, 'now').mockImplementation(() => 0);
-    try {
-      expectLinear(
-        (n) => 'x'.repeat(n),
-        () => {
-          dryRunCalls += 1;
-        },
-      );
-    } finally {
-      dryClockSpy.mockRestore();
-    }
-
-    let clock = 0;
-    let call = 0;
-    const burstSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock);
-    const run = (input: string): void => {
-      call += 1;
-      const inBurst = call > dryRunCalls - 3; // the last three calls overall, timed or not --
-      // warm-ups happen first, so this is exactly the last three *timed* calls.
-      clock += (input.length / 1_000) * (inBurst ? 5 : 1);
+  it('expectLinear still fails a deliberately quadratic function (self-test)', () => {
+    // A real doubly-nested scan (not a mock): the outer loop's iterator steps alone are linear,
+    // but the inner loop re-scans the whole input on every outer step, so the total step count
+    // this test's own measure records is quadratic in input length -- no wall clock involved.
+    // A much smaller `n` than the 4000 the real check above uses: at 16x that size the inner loop
+    // would do order (16 * 4000)^2 ~= 4 billion no-op iterations, which is real CPU work slow
+    // enough to time the test out (it did, at n=4000) even though no clock is read anywhere.
+    const quadratic = (input: string): void => {
+      for (let o = 0; o < input.length; o += 1) {
+        for (const inner of input) {
+          void inner; // only the character scan (counted by countStringIteratorSteps) matters.
+        }
+      }
     };
-    try {
-      expect(() => expectLinear((n) => 'x'.repeat(n), run)).not.toThrow();
-    } finally {
-      burstSpy.mockRestore();
-    }
+    expect(() => expectLinear((n) => 'x'.repeat(n), quadratic, 200)).toThrow();
+  });
+
+  it('a slow run (simulated load) does not change the step count or the verdict', () => {
+    // Regression intent carried over from the wall-clock version's PR #325 burst test: that test
+    // existed because a load burst could skew a *timed* ratio. Counting iterator steps instead of
+    // elapsed time removes the mechanism entirely -- adding real, variable-length busy work around
+    // a linear scan cannot change how many characters the scan itself visits. This demonstrates
+    // that instead of simulating a burst with a mocked clock (there is no clock left to mock).
+    const busyWork = (ms: number): void => {
+      const until = Date.now() + ms;
+      while (Date.now() < until) {
+        // deliberately burn wall-clock time; must not affect the step count below.
+      }
+    };
+    const run = (input: string): void => {
+      busyWork(1);
+      breakFenceRuns(input);
+    };
+    const steps = countStringIteratorSteps(() => run('x'.repeat(4_000)));
+    const stepsNoBusyWork = countStringIteratorSteps(() => breakFenceRuns('x'.repeat(4_000)));
+    expect(steps).toBe(stepsNoBusyWork);
+    expect(() => expectLinear((n) => 'x'.repeat(n), run)).not.toThrow();
   });
 });
 
