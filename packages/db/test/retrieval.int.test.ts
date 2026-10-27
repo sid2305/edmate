@@ -12,7 +12,8 @@ import {
   retrievalIndexFor,
   type EmbedFallback,
 } from '../src/index.js';
-import { ftsQuery, tsTerm } from '../src/repositories/retrieval.js';
+import { ftsQuery, PER_SIGNAL, tsTerm } from '../src/repositories/retrieval.js';
+import * as s from '../src/schema/index.js';
 import { EMBEDDING_DIMENSIONS } from '../src/schema/index.js';
 import { everything, expectScrubbed } from './scrub.js';
 import {
@@ -73,7 +74,13 @@ async function material(
   texts: string[],
   embed = true,
 ): Promise<string[]> {
-  await repos.documents.create(scope, { id: docId, moduleId, kind, sourceTitle: `${docId} title`, rightsDeclared: true });
+  await repos.documents.create(scope, {
+    id: docId,
+    moduleId,
+    kind,
+    sourceTitle: `${docId} title`,
+    rightsDeclared: true,
+  });
   const { ids } = await repos.chunks.insertMany(
     scope,
     docId,
@@ -411,6 +418,26 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       expect(last.length).toBeGreaterThan(0);
     });
 
+    it('CJK, Thai, Korean and a 60+ character term never raise (5.3a item 6)', async () => {
+      // queryTerms restricts every term reaching to_tsquery to [\p{L}\p{N}]+ runs, so none of
+      // these can carry a quote, backslash or tsquery punctuation; search and probe return
+      // normally, proving the finding (to_tsquery could raise) is already closed in practice.
+      const index = ftsOnly();
+      const queries = [
+        '日本語 文字', // CJK
+        'ภาษาไทย ขอบคุณ', // Thai
+        '한국어 안녕하세요', // Korean (Hangul)
+        'a'.repeat(65), // one very long single term
+      ];
+      for (const q of queries) {
+        const got = await index.search(q, { teacherId: RA, allowedModuleIds: ALLOWED }, 5);
+        for (const c of got) expect(ALLOWED).toContain(c.moduleId);
+        await expect(index.probe(q, { teacherId: RA, moduleIds: [MOD.locked] })).resolves.toEqual(
+          expect.objectContaining({ hit: expect.any(Boolean) }),
+        );
+      }
+    });
+
     it('a query of stop words only still searches by vector', async () => {
       const got = await hybrid().search(
         'the of and',
@@ -467,6 +494,86 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       expectScrubbed(perr, 'retrieval.probe', ['secretword', MOD.locked]);
       expect(everything(perr)).not.toContain('secretword');
     });
+
+    it(
+      '5.3a fix round: the vector signal keeps the lowest-id rows among more than PER_SIGNAL ' +
+        'ties at the cut-off, spread around by a few clearly-farther decoys',
+      async () => {
+        // A teacher of its own, so this cannot change what any other test in this file sees
+        // (search filters by module ownership, which is scoped to teacherId).
+        const T = 'tch_vectie';
+        const MOD_T = 'mod_vectie';
+        await handle.db
+          .insert(s.users)
+          .values({ id: T, name: 'Tie teacher', locale: 'en', market: 'test', role: 'teacher' });
+        await handle.db
+          .insert(s.courses)
+          .values({ id: 'crs_vectie', teacherId: T, title: 'Tie', order: 0 });
+        await handle.db
+          .insert(s.modules)
+          .values({ id: MOD_T, teacherId: T, courseId: 'crs_vectie', title: 'Tie', order: 1 });
+        const scopeT = { teacherId: T };
+        await repos.documents.create(scopeT, {
+          id: 'doc_vectie',
+          moduleId: MOD_T,
+          kind: 'material',
+          sourceTitle: 'tie',
+          rightsDeclared: true,
+        });
+
+        // More than PER_SIGNAL chunks, every one at exactly the same distance from the query
+        // (identical embedding): the case the inner query's plain `ORDER BY distance` leaves
+        // undefined, before the fix.
+        const TIE_COUNT = PER_SIGNAL + 10;
+        const tieAxis = EMBEDDING_DIMENSIONS - 2; // unused by the file's scripted axes (0-3, last)
+        const tieVector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
+        tieVector[tieAxis] = 1;
+        const { ids: tieIds } = await repos.chunks.insertMany(
+          scopeT,
+          'doc_vectie',
+          Array.from({ length: TIE_COUNT }, (_, i) => ({
+            ord: i,
+            text: `tie chunk ${i}`,
+            locator: `p${i}`,
+          })),
+        );
+        await repos.chunks.setEmbeddings(
+          scopeT,
+          tieIds.map((id) => ({ id, embedding: tieVector })),
+        );
+
+        // A few decoys spread around the cut-off: clearly farther (orthogonal axis), so they
+        // must never be chosen ahead of a tied row even though some get a lower id.
+        const farAxis = EMBEDDING_DIMENSIONS - 3;
+        const farVector = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
+        farVector[farAxis] = 1;
+        const { ids: farIds } = await repos.chunks.insertMany(
+          scopeT,
+          'doc_vectie',
+          Array.from({ length: 5 }, (_, i) => ({
+            ord: TIE_COUNT + i,
+            text: `far chunk ${i}`,
+            locator: `f${i}`,
+          })),
+        );
+        await repos.chunks.setEmbeddings(
+          scopeT,
+          farIds.map((id) => ({ id, embedding: farVector })),
+        );
+
+        // Stop words only: queryTerms is empty, so this is a vector-only search (byText = []),
+        // and the fused order equals the vector signal's order exactly (RRF is strictly
+        // decreasing in rank, so there are no cross-signal ties to break).
+        const got = await repos.retrieval.search(scopeT, {
+          q: 'the and of',
+          allowedModuleIds: [MOD_T],
+          k: PER_SIGNAL,
+          embedding: tieVector,
+        });
+        expect(got.map((c) => c.id)).toEqual(tieIds.slice(0, PER_SIGNAL));
+        for (const id of farIds) expect(got.map((c) => c.id)).not.toContain(id);
+      },
+    );
   });
 
   describe('probe', () => {

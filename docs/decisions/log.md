@@ -10,6 +10,87 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 5.3a vector tie-break fixed in-PR · decided by lead · risk: high
+- Decided: the tie-break finding on `packages/db/src/repositories/retrieval.ts` `vectorRows` (HIGH from database-reviewer and typescript-reviewer; MEDIUM from rag-pipeline-reviewer, security-reviewer and code-reviewer) was fixed in one round: the inner query over-fetches `PER_SIGNAL * 2` rows by distance alone, and the outer query applies `(distance, id)` and the `PER_SIGNAL` cut, with an honest comment and a tied-distance int test. database-reviewer and typescript-reviewer re-checked and approved. Their two LOW notes were about the handoff text only (an export claim and the decoy description); the lead corrected the handoff.
+- Why: before 5.3a, ties at the cut-off broke by lowest id; the fix restores that for tie groups up to 40 rows while keeping the HNSW plan.
+
+---
+
+### 26 Oct 2026 · 5.3a budget overrun · decided by lead · risk: low
+- Decided: accept 127 tool calls (harness counts: Phase A 45, Phase B 32, fix round 50) against the plan's 75, 1.69x.
+- Why: the build itself (77) was within 1.2x; the overrun is the fix round, which needed a new tied-distance int test against the real dev Postgres. Fixers' budgets for db int-test work should be closer to 40.
+
+---
+
+### 26 Oct 2026 · 5.3a follow-up 5.3c opened · decided by lead · risk: low
+- Decided: open board task 5.3c for the declined items 4 and 11 (widen the out-of-course calibration set; per-course recalibration once a second course exists), as the plan proposed.
+- Why: both need a second real course to validate against, which the pilot doesn't have yet.
+
+---
+
+### 26 Oct 2026 · 5.3a Phase B import-swap re-export location · decided by builder · risk: high
+- Decided: touched `packages/db/src/repositories/retrieval.ts` (a risk-paths.txt path) again in
+  Phase B, for the one-line import-path change only (no query or retrieval-behaviour change), and
+  added the new `packages/harness/src/lockedIndex.ts` outside `guardrails/**` so the risky-path
+  reviewer group for this change is `security-reviewer` + `code-reviewer` + `typescript-reviewer`
+  only — no `database-reviewer`/`rag-pipeline-reviewer` needed here, per the plan.
+- Why: the plan calls for this risk level and reviewer set explicitly (Phase B "Risky paths
+  touched"), since `retrieval.ts` is still a risk-paths.txt file even though this edit carries no
+  behaviour change.
+
+---
+
+### 26 Oct 2026 · 5.3a vector tie-break over-fetch · decided by builder · risk: high
+- Decided: fixed the inner/outer vector query split in `vectorRows` so the inner query
+  over-fetches `VECTOR_OVERFETCH = PER_SIGNAL * 2` rows (ordered by distance alone, keeping the
+  HNSW plan benefit) instead of `PER_SIGNAL`, and the outer query applies the real `(distance,
+  id)` order and the `PER_SIGNAL` cut-off; exported `PER_SIGNAL` from
+  `retrieval.ts` for the new regression test (`VECTOR_OVERFETCH` stays module-private). `2x` is a round, conservative slack chosen because no
+  caller passes more than a handful of exact ties in practice (the scripted test/demo embedder is
+  the only source of exact ties today) — not measured against a specific production tie-group
+  size, since none exists yet.
+- Why: `retrieval.ts` is a risk-paths.txt file (the retrieval query group), so any change here is
+  `risk: high` per the build plan regardless of the change's size; this one changes which rows a
+  tied vector search returns.
+
+---
+
+### 26 Oct 2026 · 5.3a Phase A query rewrites, retrieval risk group · decided by builder · risk: high
+- Decided: Phase A's two query rewrites (`vectorRows`'s inner-query distance order, `termStats`'s
+  single round trip) and the new Unicode regression test are in scope and risk: high, per the
+  plan's "Risky paths touched" section (`packages/db/src/repositories/**` touches the retrieval
+  repository group; `database-reviewer` and `rag-pipeline-reviewer` are required alongside
+  `security-reviewer`, `code-reviewer` and `typescript-reviewer`).
+- Why: a query-shape change to the retrieval path that every teacher's search and probe calls
+  through; the build plan requires logging `risk: high` for any change touching this group,
+  reviewed by the named reviewers before merge.
+
+---
+
+### 26 Oct 2026 · 5.3a subquery alias fix · decided by builder · risk: low
+- Decided: added `.as('distance')` to the raw SQL `distance` expression used inside the
+  `vectorRows` inner query, beyond what the plan's wording spelled out.
+- Why: Drizzle ORM (0.45.4) requires every raw-SQL (non-column) field selected from a subquery to
+  carry an explicit alias before an outer query can reference it; without this the query threw at
+  runtime (caught by the existing `probe` and `search` integration tests during this task's own
+  test-first cycle, not by a reviewer). No behaviour change beyond fixing the throw — the returned
+  shape and values are unchanged.
+
+---
+
+### 26 Oct 2026 · 5.3a items 4, 7, 11 declined; items 3, 8 already done · decided by builder · risk: low
+(Carrying forward the plan's own decisions into this handoff, as instructed, for the record.)
+- Decided: item 7 (`SET LOCAL hnsw.iterative_scan` outliving a passed-in `Tx`) is declined for
+  5.3a; items 4 and 11 (widening the out-of-course calibration set and a per-course recalibration
+  path) are declined and bundled, recommending a new task id `5.3c` for the lead to open at
+  closeout; items 3 and 8 are already done, landed by task 5.4.
+- Why: item 7 is dormant (no caller passes a `Tx` into `retrievalRepo` today) and is explicitly
+  flagged in the code for the future HNSW rewrite; items 4/11 need a second course to validate a
+  recalibration design against, which this demo-only codebase doesn't have yet; items 3/8 are
+  already landed with evidence in the plan (see plan.md items 3, 8 for the file/line citations).
+
+---
+
 ### 26 Oct 2026 · 9.4f apiError cache-control fix in-PR · decided by lead · risk: high
 - Decided: the HIGH (security-reviewer, typescript-reviewer) on `apps/web/src/auth/errors.ts` was fixed in one fix round: `apiError` now builds a real `Headers` and calls `set('cache-control', 'no-store')`, so a caller's `Cache-Control` in any case is replaced. The code-reviewer MEDIUM (an overstated doc comment) and the typescript-reviewer LOW on `packages/db/src/repositories/README.md` (lockRole returns `Role | null`; the calling method throws) were fixed in the same round. Both reviewers re-checked and approved.
 - Why: a cached error response could leak one student's error to another behind a shared cache; the old compile-time guard caught only the exact lowercase key.
