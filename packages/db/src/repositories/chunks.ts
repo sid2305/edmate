@@ -24,7 +24,7 @@ import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { type DocumentRow, type DocumentStatus, toDocumentRow } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
-import { notTakenDown } from './takedowns.js';
+import { notTakenDown } from './takedown-predicate.js';
 
 /** Most chunks or embeddings one call writes (ingest batches below this). */
 export const CHUNK_WRITE_MAX = 500;
