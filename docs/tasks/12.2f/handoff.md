@@ -1,6 +1,6 @@
-# 12.2f Phase A handoff
+# 12.2f handoff
 
-Status: DONE (Phase A)
+Status: DONE (Phases A-D and fix round 1)
 
 Branch: `m13/12.2f-report-followups`
 Worktree: `.claude/worktrees/agent-a12744b3866280fa0` (relative to repo root)
@@ -74,6 +74,14 @@ Test Files  1 passed (1)
 
 ## Decisions
 
+### 27 Oct 2026 · 12.2f risky paths reviewed · decided by lead · risk: high
+- Decided: merge 12.2f. Its risky paths (packages/db/src/repositories/** and apps/web/app/api/staff/**) were reviewed by security-reviewer, code-reviewer, typescript-reviewer and silent-failure-hunter. The one HIGH (apps/web/src/studio/publish.ts returned no agent status before the first publish run, so a draft agent taken down by staff never showed the suspended banner) was fixed in fix round 1 and re-reviewed by typescript-reviewer (APPROVE). The MEDIUM and LOW findings go to 12.2h.
+- Why: every required reviewer ran, and the only blocking finding is fixed and verified.
+
+### 27 Oct 2026 · 12.2f budget overrun · decided by lead · risk: low
+- Decided: accept 397 tool calls (harness count: A 92, B 50, C 122, D 90, fix round 43; the builders reported 182) against a 195-call plan budget, about 2x.
+- Why: the work is done and reviewed; the overrun came from long db test gates and Phase C's fixture repairs. Later briefs split db-heavy phases smaller and allow background gate runs.
+
 ### 27 Oct 2026 · 12.2f Phase A skip-row catch has no "unexpected error" branch · decided by builder · risk: low
 - Decided: the `catch` around each row's `toStaffReportRow(...)` call swallows any thrown error
   unconditionally (no `instanceof RepositoryError && kind === 'integrity'` check, no re-throw
@@ -100,6 +108,71 @@ Test Files  1 passed (1)
 - Why: standing rule (non-negotiable 6 / 8) — logging it here so the merge gate finds the required
   `risk: high` decision for these paths.
 
+### 27 Oct 2026 · 12.2f Phase B alert id domain tag · decided by builder · risk: low
+- Decided: the staff-alert row id for a filed report is `ra_<sha256("report-alert\0" + reportId)
+  first 40 hex chars>`, a local helper (`reportAlertId`) in `handlers.ts`, not a new export from
+  `@edmate/db`'s `reports.ts`.
+- Why: the plan asked for "a different domain tag" from `reportRowId` so the two id spaces can
+  never collide, but did not say where the helper should live. Keeping it local to the one call
+  site that needs it (this handler) avoids widening `packages/db`'s public surface for a
+  single-caller id scheme; `reports.ts`'s own `reportRowId` stays untouched (out of bounds for this
+  phase per the plan's "Files out of bounds").
+
+### 27 Oct 2026 · 12.2f Phase C two extra test-fixture fixes · decided by builder · risk: low
+- Decided: `packages/db/test/documents.int.test.ts` (one `toEqual<DocumentRow>` literal) and
+  `apps/web/app/teacher/live-classes/LiveClassesView.test.tsx` (one `DocumentView` factory
+  default) each needed `takenDown: false` added to a plain fixture literal once the field became
+  required; both are outside the plan's "Files to create/modify" list but are type-only, no new
+  assertion and no production-file change, so this stays a fixture fix, not scope creep per the
+  plan's exit condition about files turning up outside the list.
+- Why: `DocumentRowSchema`/`DocumentView` making `takenDown` a required (not optional) field,
+  exactly as the plan specified ("not optional -- a document is never ambiguously taken-down"),
+  means every existing literal of that shape across the whole workspace must supply it; `tsc
+  --noEmit` surfaced these two during the gate run, and both were one-line, no-behaviour-change
+  fixes.
+
+### 27 Oct 2026 · 12.2f risky-path reviewers (Phase C) · decided by lead/plan, logged by builder · risk: high
+- Decided: Phase C touches `packages/db/src/repositories/map.ts` and `chunks.ts` (risky path
+  `packages/db/src/repositories/**`), which requires **security-reviewer** (code-reviewer always
+  required) per `.claude/skills/merge-gate/risk-paths.txt`, as the plan's "Risky paths touched"
+  section already states. The `apps/web/src/studio/**` and `apps/web/messages/en.json` files
+  touched match no risk-paths.txt glob.
+- Why: standing rule (non-negotiable 6 / 8) — logging it here so the merge gate finds the required
+  `risk: high` decision for this path.
+
+### 27 Oct 2026 · 12.2f Phase D agentStatus placement and no-run path · decided by builder · risk: low
+- Decided: `agentStatus` is a top-level field of the `GET /api/studio/publish` JSON body, sibling
+  to `run` (not nested inside the `PublishRunView`/`run` object), and is **only computed and
+  returned when a run already exists** (`run !== null`); the `{ run: null }` no-run reply is
+  unchanged, with no `agents.get` call on that path. Client-side, `loadLatestRun`'s resolved value
+  becomes `{ run, agentStatus }` (`agentStatus: null` when the server omitted it).
+- Why: the plan's wording ("add `agentStatus` ... alongside the existing run fields" /
+  "`PublishRun`-adjacent load result type") was read literally as a field next to `run`, not inside
+  it, matching publishClient.ts's own file header lesson ("loose objects so an extra server field
+  never breaks the page" -- a sibling field, not a nested one, keeps `PublishRun`'s own shape
+  untouched for every other caller). Skipping the lookup on the no-run path is a real behaviour
+  choice the plan didn't spell out for that branch: an agent takedown only ever sets `suspended` on
+  a `live` agent (confirmed in `takedowns.ts`'s header comment -- every student-facing read already
+  requires `live`), and a `live` agent can only exist after a passed publish run, so `run === null`
+  implies the agent has never been anything but `draft` and can never be `suspended`; querying
+  `agents.get` there would be a correct but needless extra read on the one path per request that
+  already returns early.
+
+### 27 Oct 2026 · 12.2f agentStatus on the no-run path · decided by builder · risk: low
+- Decided: `GET /api/studio/publish`'s no-run path now looks up the teacher's agent (via
+  `packages.listForTeacher` + `agents.get`) and returns `agentStatus` there too, exactly as the
+  run-exists path already does, except when the teacher has no packages yet (no agent exists to
+  look up -- `{ run: null }` with no `agentStatus` field, unchanged from before).
+- Why: the Phase D decision's premise -- "an agent takedown sets `suspended` only on a `live`
+  agent ... so `run === null` implies the agent can never be `suspended`" -- was wrong.
+  `takeDownAgentInTx` (`packages/db/src/repositories/takedowns.ts`) updates `agents.status` to
+  `suspended` unconditionally, regardless of the agent's current status; a draft agent (one that
+  has never had a publish run) can be taken down just as a live one can. Skipping the lookup on the
+  no-run path therefore hid a real "removed by staff" state from the teacher. The extra read this
+  adds is one `packages.listForTeacher` + one `agents.get` call on the single path per request that
+  used to return early with no reads at all -- the same cost the `start` handler already pays on
+  every call.
+
 ## Gate
 
 - `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm --filter @edmate/db run test` —
@@ -117,7 +190,7 @@ Test Files  1 passed (1)
 
 ## Budget
 
-Phase A tool calls used: 58
+Phase A tool calls used: 92 (harness count; the builder reported 58)
 
 ## Phase B
 
@@ -190,15 +263,8 @@ Test Files  1 passed (1)
 
 ### Decisions
 
-### 27 Oct 2026 · 12.2f Phase B alert id domain tag · decided by builder · risk: low
-- Decided: the staff-alert row id for a filed report is `ra_<sha256("report-alert\0" + reportId)
-  first 40 hex chars>`, a local helper (`reportAlertId`) in `handlers.ts`, not a new export from
-  `@edmate/db`'s `reports.ts`.
-- Why: the plan asked for "a different domain tag" from `reportRowId` so the two id spaces can
-  never collide, but did not say where the helper should live. Keeping it local to the one call
-  site that needs it (this handler) avoids widening `packages/db`'s public surface for a
-  single-caller id scheme; `reports.ts`'s own `reportRowId` stays untouched (out of bounds for this
-  phase per the plan's "Files out of bounds").
+Moved to the top `## Decisions` section.
+
 
 ### Gate
 
@@ -211,7 +277,7 @@ Test Files  1 passed (1)
 
 ### Budget
 
-Phase B tool calls used: 29
+Phase B tool calls used: 50 (harness count; the builder reported 29)
 
 ## Phase C
 
@@ -296,27 +362,8 @@ Test Files  3 passed (3)
 
 ### Decisions
 
-### 27 Oct 2026 · 12.2f Phase C two extra test-fixture fixes · decided by builder · risk: low
-- Decided: `packages/db/test/documents.int.test.ts` (one `toEqual<DocumentRow>` literal) and
-  `apps/web/app/teacher/live-classes/LiveClassesView.test.tsx` (one `DocumentView` factory
-  default) each needed `takenDown: false` added to a plain fixture literal once the field became
-  required; both are outside the plan's "Files to create/modify" list but are type-only, no new
-  assertion and no production-file change, so this stays a fixture fix, not scope creep per the
-  plan's exit condition about files turning up outside the list.
-- Why: `DocumentRowSchema`/`DocumentView` making `takenDown` a required (not optional) field,
-  exactly as the plan specified ("not optional -- a document is never ambiguously taken-down"),
-  means every existing literal of that shape across the whole workspace must supply it; `tsc
-  --noEmit` surfaced these two during the gate run, and both were one-line, no-behaviour-change
-  fixes.
+Moved to the top `## Decisions` section.
 
-### 27 Oct 2026 · 12.2f risky-path reviewers (Phase C) · decided by lead/plan, logged by builder · risk: high
-- Decided: Phase C touches `packages/db/src/repositories/map.ts` and `chunks.ts` (risky path
-  `packages/db/src/repositories/**`), which requires **security-reviewer** (code-reviewer always
-  required) per `.claude/skills/merge-gate/risk-paths.txt`, as the plan's "Risky paths touched"
-  section already states. The `apps/web/src/studio/**` and `apps/web/messages/en.json` files
-  touched match no risk-paths.txt glob.
-- Why: standing rule (non-negotiable 6 / 8) — logging it here so the merge gate finds the required
-  `risk: high` decision for this path.
 
 ### Gate
 
@@ -337,7 +384,7 @@ Test Files  3 passed (3)
 
 ### Budget
 
-Phase C tool calls used: 44
+Phase C tool calls used: 122 (harness count; the builder reported 44)
 
 ## Phase D
 
@@ -414,23 +461,8 @@ Test Files  3 passed (3)
 
 ### Decisions
 
-### 27 Oct 2026 · 12.2f Phase D agentStatus placement and no-run path · decided by builder · risk: low
-- Decided: `agentStatus` is a top-level field of the `GET /api/studio/publish` JSON body, sibling
-  to `run` (not nested inside the `PublishRunView`/`run` object), and is **only computed and
-  returned when a run already exists** (`run !== null`); the `{ run: null }` no-run reply is
-  unchanged, with no `agents.get` call on that path. Client-side, `loadLatestRun`'s resolved value
-  becomes `{ run, agentStatus }` (`agentStatus: null` when the server omitted it).
-- Why: the plan's wording ("add `agentStatus` ... alongside the existing run fields" /
-  "`PublishRun`-adjacent load result type") was read literally as a field next to `run`, not inside
-  it, matching publishClient.ts's own file header lesson ("loose objects so an extra server field
-  never breaks the page" -- a sibling field, not a nested one, keeps `PublishRun`'s own shape
-  untouched for every other caller). Skipping the lookup on the no-run path is a real behaviour
-  choice the plan didn't spell out for that branch: an agent takedown only ever sets `suspended` on
-  a `live` agent (confirmed in `takedowns.ts`'s header comment -- every student-facing read already
-  requires `live`), and a `live` agent can only exist after a passed publish run, so `run === null`
-  implies the agent has never been anything but `draft` and can never be `suspended`; querying
-  `agents.get` there would be a correct but needless extra read on the one path per request that
-  already returns early.
+Moved to the top `## Decisions` section.
+
 
 ### Gate
 
@@ -456,7 +488,7 @@ Test Files  3 passed (3)
 
 ### Budget
 
-Phase D tool calls used: 32
+Phase D tool calls used: 90 (harness count; the builder reported 32)
 
 ## Fix round 1
 
@@ -507,20 +539,8 @@ Test Files  2 passed (2)
 
 ### Decisions
 
-### 27 Oct 2026 · 12.2f agentStatus on the no-run path · decided by builder · risk: low
-- Decided: `GET /api/studio/publish`'s no-run path now looks up the teacher's agent (via
-  `packages.listForTeacher` + `agents.get`) and returns `agentStatus` there too, exactly as the
-  run-exists path already does, except when the teacher has no packages yet (no agent exists to
-  look up -- `{ run: null }` with no `agentStatus` field, unchanged from before).
-- Why: the Phase D decision's premise -- "an agent takedown sets `suspended` only on a `live`
-  agent ... so `run === null` implies the agent can never be `suspended`" -- was wrong.
-  `takeDownAgentInTx` (`packages/db/src/repositories/takedowns.ts`) updates `agents.status` to
-  `suspended` unconditionally, regardless of the agent's current status; a draft agent (one that
-  has never had a publish run) can be taken down just as a live one can. Skipping the lookup on the
-  no-run path therefore hid a real "removed by staff" state from the teacher. The extra read this
-  adds is one `packages.listForTeacher` + one `agents.get` call on the single path per request that
-  used to return early with no reads at all -- the same cost the `start` handler already pays on
-  every call.
+Moved to the top `## Decisions` section.
+
 
 ### Gate
 
@@ -534,4 +554,4 @@ Test Files  2 passed (2)
 
 ### Budget
 
-Fix round tool calls used: 19
+Fix round tool calls used: 43 (harness count; the builder reported 19)
