@@ -10,6 +10,46 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 9.3m the new audit write and its lock-order/no-read-then-write-window property · decided by builder · risk: high
+- Decided: `teacherProfiles.update()` now writes a `teacher.subject` audit row (old/new subject
+  only) when a patch changes the stored subject, captured in the same statement as the UPDATE (a
+  sibling read-only CTE) so there is no read-then-write window; `audit.findSubjectHistoryForStaff`
+  reads the last `SUBJECT_HISTORY_MAX_LIMIT` (10) such rows for staff. B-58.
+- Why: matches the plan's design exactly; the CTE shape expressed cleanly as raw SQL via
+  `tx.execute(sql\`...\`)` (same pattern as `publish.ts`'s own raw CTE reads), no new shared SQL
+  helper needed.
+
+---
+
+### 26 Oct 2026 · 9.3m test fixes for the shared-audit-log test file · decided by builder · risk: low
+- Decided: (a) existing tests in `teacher-profiles.int.test.ts` that query `audit.listForTeacher`
+  by `target` only (not `action`) now filter to `action === 'teacher.verify'` before asserting a
+  row count, since `teacherId('A')`'s target string is now also written by `teacher.subject` rows
+  from earlier tests in the same file (audit_log is append-only and never truncated between
+  tests, by design — same precedent as the existing `auditCount()` delta pattern). (b) the new
+  subject-audit assertions in that file use `rows[0]` / a before-and-after length delta rather than
+  an exact-array `toEqual`, for the same reason. (c) added one new test for the no-subject-patch
+  `not_found` branch (`update(A, { bio: 'X' })` on a ghost profile), since splitting `update()`
+  into two branches (subject vs. no-subject) left that branch's own `not_found` throw uncovered.
+- Why: the plan's test sketches assumed per-test isolation that the file's own existing
+  `auditCount()`-delta convention shows was never actually true for this append-only table; fixing
+  the assertions (not the feature) keeps the 100%-statement-coverage rule without weakening what
+  each test actually checks.
+
+---
+
+### 26 Oct 2026 · 9.3m budget · decided by lead · risk: low
+- Decided: Accept 267 tool calls (harness count: Phase A 117, Phase B 98, fix round 52) against the plan's 95.
+- Why: Both phases ran over. Phase A spent its extra calls on the staff route's real-Postgres tests, and the fix round on a two-connection race test that had to fail on the old code first. The work is complete and reviewed. Future briefs ask builders to count their own calls more honestly; their reports were about half the harness count.
+
+---
+
+### 26 Oct 2026 · 9.3m merge · decided by lead · risk: high
+- Decided: Merge 9.3m. It touches packages/db/src/repositories/** and apps/web/app/api/staff/** (risky paths; the required reviewer is security-reviewer). database-reviewer found a CRITICAL race: teacherProfiles.update() read the old subject without a lock, so a concurrent update could write a stale "before" value into the teacher.subject audit row. security-reviewer raised the same race as MEDIUM, and the lead rated it HIGH. The fix adds FOR UPDATE to the prev CTE, plus a two-connection test that failed before the fix. database-reviewer and security-reviewer re-reviewed it and approved. code-reviewer and typescript-reviewer approved the original change. The LOWs move to 9.3n.
+- Why: Staff now see a teacher's last 10 subject changes on the verification queue (B-58). The audit trail behind that list must be correct under concurrent edits, and the lock makes it so with no new lock-order risk.
+
+---
+
 ### 26 Oct 2026 · 1.7a item 5 needs no change · decided by builder · risk: low
 - Decided: `packages/db/src/identity/age.ts` lines 67-70 already carry the exact comment the 1.7
   review asked for (added in a later 1.7 phase that touched this file for an unrelated reason). No
