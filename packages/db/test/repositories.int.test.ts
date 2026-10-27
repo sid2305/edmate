@@ -1887,8 +1887,12 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     attempt: async (r, scope, _actor, target) => {
-      // A timestamp unique to this attempt, so verify finds exactly this write.
-      const ts = new Date(Date.UTC(2026, 9, 17, 12, 0, ++counter)).toISOString();
+      // A timestamp unique to this attempt, so verify finds exactly this write. Task 6.5a: this
+      // grid's own `learnerProfiles.reset` case (above) runs first and stamps every pair's
+      // `memory_reset_at` to this test run's real "now" — a fixed-past ts here would be dropped
+      // by the new watermark filter, so this uses a far-future ts instead (unrelated to the
+      // watermark semantics this file otherwise never exercises; see memory-reset-watermark.int.test.ts).
+      const ts = new Date(Date.UTC(2030, 0, 1, 12, 0, ++counter)).toISOString();
       const event: EvidenceEvent = {
         ...sScope(target),
         topicId: ids.topic(teacherOf(target)),
@@ -1953,7 +1957,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     attempt: async (r, scope, _actor, target) => {
-      const ts = new Date(Date.UTC(2026, 9, 18, 12, 0, ++counter)).toISOString();
+      // Far-future ts, same reason as `evidenceEvents.append` above (this grid's own
+      // `learnerProfiles.reset` case runs first and stamps `memory_reset_at`).
+      const ts = new Date(Date.UTC(2030, 0, 2, 12, 0, ++counter)).toISOString();
       const topicId = ids.topic(teacherOf(target));
       const event: EvidenceEvent = {
         ...sScope(target),

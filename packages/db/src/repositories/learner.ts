@@ -249,7 +249,10 @@ export function learnerProfilesRepo(db: Db) {
             .select({ mastery: learnerProfiles.mastery })
             .from(learnerProfiles)
             .where(
-              and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
             )
             .for('update');
 
@@ -259,7 +262,10 @@ export function learnerProfilesRepo(db: Db) {
             .update(learnerProfiles)
             .set({ mastery: next, updatedAt: sql`now()` })
             .where(
-              and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
             );
         }),
       );
@@ -417,7 +423,13 @@ export function learnerProfilesRepo(db: Db) {
 
           await tx
             .update(learnerProfiles)
-            .set({ mastery: {}, mistakes: [], lastSummary: null, updatedAt: sql`now()` })
+            .set({
+              mastery: {},
+              mistakes: [],
+              lastSummary: null,
+              memoryResetAt: sql`now()`,
+              updatedAt: sql`now()`,
+            })
             .where(
               and(
                 eq(learnerProfiles.teacherId, sc.teacherId),
@@ -467,6 +479,17 @@ function toEvidenceEvent(
   return parseArg(EvidenceEventSchema, { ...row, ts: row.ts.toISOString() }, method);
 }
 
+/**
+ * Task 6.5a: drops any entry whose `ts` is strictly before `resetAt` (a pair that was never
+ * reset has `resetAt === null`, so nothing is dropped). Shared by `append` and `appendAndFold`,
+ * both of which call this with the profile row already locked.
+ */
+function dropBeforeReset<T extends { ts: string }>(list: T[], resetAt: Date | null): T[] {
+  if (resetAt === null) return list;
+  const watermark = resetAt.getTime();
+  return list.filter((e) => new Date(e.ts).getTime() >= watermark);
+}
+
 /** Scored evidence (append-only). */
 export function evidenceEventsRepo(db: Db) {
   return {
@@ -482,6 +505,13 @@ export function evidenceEventsRepo(db: Db) {
      * its row once) and is left out of the returned list — `profileStoreFor.applyEvidence` only
      * folds BKT updates for events this call actually wrote, so a replay changes mastery once too.
      * An event with no `id` always gets a fresh one (never deduplicated).
+     *
+     * Task 6.5a: locks the pair's `learner_profiles` row (inserting a default row first, `ON
+     * CONFLICT DO NOTHING`) *before* inserting events — same lock order and reason
+     * `appendAndFold` already uses (6.5 review MEDIUM: this method had never taken the lock,
+     * even though it writes into the same event history `rebuildMastery` replays). Any event
+     * whose `ts` is strictly before the locked `memory_reset_at` (when set) is dropped before the
+     * insert, so a job queued before a reset can never re-seed the pair's evidence history.
      */
     async append(scope: StudentScope, events: EvidenceEventEntry[]): Promise<EvidenceEvent[]> {
       const method = 'evidenceEvents.append';
@@ -499,10 +529,41 @@ export function evidenceEventsRepo(db: Db) {
             .where(and(eq(topics.teacherId, sc.teacherId), inArray(topics.id, topicIds)))
             .for('key share');
           if (owned.length !== topicIds.length) throw new RepositoryError('scope', method);
+
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // Locked *before* the events are inserted — same order as `appendAndFold`.
+          const [locked] = await tx
+            .select({ memoryResetAt: learnerProfiles.memoryResetAt })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+          /* v8 ignore next */
+          if (!locked) throw new RepositoryError('scope', method);
+
+          const survivors = dropBeforeReset(list, locked.memoryResetAt);
+          if (survivors.length === 0) return [];
+
           const rows = await tx
             .insert(evidenceEvents)
             .values(
-              list.map((e) => ({
+              survivors.map((e) => ({
                 ...(e.id === undefined ? {} : { id: e.id }),
                 studentId: sc.studentId,
                 teacherId: sc.teacherId,
@@ -549,7 +610,10 @@ export function evidenceEventsRepo(db: Db) {
      * Returns only the events actually inserted (idempotency, as `append` alone did), and only
      * those are folded — a replayed job changes mastery once, not twice.
      */
-    async appendAndFold(scope: StudentScope, events: EvidenceEventEntry[]): Promise<EvidenceEvent[]> {
+    async appendAndFold(
+      scope: StudentScope,
+      events: EvidenceEventEntry[],
+    ): Promise<EvidenceEvent[]> {
       const method = 'evidenceEvents.appendAndFold';
       const sc = studentScope(scope, method);
       const list = parseArg(EventsWithId, events, method);
@@ -581,7 +645,10 @@ export function evidenceEventsRepo(db: Db) {
 
           // Locked *before* the events are inserted — see the doc comment above.
           const [locked] = await tx
-            .select({ mastery: learnerProfiles.mastery })
+            .select({
+              mastery: learnerProfiles.mastery,
+              memoryResetAt: learnerProfiles.memoryResetAt,
+            })
             .from(learnerProfiles)
             .where(
               and(
@@ -593,10 +660,13 @@ export function evidenceEventsRepo(db: Db) {
           /* v8 ignore next */
           if (!locked) throw new RepositoryError('scope', method);
 
+          const survivors = dropBeforeReset(list, locked.memoryResetAt);
+          if (survivors.length === 0) return [];
+
           const rows = await tx
             .insert(evidenceEvents)
             .values(
-              list.map((e) => ({
+              survivors.map((e) => ({
                 ...(e.id === undefined ? {} : { id: e.id }),
                 studentId: sc.studentId,
                 teacherId: sc.teacherId,
@@ -665,7 +735,10 @@ export function evidenceEventsRepo(db: Db) {
         })
         .from(evidenceEvents)
         .where(
-          and(eq(evidenceEvents.teacherId, sc.teacherId), eq(evidenceEvents.studentId, sc.studentId)),
+          and(
+            eq(evidenceEvents.teacherId, sc.teacherId),
+            eq(evidenceEvents.studentId, sc.studentId),
+          ),
         )
         .orderBy(asc(evidenceEvents.ts), asc(evidenceEvents.id))
         .limit(limit + 1);
