@@ -9957,7 +9957,8 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: 9.2g
   milestone: M13
   title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students
