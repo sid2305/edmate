@@ -287,8 +287,11 @@ describe('StaffQueueView', () => {
     };
     renderIntl(<StaffQueueView initial={[withSubjectHistory]} />);
     const row = rowOf('asha-math');
-    expect(within(row).getByText('Math to Physics on Oct 20, 2026')).toBeInTheDocument();
-    expect(within(row).getByText('Biology to Math on Oct 18, 2026')).toBeInTheDocument();
+    const lines = within(row)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent)
+      .filter((text): text is string => text !== null && text.includes(' to '));
+    expect(lines).toEqual(['Math to Physics on Oct 20, 2026', 'Biology to Math on Oct 18, 2026']);
   });
 
   it('shows the active takedown count and the last decision line (9.3h)', () => {

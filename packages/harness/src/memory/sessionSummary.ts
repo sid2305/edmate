@@ -5,12 +5,18 @@
 // the call's own output schema (reusing LIMITS.lastSummaryMaxWords/countWords, the same numbers
 // LearnerProfileSchema.lastSummary checks), so an over-length reply fails the call outright — no
 // truncation, no re-ask.
-import { countWords, LIMITS, type Message, type ModelGateway, type ModelRequest } from '@edmate/contracts';
+import {
+  countWords,
+  LIMITS,
+  type Message,
+  type ModelGateway,
+  type ModelRequest,
+} from '@edmate/contracts';
 import { z } from 'zod';
 
 const MAX_OUTPUT_TOKENS = 200;
 
-const SessionSummarySchema = z.strictObject({
+export const SessionSummarySchema = z.strictObject({
   summary: z
     .string()
     .refine(

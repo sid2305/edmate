@@ -9,6 +9,7 @@
 // production (lead answer 2, 22 Oct 2026: kept until a discovery-backed "browse more agents"
 // task replaces it). A candidate is startable when its agent is live and the student has no live
 // subscription to it -- so an agent the student already chats with never double-lists.
+import type { Entitlement } from '@edmate/contracts';
 import type { Principal } from '../auth/guard';
 import { StartSessionSchema } from '../turn/clientInput';
 import { errorName, type ServerLog } from '../turn/routes';
@@ -20,7 +21,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 export interface LiveChat {
   agentId: string;
   teacherId: string;
-  status: string;
+  status: Entitlement['status'];
 }
 
 /** One of the student's not-ended subscriptions whose current package's agent is no longer
@@ -57,7 +58,10 @@ export function chatAgentCandidates(env: Env): string[] {
  *   own chat (human answer B-49), so this is additional, not instead of `chats`.
  * An `ended` row (the real query never returns one) is in neither list.
  */
-export function classifyHomeLinks(live: readonly LiveChat[]): { chats: string[]; paused: string[] } {
+export function classifyHomeLinks(live: readonly LiveChat[]): {
+  chats: string[];
+  paused: string[];
+} {
   const chats: string[] = [];
   const paused: string[] = [];
   for (const row of live) {
@@ -93,20 +97,25 @@ export async function homeLinks(
 ): Promise<HomeLinks> {
   try {
     const deps = open();
-    const [liveRaw, unavailableRows] = await Promise.all([
+    const [live, unavailableRows] = await Promise.all([
       deps.subscriptions.listLiveForStudent(principal.userId),
       deps.subscriptions.listUnavailableForStudent(principal.userId),
     ]);
-    const live = liveRaw.filter((row) => row.status !== 'ended');
+    // `classifyHomeLinks` is the only place that drops an `ended` row (the real query never
+    // returns one, but a test double may) -- `liveIds`/`teacherIds` below are derived from its
+    // `chats`/`paused` output, not from a second `status !== 'ended'` check on `live` (9.4e item
+    // 10: that was a duplicate of the check `classifyHomeLinks` already does).
     const { chats, paused } = classifyHomeLinks(live);
-    const liveIds = new Set(live.map((row) => row.agentId));
+    const liveIds = new Set([...chats, ...paused]);
     const owned = await Promise.all(
       candidates
         .filter((agentId) => !liveIds.has(agentId))
         .map(async (agentId) => ((await deps.agents.owner({ agentId })) === null ? null : agentId)),
     );
     const startable = owned.filter((agentId): agentId is string => agentId !== null);
-    const teacherIds = [...new Set(live.map((row) => row.teacherId))];
+    const teacherIds = [
+      ...new Set(live.filter((row) => liveIds.has(row.agentId)).map((row) => row.teacherId)),
+    ];
     const unavailable = [...new Set(unavailableRows.map((row) => row.agentId))];
     return { chats, paused, startable, teacherIds, unavailable };
   } catch (error) {

@@ -5861,10 +5861,33 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: running
+  status: done
   branch: m13/9.6f-export-cursor-index
-  model: plan:sonnet build:sonnet
-- id: 9.6g
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 978
+    tokens_in: 3300
+    tokens_out: 315545
+    cache_read_tokens: 113221495
+    wall_time_seconds: 8092
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 9.6j
   milestone: M13
   title: '9.6f database-review follow-ups: packages/db/test/export-cursor-paging.int.test.ts EXPLAINs the real cross join lateral statement messages.listForStudent sends (outer scan stays on the sessions
     (teacher_id, student_id) index, no per-noise-session lateral), not a hand-written copy (MEDIUM); the mid-range cursor EXPLAIN tests run the SQL the repositories build instead of parallel hand-written
@@ -5872,9 +5895,9 @@ tasks:
   accept: the EXPLAIN tests run the repositories' own SQL and assert the index seek for both the lateral messages query and the sessions cursor.
   deps:
   - 9.6f
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/9.6j-explain-real-sql
+  model: plan:sonnet build:sonnet
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -5886,7 +5909,9 @@ tasks:
   - 12.1a
   - 9.6f
   risk: high
-  status: todo
+  status: running
+  branch: m13/12.1c-staff-queue-followups
+  model: plan:sonnet build:sonnet
 - id: 8.7k
   milestone: M8
   title: '8.7 lead answer Q10: the studio shows a "changed since last publish" note on /teacher/publish (and the studio home) when the style card, outline, packages or uploads changed after the latest published
@@ -8340,9 +8365,31 @@ tasks:
   deps:
   - 13.4d
   risk: high
-  status: running
+  status: done
   branch: m13/13.4f-export-dedupe
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 305
+    tokens_in: 1082
+    tokens_out: 91024
+    cache_read_tokens: 41012081
+    wall_time_seconds: 3485
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 13.4g
   milestone: M13
   title: '13.4f review follow-ups: apps/web/src/export/accountExport.ts dedupe keeps the first row on an exact periodEnd tie (strict >), and listAllForStudent orders only by agent id, so an ended row can
@@ -8351,9 +8398,9 @@ tasks:
   accept: on an exact periodEnd tie the export keeps the non-ended subscription, shown by a test; parseConsentRow's error contract is documented or wrapped.
   deps:
   - 13.4f
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.4g-export-tie-break
+  model: plan:lead build:sonnet
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -8461,9 +8508,42 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: running
+  status: done
   branch: m13/9.4e-chat-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 802
+    tokens_in: 2782
+    tokens_out: 199544
+    cache_read_tokens: 98373702
+    wall_time_seconds: 4875
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
+- id: 9.4f
+  milestone: M13
+  title: '9.4e deferred items and review LOWs: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works (needs next.config.ts or @edmate/queue, not playwright.config.ts); ports.ts
+    reads users.market once per resolve (needs a combined identity method; touches identity/store.ts, ports.ts and the db access fixtures); the listLiveForStudent grid case in repositories.int.test.ts does
+    not depend on CASES order; apiError''s headers param excludes cache-control keys by type and is documented as constant-only; layout.test.tsx keeps type safety on RootLayout''s props; fix the garbled
+    bare-id-exception sentence in packages/db/src/repositories/README.md'
+  accept: web and db typecheck, lint and test green; each item fixed or given a logged wontfix.
+  deps:
+  - 9.4e
+  status: todo
+  branch: null
+  model: null
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
@@ -9188,9 +9268,29 @@ tasks:
   accept: the listed changes are in and the ingest tests pass
   deps:
   - '5.2'
-  status: running
+  status: done
   branch: m13/5.2a-video-type-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 146
+    tokens_in: 526
+    tokens_out: 31715
+    cache_read_tokens: 15685756
+    wall_time_seconds: 1599
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.2b
   milestone: M13
   title: 'Real-transcriber timing check for video ingestion (third 5.2 review LOW, split from 5.2a): packages/db/test/video-ingest.int.test.ts times a scripted transcriber, so it cannot show a real transcription
@@ -9773,9 +9873,30 @@ tasks:
   deps:
   - 9.3m
   risk: high
-  status: running
+  status: done
   branch: m13/9.3n-staff-history-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 89
+    tokens_in: 322
+    tokens_out: 22005
+    cache_read_tokens: 6566898
+    wall_time_seconds: 668
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

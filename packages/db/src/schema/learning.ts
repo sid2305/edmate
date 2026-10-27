@@ -95,6 +95,17 @@ export const sessions = pgTable(
     check('sessions_open_has_package', sql`${t.endedAt} is not null or ${t.packageId} is not null`),
     // Task 13.4: retentionRepo.purgeOldSessions' cutoff scan.
     index('sessions_created_at_idx').on(t.createdAt),
+    // Task 9.6f (9.6a review follow-up): sessions.listForStudent's (teacher_id, student_id) filter
+    // plus its (created_at, id) keyset order, in one index, so a page is an index scan with no full
+    // Sort over the pair's whole session history. Declared here so `db:generate` stays a no-op;
+    // built by the post-migrate step (packages/db/src/migrate.ts, migration 0035) with CREATE INDEX
+    // CONCURRENTLY, same as the other sessions indexes above (sessions is big and high-write).
+    index('sessions_teacher_id_student_id_created_at_id_idx').on(
+      t.teacherId,
+      t.studentId,
+      t.createdAt,
+      t.id,
+    ),
   ],
 );
 
@@ -112,7 +123,16 @@ export const messages = pgTable(
     sources: jsonb('sources').$type<SourceRef[]>(),
     ...timestamps(),
   },
-  (t) => [index('messages_session_id_created_at_idx').on(t.sessionId, t.createdAt)],
+  (t) => [
+    index('messages_session_id_created_at_idx').on(t.sessionId, t.createdAt),
+    // Task 9.6f (9.6a review follow-up): messages.listForStudent's per-session bounded-candidate
+    // seek (packages/db/src/repositories/messages.ts) needs `id` in the index too, to seek past a
+    // `(created_at, id)` cursor within one session without a Sort. Additive: the index above is
+    // left in place (other reads may still use it). Declared here so `db:generate` stays a no-op;
+    // built by the post-migrate step (packages/db/src/migrate.ts, migration 0035) with CREATE
+    // INDEX CONCURRENTLY, same as the other messages/sessions indexes (high-write tables).
+    index('messages_session_id_created_at_id_idx').on(t.sessionId, t.createdAt, t.id),
+  ],
 );
 
 /** Per-turn trace. No keys, no names. */

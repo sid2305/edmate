@@ -6,6 +6,18 @@ Isolation between teachers and between students is enforced here, not by Postgre
 1. **Scope first, always required.** The first parameter is a `TeacherScope` (`{ teacherId }`) or a
    `StudentScope` (`{ studentId, teacherId }`; student data is always per student x teacher). No
    method has an optional scope or an overload without one.
+
+   **Bare-id exception (9.4e item 5).** Two kinds of method take a bare id instead, still validated
+   with a schema before any SQL, never an optional or overloaded scope: (a) a staff-only method
+   (`teacherProfiles.listPendingForStaff`, `reports.listOpenForStaff` / `.review`,
+   `safetyAlerts.listForStaff` / `.acknowledge`, `takedowns.create` / `.lift` /
+   `.listActiveForStaff`, the regulated-subjects `listForStaff` / `setSubject` / `setApproval`)
+   takes the acting user's own id `by` first, checked with `role-lock.ts`'s `lockRole` (not
+   staff right now is `scope`, never an existence check on anyone else); and (b)
+   `subscriptions.listLiveForStudent` / `.listUnavailableForStudent` take the signed-in student's
+   own `studentId` alone, because they read across every teacher by design (a per-teacher
+   `StudentScope` can't express that) — same `IdSchema` guard as every other id here, just with
+   no `teacherId` half.
 2. **Validated at runtime before any SQL.** `teacherScope()` / `studentScope()` parse with schemas
    picked from the contracts (strict objects, contracts id format). A bad scope throws
    `RepositoryError('scope')`. This matters because Drizzle's `and()` drops `undefined` conditions,

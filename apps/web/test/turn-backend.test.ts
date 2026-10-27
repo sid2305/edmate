@@ -28,6 +28,15 @@ describe('deadlineSafeClock.sleep', () => {
     expect(sleeps).toEqual([100, MAX_REAL_SLEEP_MS, 0]);
   });
 
+  it('a non-finite ms (NaN, Infinity) clamps to 0, never sleeps for real forever (9.4e item 9)', async () => {
+    const { real, sleeps } = fakeReal();
+    const clock = deadlineSafeClock(real);
+    await clock.sleep(NaN);
+    await clock.sleep(Infinity);
+    await clock.sleep(-Infinity);
+    expect(sleeps).toEqual([0, MAX_REAL_SLEEP_MS, 0]);
+  });
+
   it('with a cancel token, never sleeps for real and resolves only when cancelled', async () => {
     const { real, sleeps } = fakeReal();
     const clock = deadlineSafeClock(real);
