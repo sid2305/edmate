@@ -28,6 +28,10 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
+    // Task 0.20j: well under STEP_TIMEOUT (30_000, teacher-packages-walkthrough.spec.ts) and far
+    // under the 900_000 test timeout -- a blocked click (the Edge-overlay bug this task fixes, or
+    // any future one) now throws in seconds, not after retrying for 900 s.
+    actionTimeout: 10_000,
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

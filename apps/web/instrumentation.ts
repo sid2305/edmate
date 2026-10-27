@@ -1,68 +1,39 @@
+import type * as NodeStartup from './instrumentation.node';
+
 // Next.js instrumentation convention (task 9.0c): `register()` runs once, when the server
 // process starts -- before any request is routed. The 9.0 finding: a fresh container's *first*
 // chat turn can log `turn.background_failed` from `preGuard`'s session-history read
 // (`packages/harness/src/pipeline/steps/preGuard.ts`, `HISTORY_TIMEOUT_MS = 50`), because
 // node-postgres connects lazily and that read can be the pool's first-ever query -- a cold TCP
 // connect + auth handshake racing a 50ms budget. preGuard already fails safe on that timeout (it
-// reports the error name and carries on with no history); this file removes the *cause* instead
-// of widening that guard's budget, by forcing one real round trip through the same shared pool
-// before any request can arrive.
+// reports the error name and carries on with no history); the warm-up in `instrumentation.node.ts`
+// removes the *cause* instead of widening that guard's budget, by forcing one real round trip
+// through the same shared pool before any request can arrive.
 //
-// Edge note: only the Node.js runtime needs this (Edge never talks to Postgres), and `pg` must
-// never be pulled into the Edge bundle. The `serverDatabase` import is therefore dynamic and
-// gated on `NEXT_RUNTIME`, not a static top-level import. (This file also avoids a static import
-// of anything under `src/turn/**`, which would pull in the whole turn runtime -- and its
-// `@edmate/harness`/`@edmate/gateway`/`@edmate/queue` dependency graph -- just for a one-line
-// helper; `errorName` is reimplemented locally instead.)
+// Edge note (task 0.20j): all Node-only work (the pool warm-up, the guard-pattern warm-up) lives
+// in `./instrumentation.node`, required here only on the Node.js runtime. This is Next's own
+// documented shape for keeping Node-only code out of the Edge bundle (`instrumentation.md`,
+// "Specifying the runtime"): a literal `require(...)` behind a compile-time
+// `if (NEXT_RUNTIME === 'edge')` branch, which Next eliminates per build target *before*
+// Edge-compatibility checking runs. The previous shape here -- an `if/return` guard followed by a
+// dynamic `import()` of Node-only code -- is not that documented shape: in `next dev` (no
+// minification, so no generic dead-code elimination either) the Edge-targeted compile still
+// traced through the dynamic imports into `@edmate/content`'s `safeRegexGuard.ts`, whose static,
+// top-level `import { ... } from 'node:worker_threads'` the Edge compiler flags. That flag became
+// a dev-overlay that ate clicks (0.20h/0.20j). `require()` of a file whose own top-level imports
+// are all dynamic has no such static trace for the Edge compiler to follow.
 //
-// Fire-and-forget: `register()` never awaits the warm-up. A DB outage (or no `DATABASE_URL` at
-// all, e.g. a build step) must never delay or block server startup or `/api/health`; the warm-up
-// only logs the error's name, never a message (it can quote a connection string or an email).
-function errorName(error: unknown): string {
-  return error instanceof Error ? error.name : typeof error;
-}
-
-/** Runs once per process (and once per route in `next dev`, which this file does not special-case
- * -- a second cheap read on dev reload is harmless). */
+// Fire-and-forget: `register()` never awaits the warm-up (enforced inside `instrumentation.node`'s
+// `runNodeStartup`). A DB outage (or no `DATABASE_URL` at all, e.g. a build step) must never delay
+// or block server startup or `/api/health`; the warm-up only logs the error's name, never a
+// message (it can quote a connection string or an email).
 export function register(): void {
-  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
-  // `warmPool` never rejects (it catches internally); `void` just makes the "not awaited" intent
-  // explicit to readers and lint.
-  void warmPool();
-  // Task 3.9c (found by 3.9b): a fresh process's first preGuard call pays to lazily compile its
-  // guard pattern tables (~150 ms cold vs 1-8 ms warm) against preGuard's 300 ms-per-guard / step
-  // 3's 400 ms budget. Synchronous CPU work, no network: runs directly, not `void`-fired. A
-  // separate, independently-failing block from `warmPool` above -- a throw here must never block
-  // `register()` or `/api/health`, same as a DB outage must not.
-  warmGuardPatterns();
-}
-
-async function warmPool(): Promise<void> {
-  try {
-    const { serverDatabase } = await import('./src/auth');
-    const { repos } = serverDatabase();
-    // An existing, already-public, parameterless-friendly read (9.2's discovery search) -- no new
-    // database surface, no raw pool handle (`@edmate/db`'s public entry has none by design).
-    await repos.discovery.search({});
-  } catch (error) {
-    console.error(`[instrumentation] warm-up failed: ${errorName(error)}`);
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    return;
   }
-}
-
-function warmGuardPatterns(): void {
-  import('@edmate/harness')
-    .then(({ warmPreGuardPatterns }) => {
-      // Task 3.9e (3.9c review LOW): warmPreGuardPatterns() never throws -- it returns the names
-      // of any matchers that failed instead, so a failure that would otherwise leave no trace is
-      // logged here (names only, never the sample text or an error).
-      const failedMatchers = warmPreGuardPatterns();
-      if (failedMatchers.length > 0) {
-        console.error(
-          `[instrumentation] guard warm-up matcher failed: ${failedMatchers.join(',')}`,
-        );
-      }
-    })
-    .catch((error: unknown) => {
-      console.error(`[instrumentation] guard warm-up failed: ${errorName(error)}`);
-    });
+  // Literal `require(...)` behind the branch above is Next's documented shape for excluding
+  // Node-only code from the Edge bundle; a dynamic `import()` here would defeat the point (see
+  // the comment above).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  (require('./instrumentation.node') as typeof NodeStartup).runNodeStartup();
 }

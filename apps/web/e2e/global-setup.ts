@@ -51,9 +51,13 @@ const BASE_URL = `http://localhost:${PORT}`;
  * importing back would create a cycle. Literal, commented as mirroring that constant. */
 const DEMO_AGENT_ID = 'demo-agent';
 
-/** 0.20g review (MEDIUM/LOW): each warm-up fetch's own ceiling, comfortably under the
- * `webServer.timeout` (60 s) global-setup itself runs inside -- a hung warm-up must never make
- * the whole run wait out Playwright's own timeout instead of this file's best-effort catch. */
+/** 0.20g review (MEDIUM/LOW), reworded in 0.20j (0.20h review): each warm-up fetch's own
+ * ceiling. It equals `playwright.config.ts`'s `webServer.timeout` (60 s) in value only -- both
+ * ~60 s budgets were chosen independently, and this one does not run nested inside that clock.
+ * Playwright's `webServer` plugin finishes waiting for the dev server (that 60 s timeout) before
+ * `globalSetup` -- where this warm-up fires -- ever runs; the two never run concurrently. This
+ * ceiling exists so a hung warm-up fails this file's own best-effort catch in seconds, instead of
+ * hanging `globalSetup` (and so the whole run) indefinitely. */
 const WARM_UP_TIMEOUT_MS = 60_000;
 
 /**

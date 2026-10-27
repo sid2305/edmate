@@ -67,6 +67,10 @@ const nextConfig: NextConfig = {
   // `instrumentation.ts` or `src/auth/*` (how `@edmate/queue`/`pg` get imported there), both out of
   // this task's scope.
   serverExternalPackages: ['@edmate/content'],
+  // 0.20j: Next's dev-only tools badge is fixed bottom-left and intercepts clicks on any button
+  // that lands there (e.g. the "Create package" button once Playwright scrolls to it); it never
+  // renders in production, so disabling it only affects `next dev`.
+  devIndicators: false,
   outputFileTracingIncludes: {
     '/**': ['../../packages/content/dist/**'],
   },

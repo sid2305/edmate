@@ -10,6 +10,70 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 0.20j instrumentation.test.ts patches Module.prototype.require instead of vi.mock · decided by builder · risk: low
+- Decided: The three "dispatches to instrumentation.node" tests monkeypatch
+  `Module.prototype.require` (restored in `afterEach`) instead of using `vi.mock`, which the plan's
+  "Tests" section assumed would work.
+- Why: confirmed empirically that Vitest's `vi.mock` only governs `import`/dynamic `import()`, not
+  a literal `require(...)` call -- even against a real, built, npm-resolvable package
+  (`@edmate/harness`). The production code must keep the literal `require(...)` token for Next's
+  documented Edge-bundle-exclusion branch elimination to recognise it, so the test had to adapt
+  instead; this is the same technique `mock-require`/`proxyquire` use for exactly this case.
+
+---
+
+### 27 Oct 2026 · 0.20j the dev-overlay hang's root cause is not the Edge warning · decided by builder · risk: low
+- Decided: Stopping with Status: BLOCKED rather than continuing to chase the 5x-clean-run
+  acceptance criterion, because the actual blocking cause (Next's dev-tools badge overlapping a
+  bottom-left-positioned button) is outside this task's file scope
+  (`next.config.ts`/`apps/web/src/**`, both out of bounds).
+- Why: plan Q2's own fallback path ("if the require-branch fix does not clear the warning at all...
+  stop after one more targeted probe... set Status: BLOCKED") covers exactly this situation: the
+  fix I built is correct and verified for the warning it targets, but the acceptance test's actual
+  failure traces to something else the plan's root-cause analysis did not anticipate.
+
+---
+
+### 27 Oct 2026 · 0.20j fix round 1: devIndicators disabled in next.config.ts · decided by builder · risk: low
+- Decided: Added `devIndicators: false` to `apps/web/next.config.ts`, per the lead's instruction in
+  the fix brief, rather than a layout change to the package form (out of bounds for this round).
+- Why: Next's dev-tools badge is fixed bottom-left, pointer-events enabled, and collides with any
+  control that renders in that corner (here, the "Create package" button once Playwright scrolls to
+  it). The option is dev-only UI (Next 16 supports `devIndicators: false`); production behaviour is
+  unaffected.
+
+---
+
+### 27 Oct 2026 · 0.20j fix round 1: run 1's unrelated Save-button timeout not chased further · decided by builder · risk: low
+- Decided: Logged run 1's failure (second package's edit/reuse path, `Save` button not found within
+  10s, no interception in the call log) as an observation, not a blocker, after confirming it did
+  not reproduce across 5 further fresh runs.
+- Why: the brief's stop condition is specifically about a *still-intercepted* click; this failure's
+  call log shows the locator never even resolved, which is a different symptom (most plausibly this
+  worktree's dev database already sitting at `PACKAGES_MAX` from this task's own earlier diagnostic
+  runs, forcing the edit/reuse branch instead of plain create). Chasing it further would mean
+  touching `apps/web/src/studio`/`app/teacher`, both out of bounds for this round.
+
+---
+
+### 27 Oct 2026 · 0.20j next.config.ts devIndicators and instrumentation require · decided by lead · risk: low
+- Decided: the fix-round-1 brief widened scope to apps/web/next.config.ts (out of bounds in the plan) to add `devIndicators: false`; that is the lead's call, not builder drift. A synchronous throw from `require('./instrumentation.node')` in apps/web/instrumentation.ts stays uncaught.
+- Why: the dev-tools badge intercepted the walkthrough's "Create package" click and the setting is dev-only. A failing require means a missing build artifact, which should stop startup loudly rather than be logged and skipped.
+
+---
+
+### 27 Oct 2026 · 0.20j walkthrough Save-button timeout moved to 0.20k · decided by lead · risk: low
+- Decided: run 1's Save-button timeout on the reuse/edit path (not an intercepted click) goes to a new task, 0.20k, rather than holding this merge.
+- Why: 5 later fresh runs passed, and the walkthrough should pass even when leftover rows push it down the reuse path, so the timeout needs its own look.
+
+---
+
+### 27 Oct 2026 · 0.20j merge and budget, 192 tool calls against 55 · decided by lead · risk: low
+- Decided: merge at 192 harness-counted tool calls against the plan's 55.
+- Why: the build found two separate causes (the Edge warning and the dev-tools badge), and each needed its own round; the two review fix rounds stayed under 50 calls each.
+
+---
+
 ### 27 Oct 2026 · 6.3a recordProposedMistakes now calls mistakeProposalsRepo.record, teacher-scoped only · decided by builder · risk: low
 - Decided: `profileStoreFor.recordProposedMistakes(scope, proposed)` persists via the new repo,
   scoped by `{ teacherId: bound.teacherId }` (no `studentId` column on `mistake_tag_proposals`).

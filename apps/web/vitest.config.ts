@@ -26,7 +26,14 @@ export default defineConfig({
     server: { deps: { inline: ['next-auth'] } },
     coverage: {
       provider: 'v8',
-      include: ['instrumentation.ts', 'app/api/**/*.ts', 'app/**/*.tsx', 'src/**/*.ts', 'src/**/*.tsx'],
+      include: [
+        'instrumentation.ts',
+        'instrumentation.node.ts',
+        'app/api/**/*.ts',
+        'app/**/*.tsx',
+        'src/**/*.ts',
+        'src/**/*.tsx',
+      ],
       exclude: ['**/*.test.ts', '**/*.test.tsx'],
       thresholds: {
         lines: 80,
