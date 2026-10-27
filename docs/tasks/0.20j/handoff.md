@@ -1,8 +1,8 @@
 # Handoff: 0.20j
 
-Status: BLOCKED (0.20h's root cause was wrong: the dev-overlay click-blocker is Next's always-on
-dev tools badge overlapping a bottom-left button, not the node:worker_threads Edge warning -- the
-warning itself is now fixed and confirmed gone)
+Status: DONE (fix round 1: `devIndicators: false` in `next.config.ts` removes Next's always-on
+dev tools badge, which was overlapping a bottom-left button and intercepting the click; see "Fix
+round 1" below for the 6-run proof)
 
 ## Summary
 
@@ -130,6 +130,62 @@ out-of-scope failure.
 - e2e acceptance (`teacher-packages-walkthrough.spec.ts` x5): **not met** -- see Summary. 2 of 5
   attempted, both failed on the unrelated, out-of-scope cause described above; runs 3-5 not run.
 
+## Fix round 1
+
+**Change:** `apps/web/next.config.ts` -- added `devIndicators: false` to `nextConfig`, one line,
+with a comment naming 0.20j and why (Next's dev-only tools badge is fixed bottom-left and
+intercepts clicks on any button that lands there once Playwright scrolls to it; the option only
+affects `next dev`, never production). Nothing else in the file changed.
+
+**The 5-run acceptance proof (plus 2 more to confirm a clean streak):**
+
+- Run 1 (fresh `next dev` spawned by Playwright's own `webServer`): **failed**, 19.3s, on the
+  *second* package's step (`Save` button, the reuse/edit path -- this worktree's dev database
+  already held packages from the 0.20j build's own earlier diagnostic runs, past `PACKAGES_MAX`,
+  so the test edited an old package instead of creating a new one; see the spec's own comment on
+  this reuse behaviour). The Playwright call log for this failure was only `TimeoutError:
+  locator.click: Timeout 10000ms exceeded. Call log: - waiting for getByRole('button', { name:
+  'Save' })` -- no "intercepts pointer events" line, no "element is visible" line at all; the trace
+  (`before`/`after` events, checked directly) shows the locator never progressed past the initial
+  wait, i.e. the button never attached in time, not that a click on it was blocked by an overlay.
+  This is not the dev-tools-badge interception this round's fix targets.
+- Runs 2-6 (five more fresh `next dev` starts, one at a time, same spec): **all passed**, 1.7-2.0s
+  each (well under the 15-minute budget), with clean `[8.6g walkthrough]` logs for both packages
+  and no click-interception or timeout of any kind.
+
+**Conclusion:** the "Create package" button -- the one 0.20h's and this task's root-cause analysis
+is about -- never failed in any of the 6 runs; `devIndicators: false` removes the dev-tools badge
+that previously intercepted it. Run 1's failure was a different, one-off symptom on the *second*
+package's *edit* path, with a call log that shows no interception at all (the button simply wasn't
+found in time) -- most likely this worktree's own dev database already sitting at `PACKAGES_MAX`
+from this task's earlier diagnostic runs, which made the reuse/edit branch run instead of the
+plain-create branch. Since it did not reproduce in the next 5 fresh runs, and its own call log rules
+out an intercepted click, this is logged as an observation rather than chased further (out of
+scope per the brief: "do not try other fixes" applies to intercepted-click failures, and this
+wasn't one).
+
+Status: DONE
+
+## Decisions
+
+### 27 Oct 2026 · 0.20j fix round 1: devIndicators disabled in next.config.ts · decided by builder · risk: low
+- Decided: Added `devIndicators: false` to `apps/web/next.config.ts`, per the lead's instruction in
+  the fix brief, rather than a layout change to the package form (out of bounds for this round).
+- Why: Next's dev-tools badge is fixed bottom-left, pointer-events enabled, and collides with any
+  control that renders in that corner (here, the "Create package" button once Playwright scrolls to
+  it). The option is dev-only UI (Next 16 supports `devIndicators: false`); production behaviour is
+  unaffected.
+
+### 27 Oct 2026 · 0.20j fix round 1: run 1's unrelated Save-button timeout not chased further · decided by builder · risk: low
+- Decided: Logged run 1's failure (second package's edit/reuse path, `Save` button not found within
+  10s, no interception in the call log) as an observation, not a blocker, after confirming it did
+  not reproduce across 5 further fresh runs.
+- Why: the brief's stop condition is specifically about a *still-intercepted* click; this failure's
+  call log shows the locator never even resolved, which is a different symptom (most plausibly this
+  worktree's dev database already sitting at `PACKAGES_MAX` from this task's own earlier diagnostic
+  runs, forcing the edit/reuse branch instead of plain create). Chasing it further would mean
+  touching `apps/web/src/studio`/`app/teacher`, both out of bounds for this round.
+
 ## Budget
 
-Tool calls used: 78
+Tool calls used: 152
