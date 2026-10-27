@@ -193,6 +193,11 @@ export function practiceNextItemTool(
   const topicIdFor = (itemId: string, scope: PracticeScope): string | undefined => {
     return bank.itemFor(itemId, scope)?.topicId;
   };
+  // 6.3c: a bank item's own `mistakeTag`, content-author-set like `topicId` -- a generated item
+  // has none (mirrors topicIdFor's generated-item gap).
+  const mistakeTagFor = (itemId: string, scope: PracticeScope): string | undefined => {
+    return bank.itemFor(itemId, scope)?.mistakeTag;
+  };
   // 5.6b: the active item, rebuilt inside the turn's entitlement: the bank first, then the
   // generator (its prompt and key recomputed from the id). Outside scope: undefined.
   const activeItem = (itemId: string, ctx: TurnContext): ItemContext | undefined => {
@@ -242,10 +247,12 @@ export function practiceNextItemTool(
       ];
       if (JSON.stringify(union).length > PRACTICE_KEYS_MAX_JSON) return undefined;
       const topicId = topicIdFor(itemId, scope);
+      const mistakeTag = mistakeTagFor(itemId, scope);
       return {
         itemId,
         moduleId,
         ...(topicId === undefined ? {} : { topicId }),
+        ...(mistakeTag === undefined ? {} : { mistakeTag }),
         answerKey: [...answerKey],
         shown: shownText(parsed.data),
       };

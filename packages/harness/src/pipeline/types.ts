@@ -443,6 +443,18 @@ export interface CommitRecord {
    * `applyEvidence` only when this is non-empty.
    */
   evidence?: EvidenceEvent[];
+  /**
+   * Mistake tags classified from this turn's wrong practice answer, already members of the
+   * style card's `mistakeTags` (task 6.3c; harness-internal producer, `mistakesFor`). Absent or
+   * empty: commit calls `profiles.applyMistakes` only when either this or `mistakesProposed` is
+   * non-empty.
+   */
+  mistakesKnown?: LearnerProfile['mistakes'];
+  /**
+   * Candidate mistake tags from this turn not on the style card's list (task 6.3c): reaches
+   * `profiles.recordProposedMistakes` for a teacher to review and approve.
+   */
+  mistakesProposed?: LearnerProfile['mistakes'];
 }
 
 export interface Steps {

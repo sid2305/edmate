@@ -319,7 +319,11 @@ interface EntitlementStore { resolve(x: { studentId: string; agentId: string; so
 interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)
   load(e: Entitlement, sessionId: string): Promise<{ agent: AgentConfig; pkg: PackageConfig; styleCard: StyleCard; locale: LocalePack; helpState: unknown } | null>;
 }   // helpState: sessions.help_state as stored, unvalidated; the harness owns its shape (ADR-0005)
-interface ProfileStore { get(studentId: string, teacherId: string): Promise<LearnerProfile>; applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile> }
+interface ProfileStore {   // applyMistakes/recordProposedMistakes: optional (ADR-0017, 6.3c); known/proposed tags from classifyMistakeTags
+  get(studentId: string, teacherId: string): Promise<LearnerProfile>; applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile>;
+  applyMistakes?(scope: { studentId: string; teacherId: string }, known: LearnerProfile['mistakes'], proposed: LearnerProfile['mistakes']): Promise<void>;
+  recordProposedMistakes?(scope: { studentId: string; teacherId: string }, proposed: LearnerProfile['mistakes']): Promise<void>;
+}
 interface TranscriptStore { history(sessionId: string, limit: number): Promise<Message[]>; append(sessionId: string, m: Message): Promise<void> }
 interface SessionStateStore { saveHelpState(sessionId: string, helpState: unknown): Promise<void> }   // bound to student x teacher; own open session only, else not_found; ≤ LIMITS.helpStateMaxJsonLength of JSON (ADR-0005)
 interface Transcriber { transcribe(i: TranscribeInput): Promise<Transcript> }   // throws on failure; never returns an empty transcript (ADR-0005)
