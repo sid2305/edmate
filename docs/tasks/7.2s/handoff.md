@@ -190,6 +190,14 @@ YAML/schema bugs this phase.
 
 ## Decisions
 
+### 27 Oct 2026 · 7.2s merge and budget, 269 tool calls against 190 · decided by lead · risk: low
+- Decided: merge at 269 harness-counted tool calls (Phase J 142, Phase K 85, fix round 1 42) against the plan's 190; the fix round ran 42 against a 30 cap.
+- Why: Phase J overran by checking every case against the bank answers one file at a time; the Phase K brief asked for batched writes and came in under its 95. The fix round's scripted whole-suite duplicate check is what the review needed. The 7.2t briefs carry the batching rule and the single-turn duplicate check from the start.
+
+### 27 Oct 2026 · 7.2s review findings handled · decided by lead · risk: low
+- Decided: code-reviewer's Phase J MEDIUMs and LOW were fixed in Phase K, and its Phase K HIGH (five repeated opening turns) and MEDIUM (a fourth ".get() default" case) in fix round 1, which it verified. The stale Phase C citations and the plums-default file name go to board task 7.2v.
+- Why: all were cheap to fix on the branch; the citations and the rename touch files outside this task's new cases.
+
 ### 27 Oct 2026 · 7.2s fix round 1 kept ids unchanged on the retricked file · decided by builder · risk: low
 
 - Decided: `pedagogy-hint-first-plums-default-en.yaml`'s `id` field still reads
@@ -299,4 +307,4 @@ YAML/schema bugs this phase.
 
 ## Budget
 
-Tool calls used: ~195 (Phase J ~100, Phase K ~95), fix round 1 ~23.
+Tool calls used: 269 (harness count: Phase J 142, Phase K 85, fix round 1 42; reviews not included)
