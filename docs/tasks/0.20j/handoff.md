@@ -189,3 +189,35 @@ Status: DONE
 ## Budget
 
 Tool calls used: 152
+
+## Fix round 2
+
+Findings (typescript-reviewer):
+1. [HIGH] `apps/web/instrumentation.ts:36` -- `require('./instrumentation.node')` returned `any`,
+   so `.runNodeStartup()` was unchecked. Fixed by adding `import type * as NodeStartup from
+   './instrumentation.node'` (type-only, erased at build so it does not pull Node code into the
+   Edge bundle) and casting the require result: `(require('./instrumentation.node') as typeof
+   NodeStartup).runNodeStartup();`. The literal `require(...)` token is unchanged, per Next's
+   documented Edge-exclusion shape.
+2. [MEDIUM] `apps/web/vitest.config.ts` -- `coverage.include` listed `instrumentation.ts` but not
+   `instrumentation.node.ts`, which now holds the warm-up logic. Added `'instrumentation.node.ts'`
+   next to the existing entry. The 80% thresholds still pass with both files included (full
+   `turbo run typecheck lint test --filter=@edmate/web` is green; no coverage failure reported).
+
+Checks:
+- Proved finding 1: first tried `typeof import('./instrumentation.node')` directly in the cast --
+  lint rejected it (`@typescript-eslint/consistent-type-imports: import() type annotations are
+  forbidden`), confirming the brief's predicted fallback was needed, so switched to the top-level
+  `import type * as NodeStartup` form. Then renamed the call to `runNodeStartupX` (via `sed` on the
+  fixed file) and re-ran `turbo run typecheck --filter=@edmate/web`: it failed with `TS2551:
+  Property 'runNodeStartupX' does not exist on type 'typeof import(".../instrumentation.node")'.
+  Did you mean 'runNodeStartup'?` -- confirming the cast makes a renamed export a type error, not a
+  runtime-only failure. Reverted the rename from the `.bak` copy before the real gate run.
+- `corepack pnpm --filter @edmate/web build` completed with no errors; `grep -ni
+  "node:worker_threads\|edge\|A Node.js API is used"` on the build log found no matches -- no
+  Edge-runtime warning about Node modules (the original 0.20j symptom).
+
+Gate: `turbo run typecheck lint test --filter=@edmate/web` all green (10/10 tasks); `prettier
+--check` on both changed files passed; `python3 .githooks/secret-scan.py --all` clean.
+
+Status: DONE

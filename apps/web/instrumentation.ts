@@ -1,3 +1,5 @@
+import type * as NodeStartup from './instrumentation.node';
+
 // Next.js instrumentation convention (task 9.0c): `register()` runs once, when the server
 // process starts -- before any request is routed. The 9.0 finding: a fresh container's *first*
 // chat turn can log `turn.background_failed` from `preGuard`'s session-history read
@@ -33,5 +35,5 @@ export function register(): void {
   // Node-only code from the Edge bundle; a dynamic `import()` here would defeat the point (see
   // the comment above).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('./instrumentation.node').runNodeStartup();
+  (require('./instrumentation.node') as typeof NodeStartup).runNodeStartup();
 }
