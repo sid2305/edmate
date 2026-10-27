@@ -202,7 +202,11 @@ async function liveTarget(
  * wrong-teacher/unverified/suspended/draft case still falls through to `not_found` below -- only
  * a stale-but-otherwise-live version is promoted to `invalid`.
  */
-async function staleVersion(q: Db | Tx, teacherId: string, packageVersionId: string): Promise<boolean> {
+async function staleVersion(
+  q: Db | Tx,
+  teacherId: string,
+  packageVersionId: string,
+): Promise<boolean> {
   const [row] = await q
     .select({ id: packageVersions.id })
     .from(packageVersions)
@@ -215,7 +219,10 @@ async function staleVersion(q: Db | Tx, teacherId: string, packageVersionId: str
     )
     .innerJoin(
       packages,
-      and(eq(packages.id, packageVersions.packageId), lt(packageVersions.version, packages.liveVersion)),
+      and(
+        eq(packages.id, packageVersions.packageId),
+        lt(packageVersions.version, packages.liveVersion),
+      ),
     )
     .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
     .where(and(eq(packageVersions.id, packageVersionId), eq(packageVersions.teacherId, teacherId)));
@@ -416,6 +423,51 @@ export function subscriptionsRepo(db: Db) {
     },
 
     /**
+     * Task 13.4d (account export): every subscription the student has ever had, across every
+     * teacher, whatever its status and whatever its agent's current status -- the account export
+     * cares about every pair the student has ever subscribed to, not just the live ones. A
+     * separate method from `listLiveForStudent`/`listUnavailableForStudent` above (not a flag on
+     * either): both of those feed `/home` and the live-classes question route and must not change
+     * behaviour. Same bare-id scope exception and `IdSchema` guard. Orders by `agents.id`, same as
+     * its siblings, for a stable diff-friendly result.
+     */
+    async listAllForStudent(studentId: string): Promise<
+      Array<{
+        agentId: string;
+        teacherId: string;
+        status: Entitlement['status'];
+        periodEnd: string;
+      }>
+    > {
+      const method = 'subscriptions.listAllForStudent';
+      const r = IdSchema.safeParse(studentId);
+      if (!r.success) throw new RepositoryError('scope', method);
+      const rows = await db
+        .select({
+          agentId: agents.id,
+          teacherId: subscriptions.teacherId,
+          status: subscriptions.status,
+          periodEnd: subscriptions.periodEnd,
+        })
+        .from(subscriptions)
+        .innerJoin(
+          packageVersions,
+          and(
+            eq(packageVersions.id, subscriptions.packageVersionId),
+            eq(packageVersions.teacherId, subscriptions.teacherId),
+          ),
+        )
+        .innerJoin(packages, eq(packages.id, packageVersions.packageId))
+        .innerJoin(
+          agents,
+          and(eq(agents.id, packages.agentId), eq(agents.teacherId, subscriptions.teacherId)),
+        )
+        .where(eq(subscriptions.studentId, r.data))
+        .orderBy(asc(agents.id));
+      return rows.map((row) => ({ ...row, periodEnd: iso(row.periodEnd) }));
+    },
+
+    /**
      * Starts a subscription with no payment (task 9.3; checkout is 10.8): the scope's student
      * subscribes to one of the scope's teacher's package versions. The write only lands when
      * `packageVersionId` names a `package_versions` row of this teacher (else `not_found` — a
@@ -446,7 +498,9 @@ export function subscriptionsRepo(db: Db) {
         const [earlier] = await db
           .select({ id: subscriptions.id })
           .from(subscriptions)
-          .where(and(eq(subscriptions.studentId, studentId), eq(subscriptions.teacherId, teacherId)))
+          .where(
+            and(eq(subscriptions.studentId, studentId), eq(subscriptions.teacherId, teacherId)),
+          )
           .limit(1);
         const status = i.status === 'trial' && earlier ? 'active' : i.status;
         const result = await db.execute(
@@ -605,10 +659,7 @@ export function subscriptionsRepo(db: Db) {
      * (9.3c): a teacher rejected after publishing can't be switched to (`not_found`). Task 9.6i:
      * a free target while the teacher's free tier is cost-alarm paused is `invalid`, as in `start`.
      */
-    async changePackage(
-      scope: StudentScope,
-      input: ChangePackageInput,
-    ): Promise<LiveSubscription> {
+    async changePackage(scope: StudentScope, input: ChangePackageInput): Promise<LiveSubscription> {
       const method = 'subscriptions.changePackage';
       const { studentId, teacherId } = studentScope(scope, method);
       const i = parseArg(ChangePackageOptions, input, method);
@@ -616,7 +667,9 @@ export function subscriptionsRepo(db: Db) {
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
           const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
-          if (!LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])) {
+          if (
+            !LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])
+          ) {
             throw new RepositoryError('invalid', method);
           }
           if (live.packageVersionId === i.packageVersionId) {
@@ -657,7 +710,12 @@ export function subscriptionsRepo(db: Db) {
             { status: live.status, packageVersionId: live.packageVersionId },
             { status, packageVersionId: i.packageVersionId },
           );
-          return { id: live.id, packageVersionId: i.packageVersionId, status, periodEnd: live.periodEnd };
+          return {
+            id: live.id,
+            packageVersionId: i.packageVersionId,
+            status,
+            periodEnd: live.periodEnd,
+          };
         }),
       );
     },
@@ -676,7 +734,9 @@ export function subscriptionsRepo(db: Db) {
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
           const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
-          if (!LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])) {
+          if (
+            !LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])
+          ) {
             throw new RepositoryError('invalid', method);
           }
           await tx
@@ -691,7 +751,12 @@ export function subscriptionsRepo(db: Db) {
             { status: live.status, packageVersionId: live.packageVersionId },
             { status: 'paused', packageVersionId: live.packageVersionId },
           );
-          return { id: live.id, packageVersionId: live.packageVersionId, status: 'paused', periodEnd: live.periodEnd };
+          return {
+            id: live.id,
+            packageVersionId: live.packageVersionId,
+            status: 'paused',
+            periodEnd: live.periodEnd,
+          };
         }),
       );
     },
@@ -777,7 +842,12 @@ export function subscriptionsRepo(db: Db) {
             { status: 'paused', packageVersionId: live.packageVersionId },
             { status: restored, packageVersionId: live.packageVersionId },
           );
-          return { id: live.id, packageVersionId: live.packageVersionId, status: restored, periodEnd: live.periodEnd };
+          return {
+            id: live.id,
+            packageVersionId: live.packageVersionId,
+            status: restored,
+            periodEnd: live.periodEnd,
+          };
         }),
       );
     },
@@ -809,7 +879,12 @@ export function subscriptionsRepo(db: Db) {
             { status: live.status, packageVersionId: live.packageVersionId },
             { status: 'ended', packageVersionId: live.packageVersionId },
           );
-          return { id: live.id, packageVersionId: live.packageVersionId, status: 'ended', periodEnd: live.periodEnd };
+          return {
+            id: live.id,
+            packageVersionId: live.packageVersionId,
+            status: 'ended',
+            periodEnd: live.periodEnd,
+          };
         }),
       );
     },
