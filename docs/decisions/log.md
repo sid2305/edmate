@@ -10,6 +10,43 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 9.3n budget overrun (43 vs 25) · decided by lead · risk: low
+- Decided: accept 43 tool calls against a budget of 25 (the builder reported 24).
+- Why: the work stayed inside the plan's three files; the extra calls were @edmate/web test and lint runs.
+
+---
+
+### 26 Oct 2026 · 9.3n index-suffixed key left as it is in apps/web/app/staff/verification-row.tsx · decided by lead · risk: low
+- Decided: wontfix the code-review LOW that the `ts|from|to|index` key in apps/web/app/staff/verification-row.tsx still changes when an entry is added at the head of the list.
+- Why: the list items hold no state or focus, so a remount is harmless, and the suffix keeps keys unique if one edit is audited twice in a millisecond.
+
+---
+
+### 26 Oct 2026 · 9.3n subject-history key always suffixes the index · decided by builder · risk: low
+- Decided: the key is `` `${change.ts}|${change.from}|${change.to}|${i}` `` -- the index suffix is
+  always present, not only added when a collision is possible.
+- Why: the plan allowed adding the index "only then" (when two changes can share all three
+  fields), but detecting that case would need a second pass over the array just to decide the key
+  shape. Always including `i` is simpler, still gives React a stable identity across renders of
+  the same list (the index is a tiebreaker, not the only key), and costs nothing since
+  `subjectHistory` is never reordered in place.
+
+---
+
+### 26 Oct 2026 · 9.3n merge touches apps/web/app/api/staff (tests only) · decided by builder · risk: high
+- Decided: this PR's only change under `apps/web/app/api/staff/**` is to
+  `route.test.ts` (new test cases); `handlers.ts` is byte-for-byte unchanged.
+- Why: that path is in the risk-paths list, so the merge gate needs the risk-high decision logged
+  even though the change is test-only and found no new finding against the handler.
+
+---
+
+### 26 Oct 2026 · 5.2a real-transcriber timing check split to 5.2b · decided by lead · risk: low
+- Decided: the third 5.2 review LOW (a real-transcriber timing check against the 15-minute budget) is not part of 5.2a; it is board task 5.2b, run by a human.
+- Why: it needs a real model call, which tests may not make; the two type LOWs are done here.
+
+---
+
 ### 26 Oct 2026 · 13.4f merge touches packages/db/src/identity/store.ts · decided by lead · risk: high
 - Decided: merge 13.4f. It changes `packages/db/src/identity/store.ts` (a risky path): `listConsentsForStudent` now parses `grantedBy` with a zod enum through an exported pure `parseConsentRow` instead of casting it. security-reviewer, code-reviewer and typescript-reviewer approved.
 - Why: a bad stored value now fails loud instead of being trusted; the only caller stays inside the guarded store methods, which scrub the error, and zod's enum message does not echo the bad value.

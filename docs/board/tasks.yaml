@@ -8511,6 +8511,18 @@ tasks:
   status: running
   branch: m13/9.4e-chat-followups
   model: plan:sonnet build:sonnet
+- id: 9.4f
+  milestone: M13
+  title: '9.4e deferred items and review LOWs: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works (needs next.config.ts or @edmate/queue, not playwright.config.ts); ports.ts reads
+    users.market once per resolve (needs a combined identity method; touches identity/store.ts, ports.ts and the db access fixtures); the listLiveForStudent grid case in repositories.int.test.ts does not depend
+    on CASES order; apiError''s headers param excludes cache-control keys by type and is documented as constant-only; layout.test.tsx keeps type safety on RootLayout''s props; fix the garbled bare-id-exception
+    sentence in packages/db/src/repositories/README.md'
+  accept: web and db typecheck, lint and test green; each item fixed or given a logged wontfix.
+  deps:
+  - 9.4e
+  status: todo
+  branch: null
+  model: null
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
@@ -9235,9 +9247,29 @@ tasks:
   accept: the listed changes are in and the ingest tests pass
   deps:
   - '5.2'
-  status: running
+  status: done
   branch: m13/5.2a-video-type-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 146
+    tokens_in: 526
+    tokens_out: 31715
+    cache_read_tokens: 15685756
+    wall_time_seconds: 1599
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.2b
   milestone: M13
   title: 'Real-transcriber timing check for video ingestion (third 5.2 review LOW, split from 5.2a): packages/db/test/video-ingest.int.test.ts times a scripted transcriber, so it cannot show a real transcription
@@ -9820,9 +9852,30 @@ tasks:
   deps:
   - 9.3m
   risk: high
-  status: running
+  status: done
   branch: m13/9.3n-staff-history-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 89
+    tokens_in: 322
+    tokens_out: 22005
+    cache_read_tokens: 6566898
+    wall_time_seconds: 668
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
