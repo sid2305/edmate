@@ -2996,9 +2996,9 @@ tasks:
   - '6.3'
   - 6.3c
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.3a-mistake-proposals
+  model: plan:sonnet build:sonnet
 - id: 6.3c
   milestone: M13
   title: 'Wire mistake tagging into practice turns (found while planning 6.3a): nothing in production calls classifyMistakeTags or learnerRepo.applyMistakes yet, so 6.3a''s proposals table would have no
@@ -11227,9 +11227,30 @@ tasks:
   deps:
   - 6.3d
   risk: risky
-  status: running
+  status: done
   branch: m13/6.3e-proposed-param
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 290
+    tokens_in: 1044
+    tokens_out: 56439
+    cache_read_tokens: 42096900
+    wall_time_seconds: 3280
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 6.4d
   milestone: M13
   title: '6.4c review LOW: packages/harness/src/pipeline/runner.ts records an evidenceSkip guard with bad_topic_id when a stored practiceTopicId fails the id shape, but no test covers it; add that case
@@ -11332,9 +11353,28 @@ tasks:
   deps:
   - 0.20f
   risk: low
-  status: running
+  status: done
   branch: m13/0.20i-backtrack-selftest
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 4
+    tokens_in: 16
+    tokens_out: 155
+    cache_read_tokens: 94497
+    wall_time_seconds: 75
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 0.20j
   milestone: M13
   title: 'local dev e2e hang found by 0.20h: in next dev, the Edge Runtime warning for node:worker_threads (packages/content safeRegexGuard.js, line 31) brings up the Next dev overlay portal, which intercepts
