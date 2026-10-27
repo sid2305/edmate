@@ -3377,9 +3377,9 @@ tasks:
   deps:
   - '6.5'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.5b-memory-lows
+  model: plan:sonnet build:sonnet
 - id: 7.4a
   milestone: M13
   title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSigna later;
