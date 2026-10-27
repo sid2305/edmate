@@ -11152,9 +11152,9 @@ tasks:
   deps:
   - 6.4c
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.4d-bad-topic-test
+  model: plan:lead build:sonnet
 - id: 8.2s
   milestone: M13
   title: '8.2r review MEDIUM: packages/db/src/schema/content.ts declares documents_teacher_id_created_at_id_idx with createdAt.desc() and id.desc() but no .nullsFirst(), so the drizzle snapshot records
