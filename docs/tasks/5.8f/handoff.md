@@ -34,6 +34,15 @@ Grepped `rolePlayStepPersonaId` and `rolePlayStep:` across `packages` and `apps`
   for harness and its dependents (see below).
 
 ## Decisions
+
+### 27 Oct 2026 · 5.8f merge of pedagogy/skills.ts and policy.ts · decided by lead · risk: high
+- Decided: merge the `SkillInput.rolePlayStepFor` change in `packages/harness/src/pedagogy/` (a risky path).
+- Why: code-reviewer and typescript-reviewer both approved with no findings; the change is type-only, keeps the same run-time persona check and message, and nothing different reaches the model.
+
+### 27 Oct 2026 · 5.8f budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (30 harness tool calls against a budget of 20; the builder reported 17-21).
+- Why: the extra calls went to the full dependents gate and a re-run of the known apps/cli chatDbRetrieval flake; the diff stayed on scope.
+
 ### 27 Oct 2026 · 5.8f one field for a passed-in role-play step · decided by builder · risk: low
 - Decided: merged `rolePlayStep`/`rolePlayStepPersonaId` into one `rolePlayStepFor: { step,
   personaId }` field, matching the shape already built in `policy.ts`, with `readonly` members.
@@ -55,4 +64,4 @@ Grepped `rolePlayStepPersonaId` and `rolePlayStep:` across `packages` and `apps`
 - `python3 .githooks/secret-scan.py --all`: clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 17
+Tool calls used: 30 (harness count; the builder reported 17)
