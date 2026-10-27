@@ -10,6 +10,19 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.3e applyMistakes proposed param · decided by lead · risk: high
+- Decided: approve the change to ports.ts (packages/db/src/repositories/ports.ts) for merge: the third `applyMistakes` parameter is named `_proposed` and ignored, with an int test. security-reviewer and code-reviewer approved; the MEDIUM test-coverage finding is deferred to 6.3a Phase A.
+- Why: no behaviour change; the repositories path is a risk group, so the lead records the approval.
+- Budget: 64 tool calls against a 25-call plan (2.6x); the builder hit unrelated flaky tests under machine load and re-ran them alone. Future one-line repo changes plan about 40.
+
+---
+
+### 27 Oct 2026 · 0.20i approve the test-only change under packages/harness/src/pedagogy · decided by lead · risk: high
+- Decided: Merge 0.20i. It changes only modelRequest.test.ts (packages/harness/src/pedagogy/): the backtracking self-test now asserts on k + 1, not on a repeat of the run that tripped the ceiling. No source file changes. code-reviewer (required for the group) approved.
+- Why: The old self-test failed CI on two unrelated PRs (385, 387) on 27 Oct 2026 when the repeat run landed just under the 2 s ceiling. The new run is about twice as slow, so it has margin, and the worst case (about 16 s) fits the 30 s timeout.
+
+---
+
 ### 27 Oct 2026 · 8.2s budget overrun accepted · decided by lead · risk: low
 - Decided: Accept 49 tool calls (harness count) against a plan budget of 20.
 - Why: The drift check ran drizzle-kit twice and had to clean up the generated files in between, which the lead's estimate missed. Future snapshot fixes should plan about 40.
