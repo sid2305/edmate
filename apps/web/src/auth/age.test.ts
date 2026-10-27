@@ -166,6 +166,53 @@ describe('loadAgeContent (real content/)', () => {
     expect(log[0]).not.toContain('@'); // no PII: just file + schema/validation reasons
   });
 
+  function signedNoticeContentDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'edmate-age-'));
+    cpSync(CONTENT, dir, { recursive: true });
+    const path = join(dir, 'legal', 'privacy-notice', 'IN.md');
+    const signed = readFileSync(path, 'utf8')
+      .replace('reviewedBy: pending', 'reviewedBy: sid2305')
+      .replace('[PLACEHOLDER] ', '');
+    writeFileSync(path, signed);
+    return dir;
+  }
+
+  it('production + unsigned, the flag unset (default): refuses', () => {
+    const production = loadAgeContent(CONTENT, undefined, true);
+    expect(() => production.notice('IN')).toThrow(
+      /privacy notice for "IN" is not signed; refusing in production/,
+    );
+  });
+
+  it("production: false (today's default) still returns the placeholder", () => {
+    const nonProduction = loadAgeContent(CONTENT);
+    expect(nonProduction.notice('IN')).toMatchObject({ market: 'IN', signed: false });
+  });
+
+  it('a signed notice never throws, in production or not', () => {
+    const dir = signedNoticeContentDir();
+    const inProduction = loadAgeContent(dir, undefined, true);
+    expect(inProduction.notice('IN')).toMatchObject({ market: 'IN', signed: true });
+    const notProduction = loadAgeContent(dir);
+    expect(notProduction.notice('IN')).toMatchObject({ market: 'IN', signed: true });
+  });
+
+  it('production + unsigned: the flag must be the exact string "true", else it refuses', () => {
+    const unset = loadAgeContent(CONTENT, undefined, true, false);
+    expect(() => unset.notice('IN')).toThrow(/refusing in production/);
+    // Mirrors the index.ts check (`AGE_NOTICE_ALLOW_UNSIGNED === 'true'`): '1' is not 'true'.
+    const one = loadAgeContent(CONTENT, undefined, true, ('1' as string) === 'true');
+    expect(() => one.notice('IN')).toThrow(/refusing in production/);
+  });
+
+  it('production + unsigned + the flag true: serves the placeholder and logs the code', () => {
+    const log: string[] = [];
+    const allowed = loadAgeContent(CONTENT, (l) => log.push(l), true, true);
+    const notice = allowed.notice('IN');
+    expect(notice).toMatchObject({ market: 'IN', signed: false });
+    expect(log).toEqual(['[auth] age gate: age_notice_unsigned_allowed IN']);
+  });
+
   it('with no logger, a refused pack goes to console.error by name only', () => {
     const dir = mkdtempSync(join(tmpdir(), 'edmate-age-'));
     mkdirSync(join(dir, 'legal', 'privacy-notice'), { recursive: true });
@@ -427,6 +474,64 @@ describe('submitAgeAnswer', () => {
     });
   });
 
+  it('a throwing resolve is logged (no PII) before the generic failure is returned', async () => {
+    const t = await setup();
+    t.deps.resolve = async () => {
+      throw new Error('db down: postgres://u:p@host/x');
+    };
+    expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, t.deps)).toMatchObject({
+      error: { code: 'provider_error', retryable: true },
+    });
+    expect(t.log).toEqual(['[auth] age gate: resolve failed Error']);
+  });
+
+  it('an unexpected record failure (neither not_found nor invalid) is logged before returning', async () => {
+    const t = await setup();
+    t.identity.recordAgeAnswer = async () => {
+      throw new Error('db down: postgres://u:p@host/x');
+    };
+    expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, t.deps)).toMatchObject({
+      error: { code: 'provider_error', retryable: true },
+    });
+    expect(t.log).toEqual(['[auth] age gate: record failed Error']);
+  });
+
+  it('with no log field, a throwing resolve goes to console.error by name only', async () => {
+    const t = await setup();
+    const noLogDeps: AgeGateDeps = { ...t.deps };
+    delete noLogDeps.log;
+    noLogDeps.resolve = async () => {
+      throw new Error('db down: postgres://u:p@host/x');
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, noLogDeps)).toMatchObject({
+        error: { code: 'provider_error', retryable: true },
+      });
+      expect(spy).toHaveBeenCalledWith('[auth] age gate: resolve failed Error');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('with no log field, an unexpected record failure goes to console.error by name only', async () => {
+    const t = await setup();
+    t.identity.recordAgeAnswer = async () => {
+      throw new Error('db down: postgres://u:p@host/x');
+    };
+    const noLogDeps: AgeGateDeps = { ...t.deps };
+    delete noLogDeps.log;
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, noLogDeps)).toMatchObject({
+        error: { code: 'provider_error', retryable: true },
+      });
+      expect(spy).toHaveBeenCalledWith('[auth] age gate: record failed Error');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('uses the __Host- names over https', () => {
     expect(ageBlockCookieName(true)).toBe('__Host-edmate.age-block');
     expect(ageBlockCookieName(false)).toBe('edmate.age-block');
@@ -463,5 +568,36 @@ describe('ageGateView', () => {
     const s = await setup();
     await s.identity.grantRole({ userId: s.user.id, role: 'staff', by: 'operator' });
     expect(await ageGateView(s.deps)).toEqual({ state: 'not_student' });
+  });
+
+  it('a throwing resolve is logged and read as sign_in (ask the learner to sign in again)', async () => {
+    const t = await setup();
+    const failingDeps = {
+      ...t.deps,
+      resolve: async () => {
+        throw new Error('db down: postgres://u:p@host/x');
+      },
+    };
+    expect(await ageGateView(failingDeps)).toEqual({ state: 'sign_in' });
+    expect(t.log).toEqual(['[auth] age gate: resolve failed Error']);
+  });
+
+  it('with no log field, a throwing resolve goes to console.error by name only', async () => {
+    const t = await setup();
+    const failingDeps = {
+      cookies: t.deps.cookies,
+      content: t.deps.content,
+      secureCookies: t.deps.secureCookies,
+      resolve: async () => {
+        throw new Error('db down: postgres://u:p@host/x');
+      },
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await ageGateView(failingDeps)).toEqual({ state: 'sign_in' });
+      expect(spy).toHaveBeenCalledWith('[auth] age gate: resolve failed Error');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
