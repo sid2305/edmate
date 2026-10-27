@@ -11032,7 +11032,7 @@ tasks:
   deps:
   - 11.4d
   risk: low
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 6.4b
@@ -11238,9 +11238,29 @@ tasks:
   deps:
   - 6.4c
   risk: low
-  status: running
+  status: done
   branch: m13/6.4d-bad-topic-test
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 43
+    tokens_in: 144
+    tokens_out: 9464
+    cache_read_tokens: 2386858
+    wall_time_seconds: 190
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2s
   milestone: M13
   title: '8.2r review MEDIUM: packages/db/src/schema/content.ts declares documents_teacher_id_created_at_id_idx with createdAt.desc() and id.desc() but no .nullsFirst(), so the drizzle snapshot records
@@ -11281,9 +11301,29 @@ tasks:
   deps:
   - 11.4j
   risk: low
-  status: running
+  status: done
   branch: m13/11.4k-chunker-comments
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 197
+    tokens_in: 728
+    tokens_out: 24160
+    cache_read_tokens: 33485107
+    wall_time_seconds: 3263
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 0.20i
   milestone: M13
   title: 'harness timing flake: modelRequest.test.ts "expectUnderCeiling still fails on a deliberately backtracking regex (self-test)" finds the first k whose regex run passes the 2 s ceiling, then re-runs
@@ -11295,3 +11335,16 @@ tasks:
   status: running
   branch: m13/0.20i-backtrack-selftest
   model: plan:lead build:sonnet
+- id: 0.20j
+  milestone: M13
+  title: 'local dev e2e hang found by 0.20h: in next dev, the Edge Runtime warning for node:worker_threads (packages/content safeRegexGuard.js, line 31) brings up the Next dev overlay portal, which intercepts
+    clicks, so teacher-packages-walkthrough.spec.ts retries the Save click until its 900 s timeout; find why the guard reaches the Edge bundle and keep it Node-only, and set a Playwright actionTimeout so
+    a blocked click fails fast'
+  accept: teacher-packages-walkthrough.spec.ts passes 5 fresh local runs against next dev; no node:worker_threads Edge warning in the dev server log; apps/web and @edmate/content typecheck, lint and test
+    green.
+  deps:
+  - 0.20h
+  risk: low
+  status: todo
+  branch: null
+  model: null

@@ -426,3 +426,4 @@ either phase per this task's own reasoning.)
 
 ## Lead answers (27 Oct 2026)
 - Q0: Yes. Phase A starts only after 6.3e merges, on a branch cut from main after that merge. Both touch ports.ts; 6.3e is small.
+- Q-6.3e (27 Oct 2026): 6.3e's review deferred one MEDIUM here. Phase A adds an int-test case that calls `applyMistakes` with a non-empty `known` plus proposed tags and asserts the proposed tags are not written to the learner profile (only `recordProposedMistakes` persists them).
