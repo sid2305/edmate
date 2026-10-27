@@ -11186,9 +11186,9 @@ tasks:
   deps:
   - 8.2r
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2s-list-index-nulls
+  model: plan:lead build:sonnet
 - id: 11.4k
   milestone: M13
   title: '11.4j review LOWs (comments only) in apps/worker/src/ingest/ffmpegChunker.ts: say in the outputWatchMs doc comment that the in-run cap is approximate (a fast writer can pass maxOutputBytes before
