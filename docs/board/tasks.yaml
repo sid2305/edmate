@@ -3402,9 +3402,29 @@ tasks:
   deps:
   - '6.5'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.5b-memory-lows
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 103
+    tokens_in: 378
+    tokens_out: 15649
+    cache_read_tokens: 6872135
+    wall_time_seconds: 554
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 7.4a
   milestone: M13
   title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSigna later;
@@ -9321,8 +9341,9 @@ tasks:
   accept: each new audit rule is shown failing on a fixture; scopedRetrieval refuses wrong-typed fields; migrate.int has no clock-skew flake; db and harness tests pass
   deps:
   - '5.4'
-  status: todo
+  status: planning
   risk: risky
+  model: plan:sonnet
 - id: 5.5a
   milestone: M13
   title: 'Calculator follow-ups (5.5 review MEDIUM/LOW): refuse implicit multiplication across spaces and after ")" (1 e 2, 2 pi, sqrt(4)pi, (1)(2)); add them to the rejection table and fuzz attacks; fix
