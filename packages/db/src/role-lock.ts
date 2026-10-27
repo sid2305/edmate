@@ -1,7 +1,11 @@
 // A user's role, read under a share lock inside the caller's transaction (task 8.1). It lives
 // outside `repositories/`, whose source never names the users table (test/scope.test.ts: no
-// names, emails or phones): it selects the role column and nothing else, so a repository can
-// check "is this user staff / a teacher right now" without ever reading personal data.
+// names, emails or phones), except `teacher-profiles.ts`'s staff-only queue reads (task 12.1a):
+// `listPendingForStaff` and `findBySlugForStaff` read `users.role`/`name`/`email` directly, a
+// plain, unlocked read (not through `lockRole`) since they check "is this request from staff
+// right now", not a write that needs the share lock. This module itself still selects the role
+// column and nothing else, so a repository can check "is this user staff / a teacher right now"
+// without ever reading personal data.
 import { eq } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { users } from './schema/index.js';

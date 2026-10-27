@@ -6,9 +6,18 @@
 // Runs only when TEST_DATABASE_URL is set explicitly (CI sets it for the whole job; locally, point
 // it at your own disposable Postgres -- never the dev compose database). Unset, it says so on
 // stderr and skips; with CI=true it fails instead. Every row it writes uses fresh random ids and
-// emails, and both teachers end `rejected`, so nothing it leaves behind is pending or discoverable.
+// emails. Task 12.1c: `afterAll` deletes every row this file wrote (audit_log, platform_audit_log,
+// teacher_profiles, users, in FK order) through a raw `Db` from `@edmate/db/internal` (the subpath
+// meant for tests -- app code never gets a raw handle), so nothing it leaves behind is pending,
+// discoverable or just orphaned rows in the shared CI database.
 import { randomBytes } from 'node:crypto';
 import { migrateDatabase, openDatabase, RepositoryError } from '@edmate/db';
+// Test-only cleanup, same exception packages/db's own test/*.int.test.ts files rely on; apps/web's
+// app code still cannot import this (the ban stays in packages/config/eslint/app.js; this is a
+// one-file, test-only suppression). The raw `pool` (not the Drizzle query builder: apps/web has no
+// `drizzle-orm` dependency) runs plain parameterised SQL.
+// eslint-disable-next-line no-restricted-imports
+import { createDb } from '@edmate/db/internal';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createGuard, type CookieReader, type Principal } from '../../../../src/auth/guard';
@@ -77,6 +86,22 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
           { status: 'rejected', by: staffId, reason: 'int test cleanup' },
         )
         .catch(() => undefined);
+    }
+    // Task 12.1c: the reject-cleanup above still leaves the staff user and every teacher row (and
+    // the audit rows they generated) behind. Delete them, in FK order, through a raw handle.
+    const ids = [staffId, teacherA, teacherB, teacherC].filter((id) => id !== '');
+    if (ids.length > 0) {
+      const raw = createDb({ DATABASE_URL: DB_URL });
+      try {
+        await raw.pool.query('delete from audit_log where teacher_id = any($1)', [ids]);
+        await raw.pool.query('delete from platform_audit_log where subject_user_id = any($1)', [
+          ids,
+        ]);
+        await raw.pool.query('delete from teacher_profiles where user_id = any($1)', [ids]);
+        await raw.pool.query('delete from users where id = any($1)', [ids]);
+      } finally {
+        await raw.close();
+      }
     }
     await db.close();
   });

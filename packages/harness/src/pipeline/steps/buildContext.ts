@@ -58,8 +58,9 @@ function fit(chunks: readonly Chunk[], budget: number): Chunk[] {
 /**
  * Union of `own` (the student's own words) and `ctx` (the agent-widened query) by chunk id,
  * keeping the higher score for a chunk found by both. Sorted by score descending; an unscored
- * chunk sorts last and stays unscored, keeping `own`'s rank order (stable sort), then capped to
- * `k` (3.4c: the dilution fix).
+ * chunk sorts last and stays unscored; equal, defined scores break the tie ascending by id, so
+ * order no longer depends on `own`/`ctx` insertion order (3.4d), then capped to `k` (3.4c: the
+ * dilution fix).
  */
 function mergeByScore(own: readonly Chunk[], ctx: readonly Chunk[], k: number): Chunk[] {
   const byId = new Map<string, Chunk>();
@@ -72,6 +73,7 @@ function mergeByScore(own: readonly Chunk[], ctx: readonly Chunk[], k: number): 
       if (a.score === undefined && b.score === undefined) return 0;
       if (a.score === undefined) return 1;
       if (b.score === undefined) return -1;
+      if (a.score === b.score) return a.id < b.id ? -1 : 1;
       return b.score - a.score;
     })
     .slice(0, k);

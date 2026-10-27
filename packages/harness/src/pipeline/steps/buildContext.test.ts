@@ -276,14 +276,17 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
 
   it('locked precedence (3.4c): a real locked request still ends locked even though the agent context alone would cover', async () => {
     // The student's own words hit the locked module; the agent's last question is on allowed
-    // material. The context search would cover, but locked precedence means it never gets to.
+    // material (chk_world_03's own text, so the combined query's overlap on it is well above the
+    // 0.5 coverage threshold -- the context search really would cover). Locked precedence means it
+    // never gets to: `found` stays the student-only search, so coverage stays uncovered and the
+    // gate falls through to `lockedHit`.
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     const history = [
-      msg(1, 'agent', 'Fractions name equal parts of a whole; a common denominator is shared.'),
+      msg(1, 'agent', 'A common denominator is a shared multiple of both denominators.'),
     ];
     const b = await run(world({ retrieval: r, history }), ENTITLED, {
       ...demoTurnInput,
-      text: 'integration by parts: choose u and dv',
+      text: 'integration by parts',
     });
     expect(b.lockedHit).toBe(true);
     expect(coverageGate(b, DEFAULT_COVERAGE_THRESHOLD)).toBe('locked');
@@ -309,6 +312,26 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const b = await run(world({ retrieval: r, history }));
     expect(b.retrieved.map((c) => c.id)).toEqual(['chk_own', 'chk_shared', 'chk_ctx']);
     expect(b.retrieved.find((c) => c.id === 'chk_shared')?.score).toBe(0.7);
+  });
+
+  it('mergeByScore tie-break: equal scores sort ascending by id, not insertion order', async () => {
+    // own's chunks are always spread into the merge map before ctx's, so a stable sort alone
+    // would keep own's chunk ('chk_b') ahead of ctx's ('chk_a') despite the equal score; the
+    // explicit id tie-break must reorder them ascending by id regardless of insertion order.
+    const ownChunk: Chunk = { ...demoChunk, id: 'chk_b', score: 0.5 };
+    const ctxChunk: Chunk = { ...demoChunk, id: 'chk_a', score: 0.5 };
+    let call = 0;
+    const r: RetrievalIndex = {
+      search: () => {
+        call += 1;
+        return Promise.resolve(call === 1 ? [ownChunk] : [ctxChunk]);
+      },
+      probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
+    };
+    const history = [msg(1, 'agent', 'a different question entirely')];
+    const b = await run(world({ retrieval: r, history }));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_a', 'chk_b']);
   });
 
   it('a hint request with agent history: the context search runs (student text is blank, no probe)', async () => {
