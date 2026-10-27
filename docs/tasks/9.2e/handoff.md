@@ -35,18 +35,6 @@ Status: DONE (Phase 1 only; Phase 2 — items 1, 2, 5, the `LanguageTag` re-expo
 `searchParams.ts`, `packages/db/**` and everything under `apps/web/app/staff`/`app/api/staff` were
 not touched, per the lead amendment and the "other builders" note.
 
-### 26 Oct 2026 · 9.2e budget overrun · decided by lead · risk: low
-- Decided: accept 128 tool calls (harness count across both phases and the fix round) against the plan's 80.
-- Why: builders run about 2x their self-reports, and Phase 2 hit int-test contention on the shared dev database. Each phase stayed under the 150-call ceiling.
-
-### 26 Oct 2026 · 9.2e merge of discovery.ts and the repositories barrel · decided by lead · risk: high
-- Decided: merge the changes to packages/db/src/repositories/discovery.ts (comment) and packages/db/src/repositories/index.ts (the `LanguageTag` type re-export).
-- Why: security-reviewer and database-reviewer ran on this risk path and found no CRITICAL or HIGH issue. The barrel change adds a type only, and the gate covered the dependents (--filter=...@edmate/db).
-
-### 26 Oct 2026 · 9.2e searchParams lang length · decided by lead · risk: low
-- Decided: wontfix the LOW on apps/web/src/discovery/searchParams.ts: no extra length cap on `lang`.
-- Why: `LanguageTag` from @edmate/db already bounds the tag's shape, so an overlong value is rejected before it reaches the query.
-
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — green (10/10 tasks
@@ -57,6 +45,18 @@ not touched, per the lead amendment and the "other builders" note.
 - `python3 .githooks/secret-scan.py --all` — clean, no output.
 
 ## Decisions
+
+### 26 Oct 2026 · 9.2e budget overrun · decided by lead · risk: low
+- Decided: accept 128 tool calls (harness count across both phases and the fix round) against the plan's 80.
+- Why: builders run about 2x their self-reports, and Phase 2 hit int-test contention on the shared dev database. Each phase stayed under the 150-call ceiling.
+
+### 26 Oct 2026 · 9.2e merge of discovery.ts and the repositories barrel · decided by lead · risk: high
+- Decided: merge the changes to packages/db/src/repositories/discovery.ts (comment) and packages/db/src/repositories/index.ts (the `LanguageTag` type re-export).
+- Why: security-reviewer and database-reviewer ran on this risk path and found no CRITICAL or HIGH issue. The barrel change adds a type only, and the gate covered the dependents (--filter=...@edmate/db).
+
+### 26 Oct 2026 · 9.2e searchParams lang length · decided by lead · risk: low
+- Decided: wontfix the LOW on apps/web/src/discovery/searchParams.ts: no extra length cap on `lang`.
+- Why: `LanguageTag` limits `lang` to letters, digits and hyphens. The value only reaches the query as a bound parameter, and the URL length limit already bounds it, so a long tag costs one cheap no-match search. Low impact before the pilot.
 
 ### 26 Oct 2026 · 9.2e rate-limit timeout values · decided by builder · risk: low
 - Decided: `connectTimeout` and `commandTimeout` are both 1000 ms (not the plan's illustrative
