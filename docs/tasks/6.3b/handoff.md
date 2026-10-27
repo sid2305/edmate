@@ -52,6 +52,18 @@ lines ~516, ~542-553, ~556 pre-edit; `packages/db/test/repositories.int.test.ts`
 
 ## Decisions
 
+### 27 Oct 2026 · 6.3b prettier reformatted the whole of `profile-store.int.test.ts` · decided by builder · risk: low
+- Decided: ran `prettier --write` on the file (as the gate requires `prettier --check` to pass)
+  rather than hand-formatting only the new test bodies; this rewrote every existing `it(...)`
+  call in the file from an explicit multi-line `it(\n'desc',\nasync () => {...},\n15_000,\n)`
+  shape to prettier 3.9.10's own single-line-where-it-fits shape — a large diff, but no behaviour
+  change (confirmed: all pre-existing tests in the file still pass, 23/23). The file already
+  failed `prettier --check` before this task touched it (pre-existing drift, not introduced
+  here); fixing only my own additions by hand would have left the file still failing the check.
+- Why: the gate names `prettier --check` on changed files as a required command; the only way to
+  make it pass on this file, given its pre-existing drift, is a full-file `--write`.
+risk: low
+
 ### 27 Oct 2026 · 6.3b caps and re-check implemented as planned · decided by builder · risk: low
 - Decided: shipped `MAX_MISTAKES_PATCH_LENGTH = 50`, `MAX_MISTAKES_ENTRIES = 200`, required
   `allowedTags`, and reject-whole-write (`'limit'`, no truncation) exactly as the plan's Q1/Q2/Q3
