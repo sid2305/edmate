@@ -39,6 +39,10 @@ Closed the two 9.2g security-review LOWs.
 
 ## Decisions
 
+### 27 Oct 2026 · 9.2h budget overrun · decided by lead · risk: low
+- Decided: accept 48 tool calls against a budget of 25 (1.92x); no rework.
+- Why: the work stayed inside the two planned files plus one int test, and all three reviewers approved with no findings; the plan's budget was set too low for a db int test plus a web client test.
+
 ### 27 Oct 2026 · 9.2h client.ts risky-path review · decided by builder · risk: high
 - Decided: `apps/web/app/staff/**` is a risky path per the plan; `review.md` for this PR must
   name `security-reviewer` (plus `code-reviewer` and `typescript-reviewer`) as required
@@ -47,4 +51,4 @@ Closed the two 9.2g security-review LOWs.
   can check it.
 
 ## Budget
-Tool calls used: 29
+Tool calls used: 48 (harness count; the builder reported 29)
