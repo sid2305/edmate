@@ -3043,7 +3043,7 @@ tasks:
   deps:
   - 6.3c
   risk: risky
-  status: running
+  status: review
   branch: m13/6.3d-mistake-db-adapter
   model: plan:sonnet build:sonnet
 - id: 6.2a
@@ -11012,9 +11012,9 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.4c-review-lows
+  model: plan:lead build:sonnet
 - id: 1.4f
   milestone: M13
   title: '1.4e Part 2 (split by the lead): run the magic-link sandbox script against a local stack rebuilt on current code and record the result; waits on B-61 (who rebuilds the stack)'
@@ -11072,7 +11072,8 @@ tasks:
   model: null
 - id: 13.3c
   milestone: M13
-  title: 'B-60 (human, 27 Oct 2026): database sign-in sessions last 7 days, renewed on use; set SESSION_MAX_AGE_S in apps/web/src/auth/config.ts to 7 days (keep the daily SESSION_UPDATE_AGE_S renewal) and update any test or doc that states 30 days'
+  title: 'B-60 (human, 27 Oct 2026): database sign-in sessions last 7 days, renewed on use; set SESSION_MAX_AGE_S in apps/web/src/auth/config.ts to 7 days (keep the daily SESSION_UPDATE_AGE_S renewal) and
+    update any test or doc that states 30 days'
   accept: a test pins the 7-day max age and the daily renewal; @edmate/web typecheck, lint and test green.
   deps:
   - 13.3b
