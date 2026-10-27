@@ -5895,9 +5895,31 @@ tasks:
   accept: the EXPLAIN tests run the repositories' own SQL and assert the index seek for both the lateral messages query and the sessions cursor.
   deps:
   - 9.6f
-  status: running
+  status: done
   branch: m13/9.6j-explain-real-sql
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 172
+    tokens_in: 590
+    tokens_out: 37967
+    cache_read_tokens: 16743421
+    wall_time_seconds: 1162
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 3
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -9291,9 +9313,27 @@ tasks:
   accept: a createSession failure in build-smoke still erases the student row (shown by a test or a clear code path); web typecheck, lint and test green.
   deps:
   - 1.7d
-  status: running
+  status: done
   branch: m13/1.7i-build-smoke-cleanup-order
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 1.7e
   milestone: M13
   title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain

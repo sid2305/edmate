@@ -10,6 +10,35 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 1.7i budget overrun (39 vs 15) · decided by lead · risk: low
+- Decided: accept 39 harness-counted tool calls against a 15-call budget (2.6x); no rework.
+- Why: the change is a two-line reorder. The extra calls went to the web gate auto-backgrounding and the builder polling its log. Both reviewers approved with no findings.
+
+---
+
+### 26 Oct 2026 · 9.6j budget overrun (87 vs 30) · decided by lead · risk: low
+- Decided: accept 87 harness-counted tool calls (build 40, fix round 47) against a 30-call budget (2.9x); no rework.
+- Why: the build had to trace drizzle's node-postgres call path to spy on the real statements, and the fix round re-ran the db int suite against dev Postgres. The scope stayed to one test file. The fix round was needed because the first version did not pin the outer sessions seek, which was the whole point of the task.
+
+---
+
+### 26 Oct 2026 · 9.6j review LOWs wontfix (test-only cast and generic) · decided by lead · risk: low
+- Decided: wontfix two typescript-reviewer findings in packages/db/test/export-cursor-paging.int.test.ts: the `as unknown as` double-cast on the spied pool.query, and the unused result generic on captureAndExplain.
+- Why: both are test-only typing, with no effect on what the EXPLAIN assertions check; a follow-up task for them would cost more than the cleanup is worth.
+
+---
+
+### 26 Oct 2026 · 9.6j findIndexScan relation filter · decided by builder · risk: low
+- Decided: added an optional `relation` parameter to the existing `findIndexScan` helper (matches
+  `Relation Name` on the plan node) rather than writing a second helper, so the messages
+  mid-range-cursor test can pick the inner per-session Index Scan instead of the outer sessions
+  Index Only Scan the real lateral statement also contains.
+- Why: converting to the real statement (per the plan) means this test's EXPLAIN tree now has two
+  Index (Only) Scan nodes instead of one; the plan's own assertions (`Index Cond` matches
+  `created_at`, `Filter` undefined) only hold for the inner one.
+
+---
+
 ### 26 Oct 2026 · 12.1c budget overrun (151 vs 95) · decided by lead · risk: low
 - Decided: accept both phases at 151 harness-counted tool calls (Phase A 79, Phase B 72) against a 95-call budget (1.59x); no rework.
 - Why: Phase A added a migration with a generated snapshot and an EXPLAIN int test; Phase B found two audit tables the plan's cleanup missed and fixed the FK order. All four reviewers (security, database, code, typescript) approved with no findings.
