@@ -67,14 +67,22 @@ function reasonKey(reason: string | undefined): (typeof REASON_KEYS)[number] | '
 
 const isActive = (d: DocumentView) => d.status === 'uploading' || d.status === 'processing';
 
+/** A teacher's module, as read for the upload centre's picker (8.2a Phase C: a real title, not a
+ * bare id -- `packages/db`'s `modules.list`). */
+export interface ModuleOption {
+  id: string;
+  title: string;
+}
+
 export interface UploadsViewProps {
-  /** The teacher's module ids (from the server); uploads are filed under one of them. */
-  moduleIds: readonly string[];
+  /** The teacher's modules (from the server); uploads are filed under one of them. */
+  modules: readonly ModuleOption[];
   /** The bucket PUT; tests inject one. */
   putFile?: PutFile;
 }
 
-export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewProps) {
+export function UploadsView({ modules, putFile = realPutFile }: UploadsViewProps) {
+  const moduleIds = modules.map((m) => m.id);
   const t = useTranslations('uploads');
   const [docs, setDocs] = useState<DocumentView[] | null>(null);
   const [banner, setBanner] = useState<ErrorKey | null>(null);
@@ -96,13 +104,25 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const [rightsChecked, setRightsChecked] = useState(false);
   const replaceTarget = useRef<string | null>(null);
   const replacePicker = useRef<HTMLInputElement>(null);
+  // 8.2a Phase B (review MEDIUM): `refresh`, `send`, `finish` and `onDelete` all call `setDocs`/
+  // `setBanner`/`patch` after an `await`; a mounted flag guards each of those calls so a late
+  // response after the component unmounted never touches state.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const patch = useCallback((id: string, next: Local) => {
+    if (!mounted.current) return;
     setLocal((all) => ({ ...all, [id]: next }));
   }, []);
 
   const refresh = useCallback(async () => {
     const result = await listDocuments();
+    if (!mounted.current) return;
     if (result.ok) setDocs(result.value);
     else setBanner(errorKey(result));
   }, []);
@@ -142,6 +162,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const finish = useCallback(
     async (id: string) => {
       const done = await completeDocument(id);
+      if (!mounted.current) return;
       if (done.ok) patch(id, {});
       else patch(id, { error: errorKey(done), retry: done.status === 409 || done.status >= 500 });
       await refresh();
@@ -158,6 +179,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
       const contentType = contentTypeFor(file);
       if (!contentType) return setBanner('unsupported_type');
       const ticket = await start(contentType, file.size);
+      if (!mounted.current) return;
       if (!ticket.ok) return setBanner(errorKey(ticket));
       const { documentId, uploadUrl, uploadHeaders } = ticket.value;
       patch(documentId, { progress: 0 });
@@ -167,9 +189,11 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
           patch(documentId, { progress }),
         );
       } catch {
+        if (!mounted.current) return;
         patch(documentId, { error: 'upload_failed' });
         return;
       }
+      if (!mounted.current) return;
       await finish(documentId);
     },
     [finish, patch, putFile, refresh],
@@ -203,6 +227,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const onDelete = async (id: string) => {
     setConfirming(null);
     const result = await deleteDocument(id);
+    if (!mounted.current) return;
     if (!result.ok) setBanner(errorKey(result));
     await refresh();
   };
@@ -257,9 +282,9 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
                 value={moduleId}
                 onChange={(e) => setModuleId(e.target.value)}
               >
-                {moduleIds.map((id, i) => (
-                  <option key={id} value={id}>
-                    {t('moduleOption', { n: i + 1 })}
+                {modules.map((m, i) => (
+                  <option key={m.id} value={m.id}>
+                    {m.title.trim() === '' ? t('moduleOption', { n: i + 1 }) : m.title}
                   </option>
                 ))}
               </select>

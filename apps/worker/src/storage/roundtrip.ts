@@ -35,13 +35,44 @@ const DEV_DEFAULTS = {
 
 type Env = Record<string, string | undefined>;
 
+/** A storage setting that is unusable here; `code` names the setting, never its value. */
+export class StorageConfigError extends Error {
+  readonly code: string;
+  constructor(code: string) {
+    super(`storage config refused: ${code}`);
+    this.code = code;
+    this.name = 'StorageConfigError';
+  }
+}
+
+/** Settings production must name itself: the dev placeholders are never used there. */
+const REQUIRED_IN_PRODUCTION = [
+  'S3_ENDPOINT',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+  'S3_BUCKET',
+] as const;
+
 function read(env: Env, name: keyof typeof DEV_DEFAULTS): string {
   const value = env[name];
   return value === undefined || value === '' ? DEV_DEFAULTS[name] : value;
 }
 
-/** Reads the S3 settings, falling back to the local MinIO defaults. Throws on malformed values. */
+/**
+ * Reads the S3 settings. Outside production it falls back to the local MinIO defaults; under
+ * NODE_ENV=production the endpoint, credentials and bucket must be set, must not equal their dev
+ * placeholder and the endpoint must be https (unless S3_ALLOW_HTTP==='true', the dev-stack's
+ * explicit opt-in). Throws StorageConfigError (a code only, never a value) on a bad value.
+ */
 export function storageConfigFromEnv(env: Env): StorageConfig {
+  const production = env.NODE_ENV === 'production';
+  if (production) {
+    for (const name of REQUIRED_IN_PRODUCTION) {
+      const value = (env[name] ?? '').trim();
+      if (value === '') throw new StorageConfigError(`${name}_missing`);
+      if (value === DEV_DEFAULTS[name]) throw new StorageConfigError(`${name}_placeholder`);
+    }
+  }
   const endpoint = read(env, 'S3_ENDPOINT');
   let protocol: string;
   try {
@@ -50,11 +81,15 @@ export function storageConfigFromEnv(env: Env): StorageConfig {
     protocol = '';
   }
   if (protocol !== 'http:' && protocol !== 'https:') {
-    throw new Error(`S3_ENDPOINT must be an http(s) URL, got "${endpoint}"`);
+    throw new StorageConfigError('S3_ENDPOINT_invalid');
+  }
+  const httpsOnly = production && env.S3_ALLOW_HTTP !== 'true';
+  if (httpsOnly && protocol !== 'https:') {
+    throw new StorageConfigError('S3_ENDPOINT_not_https');
   }
   const pathStyle = read(env, 'S3_FORCE_PATH_STYLE');
   if (pathStyle !== 'true' && pathStyle !== 'false') {
-    throw new Error(`S3_FORCE_PATH_STYLE must be "true" or "false", got "${pathStyle}"`);
+    throw new StorageConfigError('S3_FORCE_PATH_STYLE_invalid');
   }
   return {
     endpoint,

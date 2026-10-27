@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  StorageConfigError,
   describeError,
   ensureBucket,
   roundTrip,
@@ -139,6 +140,82 @@ describe('storageConfigFromEnv', () => {
     expect(() => storageConfigFromEnv({ S3_FORCE_PATH_STYLE: 'yes' })).toThrow(
       /S3_FORCE_PATH_STYLE/,
     );
+  });
+});
+
+describe('storageConfigFromEnv in production', () => {
+  const PROD = {
+    NODE_ENV: 'production',
+    S3_ENDPOINT: 'https://s3.example.test',
+    S3_ACCESS_KEY_ID: 'synthetic-id',
+    S3_SECRET_ACCESS_KEY: 'synthetic-secret',
+    S3_BUCKET: 'synthetic-bucket',
+  };
+
+  it('reads a complete https config', () => {
+    expect(storageConfigFromEnv(PROD)).toMatchObject({
+      endpoint: 'https://s3.example.test',
+      bucket: 'synthetic-bucket',
+    });
+  });
+
+  it.each(['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'] as const)(
+    'never falls back to the dev placeholders when %s is missing or blank, and the error names only the setting',
+    (name) => {
+      const missing = { ...PROD, [name]: undefined };
+      expect(() => storageConfigFromEnv(missing)).toThrow(StorageConfigError);
+      expect(() => storageConfigFromEnv(missing)).toThrow(
+        expect.objectContaining({ code: `${name}_missing` }),
+      );
+      expect(() => storageConfigFromEnv({ ...PROD, [name]: ' ' })).toThrow(StorageConfigError);
+    },
+  );
+
+  it.each(['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'] as const)(
+    'refuses %s set to its own dev-default placeholder value',
+    (name) => {
+      const DEV = {
+        S3_ENDPOINT: 'http://localhost:9000',
+        S3_ACCESS_KEY_ID: 'edmate-dev',
+        S3_SECRET_ACCESS_KEY: 'edmate-dev-storage',
+        S3_BUCKET: 'edmate-dev',
+      };
+      let caught: unknown;
+      try {
+        storageConfigFromEnv({ ...PROD, [name]: DEV[name] });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(StorageConfigError);
+      expect(caught).toMatchObject({ code: `${name}_placeholder` });
+    },
+  );
+
+  it('refuses a plain-http endpoint, and the error never quotes it', () => {
+    let caught: unknown;
+    try {
+      storageConfigFromEnv({ ...PROD, S3_ENDPOINT: 'http://internal-host.test:9000' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(StorageConfigError);
+    expect(caught).toMatchObject({ code: 'S3_ENDPOINT_not_https' });
+    expect(String((caught as Error).message)).not.toContain('internal-host');
+  });
+
+  it('allows plain http only on the explicit dev-stack opt-in', () => {
+    const local = { ...PROD, S3_ENDPOINT: 'http://minio:9000', S3_ALLOW_HTTP: 'true' };
+    expect(storageConfigFromEnv(local).endpoint).toBe('http://minio:9000');
+    expect(() => storageConfigFromEnv({ ...local, S3_ALLOW_HTTP: 'yes' })).toThrow(
+      expect.objectContaining({ code: 'S3_ENDPOINT_not_https' }),
+    );
+  });
+
+  it('keeps the dev and test defaults outside production', () => {
+    expect(storageConfigFromEnv({ NODE_ENV: 'development' }).endpoint).toBe(
+      'http://localhost:9000',
+    );
+    expect(storageConfigFromEnv({ NODE_ENV: 'test' }).bucket).toBe('edmate-dev');
   });
 });
 

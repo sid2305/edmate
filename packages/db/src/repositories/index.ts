@@ -103,6 +103,7 @@ export type RepositoryMethod = {
 export { RepositoryError, ScrubbedDbError, type RepositoryErrorKind } from './errors.js';
 export { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
 export type { AuditRow, TeacherProfileRow, TeacherQuestionForTeacher } from './map.js';
+export type { ModuleListItem } from './modules.js';
 export { STYLE_CARD_LIMITS, type StyleCardDraftInput } from './style-cards.js';
 export {
   GROUPS_MAX_LIMIT,
