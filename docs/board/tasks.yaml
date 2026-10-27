@@ -11521,6 +11521,27 @@ tasks:
   deps:
   - 0.20j
   risk: low
-  status: running
+  status: done
   branch: m13/0.20k-walkthrough-at-cap
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 375
+    tokens_in: 1346
+    tokens_out: 98492
+    cache_read_tokens: 40236841
+    wall_time_seconds: 2436
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0

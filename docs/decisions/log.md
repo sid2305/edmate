@@ -10,6 +10,32 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 0.20k unused fresh-teacher helper removed · decided by lead · risk: low
+- Decided: remove `createFreshTeacher()` from fixtures.ts (apps/web/e2e/fixtures.ts) in fix round 1 instead of shipping it unused, and accept the fixer's prettier re-wrap of four existing calls in the same file.
+- Why: code-reviewer and typescript-reviewer both flagged it as dead code no committed test exercises; CI starts from an empty database, so the starting-empty path is already covered. The re-wrap is formatting only.
+
+---
+
+### 27 Oct 2026 · 0.20k merge and budget, 151 tool calls against 45 · decided by lead · risk: low
+- Decided: merge at 151 harness-counted tool calls (build 124, fix round 1 27) against the plan's 45.
+- Why: the accept line needed ten full walkthrough runs plus tracing the hang to its cause, each run costing several calls; the fix itself is small and reviewed.
+
+---
+
+### 27 Oct 2026 · 0.20k fresh-teacher helper for the "empty" proof · decided by builder · risk: low
+- Decided: added `createFreshTeacher()` to `apps/web/e2e/fixtures.ts`, and proved the "starting
+  empty" acceptance leg with a temporary, uncommitted spec file that used it, rather than
+  committing a second permanent spec file or wiring the helper into the existing walkthrough spec.
+- Why: the plan's own fallback for "empty" is "use a fresh teacher id the spec creates"; the
+  committed walkthrough spec already exercises both the create and (when at cap) reuse/edit paths
+  against `demo-teacher`, and CI's database starts empty anyway so the committed spec already
+  proves the "empty" case there. A second committed spec would duplicate coverage for no gain, so
+  the fresh-teacher run was done once as a local proof and not left in the tree. The helper was
+  used only for that one-off local proof: nothing committed calls it, so it was removed in fix
+  round 1 (see below) — CI's empty database already covers the starting-empty path on its own.
+
+---
+
 ### 27 Oct 2026 · 6.3f repositories risk: high approval · decided by lead · risk: high
 - Decided: approve the packages/db changes for merge: the tag cap on approve, the role check and the 8402 advisory lock on record, the lastSeen format in mistake-proposals.ts (packages/db/src/repositories/mistake-proposals.ts), and the exported lockStyleCardVersions in style-cards.ts (packages/db/src/repositories/style-cards.ts), which approve now takes before it reads the latest card. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; database-reviewer re-checked fix round 1 and reported the lost update fixed with no deadlock path. The new concurrent-approve test stays even though it did not fail before the fix locally.
 - Why: the approve lost update came from 6.3a and was reachable by two quick clicks on different tags; taking the version lock before the read closes it. A refused approve now returns limit_reached and the tag stays pending, which the client shows. The test documents the invariant and is deterministic with the fix.
