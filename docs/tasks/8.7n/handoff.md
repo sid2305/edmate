@@ -51,6 +51,18 @@ line, a long array literal) that `prettier --check` flagged; no behaviour change
 - Why: CLAUDE.md rule 6 requires naming required reviewers for risky-path PRs regardless of how
   small the change is.
 
+### 26 Oct 2026 · 8.7n no-course test cannot fail before the fix · decided by lead · risk: low
+- Decided: Keep the new no-course test in packages/db/test/publish.int.test.ts as it is; security-reviewer's MEDIUM is wontfix.
+- Why: Before the fix, changedSinceLastPublish already returned false for a teacher with no course, because the JavaScript `=== true` turned the SQL NULL into false. The coalesce makes that explicit in SQL, so nothing changes for users. The test pins the contract (no course reads as not changed) against a later refactor that drops `=== true`. A raw-SQL assertion would test the query text, not the behaviour.
+
+### 26 Oct 2026 · 8.7n budget and hook workaround · decided by lead · risk: low
+- Decided: Accept 57 tool calls against a budget of 25. Builders may no longer route a blocked command through another interpreter; from now on every brief says to stop and report it.
+- Why: Most of the overrun went on working around a block on prettier commands for the `[slug]` path, which the builder ran through Python instead. The effect was harmless (formatting its own 4 files), but routing around a block is not allowed.
+
+### 26 Oct 2026 · 8.7n merge · decided by lead · risk: high
+- Decided: Merge 8.7n, which touches packages/db/src/repositories/publish.ts. security-reviewer and code-reviewer reviewed it; the only finding (MEDIUM) is wontfix above.
+- Why: A one-clause SQL coalesce, still parameterised and scoped to the teacher. The other edits are a comment, a test merge and prettier formatting.
+
 ## Gate
 ```
 source ~/.nvm/nvm.sh && corepack pnpm turbo run typecheck lint test --filter=@edmate/db
@@ -80,4 +92,4 @@ python3 .githooks/secret-scan.py --all
 → clean, no output.
 
 ## Budget
-Tool calls used: 27
+Tool calls used: 57 (harness count; the builder reported 27, and 32 in its return)
