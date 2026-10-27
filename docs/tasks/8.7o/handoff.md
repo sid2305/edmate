@@ -60,3 +60,56 @@ for a 200k/300k-character run would be far worse, consistent with O(n^2)).
 
 ## Budget
 Tool calls used: 19
+
+## Fix round
+
+### What changed
+- Fix 1 (CRITICAL, code-reviewer/security-reviewer): the lookbehind approach is wrong — on
+  `"contact ab@test.example-cd@test.example now"` the old regex redacts both addresses, but the
+  lookbehind's trailing domain letter (`e` in `.example`) blocks the second match. Replaced the
+  lookbehind entirely with a linear left-to-right scan, `redactEmails` (exported, test-only,
+  replacing the old `EMAIL` regex export), that reproduces the old regex's `String.replace`
+  semantics exactly: walk to the next `@`, extend the local part left to the maximal run of
+  local-part characters without crossing `pos` (the end of the previous match), then try the
+  domain pattern as a sticky regex right after the `@`; on success emit REDACTED and advance `pos`;
+  on failure (empty local part or no domain match) move past this `@` without moving `pos`. Handles
+  astral (surrogate-pair) characters when stepping left over the local part. `redactString`'s call
+  site is unchanged in shape: one function call producing `afterEmail`, now `redactEmails(s)`
+  instead of `s.replace(EMAIL, REDACTED)`.
+- Fix 2 (HIGH typescript-reviewer, MEDIUM security-reviewer): the differential test was too weak.
+  Added the reviewer's adjacent-email case plus six more fake test-shaped addresses (see
+  `ADJACENT_EMAIL_STRINGS` in the test file; secret-scan: allow, all fake), all pinned to match the
+  old regex's output.
+  Raised the seeded random differential to 50,000 draws, added a second seeded generator built
+  from email-shaped pieces (local-part runs, `@`, domain labels, `.`, `-`, spaces) so adjacent
+  emails are common, also run 50,000 times. Both alphabets now include non-ASCII letters/digits
+  (é, Ж, ٣). Added a test showing the fix-round-1 lookbehind regex (kept test-only as
+  `LOOKBEHIND_EMAIL`) fails the adjacent-email case while `redactEmails` passes it. Also added two
+  unit tests for 100% branch coverage of the surrogate-pair step (an astral local-part character,
+  and a lone low surrogate at the string start).
+- Fix 3 (MEDIUM code-reviewer): raised `TIME_BOUND_MS` from 100 to 1000, with a one-line comment
+  that a quadratic run at 600k characters takes minutes, so 1s is still a meaningful regression
+  catch.
+
+### Decision
+No new decisions this round beyond the plan's existing one (EMAIL export is test-only); the export
+is now named `redactEmails` instead of `EMAIL` since it is a function, not a regex, but it keeps
+the same test-only, not-re-exported shape.
+
+### Gate result (this round)
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` — PASS (26 tasks successful,
+  exit 0; `redact-json.ts` coverage 100/100/100/100, confirmed by its absence from the
+  below-threshold rows and by no coverage error referencing it).
+- `corepack pnpm exec prettier --check packages/db/src/repositories/redact-json.ts packages/db/test/redact-json.test.ts` — PASS.
+- `python3 .githooks/secret-scan.py --all` — PASS (no output, clean; fake addresses carry inline
+  `secret-scan: allow` markers).
+
+### Measured times (this machine, informational; CI bound is the loose 1000ms in the test)
+- a long run with no `@` (`'a1_'.repeat(200_000)`): 8ms
+- a long run with one trailing `@`: 18ms
+- a long dotted local-part run with no `@` (`'a.'.repeat(300_000)`): 12ms
+- a long dotted local-part run with a trailing `@`: 23ms
+- a long dotted domain after `@` (domain-part case): 15ms
+- a long dashed domain after `@`: 12ms
+
+### Tool calls used: 26
