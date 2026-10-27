@@ -17,7 +17,7 @@ Status: DONE
 2. **`SessionSummarySchema` failure test** — `apps/web/app/api/sessions/[id]/end/route.test.ts`:
    added `'a SessionSummarySchema failure never blocks ending the session: ends with no summary'`,
    driving the existing memory stub's `gateway.generateObject` to call `schema.parse` on a
-   310-word candidate (over `LIMITS.lastSummaryMaxWords` = 60), which throws a `ZodError`. The
+   80-word candidate (over `LIMITS.lastSummaryMaxWords` = 60), which throws a `ZodError`. The
    test asserts the session still ends (200, `{ ok: true }`), `attachSummary` is never called, and
    the log carries only `{ error: 'ZodError' }` (no raw candidate text). This was green on the
    first run — the route's existing `try { summary = await summarizeSession(...) } catch (error) {
@@ -73,6 +73,10 @@ Status: DONE
   end has no end-user-controllable packages cap this error would plausibly carry (no production
   caller of `end`/`get`/`attachSummary`/`studentTurnScope` returns `'limit'` today — the case only
   closes the switch's exhaustiveness for a future caller).
+
+### 27 Oct 2026 · 6.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 107 harness-counted tool calls against a 55-call budget (1.95x); the lead also corrected the handoff's summary-test word count (80 words, not 310).
+- Why: the work stayed inside the plan's file list across two packages and the web route, and both reviewers approved with one LOW, which goes to 6.4d. Small multi-package LOW sweeps run long; future plans for them get about 90 calls.
 
 ## Gate
 
