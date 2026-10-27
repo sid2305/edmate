@@ -26,8 +26,17 @@ No other files touched.
 
 ## Decisions
 
-None beyond the plan — both findings had a concrete, bounded fix as described, and no new
-decision was needed.
+### 26 Oct 2026 · 13.4f merge touches packages/db/src/identity/store.ts · decided by lead · risk: high
+- Decided: merge 13.4f. It changes `packages/db/src/identity/store.ts` (a risky path): `listConsentsForStudent` now parses `grantedBy` with a zod enum through an exported pure `parseConsentRow` instead of casting it. security-reviewer, code-reviewer and typescript-reviewer approved.
+- Why: a bad stored value now fails loud instead of being trusted; the only caller stays inside the guarded store methods, which scrub the error, and zod's enum message does not echo the bad value.
+
+### 26 Oct 2026 · 13.4f budget overrun (60 vs 45) · decided by lead · risk: low
+- Decided: accept 60 tool calls against a budget of 45 (the builder reported 38).
+- Why: the work stayed inside the plan's files and finished in one phase; the overrun was test runs across two packages, not scope growth.
+
+### 26 Oct 2026 · 13.4f review MEDIUM and LOW deferred to 13.4g · decided by lead · risk: low
+- Decided: the exact-periodEnd tie in the export dedupe (code-reviewer MEDIUM) and the error contract of the exported parseConsentRow (security-reviewer LOW) move to board task 13.4g.
+- Why: neither is a blocker: a tie needs a cancel and resubscribe ending on the same instant, and parseConsentRow's only caller is guarded today.
 
 ## Gate
 
@@ -49,4 +58,4 @@ PR needs `security-reviewer`, `database-reviewer`, `code-reviewer` and `typescri
 (same set 13.4d used on this file), and a `risk: high` decision at merge.
 
 ## Budget
-Tool calls used: 38
+Tool calls used: 60 (harness count; the builder reported 38)
