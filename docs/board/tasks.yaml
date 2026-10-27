@@ -10874,9 +10874,9 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.4b-session-end-claim
+  model: plan:sonnet build:sonnet
 - id: 6.4c
   milestone: M13
   title: '6.4a review LOWs: telemetry when evidenceFor skips a turn with no topic (packages/harness/src/pipeline/runner.ts); a test for a SessionSummarySchema failure in the end route (route.test.ts); a
