@@ -1,6 +1,6 @@
 // Fix round 9.4e: loadBundledPrices used to read prices.yaml at runtime with
 // `readFileSync(new URL('./prices.yaml', import.meta.url))`, which cannot find the file once
-// webpack bundles the module (`next build --webpack`), 503-ing every POST /api/sessions. Now
+// `next build` bundles the module, 503-ing every POST /api/sessions. Now
 // prices.generated.ts embeds the YAML text as a plain TS string, imported statically so no
 // runtime file read happens. This test fails if that generated file drifts from its source;
 // regenerate with `node scripts/generate-prices.mjs` (or `pnpm generate:prices`) after editing

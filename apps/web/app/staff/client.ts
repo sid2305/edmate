@@ -46,6 +46,7 @@ const SubjectChangeSchema = z.object({
 export const QueueItemSchema = z.object({
   teacherId: z.string().min(1),
   slug: z.string().min(1),
+  displayName: z.string(),
   subject: z.string(),
   name: z.string(),
   email: z.string().nullable(),

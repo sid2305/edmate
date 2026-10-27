@@ -53,7 +53,8 @@ Isolation between teachers and between students is enforced here, not by Postgre
    find teacher accounts -- task 9.2d moved the public display name to
    `teacher_profiles.display_name`, so `discovery.ts` no longer reads `users.name`, § 11 below)
    and `teacherProfiles.listPendingForStaff` (task 12.1a, § 11 below): staff-only, name and
-   email, never phone. `teacherQuestions.listForTeacher` never selects `student_id`. Any new
+   email, and the public display name (slug-fallback, same source as discovery's public reads,
+   task 9.2g), never phone. `teacherQuestions.listForTeacher` never selects `student_id`. Any new
    staff/role check inside a transaction uses `role-lock.ts`'s `lockRole`, never a fresh select.
 
 10. **Driver errors are scrubbed.** `createRepositories` wraps every method in `guarded()`: any
@@ -93,7 +94,8 @@ Isolation between teachers and between students is enforced here, not by Postgre
     `by`'s role: a malformed `by` is `invalid`, a well-formed `by` that is not staff now is
     `scope`. It is the one repository method that joins `users` for `name` and `email` (never
     `phone`), because staff need them to check a teacher's declared identity before approving or
-    rejecting; pending teachers only, oldest first, capped at `STAFF_QUEUE_MAX_LIMIT` (50).
+    rejecting, and the public display name (slug-fallback, same source as discovery's public
+    reads, task 9.2g); pending teachers only, oldest first, capped at `STAFF_QUEUE_MAX_LIMIT` (50).
 
 12. **Help state** (ADR-0005, task 3.8). `sessions.saveHelpState` writes `help_state` of the
     scope's own open session only (`ended_at IS NULL` in the same UPDATE; else `not_found`), and

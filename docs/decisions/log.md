@@ -10,6 +10,130 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 9.2g security-review LOWs deferred · decided by lead · risk: low
+- Decided: defer both security-review LOWs to new board task 9.2h: a Postgres int test for the staff queue reads with a NULL display name (coalesce to slug), and `.min(1)` on `displayName` in the staff client's `QueueItemSchema`.
+- Why: neither is reachable today (slug is never empty and the coalesce is the same one 9.2d's public reads already use); four reviewers approved with no blocking finding.
+
+---
+
+### 27 Oct 2026 · 9.2g risky-path merge (Phase B) · decided by builder · risk: high
+- Decided: this phase touches `apps/web/app/staff/**` (client.ts, client.test.ts,
+  verification-row.tsx, view.test.tsx, page.test.tsx — page.test.tsx untouched this phase) and
+  `apps/web/app/api/staff/verifications/**` (handlers.ts, route.test.ts), both under the same
+  risk-paths.txt group as Phase A's `packages/db/src/repositories/**`. Required reviewer:
+  `security-reviewer` (a staff-only identity-check surface changes shape). Recommended, not
+  gate-required: `code-reviewer`, `typescript-reviewer` (the exported `QueueItem` type gains a
+  field consumed across this package).
+- Why: non-negotiable rule 6 requires naming the group and reviewer before the lead merges, for
+  both phases' risky paths together, before the one PR opens.
+
+---
+
+### 27 Oct 2026 · 9.2g route.test.ts fixture coalesce · decided by builder · risk: low
+- Decided: in `route.test.ts`'s `memory()` helper, mapped `displayName: p.displayName ?? p.slug`
+  (not `p.displayName` alone) in both mock return objects.
+- Why: `TeacherProfileRow.displayName` is nullable (the real schema column); the new
+  `TeacherVerificationQueueRow.displayName` is non-null (the real query's `coalesce` guarantees
+  it). The `?? p.slug` keeps the fixture's types honest to both real shapes without a cast, and
+  matches the actual coalesce behaviour `teacher-profiles.ts` uses.
+
+---
+
+### 27 Oct 2026 · 9.2g page.test.tsx skipped · decided by builder · risk: low
+- Decided: did not add `displayName` to `apps/web/app/staff/page.test.tsx`'s `ROW`, despite the
+  plan listing it as optional "for consistency".
+- Why: `ROW` feeds two exact `toEqual` assertions on the SSR initial-prop shape (not just loose
+  `toEqual`s where a missing key compares equal to `undefined`, contrary to the plan's own note
+  about this file); adding the field without updating those two assertions turned them red. The
+  plan explicitly allows skipping this item when budget is tight, and fixing those two assertions
+  for a cosmetic consistency change was not worth the extra tool calls.
+
+---
+
+### 26 Oct 2026 · 9.2g risky-path merge · decided by builder · risk: high
+- Decided: this PR touches `packages/db/src/repositories/**` (map.ts, teacher-profiles.ts,
+  README.md), a risky path under `.claude/skills/merge-gate/risk-paths.txt`. Required reviewer:
+  `security-reviewer` (a staff-only identity-check surface changes shape). Recommended, not
+  gate-required: `code-reviewer`, `typescript-reviewer`.
+- Why: non-negotiable rule 6 requires naming the group and reviewer before the lead merges; Phase
+  B will add the `apps/web/app/staff/**` / `apps/web/app/api/staff/**` group under the same risk
+  path, confirmed again in the Phase B handoff.
+
+---
+
+### 26 Oct 2026 · 9.2g mismatch displayName value · decided by builder · risk: low
+- Decided: used `'XX'` (not e.g. `'Teacher XX'`) for the two corrected mismatch-case
+  `displayName` values, matching the plan's own example ("e.g. 'XX'").
+- Why: plan named this exact value as its example; no reason to deviate.
+
+---
+
+### 27 Oct 2026 · 1.7e build back to plain next build, no ADR · decided by lead · risk: medium
+- Decided: `apps/web` builds with plain `next build` (Turbopack) again; no ADR (plan Q1).
+- Why: dropping a workaround flag that pinned webpack is not a tech-stack change; Next.js stays the framework and Turbopack is its default bundler.
+
+---
+
+### 27 Oct 2026 · 1.7e Phase B PARTIAL accepted, no dev-webpack follow-up · decided by lead · risk: low
+- Decided: accept the `next dev --webpack` `/api/health` break unfixed and open no follow-up task; Playwright keeps plain `next dev`.
+- Why: build and dev both use Turbopack now, so nothing needs webpack; plan Q4 kept `instrumentation.ts` and `src/auth/rate-limit.ts` out of scope.
+
+---
+
+### 27 Oct 2026 · 1.7e stale --webpack wording fixed in-PR · decided by lead · risk: low
+- Decided: fix the stale `next build --webpack` wording (code-reviewer MEDIUM, typescript-reviewer LOWs) in this PR rather than deferring it.
+- Why: cheap and the task's own purpose; lead-verified with `git grep -- --webpack`, which leaves only a past-tense mention in `packages/gateway/src/pricing/load.ts`.
+
+---
+
+### 27 Oct 2026 · 1.7e budget overrun · decided by lead · risk: low
+- Decided: accept 130 tool calls (harness count) against a budget of 85 (1.53x).
+- Why: Phase B's dev-mode investigation and a fix round across nine files; the work stayed in scope.
+
+---
+
+### 26 Oct 2026 · 1.7e Phase B dev-mode bullmq/pg break not fixed · decided by builder · risk: low
+- Decided: Leave `next dev --webpack`'s `/api/health` crash unfixed; revert the
+  `serverExternalPackages` additions tried during this phase (back to Phase A's
+  `['@edmate/content']`) since they had no effect, and keep Turbopack as the Playwright/dev default
+  rather than adding `--webpack` back.
+- Why: the plan's one named fix (`serverExternalPackages`) demonstrably doesn't reach whatever
+  webpack dev compiles as `/instrumentation`; clearing it would need touching `instrumentation.ts`
+  or `src/auth/rate-limit.ts` (how `@edmate/queue`/`pg` are imported there), and the plan (Q4) says
+  stop and raise that rather than widen scope into those files without the lead's sign-off. Since
+  Phase A already moved the production build to Turbopack, nothing in `apps/web` needs webpack for
+  either build or dev anymore, so there is no remaining reason to chase this webpack-only bug for
+  its own sake — a follow-up task only matters if something later needs webpack again.
+- Open for the lead: a possible fast follow-up task, narrowly scoped to `instrumentation.ts`/
+  `src/auth/rate-limit.ts` (e.g. making the `@edmate/queue` import fully dynamic, mirroring
+  `instrumentation.ts`'s existing `./src/auth` dynamic import), if dev-mode webpack parity is ever
+  needed again. Not started here (Q4; risky-path files, needs sign-off first).
+
+---
+
+### 26 Oct 2026 · 1.7e Turbopack build already fixed upstream · decided by builder · risk: low
+- Decided: Switch `apps/web/package.json`'s `build` script to plain `next build` (Turbopack,
+  no `--webpack`), since the lightningcss/`vitest.config.ts` error 1.7b logged as the reason to
+  stay on `--webpack` no longer reproduces against today's `main`/Next 16.4.2. No new workaround
+  was added; the old one was simply removed, matching Q1's recommendation (not a tech-stack
+  change, no ADR needed).
+- Why: the board's acceptance explicitly allows this branch ("plain next build succeeds and
+  build-smoke passes" vs. "the reason to stay on --webpack is logged"); build succeeds cleanly and
+  build-smoke's one local failure is proven environment-only (identical on both bundlers), so there
+  is no bundler-specific reason left to stay on `--webpack` for the build.
+
+---
+
+### 26 Oct 2026 · 1.7e build-smoke local Postgres gap not fixed · decided by builder · risk: low
+- Decided: Leave the local build-smoke Postgres/SASL failure unfixed and logged, rather than
+  starting docker or guessing at credentials, since fixing it isn't in this plan's files-to-modify
+  list and the brief bars `docker`/`docker compose` from this worktree.
+- Why: the failure reproduces identically on `--webpack` and plain `next build`, so it is not a
+  Turbopack regression this task needs to fix; CI already runs build-smoke against a real Postgres
+  service with the right credentials, so the pilot's real gate (CI) is unaffected by this local gap.
+
+---
+
 ### 26 Oct 2026 · 5.3a vector tie-break fixed in-PR · decided by lead · risk: high
 - Decided: the tie-break finding on `packages/db/src/repositories/retrieval.ts` `vectorRows` (HIGH from database-reviewer and typescript-reviewer; MEDIUM from rag-pipeline-reviewer, security-reviewer and code-reviewer) was fixed in one round: the inner query over-fetches `PER_SIGNAL * 2` rows by distance alone, and the outer query applies `(distance, id)` and the `PER_SIGNAL` cut, with an honest comment and a tied-distance int test. database-reviewer and typescript-reviewer re-checked and approved. Their two LOW notes were about the handoff text only (an export claim and the decoy description); the lead corrected the handoff.
 - Why: before 5.3a, ties at the cut-off broke by lowest id; the fix restores that for tie groups up to 40 rows while keeping the HNSW plan.

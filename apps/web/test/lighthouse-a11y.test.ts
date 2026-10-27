@@ -154,7 +154,7 @@ describe.skipIf(!up)(`lighthouse accessibility: /home and /teacher${up ? '' : ` 
   beforeAll(async () => {
     if (!existsSync(BUILD_SERVER_JS)) {
       throw new Error(
-        `${BUILD_SERVER_JS} is missing: run \`next build --webpack\` (this package's own build task) before lighthouse-a11y`,
+        `${BUILD_SERVER_JS} is missing: run \`next build\` (this package's own build task) before lighthouse-a11y`,
       );
     }
     await cp(BUILD_STATIC_SRC, BUILD_STATIC_DEST, { recursive: true, force: true });

@@ -3,6 +3,9 @@
 // reject buttons. The reason is this row's own state; the busy flag belongs to the parent view.
 // Task 9.3e: a "safety concern" checkbox (row state too) makes Reject a safety rejection; Approve
 // always sends `false`.
+// Task 9.2g: the row also shows the public display name (slug-fallback), before the subject, so
+// staff approve the name students will actually see, alongside (not instead of) the declared
+// sign-in name used for identity checks.
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { MAX_REASON_CHARS, type Decision, type QueueItem } from './client';
@@ -47,6 +50,8 @@ export function VerificationRow({
             <dd>{t(`status.${currentStatus}`)}</dd>
           </>
         )}
+        <dt>{t('displayName')}</dt>
+        <dd>{item.displayName}</dd>
         <dt>{t('subject')}</dt>
         <dd>{item.subject}</dd>
         <dt>{t('name')}</dt>

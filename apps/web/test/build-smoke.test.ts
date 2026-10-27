@@ -1,4 +1,4 @@
-// Task 1.7b: a production web build (`next build --webpack`, this app's own build script) loads
+// Task 1.7b: a production web build (`next build`, this app's own build script) loads
 // the safe-regex worker -- the age gate's locale packs are loaded from a *built* `@edmate/content`,
 // not from source via vitest's own transform (the only way to have caught the original bug: the
 // worker never loaded once Next's bundler touched `safeRegexGuard.ts`'s `new URL(<literal>,
@@ -6,7 +6,7 @@
 //
 // Fix round (security review of PR #76): running `.next/standalone` *in place*, on the same
 // machine and in the same directory as the build, could never have caught the bug that review
-// found: `next build --webpack` still folds `@edmate/content` into the app's own server chunk
+// found: `next build` still folds `@edmate/content` into the app's own server chunk
 // (`serverExternalPackages` does not stop it for a pnpm workspace package; see the comment in
 // `packages/content/src/safeRegexGuard.ts`), and bundled, `import.meta.url` is rewritten to the
 // *build machine's own absolute path* -- which still resolves when the build and the test run in
@@ -130,7 +130,7 @@ describe.skipIf(!up)(
     beforeAll(async () => {
       if (!existsSync(BUILD_SERVER_JS)) {
         throw new Error(
-          `${BUILD_SERVER_JS} is missing: run \`next build --webpack\` (this package's own build task) before build-smoke`,
+          `${BUILD_SERVER_JS} is missing: run \`next build\` (this package's own build task) before build-smoke`,
         );
       }
 
