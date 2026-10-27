@@ -4176,6 +4176,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         await expect(r.takedowns.lift(ISO_STAFF, id, {})).resolves.toEqual({
           id,
           status: 'lifted',
+          agentStatus: 'live',
         });
         expect(await r.agents.owner({ agentId: ids.agent('A') })).toEqual({
           teacherId: teacherId('A'),

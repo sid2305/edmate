@@ -17,7 +17,7 @@ import { lockRole } from '../role-lock.js';
 import { agents, takedowns, teacherProfiles, users } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
-import { takeDownAgentInTx } from './takedowns.js';
+import { staffAction, takeDownAgentInTx } from './takedowns.js';
 import {
   toTeacherProfile,
   toTeacherVerificationQueueRow,
@@ -28,6 +28,16 @@ import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js'
 
 /** Re-exported for index.ts (STAFF_QUEUE_MAX_LIMIT sits alongside it there). */
 export type { TeacherVerificationQueueRow };
+
+/**
+ * `setVerification`'s own resolved value (task 9.3g): a plain `TeacherProfileRow` plus how many
+ * of the teacher's agents a safety rejection took down (`0` for every non-safety decision, or a
+ * safety rejection with no live agent). Every other caller of `toTeacherProfile` keeps returning
+ * the plain `TeacherProfileRow` shape; this type is local to `setVerification`.
+ */
+export interface VerificationResultRow extends TeacherProfileRow {
+  agentsTakenDown: number;
+}
 
 /**
  * The staff queue (task 12.1a) is capped like its siblings (`*_MAX_LIMIT`): a staff user sees at
@@ -322,7 +332,7 @@ export function teacherProfilesRepo(db: Db) {
     async setVerification(
       scope: TeacherScope,
       input: TeacherVerificationInput,
-    ): Promise<TeacherProfileRow> {
+    ): Promise<VerificationResultRow> {
       const method = 'teacherProfiles.setVerification';
       const { teacherId } = teacherScope(scope, method);
       const v = parseArg(VerificationInput, input, method);
@@ -359,6 +369,32 @@ export function teacherProfilesRepo(db: Db) {
                 );
               if (active) {
                 await tx.update(agents).set({ status: 'suspended' }).where(eq(agents.id, agent.id));
+                await tx
+                  .update(takedowns)
+                  .set({
+                    staffActions: staffAction(
+                      takedowns.staffActions,
+                      v.by,
+                      'create',
+                      v.reason ?? null,
+                      sql`, 'source', 'teacher.verify'::text`,
+                    ),
+                  })
+                  .where(eq(takedowns.id, active.id));
+                await insertAuditEntry(tx, method, teacherId, null, {
+                  actor: v.by,
+                  actorRole: 'staff',
+                  action: 'takedown.create',
+                  target: `agent:${agent.id}`,
+                  ...(v.reason === undefined ? {} : { reason: v.reason }),
+                  before: { status: agent.status, takedown: active.id },
+                  after: {
+                    takedown: active.id,
+                    status: 'active',
+                    agentStatus: 'suspended',
+                    source: 'teacher.verify',
+                  },
+                });
                 takenDown.push(active.id);
                 continue;
               }
@@ -389,7 +425,7 @@ export function teacherProfilesRepo(db: Db) {
                 ? { verificationStatus: v.status, safety: true, takedowns: takenDown }
                 : { verificationStatus: v.status },
           });
-          return toTeacherProfile(row!, method);
+          return { ...toTeacherProfile(row!, method), agentsTakenDown: takenDown.length };
         }),
       );
     },

@@ -67,7 +67,13 @@ const agentRow = async (agentId: string) =>
 const revision = () => repos.retrieval.revision(A);
 
 async function material(docId: string, moduleId: string, text: string): Promise<void> {
-  await repos.documents.create(A, { id: docId, moduleId, kind: 'material', sourceTitle: docId, rightsDeclared: true });
+  await repos.documents.create(A, {
+    id: docId,
+    moduleId,
+    kind: 'material',
+    sourceTitle: docId,
+    rightsDeclared: true,
+  });
   const { ids: chunkIds } = await repos.chunks.insertMany(A, docId, [
     { ord: 0, text, locator: 'p1' },
   ]);
@@ -136,6 +142,15 @@ async function makeTeacher() {
     `insert into package_versions (id, teacher_id, package_id, version, config) values ($1, $2, $3, 1, '{}'::jsonb)`,
     [`pv_tdp${k}`, t.teacherId, t.pkgId],
   );
+  return t;
+}
+
+/** `makeTeacher`, but the agent starts already `live` (version 1): `setVerification(safety)`
+ * only locks agents whose status is already `live` for that teacher, so a lock-order race
+ * against it needs a live agent going in. */
+async function makeLiveTeacher() {
+  const t = await makeTeacher();
+  await raw.query(`update agents set status = 'live', live_version = 1 where id = $1`, [t.agentId]);
   return t;
 }
 
@@ -288,7 +303,10 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
         targetId: DOC,
         category: 'copyright',
       });
-      await repos.documents.startReplace(A, DOC, { storageKey: 'uploads/replaced.pdf', rightsDeclared: true });
+      await repos.documents.startReplace(A, DOC, {
+        storageKey: 'uploads/replaced.pdf',
+        rightsDeclared: true,
+      });
       await repos.chunks.insertMany(A, DOC, [{ ord: 0, text: DOC_TEXT, locator: 'p1' }]);
       await raw.query(`update documents set status = 'ready' where id = $1`, [DOC]);
       const index = retrievalIndexFor(repos);
@@ -338,6 +356,7 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       await expect(repos.takedowns.lift(STAFF, id, { note: 'reviewed' })).resolves.toEqual({
         id,
         status: 'lifted',
+        agentStatus: 'live',
       });
       expect(await agentRow('agt_a')).toEqual({ status: 'live', live_version: 1 });
       expect(await repos.agents.owner({ agentId: 'agt_a' })).toEqual(A);
@@ -437,6 +456,29 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       expect((await agentRow('agt_td_draft')).status).toBe('suspended');
       await repos.takedowns.lift(STAFF, id, {});
       expect(await agentRow('agt_td_draft')).toEqual({ status: 'draft', live_version: null });
+    });
+
+    it('an agent with no teacher_profiles row at all restores to draft on lift', async () => {
+      // Same pattern as makeTeacher, minus the teacher_profiles insert.
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, 'No Profile', 'en', 'test', 'teacher')`,
+        ['tch_td_noprofile'],
+      );
+      await raw.query(
+        `insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`,
+        ['agt_td_noprofile', 'tch_td_noprofile'],
+      );
+      const { id } = await repos.takedowns.create(STAFF, {
+        kind: 'agent',
+        targetId: 'agt_td_noprofile',
+        category: 'other',
+      });
+      await expect(repos.takedowns.lift(STAFF, id, {})).resolves.toEqual({
+        id,
+        status: 'lifted',
+        agentStatus: 'draft',
+      });
+      expect(await agentRow('agt_td_noprofile')).toEqual({ status: 'draft', live_version: 1 });
     });
   });
 
@@ -791,6 +833,108 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
           }
           expect((await agentRow(t.agentId)).status).toBe('suspended');
         }
+      });
+    }
+  });
+
+  describe('lock order: setVerification(safety) and publish.goLive on one agent never deadlock', () => {
+    for (const first of ['goLive', 'verify'] as const) {
+      it(`${first} queued first: both finish, the agent ends suspended`, async () => {
+        const t = await makeLiveTeacher();
+        const scope = { teacherId: t.teacherId };
+        const run = await repos.publish.startRun(scope, {
+          agentId: t.agentId,
+          courseId: t.courseId,
+          styleCardId: t.styleCardId,
+          promptPackVersion: '1.0.0',
+          modelPolicy: demoAgentConfig.modelPolicy,
+          judgeModel: 'judge-test',
+        });
+        expect(await repos.publish.markRunning(scope, run.id)).toBe(true);
+        // Hold the agent row so both writers queue on it, in a forced order.
+        await raw.query('begin');
+        await raw.query('select 1 from agents where id = $1 for update', [t.agentId]);
+        const goLive = () =>
+          settle(repos.publish.goLive(scope, { runId: run.id, ...GATE } as never));
+        const verify = () =>
+          settle(
+            repos.teacherProfiles.setVerification(scope, {
+              status: 'rejected',
+              by: STAFF,
+              safety: true,
+            }),
+          );
+        const a = first === 'goLive' ? goLive() : verify();
+        await lockWaiters(1);
+        const b = first === 'goLive' ? verify() : goLive();
+        await lockWaiters(2);
+        await raw.query('commit');
+        const [ra, rb] = await Promise.all([a, b]);
+        const [live, down] = first === 'goLive' ? [ra, rb] : [rb, ra];
+        if (first === 'goLive') {
+          // goLive committed first (agent still live): it succeeds, then the rejection
+          // suspends the now-republished agent.
+          expect(live).toEqual({ agentVersion: 2, packageVersions: { [t.pkgId]: 1 } });
+          expect(down).toMatchObject({ verificationStatus: 'rejected', agentsTakenDown: 1 });
+        } else {
+          // The rejection committed first (and holds the profile row until it commits):
+          // goLive's own `lockVerified` (profile FOR SHARE, taken before the agent) blocks on
+          // it, and once it unblocks the teacher is no longer verified, so goLive is refused
+          // before it ever reaches the agent check.
+          expect(down).toMatchObject({ verificationStatus: 'rejected', agentsTakenDown: 1 });
+          expect(live).toBeInstanceOf(RepositoryError);
+          expect((live as RepositoryError).kind).toBe('scope');
+        }
+        expect((await agentRow(t.agentId)).status).toBe('suspended');
+      });
+    }
+  });
+
+  describe('lock order: setVerification(safety) and takedowns.create on one agent never deadlock', () => {
+    for (const first of ['create', 'verify'] as const) {
+      it(`${first} queued first: both finish, the agent ends suspended`, async () => {
+        const t = await makeLiveTeacher();
+        const scope = { teacherId: t.teacherId };
+        // Hold the agent row so both writers queue on it, in a forced order.
+        await raw.query('begin');
+        await raw.query('select 1 from agents where id = $1 for update', [t.agentId]);
+        const create = () =>
+          settle(
+            repos.takedowns.create(STAFF, {
+              kind: 'agent',
+              targetId: t.agentId,
+              category: 'harmful',
+            }),
+          );
+        const verify = () =>
+          settle(
+            repos.teacherProfiles.setVerification(scope, {
+              status: 'rejected',
+              by: STAFF,
+              safety: true,
+            }),
+          );
+        const a = first === 'create' ? create() : verify();
+        await lockWaiters(1);
+        const b = first === 'create' ? verify() : create();
+        await lockWaiters(2);
+        await raw.query('commit');
+        const [ra, rb] = await Promise.all([a, b]);
+        const [c, v] = first === 'create' ? [ra, rb] : [rb, ra];
+        if (first === 'create') {
+          // create committed first: it makes the agent's own takedown. The rejection then
+          // finds the agent already suspended (not `live`), so it never locks it at all --
+          // no takedown, no stale-row audit, zero agents taken down.
+          expect(c).toMatchObject({ id: expect.any(String) });
+          expect(v).toMatchObject({ verificationStatus: 'rejected', agentsTakenDown: 0 });
+        } else {
+          // The rejection committed first: it already made its own takedown on the agent, so
+          // the direct create call sees an active takedown on the same target and is `invalid`.
+          expect(v).toMatchObject({ verificationStatus: 'rejected', agentsTakenDown: 1 });
+          expect(c).toBeInstanceOf(RepositoryError);
+          expect((c as RepositoryError).kind).toBe('invalid');
+        }
+        expect((await agentRow(t.agentId)).status).toBe('suspended');
       });
     }
   });

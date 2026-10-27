@@ -392,6 +392,7 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
         safety: true,
       });
       expect(row.verificationStatus).toBe('rejected');
+      expect(row.agentsTakenDown).toBe(2);
       expect(await statusOf(t.tid)).toBe('rejected');
       for (const id of t.live) expect(await agentStatus(id)).toBe('suspended');
       expect(await agentStatus(t.draft)).toBe('draft');
@@ -443,11 +444,12 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
 
     it('a safety rejection with no live agent is a rejection only', async () => {
       const t = await makeTeacher(0);
-      await repos.teacherProfiles.setVerification(t.scope, {
+      const row = await repos.teacherProfiles.setVerification(t.scope, {
         status: 'rejected',
         by: STAFF,
         safety: true,
       });
+      expect(row.agentsTakenDown).toBe(0);
       expect(await statusOf(t.tid)).toBe('rejected');
       expect(await agentStatus(t.draft)).toBe('draft');
       expect(await takedownsFor(t.tid)).toEqual([]);
@@ -473,23 +475,33 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
         `insert into takedowns (id, target, reason, status) values ('td_sr_stale', $1, 'other', 'active')`,
         [`agent:${t.live[1]!}`],
       );
-      await repos.teacherProfiles.setVerification(t.scope, {
+      const row = await repos.teacherProfiles.setVerification(t.scope, {
         status: 'rejected',
         by: STAFF,
         safety: true,
       });
+      expect(row.agentsTakenDown).toBe(1);
       for (const a of t.live) expect(await agentStatus(a)).toBe('suspended');
       const tds = await takedownsFor(t.tid);
       expect(tds.map((r) => [r.id, r.status])).toEqual([
         [id, 'active'],
         ['td_sr_stale', 'active'],
       ]);
-      const verify = (await auditFor(t.tid)).filter((a) => a.action === 'teacher.verify');
+      const stale = tds.find((r) => r.id === 'td_sr_stale');
+      expect(stale?.staff_actions).toEqual([
+        expect.objectContaining({ actor: STAFF, action: 'create', source: 'teacher.verify' }),
+      ]);
+      const audit = await auditFor(t.tid);
+      const verify = audit.filter((a) => a.action === 'teacher.verify');
       expect(verify[0]?.after).toEqual({
         verificationStatus: 'rejected',
         safety: true,
         takedowns: ['td_sr_stale'],
       });
+      const staleTakedownCreate = audit.filter(
+        (a) => a.action === 'takedown.create' && a.target === `agent:${t.live[1]}`,
+      );
+      expect(staleTakedownCreate).toHaveLength(1);
     });
 
     it.each([
