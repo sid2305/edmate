@@ -3031,9 +3031,31 @@ tasks:
   deps:
   - '6.3'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.3b-mistakes-caps
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 309
+    tokens_in: 1128
+    tokens_out: 73967
+    cache_read_tokens: 32225838
+    wall_time_seconds: 1451
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 6.4a
   milestone: M13
   title: 'Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end'
@@ -3041,9 +3063,9 @@ tasks:
   deps:
   - '6.4'
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.4a-session-end
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 5.8c
   milestone: M5
   title: 'Sign the prompt packs per B-36 and B-38 (human answers, 21 Oct 2026): reviewed_by: sid2305 on feedback@1.1.0, frame@1.1.0, set@1.2.0, frame@1.2.0 and set@1.3.0 (B-37 defaults, all a, are already
@@ -10660,9 +10682,9 @@ tasks:
   deps:
   - 12.2h
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.2i-takedown-cycle
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 8.2p
   milestone: M13
   title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first)
@@ -10671,6 +10693,24 @@ tasks:
   deps:
   - 8.2i
   risk: risky
-  status: running
+  status: done
   branch: m13/8.2p-sweep-index
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0

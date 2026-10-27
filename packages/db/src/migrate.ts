@@ -138,6 +138,9 @@ export type PostMigrateStep =
  * `evidence_events_teacher_id_student_id_ts_id_idx` the same schema-only way:
  * learnerProfiles.rebuildMastery's keyset-paged replay and evidenceEvents.list's export read share
  * the same teacher_id/student_id filter plus (ts, id) order.
+ * Migration 0040 (task 8.2p) adds `documents_processing_updated_at_id_idx` the same schema-only
+ * way: ingestSweep.staleProcessing's `status = 'processing'` filter plus its
+ * `ORDER BY updated_at, id` keyset, in one partial index.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -232,6 +235,12 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'evidence_events_teacher_id_student_id_ts_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "evidence_events_teacher_id_student_id_ts_id_idx" ON "evidence_events" USING btree ("teacher_id","student_id","ts","id")`,
+  },
+  // Migration 0040 (task 8.2p): ingestSweep.staleProcessing's candidate scan.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'documents_processing_updated_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "documents_processing_updated_at_id_idx" ON "documents" USING btree ("updated_at","id") WHERE "documents"."status" = 'processing'`,
   },
 ];
 

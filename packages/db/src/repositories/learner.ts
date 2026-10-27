@@ -28,6 +28,14 @@ export const EVIDENCE_LIST_MAX = 10_000;
  * on). */
 export const REBUILD_PAGE_SIZE = 1_000;
 
+/** A single applyMistakes call's patch is capped at this many entries (task 6.3b): bounds one
+ * call's cost; a bigger patch is `invalid`. */
+export const MAX_MISTAKES_PATCH_LENGTH = 50;
+/** A profile's stored mistakes array is capped at this many distinct tags (task 6.3b): bounds
+ * per-scope storage even if a future caller's allowedTags list grows large; a write that would
+ * cross it is `limit` (the whole write is rejected, nothing is truncated silently). */
+export const MAX_MISTAKES_ENTRIES = 200;
+
 const debug = debuglog('edmate:db');
 
 const sameScope = (x: { studentId: string; teacherId: string }, scope: StudentScope) =>
@@ -142,18 +150,30 @@ export function learnerProfilesRepo(db: Db) {
      * same shape as `applyMastery`.
      *
      * The `SET` list only ever names `mistakes` and `updated_at` (never `mastery`/`last_summary`),
-     * same narrow-write discipline `applyMastery`'s own doc comment requires of itself. No topic-
-     * ownership check: a mistake tag is not a topic id, and `classifyMistakeTags` has already
-     * guaranteed every `patch` entry's tag is a member of the caller-supplied allowed list (the
-     * style card's `mistakeTags`) before this is ever called — this method only merges, it does not
-     * re-validate "on the teacher's list" (that invariant lives in the pure classifier, not here).
-     * An empty `patch` is a no-op.
+     * same narrow-write discipline `applyMastery`'s own doc comment requires of itself.
+     *
+     * Task 6.3b (6.3 review LOW): `allowedTags` must be the same list the caller used to classify
+     * the patch (the style card's `mistakeTags`, same source `classifyMistakeTags` already uses) —
+     * this method re-checks every `patch` entry's tag against it itself (defense in depth, closing
+     * the review's "does not re-check tags against the list" finding), rather than trusting the
+     * caller skipped nothing. See `MAX_MISTAKES_PATCH_LENGTH` and `MAX_MISTAKES_ENTRIES` (above)
+     * for this method's two size caps and their error kinds. An empty `patch` is a no-op.
      */
-    async applyMistakes(scope: StudentScope, patch: LearnerProfile['mistakes']): Promise<void> {
+    async applyMistakes(
+      scope: StudentScope,
+      patch: LearnerProfile['mistakes'],
+      allowedTags: readonly string[],
+    ): Promise<void> {
       const method = 'learnerProfiles.applyMistakes';
       const sc = studentScope(scope, method);
-      const p = parseArg(LearnerProfileSchema.shape.mistakes, patch, method);
+      const p = parseArg(
+        LearnerProfileSchema.shape.mistakes.max(MAX_MISTAKES_PATCH_LENGTH),
+        patch,
+        method,
+      );
       if (p.length === 0) return;
+      const allowed = new Set(allowedTags);
+      if (p.some((e) => !allowed.has(e.tag))) throw new RepositoryError('scope', method);
       await translateWrite(method, () =>
         db.transaction(async (tx) => {
           await tx
@@ -195,6 +215,7 @@ export function learnerProfilesRepo(db: Db) {
             }
           }
           const next = [...byTag.values()];
+          if (next.length > MAX_MISTAKES_ENTRIES) throw new RepositoryError('limit', method);
 
           await tx
             .update(learnerProfiles)
