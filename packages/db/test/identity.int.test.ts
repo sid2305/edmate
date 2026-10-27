@@ -1028,12 +1028,102 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         name: 'Learner',
       });
       const at = (noticeVersion: string) =>
-        opened.identity.recordAgeAnswer({ userId: u.id, market: 'US', birthYear: 2010, noticeVersion });
+        opened.identity.recordAgeAnswer({
+          userId: u.id,
+          market: 'US',
+          birthYear: 2010,
+          noticeVersion,
+        });
       expect(await kindOf(() => at('draft-0'))).toBe('invalid');
       expect(await at('v-open')).toEqual({ status: 'clear' });
     } finally {
       await opened.close();
     }
+  });
+
+  describe('listConsentsForStudent (13.4d account export)', () => {
+    const student = () =>
+      identity.createStudent({ email: email('consents'), emailVerifiedAt: null, name: 'Learner' });
+
+    async function insertConsent(
+      userId: string,
+      kind: string,
+      version: string,
+      grantedBy: 'self' | 'parent',
+      ts: Date,
+      withdrawnAt: Date | null = null,
+    ) {
+      await raw.query(
+        `insert into consents (id, user_id, kind, version, granted_by, ts, withdrawn_at)
+           values ($1, $2, $3, $4, $5, $6, $7)`,
+        [`cns_${(n += 1)}`, userId, kind, version, grantedBy, ts, withdrawnAt],
+      );
+    }
+
+    it("returns every consent row in ts order, with withdrawal, and never another student's", async () => {
+      const u = await student();
+      const other = await student();
+      await insertConsent(u.id, 'privacy_notice', 'v1', 'self', new Date('2026-01-01T00:00:00Z'));
+      const withdrawnAt = new Date('2026-03-01T00:00:00Z');
+      await insertConsent(
+        u.id,
+        'parental',
+        'v1',
+        'parent',
+        new Date('2026-02-01T00:00:00Z'),
+        withdrawnAt,
+      );
+      await insertConsent(
+        other.id,
+        'privacy_notice',
+        'v1',
+        'self',
+        new Date('2026-01-15T00:00:00Z'),
+      );
+
+      expect(await identity.listConsentsForStudent(u.id)).toEqual([
+        {
+          kind: 'privacy_notice',
+          version: 'v1',
+          grantedBy: 'self',
+          ts: '2026-01-01T00:00:00.000Z',
+          withdrawnAt: null,
+        },
+        {
+          kind: 'parental',
+          version: 'v1',
+          grantedBy: 'parent',
+          ts: '2026-02-01T00:00:00.000Z',
+          withdrawnAt: withdrawnAt.toISOString(),
+        },
+      ]);
+      expect(await identity.listConsentsForStudent(other.id)).toEqual([
+        {
+          kind: 'privacy_notice',
+          version: 'v1',
+          grantedBy: 'self',
+          ts: '2026-01-15T00:00:00.000Z',
+          withdrawnAt: null,
+        },
+      ]);
+    });
+
+    it('a user with no consents gets []', async () => {
+      const u = await student();
+      expect(await identity.listConsentsForStudent(u.id)).toEqual([]);
+    });
+
+    it('a bad id is invalid (same as getUser/getMarket; no role check)', async () => {
+      for (const bad of ['', 'has space', undefined, 42]) {
+        expect(
+          await kindOf(() =>
+            identity.listConsentsForStudent(
+              bad as unknown as Parameters<IdentityStore['listConsentsForStudent']>[0],
+            ),
+          ),
+        ).toBe('invalid');
+      }
+    });
   });
 
   describe('anonymise (13.4 account delete, Phase A)', () => {
@@ -1113,8 +1203,7 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
     }
 
     it("clears name/email/phone, auth rows, session/profile/question free text and the student's own message text, writes one platform_audit_log row, and leaves the session, safety alert and teacher row untouched", async () => {
-      const { student, sessionId, alertId, tid, teacherPhone, questionId } =
-        await seedErasable();
+      const { student, sessionId, alertId, tid, teacherPhone, questionId } = await seedErasable();
       const studentPhone = `+1555999${String((n += 1)).padStart(4, '0')}`;
       await raw.query(`update users set phone = $2 where id = $1`, [student.id, studentPhone]);
       const studentEmail = student.email as string;
@@ -1149,7 +1238,9 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       );
       // Every message in the student's session is cleared, whoever wrote it.
       expect(msgRows.map((r: { role: string; text: string }) => r.text)).toEqual(['', '']);
-      expect(msgRows.sort((a: { role: string }, b: { role: string }) => a.role.localeCompare(b.role))).toEqual([
+      expect(
+        msgRows.sort((a: { role: string }, b: { role: string }) => a.role.localeCompare(b.role)),
+      ).toEqual([
         { role: 'agent', text: '' },
         { role: 'student', text: '' },
       ]);
@@ -1178,10 +1269,9 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       );
       expect(alertRows[0]).toEqual({ student_id: student.id, excerpt_redacted: 'kept excerpt' });
 
-      const { rows: teacherRows } = await raw.query(
-        'select name, phone from users where id = $1',
-        [tid],
-      );
+      const { rows: teacherRows } = await raw.query('select name, phone from users where id = $1', [
+        tid,
+      ]);
       expect(teacherRows[0]).toEqual({ name: 'Teacher Erase', phone: teacherPhone });
 
       const { rows: auditRows } = await raw.query(
@@ -1190,7 +1280,12 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         [student.id],
       );
       expect(auditRows).toEqual([
-        { actor: student.id, actor_role: 'student', action: 'account.delete', subject_user_id: student.id },
+        {
+          actor: student.id,
+          actor_role: 'student',
+          action: 'account.delete',
+          subject_user_id: student.id,
+        },
       ]);
     });
 

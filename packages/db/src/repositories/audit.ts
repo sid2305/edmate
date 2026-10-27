@@ -78,6 +78,20 @@ type ParsedEntry = z.infer<typeof Entry>;
  * class instances, `toJSON` and dates are plain data before redaction sees them; then it is
  * redacted and size-capped. Anything JSON can't hold (a bigint, a cycle, a bare function) and
  * anything over the cap is `invalid`: rejected, never truncated.
+ *
+ * The cap is checked twice, both against the same `AUDIT_JSON_MAX_LENGTH`, with no extra
+ * headroom on the pre-check: every caller's `before`/`after` is a small, fixed structured shape
+ * (`VerifyAfter`, `SubjectChange`, config/profile deltas), so a raw value already over the cap is
+ * abnormal regardless of how much of it is personal-data-shaped text, and refusing it before
+ * paying for redaction (JSON.parse plus the regex-based redactor walking the whole value) costs
+ * nothing legitimate. Redaction can lengthen a value by a few characters per match (`REDACTED`
+ * is a fixed 10-character placeholder, which can exceed a short matched value), but never needs
+ * more headroom than the cap already allows, because the post-redaction check below is what
+ * enforces the stored-value limit; the pre-check's job is only to stop clearly oversized raw
+ * input from reaching the redactor, not to predict the exact post-redaction length. Redaction
+ * mostly shrinks a value, so a raw value over the cap that is mostly personal-data text could in
+ * theory redact down under the cap; this is now rejected pre-redaction instead of being redacted
+ * and accepted (an accepted, simplest-MVP behaviour change -- see the task's `## Decisions`).
  */
 function storable(value: unknown, method: string): SQL | null {
   if (value === undefined || value === null) return null;
@@ -88,6 +102,7 @@ function storable(value: unknown, method: string): SQL | null {
     throw new RepositoryError('invalid', method);
   }
   if (plain === undefined) throw new RepositoryError('invalid', method);
+  if (plain.length > AUDIT_JSON_MAX_LENGTH) throw new RepositoryError('invalid', method);
   const redacted = JSON.stringify(redactPersonalData(JSON.parse(plain)));
   if (redacted.length > AUDIT_JSON_MAX_LENGTH) throw new RepositoryError('invalid', method);
   return sql`${redacted}::jsonb`;
