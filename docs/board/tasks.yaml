@@ -8398,9 +8398,29 @@ tasks:
   accept: on an exact periodEnd tie the export keeps the non-ended subscription, shown by a test; parseConsentRow's error contract is documented or wrapped.
   deps:
   - 13.4f
-  status: running
+  status: done
   branch: m13/13.4g-export-tie-break
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 289
+    tokens_in: 1016
+    tokens_out: 50365
+    cache_read_tokens: 36662913
+    wall_time_seconds: 1847
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -9125,7 +9145,9 @@ tasks:
   accept: each item in docs/tasks/5.3/review.md marked [deferred 5.3a] is fixed or explicitly declined in the decision log, with tests where behaviour changes; the db gate passes
   deps:
   - '5.3'
-  status: todo
+  status: running
+  branch: m13/5.3a-retrieval-query-followups
+  model: plan:sonnet build:sonnet
 - id: 5.4a
   milestone: M13
   title: 'Access-filter follow-ups (5.4 review MEDIUM/LOW): audit rule 1 also catches db.query.chunks, namespace imports and public.chunks SQL; rule 2 needs a real scope filter; rule 5 covers apps/* once
@@ -9216,8 +9238,40 @@ tasks:
   accept: each listed item is fixed or closed with a logged reason; an interrupted build-smoke run leaves the checkout usable
   deps:
   - 1.7b
-  status: running
+  status: done
   branch: m13/1.7d-build-smoke-hardening
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 376
+    tokens_in: 1310
+    tokens_out: 96839
+    cache_read_tokens: 51507959
+    wall_time_seconds: 3056
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 0
+- id: 1.7i
+  milestone: M13
+  title: '1.7d review follow-up (code-reviewer MEDIUM): apps/web/test/build-smoke.test.ts assigns eraseStudent only after identity.createSession succeeds, so a createSession failure leaks the student row
+    on the shared dev Postgres; assign the cleanup right after createStudent returns'
+  accept: a createSession failure in build-smoke still erases the student row (shown by a test or a clear code path); web typecheck, lint and test green.
+  deps:
+  - 1.7d
+  status: running
+  branch: m13/1.7i-build-smoke-cleanup-order
   model: plan:lead build:sonnet
 - id: 1.7e
   milestone: M13
@@ -9309,9 +9363,9 @@ tasks:
   accept: removing locked precedence fails the coverage test through the gate assertion, not only through the module check; mergeByScore ties are ordered by id
   deps:
   - 3.4c
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/3.4d-same-topic-lows
+  model: plan:sonnet build:sonnet
 - id: 3.9b
   milestone: M3
   title: 'CI flake: apps/cli chat tests intermittently end a turn in an error event on CI runners, then pass on re-run (sameTopic.test.ts "three same-topic allowed turns", PR #78 and main c8b295b; deps.test.ts

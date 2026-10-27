@@ -187,6 +187,52 @@ describe('buildAccountExport', () => {
     );
   });
 
+  it('on an exact periodEnd tie, keeps the non-ended row (ended listed first)', async () => {
+    const pairs: SubscriptionPair[] = [
+      {
+        agentId: 'agt_1',
+        teacherId: 'tch_asha',
+        status: 'ended',
+        periodEnd: '2026-12-01T00:00:00.000Z',
+      },
+      {
+        agentId: 'agt_1',
+        teacherId: 'tch_asha',
+        status: 'active',
+        periodEnd: '2026-12-01T00:00:00.000Z',
+      },
+    ];
+    const backend = fakeBackend({ pairs });
+    const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
+    expect(json.teachers).toHaveLength(1);
+    expect(json.teachers[0]).toEqual(
+      expect.objectContaining({ teacherId: 'tch_asha', agentId: 'agt_1', status: 'active' }),
+    );
+  });
+
+  it('on an exact periodEnd tie, keeps the non-ended row (active listed first)', async () => {
+    const pairs: SubscriptionPair[] = [
+      {
+        agentId: 'agt_1',
+        teacherId: 'tch_asha',
+        status: 'active',
+        periodEnd: '2026-12-01T00:00:00.000Z',
+      },
+      {
+        agentId: 'agt_1',
+        teacherId: 'tch_asha',
+        status: 'ended',
+        periodEnd: '2026-12-01T00:00:00.000Z',
+      },
+    ];
+    const backend = fakeBackend({ pairs });
+    const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
+    expect(json.teachers).toHaveLength(1);
+    expect(json.teachers[0]).toEqual(
+      expect.objectContaining({ teacherId: 'tch_asha', agentId: 'agt_1', status: 'active' }),
+    );
+  });
+
   it('more than TEACHER_PAIRS_MAX distinct pairs caps the list, sets complete:false, and truncated contains teachers', async () => {
     const pairs: SubscriptionPair[] = Array.from({ length: TEACHER_PAIRS_MAX + 5 }, (_, i) => ({
       agentId: `agt_${i}`,

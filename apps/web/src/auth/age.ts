@@ -80,9 +80,20 @@ export function loadAgeContent(
     // character (a raw newline) in one would split this into more than one log line; stripping
     // control characters keeps each refusal to the single line the build-smoke test (and anyone
     // reading the log) expects.
-    // eslint-disable-next-line no-control-regex -- stripping control characters is the point
-    const reasons = r.reasons.map((reason) => reason.replace(/[\u0000-\u001f\u007f]/g, ' '));
-    log(`[auth] age gate: refused locale pack ${r.file}: ${reasons.join('; ')}`);
+    //
+    // 1.7d: C0 controls and DEL were the only characters stripped; a raw NEL (U+0085), another C1
+    // control (U+0080-U+009F), or either of the two Unicode line-break code points JavaScript's own
+    // string literals don't treat as line terminators but most terminals and log viewers render as
+    // a new line (U+2028 line separator, U+2029 paragraph separator) could still split one refusal
+    // across more than one visible line. `r.file` is loader-controlled (a directory entry name, not
+    // free text) in every real caller, but it is still run through the same strip: nothing here
+    // should depend on that staying true.
+    const strip = (s: string): string =>
+      // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+      s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ');
+    const file = strip(r.file);
+    const reasons = r.reasons.map(strip);
+    log(`[auth] age gate: refused locale pack ${file}: ${reasons.join('; ')}`);
   }
   const markets = [...packs.keys()].filter((m) => m !== ELSEWHERE).sort();
   return {
