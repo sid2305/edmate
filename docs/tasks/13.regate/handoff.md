@@ -28,6 +28,68 @@ green run (`51 passed`).
 
 ## Decisions
 
+### 27 Oct 2026 · 13.regate budget overrun · decided by lead · risk: low
+- Decided: accept 296 tool calls (Phases A 96, B 92, B2 48, fix round 60, harness counts) against a plan budget of 115 (2.6x); no rework.
+- Why: Phase B stopped PARTIAL only because 9.2g was not yet on main, so B2 repeated setup; the fix round added three int tests for a real HIGH. The plan's budget did not cover a cross-package task with a worker wiring phase. Future cross-package plans budget each phase separately.
+
+### 27 Oct 2026 · 13.regate Phase B PARTIAL finished by Phase B2 · decided by lead · risk: low
+- Decided: Phase B's PARTIAL (waiting on 9.2g in packages/db/src/index.ts) is closed by Phase B2, which wired `regate` into `openDatabase` and the worker after 9.2g merged; the top Status line is DONE.
+- Why: the left-to-do list in Phase B was exactly B2's scope, and B2's gate is green.
+
+### 27 Oct 2026 · 13.regate a stale open run frees the agent only at a new material revision · decided by lead · risk: high
+- Decided: in packages/db/src/repositories/publish.ts `regateRepo(db).liveAgentsWithMaterialChange()`, a queued or running gate run blocks candidacy only while younger than `startRun`'s stale rule (deadline + `STALE_RUN_GRACE_MS`); the one-attempt-per-material-revision check stays status-independent, so a stale run at the current revision still counts as that revision's attempt.
+- Why: the review HIGH showed an unbounded open-run check could exclude an agent forever after a worker crash; keeping one automatic attempt per revision (the lead answer in the plan) caps judge cost even when a run goes stale.
+
+### 27 Oct 2026 · 13.regate eval_runs index for the sweep deferred · decided by lead · risk: low
+- Decided: the review MEDIUM (database-reviewer, security-reviewer) asking for a partial index on eval_runs covering the gate suite's passed, published runs for the sweep's candidate query is deferred to board task 13.regatea.
+- Why: pilot data is small and the sweep runs every 15 minutes in the worker, off any request path; the index needs its own migration and review.
+
+### 27 Oct 2026 · 13.regate pins reuses `GateUnavailableReason`, not its own four-reason copy · decided by builder · risk: low
+
+- Decided: `PinsUnavailableReason = GateUnavailableReason | 'prompt_pack_unsigned'`
+  (`apps/worker/src/gate/input.ts`'s existing type), not a hand-written union repeating
+  `dev_model` / `provider_key` / `judge_model` / `judge_provider`.
+- Why: `gateModelsFromEnv`'s declared return type is the full `GateUnavailableReason` (it shares
+  the type with the gate's other unavailable reasons, like `content_missing`, even though it only
+  ever produces the model-related four); a narrower hand-written union fails `tsc` the moment that
+  function's result is passed through, and the plan's own text for `pins.ts` says the judge piece
+  is literally `gateModelsFromEnv(env)`'s judge — reusing its reason type keeps the two in sync
+  without a cast.
+
+### 27 Oct 2026 · 13.regate sweep's repo deps narrowed per-method, not per-repo · decided by builder · risk: low
+
+- Decided: `RegateSweepDeps.repos` is `{styleCards: Pick<Repositories['styleCards'], 'latest'>,
+  courses: Pick<Repositories['courses'], 'ensureDefault'>, publish: Pick<Repositories['publish'],
+  'startRun' | 'finishRun'>}`, not the plan text's literal `Pick<Repositories, 'styleCards' |
+  'courses' | 'publish'>`.
+- Why: `Pick` at the `Repositories` level picks whole sub-repo objects (`styleCards`'s `get`,
+  `latest` and `create` all at once), which would force every fake in `sweep.test.ts` to also
+  implement unused methods (`get`, `create`) just to satisfy the type — the opposite of "a narrow
+  injected interface" the brief and rule 4 ask for. Nested `Pick`s (the same shape
+  `apps/web/src/studio/publish.ts`'s `PublishBackend.repos` already uses) keep the fakes to only
+  the three methods the sweep actually calls.
+
+### 27 Oct 2026 · 13.regate a candidate with no style card is skipped, not a hard failure · decided by builder · risk: low
+
+- Decided: `styleCards.latest(scope)` returning `null` is treated as a skip
+  (`style_card_required`, no write), not passed through to `courses.ensureDefault`/`startRun` to
+  fail there.
+- Why: not spec'd (a live agent has necessarily published once, so it should always have a style
+  card) but cheap to guard explicitly rather than rely on `startRun`'s own `styleCardId` lookup to
+  fail some other way for a `null` id; matches the style of `apps/web/src/studio/publish.ts`'s own
+  `style_card_required` check on the manual-publish path.
+
+### 27 Oct 2026 · 13.regate no index.test.ts for the worker wiring · decided by builder · risk: low
+
+- Decided: no new test file for `apps/worker/src/index.ts`'s regate wiring.
+- Why: the brief asked to add a test "if the worker index has a test pattern for the other
+  scheduled jobs" and to say so otherwise. Checked `apps/worker/src/index.ts`'s existing wiring
+  for the cost alarm, weekly insights and retention jobs (each built and reviewed in earlier
+  tasks): none has a corresponding `index.test.ts`, so there is no pattern to extend. The sweep
+  job's own logic is already fully tested in isolation (`apps/worker/src/regate/*.test.ts`, 17
+  tests, Phase B); this phase only wires fakes-free, scripted singletons that match the shape of
+  the retention/cost-alarm wiring already in the file.
+
 ### 26 Oct 2026 · 13.regate standalone regate repo, not a `publishRepo` method · decided by builder · risk: high
 
 - Decided: `liveAgentsWithMaterialChange` is exported as a standalone `regateRepo(db)` factory
@@ -67,7 +129,7 @@ green run (`51 passed`).
 
 ## Budget
 
-Phase A tool calls used: 55
+Phase A tool calls used: 96 (harness count; the builder reported 55)
 
 ## State after this phase
 
@@ -79,7 +141,7 @@ sweep job (directly, or via an `openDatabase` extension coordinated with 9.2g's
 
 ## Phase B
 
-Phase B status: PARTIAL
+Phase B status: PARTIAL (finished by Phase B2; see the top `## Decisions`)
 
 ### Summary
 
@@ -141,40 +203,7 @@ blocked on 9.2g.
 
 ### Decisions
 
-### 27 Oct 2026 · 13.regate pins reuses `GateUnavailableReason`, not its own four-reason copy · decided by builder · risk: low
-
-- Decided: `PinsUnavailableReason = GateUnavailableReason | 'prompt_pack_unsigned'`
-  (`apps/worker/src/gate/input.ts`'s existing type), not a hand-written union repeating
-  `dev_model` / `provider_key` / `judge_model` / `judge_provider`.
-- Why: `gateModelsFromEnv`'s declared return type is the full `GateUnavailableReason` (it shares
-  the type with the gate's other unavailable reasons, like `content_missing`, even though it only
-  ever produces the model-related four); a narrower hand-written union fails `tsc` the moment that
-  function's result is passed through, and the plan's own text for `pins.ts` says the judge piece
-  is literally `gateModelsFromEnv(env)`'s judge — reusing its reason type keeps the two in sync
-  without a cast.
-
-### 27 Oct 2026 · 13.regate sweep's repo deps narrowed per-method, not per-repo · decided by builder · risk: low
-
-- Decided: `RegateSweepDeps.repos` is `{styleCards: Pick<Repositories['styleCards'], 'latest'>,
-  courses: Pick<Repositories['courses'], 'ensureDefault'>, publish: Pick<Repositories['publish'],
-  'startRun' | 'finishRun'>}`, not the plan text's literal `Pick<Repositories, 'styleCards' |
-  'courses' | 'publish'>`.
-- Why: `Pick` at the `Repositories` level picks whole sub-repo objects (`styleCards`'s `get`,
-  `latest` and `create` all at once), which would force every fake in `sweep.test.ts` to also
-  implement unused methods (`get`, `create`) just to satisfy the type — the opposite of "a narrow
-  injected interface" the brief and rule 4 ask for. Nested `Pick`s (the same shape
-  `apps/web/src/studio/publish.ts`'s `PublishBackend.repos` already uses) keep the fakes to only
-  the three methods the sweep actually calls.
-
-### 27 Oct 2026 · 13.regate a candidate with no style card is skipped, not a hard failure · decided by builder · risk: low
-
-- Decided: `styleCards.latest(scope)` returning `null` is treated as a skip
-  (`style_card_required`, no write), not passed through to `courses.ensureDefault`/`startRun` to
-  fail there.
-- Why: not spec'd (a live agent has necessarily published once, so it should always have a style
-  card) but cheap to guard explicitly rather than rely on `startRun`'s own `styleCardId` lookup to
-  fail some other way for a `null` id; matches the style of `apps/web/src/studio/publish.ts`'s own
-  `style_card_required` check on the manual-publish path.
+Moved under the top `## Decisions` by the lead.
 
 ### Gate
 
@@ -190,11 +219,11 @@ blocked on 9.2g.
 
 ### Budget
 
-Phase B tool calls used: 68
+Phase B tool calls used: 92 (harness count; the builder reported 68)
 
 ## Phase B2
 
-Status: DONE
+Phase B2 status: DONE
 
 ### Summary
 
@@ -234,16 +263,7 @@ edit so the two never diverged in a commit, and the full db/worker gate run belo
 
 ### Decisions
 
-### 27 Oct 2026 · 13.regate no index.test.ts for the worker wiring · decided by builder · risk: low
-
-- Decided: no new test file for `apps/worker/src/index.ts`'s regate wiring.
-- Why: the brief asked to add a test "if the worker index has a test pattern for the other
-  scheduled jobs" and to say so otherwise. Checked `apps/worker/src/index.ts`'s existing wiring
-  for the cost alarm, weekly insights and retention jobs (each built and reviewed in earlier
-  tasks): none has a corresponding `index.test.ts`, so there is no pattern to extend. The sweep
-  job's own logic is already fully tested in isolation (`apps/worker/src/regate/*.test.ts`, 17
-  tests, Phase B); this phase only wires fakes-free, scripted singletons that match the shape of
-  the retention/cost-alarm wiring already in the file.
+Moved under the top `## Decisions` by the lead.
 
 ### Gate
 
@@ -259,7 +279,7 @@ edit so the two never diverged in a commit, and the full db/worker gate run belo
 
 ### Budget
 
-Phase B2 tool calls used: 26
+Phase B2 tool calls used: 48 (harness count; the builder reported 26)
 
 ## Fix round (27 Oct 2026)
 
@@ -321,4 +341,4 @@ database-/security-/typescript-reviewer on item 1).
 None (every change follows an existing rule or convention named in the brief: `startRun`'s stale
 rule, the `gate/models.ts` bare-catch comment convention, the existing warn/error log split).
 
-Fix round tool calls used: 19
+Fix round tool calls used: 60 (harness count; the builder reported 19)
