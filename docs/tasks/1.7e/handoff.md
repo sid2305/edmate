@@ -1,6 +1,6 @@
 # 1.7e handoff — Phase A
 
-## Status: DONE
+Status: DONE (Phase A, Phase B accepted as PARTIAL by the lead, fix round)
 
 ## Summary
 Reproduced 1.7b's Turbopack build trial (`next build`, no `--webpack`) against today's `main`
