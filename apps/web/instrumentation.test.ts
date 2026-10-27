@@ -1,126 +1,71 @@
-// Task 9.0c: a fresh web container's first turn must not be the pool's first-ever query.
-// `register()` (the Next.js instrumentation convention) warms the shared pool at process start --
-// mocked DB throughout; no real connection (build plan rule 4).
+// Task 0.20j: thin dispatch tests only -- `register()` now just `require`s
+// `./instrumentation.node` behind the Edge/Node runtime branch (see instrumentation.ts for why:
+// Next's documented shape for keeping Node-only code out of the Edge bundle needs a literal,
+// static `require(...)` call, not a dynamic `import()`).
+//
+// `vi.mock` cannot intercept that literal `require(...)` call: Vitest's module graph (and
+// therefore `vi.mock`) only governs `import`/dynamic `import()`, and the `require` identifier
+// `register()` sees is a real `module.createRequire`-backed function working against Node's own
+// CJS resolver, not Vitest's -- confirmed empirically (a `vi.mock('./instrumentation.node', ...)`
+// here throws `Cannot find module` before the mock is ever consulted, and even a real,
+// npm-resolvable target like `@edmate/harness` loaded this way ignores an active `vi.mock`).
+// These tests instead patch `Module.prototype.require` directly for the one call this file makes
+// (the same technique `mock-require`/`proxyquire` use), which does reach it, since
+// `createRequire`'s returned function still resolves through that same prototype method.
+import Module from 'node:module';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const search = vi.hoisted(() => vi.fn(async () => ({ teachers: [], hasMore: false })));
-const serverDatabase = vi.hoisted(() =>
-  vi.fn(() => ({ repos: { discovery: { search } }, identity: {} }) as unknown),
-);
-const warmPreGuardPatterns = vi.hoisted(() => vi.fn((): readonly string[] => []));
+type PatchedRequire = (this: unknown, id: string) => unknown;
 
-vi.mock('./src/auth', () => ({ serverDatabase }));
-vi.mock('@edmate/harness', () => ({ warmPreGuardPatterns }));
+const originalRequire = Module.prototype.require;
+
+function patchInstrumentationNodeRequire(stub: PatchedRequire): void {
+  // Matching Node's own untyped `Module.prototype.require` signature for this test-only
+  // monkeypatch.
+  (Module.prototype as unknown as { require: unknown }).require = function (
+    this: unknown,
+    id: string,
+    ...rest: unknown[]
+  ) {
+    if (id === './instrumentation.node') {
+      return stub.call(this, id);
+    }
+    return (originalRequire as unknown as (...args: unknown[]) => unknown).call(this, id, ...rest);
+  };
+}
 
 afterEach(() => {
+  Module.prototype.require = originalRequire;
   vi.unstubAllEnvs();
-  vi.clearAllMocks();
   vi.resetModules();
 });
 
-describe('register (web container start, task 9.0c)', () => {
-  it('runs one warm-up read through serverDatabase on the Node.js runtime', async () => {
+describe('register (web container start, task 9.0c / 0.20j)', () => {
+  it('dispatches to instrumentation.node on the Node.js runtime', async () => {
+    const runNodeStartup = vi.fn();
+    patchInstrumentationNodeRequire(() => ({ runNodeStartup }));
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     const { register } = await import('./instrumentation');
     // `undefined`, not a Promise: pins `register()` as non-async, so Next never awaits the warm-up.
     expect(register()).toBeUndefined();
-    // The warm-up is a microtask chain (dynamic import + one query); flush it.
-    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
-    expect(serverDatabase).toHaveBeenCalledTimes(1);
-    expect(search).toHaveBeenCalledWith({});
+    expect(runNodeStartup).toHaveBeenCalledTimes(1);
   });
 
-  it('does nothing on a non-Node.js runtime (Edge must never pull in pg)', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'edge');
-    const { register } = await import('./instrumentation');
-    register();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(serverDatabase).not.toHaveBeenCalled();
-  });
-
-  it('does nothing when NEXT_RUNTIME is unset', async () => {
+  it('dispatches to instrumentation.node when NEXT_RUNTIME is unset (treated as Node.js)', async () => {
+    const runNodeStartup = vi.fn();
+    patchInstrumentationNodeRequire(() => ({ runNodeStartup }));
     vi.stubEnv('NEXT_RUNTIME', undefined);
     const { register } = await import('./instrumentation');
     register();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(serverDatabase).not.toHaveBeenCalled();
+    expect(runNodeStartup).toHaveBeenCalledTimes(1);
   });
 
-  it('never throws and never blocks startup when the warm-up read rejects', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    search.mockRejectedValueOnce(new Error('connection refused: user=admin@example.com'));
-    const logs: string[] = [];
-    vi.spyOn(console, 'error').mockImplementation((msg: string) => {
-      logs.push(msg);
-    });
+  it('does nothing observable on the Edge runtime (Edge must never pull in Node-only code)', async () => {
+    const requireSpy = vi.fn();
+    patchInstrumentationNodeRequire(requireSpy);
+    vi.stubEnv('NEXT_RUNTIME', 'edge');
     const { register } = await import('./instrumentation');
-    expect(() => register()).not.toThrow();
-    await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
-    // Only the error's name may be logged -- never a message that could carry an email or a
-    // connection string.
-    expect(logs[0]).toContain('Error');
-    expect(logs[0]).not.toContain('admin@example.com');
-    expect(logs[0]).not.toContain('connection refused');
-  });
-
-  it('never throws when no database is configured (serverDatabase itself throws synchronously)', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    serverDatabase.mockImplementationOnce(() => {
-      throw new Error('DATABASE_URL is not set');
-    });
-    const logs: string[] = [];
-    vi.spyOn(console, 'error').mockImplementation((msg: string) => {
-      logs.push(msg);
-    });
-    const { register } = await import('./instrumentation');
-    expect(() => register()).not.toThrow();
-    await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
-    expect(logs[0]).toContain('Error');
-    expect(logs[0]).not.toContain('DATABASE_URL');
-  });
-
-  it('never throws and logs the error name when warmPreGuardPatterns itself throws', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    warmPreGuardPatterns.mockImplementationOnce(() => {
-      throw new Error('boom');
-    });
-    const logs: string[] = [];
-    vi.spyOn(console, 'error').mockImplementation((msg: string) => {
-      logs.push(msg);
-    });
-    const { register } = await import('./instrumentation');
-    expect(() => register()).not.toThrow();
-    await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
-    expect(logs.some((l) => l.includes('Error'))).toBe(true);
-  });
-
-  it('logs the matcher name when warmPreGuardPatterns returns a non-empty list', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    warmPreGuardPatterns.mockReturnValueOnce(['moderation']);
-    const logs: string[] = [];
-    vi.spyOn(console, 'error').mockImplementation((msg: string) => {
-      logs.push(msg);
-    });
-    const { register } = await import('./instrumentation');
-    expect(() => register()).not.toThrow();
-    await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
-    expect(logs.some((l) => l.includes('moderation'))).toBe(true);
-  });
-
-  it('does not await the warm-up before returning (startup/health are never blocked)', async () => {
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    let resolveSearch: (() => void) | undefined;
-    search.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveSearch = () => resolve({ teachers: [], hasMore: false });
-        }),
-    );
-    const { register } = await import('./instrumentation');
-    register();
-    // register() has already returned synchronously -- the warm-up promise is still pending.
-    expect(resolveSearch).toBeUndefined();
-    await vi.waitFor(() => expect(resolveSearch).toBeDefined());
-    resolveSearch?.();
+    expect(register()).toBeUndefined();
+    expect(requireSpy).not.toHaveBeenCalled();
   });
 });
