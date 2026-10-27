@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { debuglog } from 'node:util';
 import { countWords, LIMITS } from '@edmate/contracts';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -385,6 +385,91 @@ export function sessionsRepo(db: Db) {
           .limit(1);
         if (!own) throw new RepositoryError('not_found', method);
         return { ended: false };
+      });
+    },
+
+    /**
+     * Task 6.4b: attaches a summary computed *after* a claim-only `end(scope, id, undefined)`
+     * already ended the session (session-end summary cost race, 6.4a security MEDIUM: two
+     * concurrent `/end` calls must run the summarizer at most once). Mirrors the summary-attach
+     * half of `end()` verbatim (the 6.5a watermark skip + `learner_profiles` upsert, moved, not
+     * duplicated-and-diverged): one `db.transaction`, a conditional `UPDATE ... WHERE
+     * ownSession(id, sc) AND endedAt IS NOT NULL AND summary IS NULL`. Idempotent and scoped: a
+     * retried or duplicate call (the session already carries a summary) is a safe no-op,
+     * `{ attached: false }`, nothing rewritten -- it can never clobber a summary attached since.
+     * A session that is missing or another student's or teacher's is `not_found`; one that exists
+     * but isn't ended yet, or already has a summary, is `{ attached: false }` (defensive --
+     * shouldn't happen via the route, which only calls this after its own `end()` claim won). A
+     * summary over `LIMITS.lastSummaryMaxWords` words is `invalid`, checked before any SQL.
+     *
+     * Same lock order as `end()`: the session row's own `UPDATE`, then `learner_profiles ... FOR
+     * UPDATE` (see `end()`'s doc comment for why that order can never deadlock with `reset`).
+     */
+    async attachSummary(
+      scope: StudentScope,
+      sessionId: string,
+      summary: string,
+    ): Promise<{ attached: boolean }> {
+      const method = 'sessions.attachSummary';
+      const sc = studentScope(scope, method);
+      const id = parseArg(IdSchema, sessionId, method);
+      if (countWords(summary) > LIMITS.lastSummaryMaxWords) {
+        throw new RepositoryError('invalid', method);
+      }
+      return db.transaction(async (tx) => {
+        const attached = await tx
+          .update(sessions)
+          .set({ summary })
+          .where(and(ownSession(id, sc), isNotNull(sessions.endedAt), isNull(sessions.summary)))
+          .returning({ createdAt: sessions.createdAt });
+        if (attached.length === 1) {
+          const [profile] = await tx
+            .select({ memoryResetAt: learnerProfiles.memoryResetAt })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .limit(1)
+            .for('update');
+          const stale =
+            profile?.memoryResetAt != null &&
+            attached[0] !== undefined &&
+            attached[0].createdAt.getTime() < profile.memoryResetAt.getTime();
+          if (stale) {
+            debug(
+              '%s: skipped a stale summary for session %s (ended, but started before the reset watermark)',
+              method,
+              id,
+            );
+          }
+          if (!stale) {
+            await tx
+              .insert(learnerProfiles)
+              .values({
+                studentId: sc.studentId,
+                teacherId: sc.teacherId,
+                lang: 'en',
+                mastery: {},
+                mistakes: [],
+                lastSummary: summary,
+              })
+              .onConflictDoUpdate({
+                target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+                set: { lastSummary: summary, updatedAt: sql`now()` },
+              });
+          }
+          return { attached: true };
+        }
+        const [own] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(ownSession(id, sc))
+          .limit(1);
+        if (!own) throw new RepositoryError('not_found', method);
+        return { attached: false };
       });
     },
 

@@ -88,7 +88,9 @@ describe.skipIf(!up)(`sessionsRepo.end on Postgres${up ? '' : ` (${SKIP_REASON})
   it('a summary writes sessions.summary and upserts learner_profiles.last_summary, in one transaction', async () => {
     const sid = await newSession();
     await setLastSummary(ONE_A, '[before] old summary');
-    expect(await repos.sessions.end(ONE_A, sid, 'Covered fractions; pick up at decimals next.')).toEqual({
+    expect(
+      await repos.sessions.end(ONE_A, sid, 'Covered fractions; pick up at decimals next.'),
+    ).toEqual({
       ended: true,
     });
     const row = await repos.sessions.get(ONE_A, sid);
@@ -158,14 +160,102 @@ describe.skipIf(!up)(`sessionsRepo.end on Postgres${up ? '' : ` (${SKIP_REASON})
   it('a summary over LIMITS.lastSummaryMaxWords is invalid, nothing written', async () => {
     const sid = await newSession();
     await setLastSummary(ONE_A, '[kept] summary before the oversized attempt');
-    const tooLong = Array.from({ length: LIMITS.lastSummaryMaxWords + 1 }, (_, i) => `word${i}`).join(
-      ' ',
-    );
+    const tooLong = Array.from(
+      { length: LIMITS.lastSummaryMaxWords + 1 },
+      (_, i) => `word${i}`,
+    ).join(' ');
     expect(await kind(repos.sessions.end(ONE_A, sid, tooLong))).toBe('invalid');
     const row = await repos.sessions.get(ONE_A, sid);
     expect(row?.endedAt).toBeNull();
     expect(row?.summary).toBeNull();
     expect(await lastSummary()).toBe('[kept] summary before the oversized attempt');
+  });
+
+  describe('attachSummary (task 6.4b)', () => {
+    async function endedNoSummary(): Promise<string> {
+      const sid = await newSession();
+      expect(await repos.sessions.end(ONE_A, sid, undefined)).toEqual({ ended: true });
+      return sid;
+    }
+
+    it('attaches once on an already-ended, summary-less session (profile upsert happens)', async () => {
+      const sid = await endedNoSummary();
+      await setLastSummary(ONE_A, '[before] old summary');
+      expect(
+        await repos.sessions.attachSummary(
+          ONE_A,
+          sid,
+          'Covered fractions; pick up at decimals next.',
+        ),
+      ).toEqual({ attached: true });
+      const row = await repos.sessions.get(ONE_A, sid);
+      expect(row?.summary).toBe('Covered fractions; pick up at decimals next.');
+      expect(await lastSummary()).toBe('Covered fractions; pick up at decimals next.');
+    });
+
+    it('a first-ever profile row (no prior learner_profiles row) still gets a readable lastSummary', async () => {
+      const other: StudentScope = { studentId: studentId('2'), teacherId: teacherId('A') };
+      const { id } = await repos.sessions.create(other, {
+        agentId: ids.agent('A'),
+        agentVersion: 1,
+        packageId: ids.pkg('A'),
+        packageVersion: 1,
+      });
+      expect(await repos.sessions.end(other, id, undefined)).toEqual({ ended: true });
+      await setLastSummary(other, null);
+      expect(await repos.sessions.attachSummary(other, id, 'First session recap.')).toEqual({
+        attached: true,
+      });
+      expect(await lastSummary(other)).toBe('First session recap.');
+    });
+
+    it('a second call is a no-op: {attached:false}, stored summary unchanged', async () => {
+      const sid = await endedNoSummary();
+      await setLastSummary(ONE_A, '[kept] first summary');
+      expect(await repos.sessions.attachSummary(ONE_A, sid, 'First attach.')).toEqual({
+        attached: true,
+      });
+      expect(
+        await repos.sessions.attachSummary(ONE_A, sid, 'Second attach, must be ignored.'),
+      ).toEqual({ attached: false });
+      const row = await repos.sessions.get(ONE_A, sid);
+      expect(row?.summary).toBe('First attach.');
+      expect(await lastSummary()).toBe('First attach.');
+    });
+
+    it('wrong scope or a missing session is not_found, nothing written', async () => {
+      const sid = await endedNoSummary();
+      const otherStudent: StudentScope = { studentId: studentId('2'), teacherId: teacherId('A') };
+      const otherTeacher: StudentScope = { studentId: studentId('1'), teacherId: teacherId('B') };
+      expect(await kind(repos.sessions.attachSummary(otherStudent, sid, 'nope'))).toBe('not_found');
+      expect(await kind(repos.sessions.attachSummary(otherTeacher, sid, 'nope'))).toBe('not_found');
+      expect(await kind(repos.sessions.attachSummary(ONE_A, 'ses_nowhere', 'nope'))).toBe(
+        'not_found',
+      );
+      const row = await repos.sessions.get(ONE_A, sid);
+      expect(row?.summary).toBeNull();
+    });
+
+    it('over LIMITS.lastSummaryMaxWords is invalid, nothing written', async () => {
+      const sid = await endedNoSummary();
+      const tooLong = Array.from(
+        { length: LIMITS.lastSummaryMaxWords + 1 },
+        (_, i) => `word${i}`,
+      ).join(' ');
+      expect(await kind(repos.sessions.attachSummary(ONE_A, sid, tooLong))).toBe('invalid');
+      const row = await repos.sessions.get(ONE_A, sid);
+      expect(row?.summary).toBeNull();
+    });
+
+    it('called on a session that is not ended yet is a no-op, {attached:false}', async () => {
+      const sid = await newSession();
+      expect(await repos.sessions.attachSummary(ONE_A, sid, 'too early')).toEqual({
+        attached: false,
+      });
+      const row = await repos.sessions.get(ONE_A, sid);
+      expect(row?.endedAt).toBeNull();
+      expect(row?.summary).toBeNull();
+    });
   });
 
   // Task 5.10d: at most one open session per (teacher, student, agent) — create() reuses an
