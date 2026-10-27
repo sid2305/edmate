@@ -3,16 +3,25 @@
 // could get fewer than 20 vector candidates. The vector query sets
 // `hnsw.iterative_scan = strict_order` (pgvector 0.8) so the scan keeps going until the filter is
 // satisfied. The pool here turns off sequential scans, bitmap scans and sorts to push the planner
-// toward the HNSW index. Finding (Phase D): the repository's statement orders by distance and then
-// id, so the planner cannot use the HNSW order at all and always scans exactly; this test could
-// not be made red, and it stays as a guard that a later index-ordered query keeps 20 candidates.
+// toward the HNSW index. Task 5.3a: the repository's inner query now orders by distance alone
+// (the id tie-break is applied only outside, over the already-limited rows), so the planner can
+// take the HNSW order for that inner scan; this is now a real guard that the iterative scan keeps
+// 20 allowed candidates even when the 1,000 nearest chunks are locked, not a guard that could not
+// be made red.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import { createRepositories, type Repositories } from '../src/index.js';
 import * as s from '../src/schema/index.js';
 import { EMBEDDING_DIMENSIONS } from '../src/schema/index.js';
-import { createDatabase, dropDatabase, postgresUp, SKIP_REASON, throwawayName, urlFor } from './pg.js';
+import {
+  createDatabase,
+  dropDatabase,
+  postgresUp,
+  SKIP_REASON,
+  throwawayName,
+  urlFor,
+} from './pg.js';
 
 const up = await postgresUp('hnsw filtered-scan tests');
 const dbName = throwawayName();
@@ -38,7 +47,13 @@ function near(axis: number, i: number): number[] {
 
 async function fill(moduleId: string, axis: number, count: number): Promise<void> {
   const docId = `doc_${moduleId}`;
-  await repos.documents.create(scope, { id: docId, moduleId, kind: 'material', sourceTitle: docId, rightsDeclared: true });
+  await repos.documents.create(scope, {
+    id: docId,
+    moduleId,
+    kind: 'material',
+    sourceTitle: docId,
+    rightsDeclared: true,
+  });
   for (let start = 0; start < count; start += 500) {
     const n = Math.min(500, count - start);
     const drafts = Array.from({ length: n }, (_, j) => ({
@@ -66,7 +81,9 @@ describe.skipIf(!up)('vector search with a small allowed set (HNSW iterative sca
     await handle.db
       .insert(s.users)
       .values({ id: T, name: 'H teacher', locale: 'en', market: 'test', role: 'teacher' });
-    await handle.db.insert(s.courses).values({ id: 'crs_hnsw', teacherId: T, title: 'H', order: 0 });
+    await handle.db
+      .insert(s.courses)
+      .values({ id: 'crs_hnsw', teacherId: T, title: 'H', order: 0 });
     await handle.db.insert(s.modules).values([
       { id: LOCKED, teacherId: T, courseId: 'crs_hnsw', title: 'Locked', order: 1 },
       { id: ALLOWED, teacherId: T, courseId: 'crs_hnsw', title: 'Allowed', order: 2 },

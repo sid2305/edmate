@@ -73,7 +73,13 @@ async function material(
   texts: string[],
   embed = true,
 ): Promise<string[]> {
-  await repos.documents.create(scope, { id: docId, moduleId, kind, sourceTitle: `${docId} title`, rightsDeclared: true });
+  await repos.documents.create(scope, {
+    id: docId,
+    moduleId,
+    kind,
+    sourceTitle: `${docId} title`,
+    rightsDeclared: true,
+  });
   const { ids } = await repos.chunks.insertMany(
     scope,
     docId,
@@ -409,6 +415,26 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       }
       const last = await index.search(queries[4]!, { teacherId: RA, allowedModuleIds: ALLOWED }, 5);
       expect(last.length).toBeGreaterThan(0);
+    });
+
+    it('CJK, Thai, Korean and a 60+ character term never raise (5.3a item 6)', async () => {
+      // queryTerms restricts every term reaching to_tsquery to [\p{L}\p{N}]+ runs, so none of
+      // these can carry a quote, backslash or tsquery punctuation; search and probe return
+      // normally, proving the finding (to_tsquery could raise) is already closed in practice.
+      const index = ftsOnly();
+      const queries = [
+        '日本語 文字', // CJK
+        'ภาษาไทย ขอบคุณ', // Thai
+        '한국어 안녕하세요', // Korean (Hangul)
+        'a'.repeat(65), // one very long single term
+      ];
+      for (const q of queries) {
+        const got = await index.search(q, { teacherId: RA, allowedModuleIds: ALLOWED }, 5);
+        for (const c of got) expect(ALLOWED).toContain(c.moduleId);
+        await expect(index.probe(q, { teacherId: RA, moduleIds: [MOD.locked] })).resolves.toEqual(
+          expect.objectContaining({ hit: expect.any(Boolean) }),
+        );
+      }
     });
 
     it('a query of stop words only still searches by vector', async () => {

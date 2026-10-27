@@ -226,35 +226,55 @@ async function rank(
     if (embedding === undefined) return [];
     const v = sql`${vectorToDriver(embedding)}::vector`;
     const distance = sql<number>`(${chunks.embedding} <=> ${v})::float8`;
-    // The id tie-break keeps this an exact scan today (the planner cannot take an HNSW order with
-    // a second sort key). Should it ever use the index, pgvector 0.8's iterative scan keeps going
-    // until the teacher and module filter has filled the list, instead of filtering ef_search
-    // (40) candidates after the scan; SET LOCAL ends with the transaction.
+    // Task 5.3a: the inner query orders by distance alone (no second sort key), so the planner can
+    // take an HNSW order for it; pgvector 0.8's iterative scan keeps going until the teacher and
+    // module filter has filled the list, instead of filtering ef_search (40) candidates after the
+    // scan. The id tie-break is applied only outside, over the already-limited rows, so the final
+    // order is unchanged (distance, then id) and ties still break deterministically. SET LOCAL
+    // ends with the transaction.
     return db.transaction(async (tx) => {
       await tx.execute(sql`set local hnsw.iterative_scan = strict_order`);
-      return tx
-        .select({ ...fields, distance })
+      const inner = tx
+        .select({ ...fields, distance: distance.as('distance') })
         .from(chunks)
         .where(scoped(isNotNull(chunks.embedding)))
-        .orderBy(asc(distance), asc(chunks.id))
-        .limit(PER_SIGNAL);
+        .orderBy(asc(distance))
+        .limit(PER_SIGNAL)
+        .as('v');
+      return tx
+        .select({
+          id: inner.id,
+          teacherId: inner.teacherId,
+          documentId: inner.documentId,
+          moduleId: inner.moduleId,
+          kind: inner.kind,
+          text: inner.text,
+          sourceTitle: inner.sourceTitle,
+          locator: inner.locator,
+          distance: inner.distance,
+        })
+        .from(inner)
+        .orderBy(asc(inner.distance), asc(inner.id));
     });
   };
-  /** Each term's document frequency over the searched chunks, and their count. */
+  /**
+   * Each term's document frequency over the searched chunks, and their count, in one round trip
+   * (Task 5.3a): a `total` CTE counts the scope once, cross-joined into the per-term `GROUP BY` so
+   * every row carries the same shared `n` alongside its own `df`.
+   */
   const termStats = async (): Promise<{ df: Map<string, number>; n: number }> => {
     if (tsq === null) return { df: new Map(), n: 0 };
-    const [dfRows, countRows] = await Promise.all([
-      db.execute<{ term: string; df: number }>(
-        sql`select t.term, count(${chunks.id})::int as df from unnest(${termList}) as t(term) left join ${chunks} on ${chunks.search} @@ ${termQuery(sql`t.term`)} and ${scope} group by t.term`,
-      ),
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(chunks)
-        .where(scope),
-    ]);
+    const result = await db.execute<{ term: string; df: number; n: number }>(
+      sql`with total as (select count(*)::int as n from ${chunks} where ${scope})
+          select t.term, count(${chunks.id})::int as df, total.n
+          from unnest(${termList}) as t(term)
+          cross join total
+          left join ${chunks} on ${chunks.search} @@ ${termQuery(sql`t.term`)} and ${scope}
+          group by t.term, total.n`,
+    );
     return {
-      df: new Map(dfRows.rows.map((r) => [r.term, Number(r.df)])),
-      n: Number(countRows[0]?.n ?? 0),
+      df: new Map(result.rows.map((r) => [r.term, Number(r.df)])),
+      n: Number(result.rows[0]?.n ?? 0),
     };
   };
   const [byText, byVector, stats] = await Promise.all([textRows(), vectorRows(), termStats()]);
