@@ -9270,9 +9270,9 @@ tasks:
   accept: a createSession failure in build-smoke still erases the student row (shown by a test or a clear code path); web typecheck, lint and test green.
   deps:
   - 1.7d
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/1.7i-build-smoke-cleanup-order
+  model: plan:lead build:sonnet
 - id: 1.7e
   milestone: M13
   title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain
