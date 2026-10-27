@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 1.7a item 5 needs no change · decided by builder · risk: low
+- Decided: `packages/db/src/identity/age.ts` lines 67-70 already carry the exact comment the 1.7
+  review asked for (added in a later 1.7 phase that touched this file for an unrelated reason). No
+  diff to this file in this PR, per the plan.
+- Why: the plan's own "Item 5 is already done" section instructs verify-only; re-read the file and
+  confirmed the comment is present, word for word.
+
+---
+
+### 26 Oct 2026 · 1.7a apps/web/src/auth/** risk · decided by builder · risk: high
+- Decided: logging this decision at `risk: high` per the non-negotiables, naming the
+  `apps/web/src/auth/**` path (items 2 and 4: `age.ts`, `index.ts`).
+- Why: the plan's own "Required reviewers" section calls for this; it is a risky path requiring
+  security-reviewer.
+
+---
+
+### 26 Oct 2026 · 1.7a production-refuses-unsigned-notice consequence · decided by builder · risk: low
+- Decided: recording, per the plan's Open question, that no learner can clear the age gate in a real
+  (non-local) production deployment until a market's privacy notice is signed, and that this is the
+  intended effect of the board's accept line ("production refuses a pending notice"), not a defect.
+- Why: the plan's Open question already analyses this and recommends proceeding; logging it here so
+  it is on record before the pilot gate (GATE/3.10c/B-27 already track getting a notice signed).
+
+---
+
+### 26 Oct 2026 · 1.7a coverage gap in submitAgeAnswer's log fallback · decided by builder · risk: low
+- Decided: added two tests to `apps/web/src/auth/age.test.ts` — "with no log field, a throwing
+  resolve goes to console.error by name only" and the same for an unexpected record failure — to
+  cover the `deps.log ?? ((line) => console.error(line))` default branch in `submitAgeAnswer`'s two
+  catch sites (the first builder's tests always passed a `log` field, so this branch, lines 184 and
+  224, was never exercised and the `@edmate/web` coverage gate failed on `src/auth/**`'s 100%
+  threshold for functions/statements).
+- Why: `packages/harness/src/access/**` and guard logic/subscription state machine aside, `src/auth`
+  carries its own 100% coverage threshold in this repo's vitest config; the fix follows the exact
+  pattern `ageGateView`'s own "with no log field" test already used, no new pattern introduced.
+
+---
+
+### 26 Oct 2026 · 1.7a budget · decided by lead · risk: low
+- Decided: Accept 179 tool calls (harness count) against the plan's 40. The first builder stopped at 116 calls without committing. The lead committed its work in progress, and a fresh builder finished in 63 calls.
+- Why: Six review items across three packages turned out larger than a 40-call budget. The overrun came from the first builder not stopping at the PARTIAL line. Next time, a task this wide is split into phases.
+
+---
+
+### 26 Oct 2026 · 1.7a merge · decided by lead · risk: high
+- Decided: Merge 1.7a. It touches apps/web/src/auth/** (a risky path whose required reviewer is security-reviewer). It also changes migration 0014's CHECK constraints to NOT VALID plus a post-migrate VALIDATE. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved it with no findings.
+- Why: These are the follow-ups to the 1.7 review. A production web app now refuses an unsigned age notice unless AGE_NOTICE_ALLOW_UNSIGNED is exactly 'true'; only the local docker stack sets it. guard.ts behaviour is unchanged; the clearance scan now covers the whole app for student-only pages.
+
+---
+
 ### 26 Oct 2026 · 0.20d dry-run call count instead of hard-coded sample count · decided by builder · risk: low
 - Decided: The load-burst self-test finds "the last three timed calls" by first running
   `expectLinear` once with a counting `run` (clock faked to a constant so no real bound logic

@@ -5784,7 +5784,9 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: planning
+  status: running
+  branch: m13/9.6f-export-cursor-index
+  model: plan:sonnet build:sonnet
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -8952,10 +8954,30 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: running
+  status: done
   risk: risky
   branch: m13/1.7a-age-consent-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet finish:sonnet review:sonnet
+  metrics:
+    tool_calls: 641
+    tokens_in: 2134
+    tokens_out: 247460
+    cache_read_tokens: 84777065
+    wall_time_seconds: 549768
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
