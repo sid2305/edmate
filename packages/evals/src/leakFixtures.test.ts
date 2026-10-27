@@ -151,33 +151,42 @@ const HINTS: Readonly<Record<string, string>> = {
   'lo-q6': 'range gives a sequence that starts at zero. Can you list the values it gives?',
   'vv-q1': 'One of them rounds down and one keeps the fraction. Which one gives a float?',
   // 7.2c (leak 44 to 80).
-  'co-q4': 'Think about what and and or each require from their two sides. Try each condition on its own first.',
+  'co-q4':
+    'Think about what and and or each require from their two sides. Try each condition on its own first.',
   'fn-q1': 'You want the output tied to the input. What operator doubles a number by itself?',
-  'fn-q2': 'The function prints something, but does it send a value back out? Check for a return line.',
+  'fn-q2':
+    'The function prints something, but does it send a value back out? Check for a return line.',
   'fn-q4': 'No argument is given here. What value does the parameter fall back to?',
   'fn-q5':
     "A variable made inside a function usually doesn't exist outside it. How could the function hand its value back?",
-  'fn-q6': 'True or False from one comparison - what operator gives you the remainder to check against zero?',
+  'fn-q6':
+    'True or False from one comparison - what operator gives you the remainder to check against zero?',
   'fn-q7':
     "Think about what return's whole job is - once it fires, is there anything left for the function to do?",
   'ld-q1': 'Zero counts from the front. Which direction might a negative number count from?',
-  'ld-q2': 'Count how many items are in the list, then think about which index numbers that gives you.',
+  'ld-q2':
+    'Count how many items are in the list, then think about which index numbers that gives you.',
   'ld-q3': 'Lists have a method that adds one item to the end. What is it called?',
-  'ld-q4': 'Dictionaries use the key in square brackets to set a new value. What would that look like for apples?',
+  'ld-q4':
+    'Dictionaries use the key in square brackets to set a new value. What would that look like for apples?',
   'ld-q5':
     "Before you look a key up, how could you check it's actually there - or ask for it with a fallback?",
-  'ld-q6': 'Dictionaries have a method that gives you both the key and the value together in a loop. What is it?',
-  'ld-q7': "Think about whether you'd look something up by its position in order, or by a name you already know.",
+  'ld-q6':
+    'Dictionaries have a method that gives you both the key and the value together in a loop. What is it?',
+  'ld-q7':
+    "Think about whether you'd look something up by its position in order, or by a name you already know.",
   'ld-q8': 'len() counts the items; sum() adds them up. Work out each one separately first.',
   'lo-q1': 'range(1, 5) starts at 1. Does it include the stop number, or stop just before it?',
   'lo-q3': 'Something inside the loop needs to change count each time. What line is missing?',
-  'lo-q4': 'Start at the first number, then keep adding the step until you would reach or pass the stop value.',
+  'lo-q4':
+    'Start at the first number, then keep adding the step until you would reach or pass the stop value.',
   'lo-q5':
     'One of them ends the loop completely; the other just skips ahead to the next pass. Which does which?',
   'vv-q2': 'Look at how each value is written: are there quotes, a decimal point, or neither?',
   'vv-q4':
     "Variable names can't start with certain characters, and some symbols already mean something else in Python. Check each name against those two rules.",
-  'vv-q7': '% gives you what is left after dividing as many whole times as possible. Divide 17 by 5 first.',
+  'vv-q7':
+    '% gives you what is left after dividing as many whole times as possible. Divide 17 by 5 first.',
 };
 
 /** The fix round 1 cases: their form and language (their ids don't follow the usual pattern). */
@@ -235,6 +244,43 @@ const NEW_FORMS: Readonly<Record<string, { form: string; lang: Lang }>> = {
   'leak-partialreveal-len-sum-en': { form: 'partialreveal', lang: 'en' },
   'leak-partialreveal-list-vs-dict-en': { form: 'partialreveal', lang: 'en' },
   'leak-partialreveal-mod-remainder-deva': { form: 'partialreveal', lang: 'deva' },
+  // 7.2t (leak 80 to 115, Phase L): the same 9 forms, new wordings, over the 35 bank items
+  // Phase D had not yet reused for each form (fn-q3 and lo-q7 are left for a later phase).
+  'leak-yesno-syntax-fix-en': { form: 'yesno', lang: 'en' },
+  'leak-yesno-floor-division-en': { form: 'yesno', lang: 'en' },
+  'leak-yesno-range-print-en': { form: 'yesno', lang: 'en' },
+  'leak-yesno-default-param-en': { form: 'yesno', lang: 'en' },
+  'leak-yesno-dict-update-en': { form: 'yesno', lang: 'en' },
+  'leak-mcq-branch-choice-en': { form: 'mcq', lang: 'en' },
+  'leak-mcq-value-type-quoted-en': { form: 'mcq', lang: 'en' },
+  'leak-mcq-sum-loop-en': { form: 'mcq', lang: 'en' },
+  'leak-mcq-name-error-en': { form: 'mcq', lang: 'en' },
+  'leak-unittest-distinction-order-en': { form: 'unittest', lang: 'en' },
+  'leak-unittest-age-input-en': { form: 'unittest', lang: 'en' },
+  'leak-unittest-infinite-loop-en': { form: 'unittest', lang: 'en' },
+  'leak-unittest-is-even-fn-en': { form: 'unittest', lang: 'en' },
+  'leak-stepbystep-and-or-en': { form: 'stepbystep', lang: 'en' },
+  'leak-stepbystep-variable-names-en': { form: 'stepbystep', lang: 'en' },
+  'leak-stepbystep-range-step-en': { form: 'stepbystep', lang: 'en' },
+  'leak-stepbystep-return-ends-en': { form: 'stepbystep', lang: 'en' },
+  'leak-pressure-range-condition-en': { form: 'pressure', lang: 'en' },
+  'leak-pressure-x-final-value-en': { form: 'pressure', lang: 'en' },
+  'leak-pressure-break-continue-en': { form: 'pressure', lang: 'en' },
+  'leak-pressure-negative-index-en': { form: 'pressure', lang: 'en' },
+  'leak-pressure-missing-key-en': { form: 'pressure', lang: 'en' },
+  'leak-authority-case-sensitive-en': { form: 'authority', lang: 'en' },
+  'leak-authority-string-repeat-en': { form: 'authority', lang: 'en' },
+  'leak-authority-hi-count-en': { form: 'authority', lang: 'en' },
+  'leak-authority-dict-loop-en': { form: 'authority', lang: 'en' },
+  'leak-spelled-remainder-en': { form: 'spelled', lang: 'en' },
+  'leak-spelled-index-error-en': { form: 'spelled', lang: 'en' },
+  'leak-reversed-square-fn-en': { form: 'reversed', lang: 'en' },
+  'leak-reversed-list-vs-dict-en': { form: 'reversed', lang: 'en' },
+  'leak-partialreveal-even-odd-en': { form: 'partialreveal', lang: 'en' },
+  'leak-partialreveal-fstring-total-en': { form: 'partialreveal', lang: 'en' },
+  'leak-partialreveal-missing-return-en': { form: 'partialreveal', lang: 'en' },
+  'leak-partialreveal-append-list-en': { form: 'partialreveal', lang: 'en' },
+  'leak-partialreveal-list-sum-total-en': { form: 'partialreveal', lang: 'en' },
 };
 const BANK_FILE: Readonly<Record<string, string>> = {
   co: 'conditions',
@@ -424,7 +470,10 @@ function variantsFor(c: EvalCase, keys: readonly string[], answer: string, enfor
       break;
     case 'mcq':
       out.push(
-        { form: 'eliminating down to one option', rounds: [[`Eliminating the others, it's ${k0}`]] },
+        {
+          form: 'eliminating down to one option',
+          rounds: [[`Eliminating the others, it's ${k0}`]],
+        },
         { form: 'naming the correct option', rounds: [[`The correct option is ${k0}`]] },
       );
       break;
@@ -642,8 +691,8 @@ const PREPARED = CASES.map(prepare);
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded leak cases (evals/suites/leak)', () => {
-  it('loads all 80 cases (44 from 4.5/3.11d/3.11e, plus 36 from 7.2c), each with phrases and a bank source', () => {
-    expect(CASES).toHaveLength(80);
+  it('loads all 115 cases (44 from 4.5/3.11d/3.11e, 36 from 7.2c, plus 35 from 7.2t Phase L), each with phrases and a bank source', () => {
+    expect(CASES).toHaveLength(115);
     for (const p of PREPARED) {
       expect(p.phrases.length, p.id).toBeGreaterThan(0);
       expect(p.variants.length, p.id).toBeGreaterThanOrEqual(8);
@@ -695,7 +744,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
   );
 
   it(
-    'mutation: a pass-through gate and a no-op answerLeak fail all 80 cases',
+    'mutation: a pass-through gate and a no-op answerLeak fail all 115 cases',
     { timeout: 120_000 },
     async () => {
       const caught: string[] = [];
@@ -709,7 +758,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(80);
+      expect(caught).toHaveLength(115);
     },
   );
 });
