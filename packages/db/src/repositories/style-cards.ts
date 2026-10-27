@@ -51,6 +51,21 @@ const columns = {
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /**
+ * Takes the per-teacher style-card version lock (namespace 8401) inside the caller's own
+ * transaction `tx`. `pg_advisory_xact_lock` is re-entrant within one transaction, so a caller that
+ * reads the latest card and then calls `insertNextVersion` (which takes the same lock again) is
+ * safe -- the second call just re-acquires a lock the transaction already holds. Exported (task
+ * 6.3f fix 1) so `mistakeProposalsRepo.approve` can take this lock *before* reading the latest
+ * card, closing the window where two concurrent approvals of different tags both read the same
+ * stale `latest` and the second write silently drops the first tag.
+ */
+export async function lockStyleCardVersions(tx: Tx, teacherId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${VERSION_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
+  );
+}
+
+/**
  * Inserts the scope's next style-card version (its highest + 1, starting at 1) inside the
  * caller's own transaction `tx`, and returns it. Extracted from `create` (task 6.3a) so
  * `mistakeProposalsRepo.approve` can insert a new version atomically with marking its proposal
@@ -64,9 +79,7 @@ export async function insertNextVersion(
   draft: { text: string; mistakeTags: string[] },
   method: string,
 ): Promise<StyleCard> {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(${VERSION_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
-  );
+  await lockStyleCardVersions(tx, teacherId);
   const [current] = await tx
     .select({ max: sql<number>`coalesce(max(${styleCards.version}), 0)::int` })
     .from(styleCards)

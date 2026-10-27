@@ -95,6 +95,71 @@ test:
   code style!"
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
+## Fix round 1
+
+### Findings (database-reviewer; the lead raised the first to HIGH)
+
+1. **[HIGH] `approve` computed `merged` before taking the version lock.** `approve` read the
+   teacher's latest style card and computed `merged` before `insertNextVersion` ever took the
+   per-teacher advisory lock (`VERSION_LOCK_NAMESPACE` 8401, `style-cards.ts`). Two `approve` calls
+   for *different* tags of the same teacher could each read the same stale `latest`, so the second
+   new version silently dropped the first tag even though both proposals were marked `approved` --
+   reachable from the style-card page with two quick clicks.
+   Fix: added `lockStyleCardVersions(tx, teacherId)`, an exported helper in `style-cards.ts` that
+   runs the same `pg_advisory_xact_lock(8401::int4, hashtext(teacherId))` statement.
+   `insertNextVersion` now calls it instead of inlining the SQL, and `approve` calls it itself,
+   right after the pending re-check and before reading `latest`. `pg_advisory_xact_lock` is
+   re-entrant within one transaction, so `insertNextVersion`'s own call later in the same
+   transaction is a safe no-op re-acquire; both call sites' comments say so. Lock order is
+   unchanged (role → proposal row → version lock), so no new deadlock cycle opens against
+   `record`'s 8402 lock or style-card `create`.
+2. **[LOW] the concurrent `record` test only checked the final row count.** It fired three
+   concurrent 40-tag batches (120 total) against the 100-row cap and only asserted the final count
+   was `<= 100`; it never checked that the lock actually caused a rejection, as opposed to the
+   count landing under the cap for some other reason. Fix: captured `Promise.allSettled`'s results,
+   asserted at least one settled as `rejected`, and asserted every rejection is a `RepositoryError`
+   with `kind: 'limit'`.
+
+### Change
+
+- `packages/db/src/repositories/style-cards.ts`: added exported `lockStyleCardVersions(tx,
+  teacherId)`; `insertNextVersion` now calls it instead of inlining the lock statement.
+- `packages/db/src/repositories/mistake-proposals.ts`: `approve` imports and calls
+  `lockStyleCardVersions` before reading `latest`; docstring and an inline comment explain why
+  (and why `insertNextVersion`'s own re-entrant call later is safe).
+- `packages/db/test/mistake-proposals.int.test.ts`: added `concurrent approvals of two different
+  tags for the same teacher both land in mistakeTags (6.3f fix round 1)` -- records two tags,
+  approves both via `Promise.all`, asserts the final latest card's version is `before + 2` and its
+  `mistakeTags` contains both new tags, and that neither proposal is still pending. Also hardened
+  the existing concurrent `record` test per finding 2 above.
+
+### Red before, green after -- and a reproducibility note
+
+Watched the new concurrent-approve test against the code *before* the fix (lock call removed from
+`approve`, left in `insertNextVersion` only): it passed in 13 runs in a row (3 initial + 10 in a
+loop), never reproducing the race. Tracing why: both `approve` transactions reach `lockRole` (a
+`FOR SHARE` lock on the same `users` row, which does not block two readers) and then lock their
+own, different proposal rows (`FOR UPDATE` on different `tag` rows, no contention either) quickly
+enough over a local Postgres connection that one transaction's full round trip -- read `latest`,
+compute `merged`, call `insertNextVersion` (which takes the 8401 lock, inserts, and the outer
+`db.transaction` commits) -- consistently finishes before the other transaction's `select latest`
+runs, so the window the bug needs (`tx2` reading `latest` before `tx1` commits) never opened in
+this environment. This matches the HIGH finding's own words ("the style-card page lets a teacher
+do this with two quick clicks") -- the race is real under real network latency between a browser
+click and the server, just not reliably forced by two promises resolved back-to-back against a
+local database with no injected delay. Re-ran the same test after restoring the fix: still green
+(1 passed, 16 skipped), and the gate below confirms nothing else regressed. The fix is applied
+regardless, per the finding's own correct trace of the code (not of this test's observed timing).
+
+## Gate (fix round 1)
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` → 8/8 tasks successful;
+  `src/repositories/**` stays at 100% statements/branches/functions/lines.
+- `corepack pnpm turbo run typecheck --filter=...@edmate/db` → 12/12 tasks successful.
+- `corepack pnpm exec prettier --check` on the three changed files → "All matched files use
+  Prettier code style!"
+- `python3 .githooks/secret-scan.py --all` → clean, no output.
+
 ## Budget
 
 Tool calls used: 44

@@ -127,6 +127,27 @@ describe.skipIf(!up)(`mistakeProposals on Postgres${up ? '' : ` (${SKIP_REASON})
     expect(after!.version).toBe(before!.version + 1);
   });
 
+  it('concurrent approvals of two different tags for the same teacher both land in mistakeTags (6.3f fix round 1)', async () => {
+    await repos.mistakeProposals.record(A, [
+      { tag: 'concurrent_tag_one', count: 1, lastSeen: AT },
+      { tag: 'concurrent_tag_two', count: 1, lastSeen: AT },
+    ]);
+    const before = await repos.styleCards.latest(A);
+    const [one, two] = await Promise.all([
+      repos.mistakeProposals.approve(A, 'concurrent_tag_one'),
+      repos.mistakeProposals.approve(A, 'concurrent_tag_two'),
+    ]);
+    expect(one.approved).toBe(true);
+    expect(two.approved).toBe(true);
+    const after = await repos.styleCards.latest(A);
+    expect(after!.version).toBe(before!.version + 2);
+    expect(after!.mistakeTags).toContain('concurrent_tag_one');
+    expect(after!.mistakeTags).toContain('concurrent_tag_two');
+    const pending = await repos.mistakeProposals.listPending(A);
+    expect(pending.map((p) => p.tag)).not.toContain('concurrent_tag_one');
+    expect(pending.map((p) => p.tag)).not.toContain('concurrent_tag_two');
+  });
+
   it('reject marks a pending proposal rejected and never touches style_cards', async () => {
     await repos.mistakeProposals.record(A, [{ tag: 'reject_only', count: 1, lastSeen: AT }]);
     const before = await repos.styleCards.latest(A);
@@ -288,7 +309,7 @@ describe.skipIf(!up)(`mistakeProposals on Postgres${up ? '' : ` (${SKIP_REASON})
     // Three concurrent batches of 40 distinct new tags each (120 total) against a 100-row cap,
     // starting from zero rows for this teacher: without a lock serialising the count check against
     // the write, each of the three transactions can see "0 existing" and all three would pass.
-    await Promise.allSettled([
+    const settled = await Promise.allSettled([
       repos.mistakeProposals.record(G, batch('race_x')),
       repos.mistakeProposals.record(G, batch('race_y')),
       repos.mistakeProposals.record(G, batch('race_z')),
@@ -302,6 +323,14 @@ describe.skipIf(!up)(`mistakeProposals on Postgres${up ? '' : ` (${SKIP_REASON})
       ).rows[0]?.n,
     );
     expect(rowCount).toBeLessThanOrEqual(MISTAKE_PROPOSALS_MAX);
+    // 6.3f fix round 1 (LOW): 120 tags against a 100-row cap means the lock must have actually
+    // refused at least one of the three batches, not merely left the count under the cap by luck.
+    const rejected = settled.filter((r) => r.status === 'rejected');
+    expect(rejected.length).toBeGreaterThan(0);
+    for (const r of rejected) {
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(RepositoryError);
+      expect((r as PromiseRejectedResult).reason).toMatchObject({ kind: 'limit' });
+    }
   });
 
   it('record with a lastSeen that is not a valid offset-bearing ISO datetime is invalid; no row written', async () => {

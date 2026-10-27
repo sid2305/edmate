@@ -10,7 +10,7 @@ import { lockRole } from '../role-lock.js';
 import { mistakeTagProposals, styleCards } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { checked } from './map.js';
-import { insertNextVersion, STYLE_CARD_LIMITS } from './style-cards.js';
+import { insertNextVersion, lockStyleCardVersions, STYLE_CARD_LIMITS } from './style-cards.js';
 import { parseArg, teacherScope, type TeacherScope } from './scope.js';
 import { type StyleCard, StyleCardSchema } from '@edmate/contracts';
 
@@ -165,10 +165,13 @@ export function mistakeProposalsRepo(db: Db) {
     /**
      * Approves the scope's teacher's pending proposal `tag`: locks the teacher's role and the
      * proposal row, re-checks `pending` (else `{approved: false, card: null}`, a race-safe no-op
-     * for whichever concurrent `approve` call lost), reads the teacher's current latest style
-     * card (`not_found` if none), and inserts a new style-card version whose `mistakeTags` is the
-     * old version's tags plus `tag` (deduped), via `insertNextVersion`, in the same transaction as
-     * marking the proposal `approved`.
+     * for whichever concurrent `approve` call lost), takes the per-teacher style-card version
+     * lock (task 6.3f fix round 1 -- before reading `latest`, so two approvals of different tags
+     * for the same teacher can't both read the same stale card and have the second silently drop
+     * the first tag), reads the teacher's current latest style card (`not_found` if none), and
+     * inserts a new style-card version whose `mistakeTags` is the old version's tags plus `tag`
+     * (deduped), via `insertNextVersion`, in the same transaction as marking the proposal
+     * `approved`.
      */
     async approve(
       scope: TeacherScope,
@@ -192,6 +195,12 @@ export function mistakeProposalsRepo(db: Db) {
             .for('update');
           if (proposal === undefined) throw new RepositoryError('not_found', method);
           if (proposal.status !== 'pending') return { approved: false, card: null };
+
+          // Task 6.3f fix round 1: take the version lock before reading `latest`, not after --
+          // `insertNextVersion` takes the same lock again below, which is safe (it's re-entrant
+          // within this transaction), but by then it would be too late to prevent two concurrent
+          // approvals of different tags from both reading the same stale `latest`.
+          await lockStyleCardVersions(tx, teacherId);
 
           const [latest] = await tx
             .select({
