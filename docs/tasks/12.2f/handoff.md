@@ -555,3 +555,21 @@ Moved to the top `## Decisions` section.
 ### Budget
 
 Fix round tool calls used: 43 (harness count; the builder reported 19)
+
+## CI fix
+
+`@edmate/worker#typecheck` failed: `DocumentRow` (packages/db) gained a required `takenDown:
+boolean` on this branch, and `apps/worker/src/ingest/processor.test.ts`'s single `row()` fixture
+didn't set it. Added `takenDown: false` to that fixture (no other `DocumentRow` fixture in the
+file needed it). `packages/db` untouched.
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db` -- 14 of 20 tasks
+successful on the first run; `@edmate/cli#test` failed only on
+`test/chatDbRetrieval.int.test.ts` with a 10s `beforeAll` hook timeout creating its throwaway
+Postgres database (resource contention from 20 tasks running together, not this change). Re-ran
+that single file alone: `corepack pnpm vitest run test/chatDbRetrieval.int.test.ts` inside
+`apps/cli` -- passed (exit 0). `corepack pnpm prettier --check
+apps/worker/src/ingest/processor.test.ts` -- clean. `python3 .githooks/secret-scan.py --all` --
+clean.
+
+Tool calls used: 17
