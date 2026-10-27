@@ -52,6 +52,18 @@ for a 200k/300k-character run would be far worse, consistent with O(n^2)).
   would make a differential comparison meaningless). A module-local export reached by its file
   path keeps the package's public surface (`src/index.ts`) unchanged.
 
+### 26 Oct 2026 · 8.7o budget overrun · decided by lead · risk: low
+- Decided: accept 111 tool calls in total (build 37, fix round 74) against a plan budget of 30.
+- Why: the fix round was caused by the lead's own plan, whose lookbehind design failed open on adjacent emails; the fixer also lost calls to a hang after the Mac slept. The diff stays in scope.
+
+### 26 Oct 2026 · 8.7o lone low surrogate finding deferred · decided by lead · risk: medium
+- Decided: the re-review's HIGH from typescript-reviewer (packages/db/src/repositories/redact-json.ts `redactEmails` steps back over a low surrogate without checking the unit before it is a high surrogate) is triaged to LOW and deferred to 8.7p, which already edits this file.
+- Why: it only over-redacts (fails closed, never leaks an email), and only on text holding an unpaired surrogate, which Postgres text and jsonb reject anyway; security-reviewer and code-reviewer each matched the old regex on 130,000 to 200,000 fuzzed strings.
+
+### 26 Oct 2026 · 8.7o merge · decided by lead · risk: high
+- Decided: merge 8.7o after one fix round; security-reviewer and code-reviewer approved the fix, and typescript-reviewer's one remaining finding is deferred to 8.7p.
+- Why: packages/db/src/repositories/redact-json.ts is a risky path (reviewers: security-reviewer); the change replaces a quadratic email regex with a linear scan that gives the same output and closes the round 1 fail-open.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` — PASS (80 test files,
   1710 passed, 4 skipped; `redact-json.ts` coverage 100/100/100/100).
@@ -59,7 +71,7 @@ for a 200k/300k-character run would be far worse, consistent with O(n^2)).
 - `python3 .githooks/secret-scan.py --all` — PASS (no output, clean).
 
 ## Budget
-Tool calls used: 19
+Tool calls used: 37 (harness count; the builder reported 19). Fix round: 74 (harness count; the fixer reported 26).
 
 ## Fix round
 
