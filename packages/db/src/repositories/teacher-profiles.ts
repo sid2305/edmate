@@ -311,6 +311,13 @@ export function teacherProfilesRepo(db: Db) {
      * advisory -> profile -> agent -> run, and takedowns.create/lift take role -> (profile) ->
      * agent -> takedown -> report: everyone takes the profile before an agent and an agent before
      * a takedown, and nobody holds an agent while waiting on a role or profile row, so no cycle.
+     *
+     * Lead decision (task 12.1c): no pending-only guard here. Staff may already target a
+     * `verified` or `rejected` teacher (the "staff can later reject a verified teacher" and "a
+     * re-verification does not lift the takedowns" cases above), and every transition writes a
+     * `teacher.verify` audit row with before/after by a current staff user -- the audit trail is
+     * the safeguard, not a status gate. Reverting a decision back to `pending` ("revoke") stays a
+     * separate future task; `VerificationInput` only accepts `verified`/`rejected` today.
      */
     async setVerification(
       scope: TeacherScope,

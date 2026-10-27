@@ -28,9 +28,10 @@ import { describeError } from '../../../../src/auth/describe-error';
 import { apiError } from '../../../../src/auth/errors';
 import type { RoleContext } from '../../../../src/auth/guard';
 import { readJson, TOO_LARGE } from '../../../../src/studio/routes';
+import { MAX_REASON_CHARS } from '../../../staff/client';
 
-/** setVerification's own reason cap (packages/db VerificationInput). */
-export const MAX_REASON_CHARS = 500;
+/** Task 12.1c: re-exported so `route.test.ts`'s `import ... from './handlers'` keeps working. */
+export { MAX_REASON_CHARS };
 
 /**
  * The one decision a staff user sends. Strict: unknown keys (a `by`, a `userId`) are refused.
@@ -208,9 +209,16 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
         });
       } catch (error) {
         if (error instanceof RepositoryError) {
-          // `invalid` / `not_found` here can only mean the session's own id is not a staff user.
-          if (error.kind === 'scope' || error.kind === 'invalid' || error.kind === 'not_found') {
-            return apiError('forbidden', MSG.listForbidden, 403);
+          switch (error.kind) {
+            case 'scope':
+            case 'invalid':
+            case 'not_found':
+              // `invalid` / `not_found` here can only mean the session's own id is not a staff
+              // user.
+              return apiError('forbidden', MSG.listForbidden, 403);
+            case 'integrity':
+            case 'failed':
+              break;
           }
         }
         return failed('list', error);
@@ -278,6 +286,8 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
               return apiError('not_found', MSG.notFound, 404);
             case 'invalid':
             case 'integrity':
+              // `integrity` here can only mean a bad reason/safety combination for this teacher's
+              // current status; same outcome as `invalid` (same decision as `list`'s switch above).
               return validation();
             case 'failed':
               break;

@@ -35,6 +35,7 @@ apps/web/app/api/webhooks/**
 apps/web/src/auth/**
 apps/web/app/api/auth/**
 apps/web/app/api/staff/**
+apps/web/app/staff/**
 packages/db/src/identity/**
 packages/gateway/src/keys/**
 packages/db/src/repositories/**

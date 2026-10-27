@@ -367,7 +367,7 @@ describe('repositories source', () => {
     expect(profilesSrc).toContain('users.email');
   });
 
-  it('reads a user only through role-lock.ts, which selects the role column alone (8.1)', () => {
+  it("role-lock.ts's own select reads only the role column, never name, email or phone (8.1)", () => {
     const src = readFileSync(join(dir, '..', 'role-lock.ts'), 'utf8');
     const selects = [...src.matchAll(/\.select\(([^)]*)\)/g)].map((m) => m[1]);
     expect(selects).toEqual(['{ role: users.role }']);
