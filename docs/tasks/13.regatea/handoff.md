@@ -75,6 +75,14 @@ before the `migrate.ts` edit.
 
 ## Decisions
 
+### 27 Oct 2026 · 13.regatea EXPLAIN test proves the index fits, not the live plan · decided by lead · risk: low
+- Decided: wontfix the database-reviewer LOW on packages/db/test/eval-runs-gate-passed-index.int.test.ts: the test reaches "no Sort" only with local work_mem and random_page_cost settings, so it shows the index matches the regate sweep's query, not that the live planner picks it today.
+- Why: the index matches the query column for column; at pilot table sizes a Sort is cheap, and the sweep runs every 15 minutes off any request path.
+
+### 27 Oct 2026 · 13.regatea budget overrun · decided by lead · risk: low
+- Decided: accept 131 tool calls (harness count; the builder reported 78) against a 60-call budget, about 2.2x.
+- Why: the overrun found a real issue (drizzle's .desc() emits NULLS LAST, so the index needed .nullsFirst() to remove the Sort); the work is done and approved.
+
 ### 27 Oct 2026 · 13.regatea migration snapshot files · decided by builder · risk: low
 - Decided: generate and include `packages/db/migrations/meta/0038_snapshot.json` and the
   matching `_journal.json` entry (via `drizzle-kit generate`, then hand-replacing the generated
@@ -142,4 +150,4 @@ before the `migrate.ts` edit.
 
 ## Budget
 
-Tool calls used: 78
+Tool calls used: 131 (harness count; the builder reported 78)
