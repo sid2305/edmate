@@ -10190,7 +10190,9 @@ tasks:
   deps:
   - 1.4d
   risk: low
-  status: planning
+  status: running
+  branch: m13/1.4e-redis-ready-timeout
+  model: plan:lead build:sonnet review:sonnet
 - id: 5.6g
   milestone: M13
   title: '5.6b review MEDIUM and LOWs: packages/harness/src/pipeline/generate/streamGate.ts:301-316 ruleOutCompletes/commitRuledOut judge the released window plus the piece (like keys.leaks), not the bare
