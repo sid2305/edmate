@@ -5810,6 +5810,7 @@ tasks:
   accept: the leak case passes; EXPLAIN on the staff queue uses the partial index; the comment and title match the code.
   deps:
   - 12.1a
+  - 9.6f
   risk: high
   status: todo
 - id: 8.7k
