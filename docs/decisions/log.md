@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 0.20e budget overrun · decided by lead · risk: low
+- Decided: accept 32 tool calls against a plan budget of 15.
+- Why: the regression proof needed extra SLO runs against the shared dev database, and each run is slow. The diff is one test file.
+
+---
+
 ### 26 Oct 2026 · 8.7q pre-cap uses the same constant, no headroom · decided by builder · risk: high
 - Decided: the pre-check in `storable()` reuses `AUDIT_JSON_MAX_LENGTH` (10,000) itself, not a
   larger threshold with headroom for redaction growth.
