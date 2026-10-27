@@ -229,6 +229,14 @@ describe('POST /api/studio/documents (create)', () => {
     });
   });
 
+  it('a signing failure commits nothing: the row is cleaned up, no orphan upload row survives', async () => {
+    const s = setup();
+    vi.mocked(s.backend.storage.createUploadUrl).mockRejectedValueOnce(new TypeError('boom'));
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    expect(res.status).toBe(500);
+    expect(s.rows.has('doc_1')).toBe(false);
+  });
+
   it('files audio and video as transcript material', async () => {
     const s = setup();
     await s.h.create(req('POST', '/x', { ...NEW_PDF, contentType: 'audio/mpeg' }), ctx(ASHA));

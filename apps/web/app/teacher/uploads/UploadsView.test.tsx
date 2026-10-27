@@ -7,11 +7,16 @@ import { axe, toHaveNoViolations } from 'jest-axe';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderIntl } from '../../../test/intl';
 import type { DocumentView, PutFile } from '../../../src/studio/uploadClient';
-import { POLL_MAX_MS, POLL_MS, UploadsView } from './UploadsView';
+import { POLL_MAX_MS, POLL_MS, UploadsView, type ModuleOption } from './UploadsView';
 
 beforeAll(() => {
   expect.extend(toHaveNoViolations);
 });
+
+/** 8.2a Phase C: `UploadsView` takes modules (id + title), not bare ids. Each synthetic id gets
+ * its own synthetic title, in the same order, so a test can assert either one. */
+const mods = (ids: string[]): ModuleOption[] =>
+  ids.map((id, i) => ({ id, title: `Module title ${i + 1}` }));
 
 const doc = (over: Partial<DocumentView>): DocumentView => ({
   id: 'doc_1',
@@ -108,7 +113,7 @@ describe('UploadsView', () => {
         failureReason: 'something_new',
       }),
     ]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     const list = await screen.findByRole('list', { name: 'Your files' });
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(3);
@@ -124,7 +129,7 @@ describe('UploadsView', () => {
       doc({ id: 'doc_1', sourceTitle: 'Algebra notes.pdf', status: 'ready', takenDown: true }),
       doc({ id: 'doc_2', sourceTitle: 'Lecture.mp3', status: 'ready', takenDown: false }),
     ]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     const list = await screen.findByRole('list', { name: 'Your files' });
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
@@ -135,7 +140,7 @@ describe('UploadsView', () => {
 
   it('accepts caption files and shows the YouTube hint (task 8.2c)', async () => {
     api([]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     await screen.findByText(/No files yet/);
     const picker = screen.getByLabelText('Upload a file');
     if (!(picker instanceof HTMLInputElement)) throw new Error('the file picker is not an input');
@@ -145,7 +150,7 @@ describe('UploadsView', () => {
 
   it('shows an empty state, and no upload control without a module', async () => {
     api([]);
-    renderIntl(<UploadsView moduleIds={[]} putFile={okPut} />);
+    renderIntl(<UploadsView modules={[]} putFile={okPut} />);
     expect(await screen.findByText(/No files yet/)).toBeInTheDocument();
     expect(screen.getByText(/Set up a module/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Upload a file')).toBeNull();
@@ -154,7 +159,7 @@ describe('UploadsView', () => {
   it('uploads: create with the exact type and size, PUT with exactly the headers, then complete', async () => {
     const s = api([]);
     const put = vi.fn<PutFile>(okPut);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={put} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={put} />);
     await screen.findByText(/No files yet/);
     checkRights();
     s.next('POST /api/studio/documents', ticket('doc_9', 'text/markdown'));
@@ -188,9 +193,44 @@ describe('UploadsView', () => {
     );
   });
 
+  it('shows each module’s real title in the picker, not a placeholder (8.2a Phase C)', async () => {
+    api([]);
+    renderIntl(
+      <UploadsView
+        modules={[
+          { id: 'mod_1', title: 'Algebra basics' },
+          { id: 'mod_2', title: 'Geometry' },
+        ]}
+        putFile={okPut}
+      />,
+    );
+    await screen.findByText(/No files yet/);
+    const picker = screen.getByLabelText('Module');
+    const options = within(picker).getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['Algebra basics', 'Geometry']);
+    expect(screen.queryByText('Module 1')).toBeNull();
+  });
+
+  it('falls back to a numbered placeholder when a module has no title', async () => {
+    api([]);
+    renderIntl(
+      <UploadsView
+        modules={[
+          { id: 'mod_1', title: '' },
+          { id: 'mod_2', title: 'Geometry' },
+        ]}
+        putFile={okPut}
+      />,
+    );
+    await screen.findByText(/No files yet/);
+    const picker = screen.getByLabelText('Module');
+    const options = within(picker).getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['Module 1', 'Geometry']);
+  });
+
   it('files under the chosen module when there are several', async () => {
     const s = api([]);
-    renderIntl(<UploadsView moduleIds={['mod_1', 'mod_2']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1', 'mod_2'])} putFile={okPut} />);
     await screen.findByText(/No files yet/);
     checkRights();
     fireEvent.change(screen.getByLabelText('Module'), { target: { value: 'mod_2' } });
@@ -205,7 +245,7 @@ describe('UploadsView', () => {
 
   it('refuses an unsupported file before calling the API', async () => {
     const s = api([]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     await screen.findByText(/No files yet/);
     checkRights();
     pick(
@@ -220,7 +260,7 @@ describe('UploadsView', () => {
     const s = api([]);
     renderIntl(
       <UploadsView
-        moduleIds={['mod_1']}
+        modules={mods(['mod_1'])}
         putFile={async () => Promise.reject(new Error('upload failed'))}
       />,
     );
@@ -238,7 +278,7 @@ describe('UploadsView', () => {
 
   it('a 409 on complete asks to wait, and Try again completes it', async () => {
     const s = api([]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     await screen.findByText(/No files yet/);
     checkRights();
     s.next('POST /api/studio/documents', ticket('doc_9', 'application/pdf'));
@@ -262,7 +302,7 @@ describe('UploadsView', () => {
 
   it('an enqueue_failed file can be retried; a 503 says so in words', async () => {
     const s = api([doc({ status: 'failed', failureReason: 'enqueue_failed' })]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     expect(await screen.findByText("Processing couldn't start.")).toBeInTheDocument();
     s.next('POST /api/studio/documents/doc_1/complete', err(503, 'provider_error'));
     fireEvent.click(screen.getByRole('button', { name: 'Try again: Algebra notes.pdf' }));
@@ -272,7 +312,7 @@ describe('UploadsView', () => {
   it('polls about every 4 s while a file is processing, then stops', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const s = api([doc({ status: 'processing' })]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     expect(await screen.findByText('Processing')).toBeInTheDocument();
     const lists = () => s.calls.filter((c) => c.method === 'GET').length;
     const before = lists();
@@ -293,7 +333,7 @@ describe('UploadsView', () => {
   it('stops polling after the poll cap and tells the teacher to check back later (11.4g)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const s = api([doc({ status: 'processing' })]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     expect(await screen.findByText('Processing')).toBeInTheDocument();
     const lists = () => s.calls.filter((c) => c.method === 'GET').length;
 
@@ -313,7 +353,7 @@ describe('UploadsView', () => {
   it('a row past the poll cap does not stop a newer row from polling to completion (11.4g fix round)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const s = api([doc({ id: 'doc_old', sourceTitle: 'Stuck.pdf', status: 'processing' })]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     expect(await screen.findByText('Processing')).toBeInTheDocument();
     const lists = () => s.calls.filter((c) => c.method === 'GET').length;
 
@@ -366,7 +406,7 @@ describe('UploadsView', () => {
   it('replaces a file through the hidden picker, then completes it', async () => {
     const s = api([doc({})]);
     const put = vi.fn<PutFile>(okPut);
-    const { container } = renderIntl(<UploadsView moduleIds={['mod_1']} putFile={put} />);
+    const { container } = renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={put} />);
     await screen.findByRole('button', { name: 'Replace Algebra notes.pdf' });
     checkRights();
     fireEvent.click(screen.getByRole('button', { name: 'Replace Algebra notes.pdf' }));
@@ -401,7 +441,7 @@ describe('UploadsView', () => {
 
   it('disables upload, replace and add-link until the rights checkbox is checked (task 12.3c)', async () => {
     const s = api([doc({})]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     await screen.findByRole('button', { name: 'Replace Algebra notes.pdf' });
     const filePicker = screen.getByLabelText('Upload a file') as HTMLInputElement;
     const replaceButton = screen.getByRole('button', { name: 'Replace Algebra notes.pdf' });
@@ -421,7 +461,7 @@ describe('UploadsView', () => {
 
   it('adds a link only once the rights box is checked, sending rightsDeclared: true', async () => {
     const s = api([]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     await screen.findByText(/No files yet/);
     checkRights();
     fireEvent.change(screen.getByLabelText('Add a web link'), {
@@ -445,7 +485,7 @@ describe('UploadsView', () => {
 
   it('deletes only after a confirm, and Cancel keeps the file', async () => {
     const s = api([doc({})]);
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Algebra notes.pdf' }));
     expect(screen.getByText(/stops using it/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -461,13 +501,13 @@ describe('UploadsView', () => {
   it('a list failure shows an alert', async () => {
     const s = api([]);
     s.next('GET /api/studio/documents', err(401, 'unauthorized'));
-    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Please sign in again.');
   });
 
   it('renders a title as text, never as markup', async () => {
     api([doc({ sourceTitle: '<b>bold</b> notes.md' })]);
-    const { container } = renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    const { container } = renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
     expect(await screen.findByText('<b>bold</b> notes.md')).toBeInTheDocument();
     expect(container.querySelector('b')).toBeNull();
   });
@@ -483,11 +523,54 @@ describe('UploadsView', () => {
       }),
     ]);
     const { container } = renderIntl(
-      <UploadsView moduleIds={['mod_1', 'mod_2']} putFile={okPut} />,
+      <UploadsView modules={mods(['mod_1', 'mod_2'])} putFile={okPut} />,
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Talk.mp4' }));
     await waitFor(() => expect(screen.getByText(/stops using it/)).toBeInTheDocument());
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+
+  it('unmounting mid-upload never refreshes or touches state after unmount (8.2a Phase B)', async () => {
+    const calls: string[] = [];
+    let resolveComplete: (() => void) | undefined;
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push(`${method} ${url}`);
+      if (method === 'GET' && url === '/api/studio/documents') {
+        return json({ status: 200, body: { documents: [] } });
+      }
+      if (method === 'POST' && url === '/api/studio/documents') {
+        return json(ticket('doc_1', 'application/pdf'));
+      }
+      if (method === 'POST' && url === '/api/studio/documents/doc_1/complete') {
+        await new Promise<void>((resolve) => {
+          resolveComplete = resolve;
+        });
+        return json({ status: 200, body: { documentId: 'doc_1', status: 'ready' } });
+      }
+      return json(err(500, 'provider_error'));
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = renderIntl(<UploadsView modules={mods(['mod_1'])} putFile={okPut} />);
+    await screen.findByText(/No files yet/);
+    checkRights();
+    const picker = screen.getByLabelText('Upload a file');
+    pick(picker, new File(['x'], 'a.pdf', { type: 'application/pdf' }));
+    await waitFor(() => expect(calls).toContain('POST /api/studio/documents/doc_1/complete'));
+    const callsBeforeUnmount = calls.length;
+    expect(() => unmount()).not.toThrow();
+    resolveComplete?.();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // A mounted guard skips `finish`'s post-completion `refresh()` once the component has
+    // unmounted, so no further fetch call fires after the late `complete` response lands.
+    expect(calls.length).toBe(callsBeforeUnmount);
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });

@@ -10,6 +10,132 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2a unmount test asserts no extra fetch call, not just no console warning · decided by builder · risk: low
+- Decided: the Phase B unmount test's primary assertion is that no extra `fetch` call fires after
+  unmount (checked by comparing the call count before and after the late response resolves), with
+  a `console.error` spy kept as a secondary check.
+- Why: the plan's test sketch (spy `console.error` for "state update on an unmounted component")
+  no longer applies under React 19 — React removed that warning because a post-unmount `setState`
+  is a silent no-op, not a bug to warn about. A console.error-only assertion would pass even
+  against the unfixed component (confirmed: it did), so it would not be red before the fix. The
+  extra-fetch-call assertion is red against the unmodified component (5 calls instead of 4,
+  verified by stashing just the component file) and green after the guard, which is what the plan's
+  exit condition ("the unmount-guard test is red-then-green") requires.
+
+---
+
+### 27 Oct 2026 · 8.2a packages/db/src/repositories/modules.ts gains a list() read method · decided by builder · risk: high
+- Decided: `modules.ts` (under the risky `packages/db/src/repositories/**` glob) gains a `list()`
+  method returning each of the scope's modules as `{ id, title }`, alongside the existing `ids()`.
+- Why: the upload centre's module picker needs a real title, not a bare id, and the title column
+  (`modules.title`, `packages/db/src/schema/content.ts`) already exists -- no migration. The new
+  method adds no write, no new table or column, and uses the exact same `teacherScope` guard and
+  `orderBy(asc(modules.id))` as `ids()`, so it opens no new access path; it is flagged `risk: high`
+  only because it falls under the risky repositories glob, per this repo's merge-gate rule (any
+  risky-path file makes the whole PR's decision `risk: high`), and needs security-reviewer plus
+  database-reviewer (this repo's standing convention for `packages/db` changes) before merge.
+
+---
+
+### 27 Oct 2026 · 8.2a create keeps write-before-sign, cleans up on signing failure · decided by builder · risk: low
+- Decided: `create` does not reorder to "sign then write" the way `replace` does. It keeps
+  `documents.create` first, then signs, and on a signing failure deletes the row it just wrote
+  (best-effort, logged) before rethrowing.
+- Why: unlike `replace`'s ownership check (a plain `get`, cheap to run before signing),
+  `create`'s moduleId/liveClassId ownership check is embedded in `documents.create`'s write itself
+  (a foreign-key-shaped check against another teacher's module or live class). Two existing tests
+  depend on this: a foreign `moduleId` or `liveClassId` must be `not_found` with
+  `storage.createUploadUrl` never called. Reordering to sign-first would either break those tests
+  or require a new separate ownership-read repository method, which is outside Phase A's file list
+  (`apps/worker/src/storage/roundtrip.ts`, `apps/web/src/storage/presign.ts`,
+  `apps/web/src/studio/routes.ts`, `docker/env.example`) and risks the scope creep the plan's exit
+  conditions warn against. The net effect for the accept line is the same either way: a signing
+  failure leaves no visible `uploading` row.
+
+---
+
+### 27 Oct 2026 · 8.2a approve the merge (repositories and storage paths) · decided by lead · risk: high
+- Decided: merge 8.2a. It touches the risky path packages/db/src/repositories/** (a read-only modules.list(), scoped like ids()); security-reviewer and database-reviewer ran and found nothing above MEDIUM, and code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+- Why: storage now fails closed in production, signing happens before any write on replace, a signing failure on create removes its row, and the uploads page stops updating after unmount; every finding is MEDIUM or LOW.
+
+---
+
+### 27 Oct 2026 · 8.2a signing-failure orphan and onAddLink guard deferred to 8.2q · decided by lead · risk: low
+- Decided: defer two MEDIUMs to 8.2q: (1) apps/web/src/studio/routes.ts create: if the signing fails and the cleanup delete also fails, an uploading row survives, and the ingest sweep only scans processing rows; 8.2q makes the sweep reconcile stale uploading rows and tests the cleanup-failure branch; (2) apps/web/app/teacher/uploads/UploadsView.tsx onAddLink lacks the unmount guard the other handlers got. S3_REGION joining the production-required list also goes to 8.2q.
+- Why: (1) needs two failures in a row and leaves a row with no file and no data, which the teacher can delete; 8.2q already owns the upload-centre retry and cleanup work. (2) is a no-op state update after unmount in React 19, not a user-visible bug.
+
+---
+
+### 27 Oct 2026 · 8.2a two LOWs left as is · decided by lead · risk: low
+- Decided: wontfix (1) the production storage-config check duplicated in apps/web/src/storage/presign.ts and apps/worker/src/storage/roundtrip.ts, and (2) no row limit on packages/db/src/repositories/modules.ts list().
+- Why: (1) the two apps don't share a storage package, and a shared helper in packages/contracts would need an ADR for a few lines; both copies have their own tests. (2) list() has the same bound as the existing ids() (one course per teacher in the MVP); both get a cap together if that changes.
+
+---
+
+### 27 Oct 2026 · 8.2a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 182 tool calls by harness count (Phase A 64, Phases B and C 118; the agents reported 32, 19 and 42) against a plan budget of 110.
+- Why: Phase C added a db repository method with an integration test and a full dependents gate; the work is done and the reviewers approved.
+
+---
+
+### 27 Oct 2026 · 0.20f step-count measure instead of the fallback · decided by builder · risk: low
+- Decided: used the preferred step-count approach (patching `String.prototype[Symbol.iterator]`
+  to count character-scan work), not the 3-attempts-pass-if-any-under-bound fallback the plan
+  allowed.
+- Why: both `breakFenceRuns` and `neutraliseForgedLabel` scan their input with exactly one
+  `for (const ch of text)` loop (no other seam, like a regex callback or exposed counter, exists
+  without touching the source files, which the plan forbids), and that loop's iterator calls are
+  interceptable from a test file alone. This gives an exact, load-independent step count, so the
+  acceptance's "does not use wall-clock ratios" is met outright and the fallback and its logged
+  deviation are not needed.
+
+---
+
+### 27 Oct 2026 · 0.20f self-test input size · decided by builder · risk: low
+- Decided: the quadratic self-test uses its own small `n = 200` via a new optional third
+  parameter on `expectLinear`, instead of the real check's `n = 4,000`.
+- Why: a genuine doubly-nested scan (needed so the self-test exercises real quadratic work, not a
+  mocked clock) at `n = 4,000` does order `(16 * 4,000)^2 ≈ 4` billion no-op iterations at the 16x
+  size, which is real, slow CPU work; it hit the default 20 s test timeout under load (see red
+  evidence above) even though no wall clock is read anywhere in the measure itself. `n = 200`
+  keeps the same 16x shape (so the ratio math is identical) while finishing in milliseconds.
+
+---
+
+### 27 Oct 2026 · 0.20f step count plus an absolute ceiling, no wall-clock ratio · decided by builder · risk: low
+- Decided: the measure is the original step count (`countStringIteratorSteps`/`expectLinear`,
+  unchanged) *plus* a second, independent absolute wall-clock ceiling (`expectUnderCeiling`,
+  `Date.now()`-based, a fixed `2_000` ms bound, not a ratio). No wall-clock ratio is used anywhere.
+- Why: fix round 1 found the step count blind to regex-internal work (`.replace`, `.matchAll`,
+  regex `exec`), so a catastrophic-backtracking regex in `forgedLabelPattern` or
+  `decodeHtmlEntities` would pass unseen. An absolute ceiling (not a ratio) catches that: ordinary
+  CI load cannot push a sub-100-ms real scan past a 2-second ceiling, but a backtracking or
+  quadratic regex blow-up on a similarly sized hostile string takes seconds to many seconds (shown
+  by the self-test), so the gap between "real work" and "blow-up" stays wide without any
+  load-dependent tuning. This keeps the acceptance's "does not use wall-clock ratios" intact: the
+  step-count ratio check (16x input -> ratio < 64) still carries all the linear-vs-quadratic
+  judgment; the new check only ever compares one elapsed time to one fixed constant.
+
+---
+
+### 27 Oct 2026 · 0.20f approve the test-only change under packages/harness/src/pedagogy · decided by lead · risk: high
+- Decided: merge 0.20f. It changes only packages/harness/src/pedagogy/modelRequest.test.ts and packages/harness/src/pipeline/runner.test.ts; no source file changes. code-reviewer (required for the group) and typescript-reviewer approved after one fix round.
+- Why: the change is test-only; the earlier HIGH (the step count missed regex work) is fixed by an absolute 2,000 ms ceiling over the real functions, confirmed by both reviewers.
+
+---
+
+### 27 Oct 2026 · 0.20f budget overrun accepted · decided by lead · risk: low
+- Decided: accept 177 tool calls against a budget of 40 (build 48, fix round 1 97, fix round 2 32 by harness count; the agents reported 29, 44 and 14).
+- Why: the fix round had to measure timings under load to pick a ceiling and a self-test size; the work is done and both reviewers approved.
+
+---
+
+### 27 Oct 2026 · 0.20f backtracking self-test grows its input until it crosses the ceiling · decided by lead · risk: low
+- Decided: replace the fixed k=25 in the backtracking self-test of packages/harness/src/pedagogy/modelRequest.test.ts with a search: k grows from 16 by 1 until the first run passes the 2,000 ms ceiling (capped at 40, test timeout about 30 s), then the test asserts expectUnderCeiling throws. This fixes the reviewers' thin-margin MEDIUM and the CI timeout (fix round 2). No re-review: the change is test-only, inside the self-test, and leaves expectUnderCeiling, the ceiling and the real-input test unchanged.
+- Why: an earlier lead call left the margin as is, reasoning that CI runners are slower so the margin is wider; that was wrong in the other direction: on CI the fixed k=25 took 28.8 s and hit the 20 s test timeout. A search adapts to the machine's speed either way.
+
+---
+
 ### 27 Oct 2026 · 1.4e timeout design · decided by builder · risk: low
 - Decided: the shared "ready" entry has no timeout of its own; only individual callers time
   out via their own `setTimeout`. The `ready` listener (and the WeakMap entry) is removed when

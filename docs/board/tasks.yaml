@@ -2542,10 +2542,32 @@ tasks:
   accept: a production worker or web with missing or dev storage config refuses to start ingest or uploads and logs only a code; no orphan uploading row after a signing failure.
   deps:
   - '8.2'
-  status: running
+  status: done
   branch: m13/8.2a-storage-hardening
   risk: risky
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 935
+    tokens_in: 3198
+    tokens_out: 357473
+    cache_read_tokens: 107938010
+    wall_time_seconds: 559913
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        MEDIUM: 2
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 2
+    human_questions: 0
 - id: 5.10b
   milestone: M13
   title: '5.10 review follow-ups: teacherQuestions.answer locks the group rows in one id-ordered statement (no 40P01 deadlock between two answers in one group) and takes the agent lock first like open;
@@ -2987,9 +3009,9 @@ tasks:
   - 6.4a
   - 6.3b
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.3c-mistake-tagging
+  model: plan:sonnet build:sonnet
 - id: 6.2a
   milestone: M13
   title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
@@ -10830,20 +10852,44 @@ tasks:
   deps:
   - 0.20d
   risk: risky
-  status: running
+  status: done
   branch: m13/0.20f-harness-timing-flake
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 614
+    tokens_in: 2170
+    tokens_out: 135501
+    cache_read_tokens: 78460814
+    wall_time_seconds: 5837
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2q
   milestone: M13
   title: 'Upload-centre race, retry and quota hardening (deferred from 8.2a, see docs/tasks/8.2a/plan.md): complete compares storageKey before setting processing (409 on mismatch, like failIfStorageKey);
-    dropObject retries a failed S3 delete 2-3 times before logging; create gets a per-teacher rate limit like addLink'
+    dropObject retries a failed S3 delete 2-3 times before logging; create gets a per-teacher rate limit like addLink; from the 8.2a review: the ingest sweep also reconciles stale uploading rows (a signing
+    failure whose cleanup delete also failed leaves one), with a test for the cleanup-failure branch in apps/web/src/studio/routes.ts; UploadsView onAddLink gets the same unmount guard as the other async
+    handlers; S3_REGION joins REQUIRED_IN_PRODUCTION in apps/web/src/storage/presign.ts and apps/worker/src/storage/roundtrip.ts'
   accept: a replace during complete answers 409 and leaves the row unchanged; a failed S3 delete is retried before it is logged; create past the limit answers 429; web and db tests green.
   deps:
   - 8.2a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2q-upload-hardening
+  model: plan:sonnet build:sonnet
 - id: 8.2r
   milestone: M13
   title: 'Documents list index and 0017 validate-at-scale hygiene (deferred from 8.2a): composite index (teacher_id, created_at desc, id desc) for documents.listForTeacher, and a new migration that re-adds
@@ -10906,6 +10952,18 @@ tasks:
     suite'
   accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
   deps: []
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 11.4j
+  milestone: M13
+  title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
+    add an error listener to the drained stdout/stderr streams; keep the error name (not content) when a run() failure is mapped to a validation error, so a missing binary differs from bad input; make the
+    oversized-output test count reads instead of checking the directory after cleanup'
+  accept: each item is fixed with a test; @edmate/worker typecheck, lint and test green.
+  deps:
+  - 11.4d
   risk: low
   status: todo
   branch: null

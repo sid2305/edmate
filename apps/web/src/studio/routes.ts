@@ -276,6 +276,11 @@ const create: Work = async (b, scope, req) => {
   if (body.liveClassId !== undefined && !isRecordingType(type)) return validation(MSG.type);
   const id = b.newDocumentId();
   const key = newStorageKey(scope.teacherId, id, type);
+  // Unlike `replace` (whose ownership check is a plain read, so it can sign before writing),
+  // `create`'s moduleId/liveClassId ownership check happens inside `documents.create` itself (a
+  // foreign-key-shaped check, not a separate read) -- that write must stay first so a foreign id
+  // is `not_found` with nothing signed. A signing failure *after* that write is then cleaned up:
+  // the row is deleted so no orphan `uploading` row survives the request.
   await b.documents.create(scope, {
     id,
     moduleId: body.moduleId,
@@ -285,11 +290,21 @@ const create: Work = async (b, scope, req) => {
     rightsDeclared: body.rightsDeclared,
     ...(body.liveClassId === undefined ? {} : { liveClassId: body.liveClassId }),
   });
-  const uploadUrl = await b.storage.createUploadUrl({
-    key,
-    contentType: type.contentType,
-    contentLength: body.byteSize,
-  });
+  let uploadUrl: string;
+  try {
+    uploadUrl = await b.storage.createUploadUrl({
+      key,
+      contentType: type.contentType,
+      contentLength: body.byteSize,
+    });
+  } catch (error) {
+    try {
+      await b.documents.delete(scope, id);
+    } catch (cleanupError) {
+      b.log.error('studio.create_cleanup_failed', { error: errorName(cleanupError) });
+    }
+    throw error;
+  }
   return ok(
     { documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } },
     201,
