@@ -8606,9 +8606,32 @@ tasks:
   accept: web and db typecheck, lint and test green; each item fixed or given a logged wontfix.
   deps:
   - 9.4e
-  status: running
+  status: done
   branch: m13/9.4f-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 154
+    tokens_in: 548
+    tokens_out: 20771
+    cache_read_tokens: 10206126
+    wall_time_seconds: 961
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
@@ -9339,7 +9362,7 @@ tasks:
 - id: 1.7e
   milestone: M13
   title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain
-    next build and re-run build-smoke'
+    next build and re-run build-smoke; also check the dev-mode bullmq/@edmate/queue break at /api/health (next dev) before dropping the Playwright --webpack flag (9.4f review LOW)'
   accept: plain next build succeeds and build-smoke passes on the Turbopack build, or the reason to stay on --webpack is logged
   deps:
   - 1.7b
