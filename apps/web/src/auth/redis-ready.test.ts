@@ -2,7 +2,13 @@
 // is `ready`. The sign-in counters wait for `ready` with a bounded timeout, then fail closed.
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readyCounters, RedisNotReadyError, REDIS_READY_TIMEOUT_MS, whenReady } from './redis-ready';
+import {
+  pendingWaiterCount,
+  readyCounters,
+  RedisNotReadyError,
+  REDIS_READY_TIMEOUT_MS,
+  whenReady,
+} from './redis-ready';
 
 function fakeRedis(status: string) {
   return Object.assign(new EventEmitter(), { status });
@@ -57,6 +63,34 @@ describe('whenReady', () => {
     expect(redis.listenerCount('ready')).toBe(0);
   });
 
+  it('a second caller with a shorter timeout rejects at its own deadline while the first still waits', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 1_000);
+    const second = whenReady(redis, 200);
+    const checkSecond = expect(second).rejects.toBeInstanceOf(RedisNotReadyError);
+    await vi.advanceTimersByTimeAsync(200);
+    await checkSecond;
+    expect(redis.listenerCount('ready')).toBe(1); // first is still waiting
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(first).resolves.toBeUndefined();
+  });
+
+  it('a second caller with a longer timeout resolves if ready fires after the first deadline but before its own', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 200);
+    const second = whenReady(redis, 1_000);
+    const checkFirst = expect(first).rejects.toBeInstanceOf(RedisNotReadyError);
+    await vi.advanceTimersByTimeAsync(200);
+    await checkFirst;
+    expect(redis.listenerCount('ready')).toBe(1); // second is still waiting, listener stays
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(second).resolves.toBeUndefined();
+  });
+
   it('a second outage after the first resolves registers a fresh listener (not stuck cached)', async () => {
     const redis = fakeRedis('connecting');
     const first = whenReady(redis, 1_000);
@@ -70,6 +104,69 @@ describe('whenReady', () => {
     redis.status = 'ready';
     redis.emit('ready');
     await expect(second).resolves.toBeUndefined();
+  });
+  it('when every waiter times out before ready, nothing resolves late and no listener is left', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 100);
+    const second = whenReady(redis, 200);
+    const checkFirst = expect(first).rejects.toBeInstanceOf(RedisNotReadyError);
+    const checkSecond = expect(second).rejects.toBeInstanceOf(RedisNotReadyError);
+    await vi.advanceTimersByTimeAsync(200);
+    await checkFirst;
+    await checkSecond;
+    expect(redis.listenerCount('ready')).toBe(0);
+    expect(pendingWaiterCount(redis)).toBe(0);
+    redis.status = 'ready';
+    redis.emit('ready');
+    // Nothing to assert resolving late: both promises already settled (rejected) above. A late
+    // `ready` emit must not throw or resolve either promise again.
+    await expect(first).rejects.toBeInstanceOf(RedisNotReadyError);
+    await expect(second).rejects.toBeInstanceOf(RedisNotReadyError);
+  });
+
+  it('a new caller after the last timeout gets a fresh listener and resolves on the next ready', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 100);
+    const checkFirst = expect(first).rejects.toBeInstanceOf(RedisNotReadyError);
+    await vi.advanceTimersByTimeAsync(100);
+    await checkFirst;
+    expect(redis.listenerCount('ready')).toBe(0);
+
+    const onceSpy = vi.spyOn(redis, 'once');
+    const second = whenReady(redis, 1_000);
+    expect(onceSpy).toHaveBeenCalledTimes(1);
+    expect(redis.listenerCount('ready')).toBe(1);
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(second).resolves.toBeUndefined();
+    expect(redis.listenerCount('ready')).toBe(0);
+  });
+
+  it('bounded memory: overlapping waves of callers never grow the waiting set beyond who is in flight', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const waveSize = 100;
+    const waves = 10;
+    let maxObserved = 0;
+    const pendingPromises: Array<Promise<unknown>> = [];
+
+    for (let wave = 0; wave < waves; wave++) {
+      for (let i = 0; i < waveSize; i++) {
+        const p = whenReady(redis, 50);
+        pendingPromises.push(p.catch(() => undefined));
+      }
+      maxObserved = Math.max(maxObserved, pendingWaiterCount(redis));
+      // Advance past this wave's timeout before starting the next wave, so each wave's callers
+      // leave the waiting set before the next wave joins.
+      await vi.advanceTimersByTimeAsync(50);
+      expect(pendingWaiterCount(redis)).toBe(0);
+    }
+
+    expect(maxObserved).toBeLessThanOrEqual(waveSize);
+    await Promise.all(pendingPromises);
+    expect(redis.listenerCount('ready')).toBe(0);
   });
 });
 
