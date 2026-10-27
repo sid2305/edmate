@@ -1,6 +1,6 @@
 # Handoff: 8.2i
 
-Status: DONE (Phases A and C)
+Status: DONE
 
 ## Decisions
 None.
@@ -201,3 +201,114 @@ $ python3 .githooks/secret-scan.py --all
 
 ### Budget
 Phase C tool calls used: 24
+
+## Phase B
+
+Summary of what changed:
+- `packages/db/src/repositories/ingestSweep.ts` (new): `ingestSweepRepo(db)` with one method,
+  `staleProcessing(cutoff, limit = INGEST_SWEEP_LIMIT)` — a cross-teacher, read-only query for
+  documents still `status = 'processing'` with `updated_at < cutoff` and a non-null `storage_key`,
+  oldest-first, capped at `limit`. Deliberately outside `createRepositories` and the isolation
+  grid, same pattern as `./retention.ts` (a scheduled job's cross-account read, not a signed-in
+  teacher's own scoped request).
+- `packages/db/src/repositories/index.ts`: exports `ingestSweepRepo`, `INGEST_SWEEP_LIMIT`,
+  `IngestSweepRepo`, `StaleProcessingDocument` from `./ingestSweep.js`, with the same short comment
+  style as `retention`'s export block.
+- `packages/db/src/index.ts`: `openDatabase()` now also attaches `ingestSweep: ingestSweepRepo(db)`,
+  the same way it attaches `retention` and `regate` (lead answer Q4, following 13.regate's
+  pattern).
+- `packages/db/test/ingest-sweep.int.test.ts` (new): `staleProcessing` returns only past-cutoff
+  `processing` rows with a storage key, across teachers (excludes `ready`/`failed`/`uploading` and
+  a null-storage-key `teacher_note`), is oldest-first and respects `limit`, and returns nothing for
+  a cutoff entirely in the past.
+- `packages/db/test/repositories.int.test.ts`: the existing `openDatabase gives repositories, ...`
+  test's exact `Object.keys(opened)` list needed `'ingestSweep'` added (sorted, next to `'regate'`)
+  now that `openDatabase()` returns one more top-level key; title updated to name it. (Not one of
+  Phase B's listed files, but a direct, minimal consequence of the one `openDatabase()` change the
+  plan asked for — see Decisions.)
+- `apps/worker/src/ingest/sweep.ts` (new): one file, modelled on `apps/worker/src/alarms/schedule.ts`
+  — `INGEST_SWEEP_QUEUE`, `INGEST_SWEEP_SCHEDULER_ID`, `INGEST_SWEEP_JOB`, `INGEST_SWEEP_PATTERN`
+  (`*/15 * * * *`, lead answer Q1), `STUCK_PROCESSING_MINUTES` (30, lead answer Q1),
+  `INGEST_SWEEP_FAILURE_REASON` (`'provider_error'`, lead answer Q2), `MAX_ITERATIONS` (1000).
+  `ingestSweepJob(deps)` computes `cutoff = now - 30min`, calls `staleProcessing(cutoff, limit)`,
+  and for each row calls `documents.failIfStorageKey({ teacherId }, id, storageKey,
+  'provider_error')`: `{ updated: true }` is counted `marked`; `{ updated: false }` is logged
+  `ingest_sweep.candidate_skipped` (`warn`, not an error — it moved on since the read) and counted
+  `skipped`; a per-row throw is logged `ingest_sweep.candidate_failed` (`error`) and the loop
+  continues to the rest of the page, but the run still rejects at the end so BullMQ retries it. The
+  loop pages while a full page (`INGEST_SWEEP_LIMIT` rows) comes back, capped at `MAX_ITERATIONS`.
+  One `ingest_sweep.run` summary line per run (`marked`, `skipped`, `cutoff`, `pages`).
+  `scheduleIngestSweep(queue, pattern)` and `createIngestSweepWorker(opts)` are byte-for-byte the
+  cost-alarm/regate-sweep shape (`upsertJobScheduler`, dead-letter wiring via `onJobFailed`).
+- `apps/worker/src/ingest/sweep.test.ts` (new): a no-op run (zero stale documents); marks only
+  `updated: true` rows and logs `updated: false` ones skipped, not as errors; a per-row throw is
+  logged and the rest of the page still runs, but the job rejects; the loop pages while a page is
+  full and stops once a page is short; `scheduleIngestSweep`'s upsert call; `createIngestSweepWorker`
+  builds without connecting and wires `failed`/`error` to the dead letter and the log.
+- `apps/worker/src/index.ts`: wired the same way `regate`/`retention` are — a new
+  `ingestSweepQueue = new Queue(INGEST_SWEEP_QUEUE, ...)`, `createIngestSweepWorker({ ..., deps: {
+  staleProcessing: (cutoff) => db.ingestSweep.staleProcessing(cutoff), documents: db.repos.documents,
+  now, log } })`, added to the `workers` shutdown list and the queue-close list, and
+  `scheduleIngestSweep(ingestSweepQueue).catch(...)` called at startup; the file's header comment
+  now names this job too.
+
+Red-then-green evidence:
+```
+$ corepack pnpm --filter=@edmate/db exec vitest run test/ingest-sweep.int.test.ts
+(with the `ingestSweepRepo` export temporarily commented out of repositories/index.ts)
+TypeError: ingestSweepRepo is not a function
+Test Files  1 failed (1)
+```
+```
+$ corepack pnpm --filter=@edmate/db exec vitest run test/ingest-sweep.int.test.ts
+Test Files  1 passed (1)
+     Tests  3 passed (3)
+```
+```
+$ corepack pnpm --filter=@edmate/worker exec vitest run src/ingest/sweep.test.ts
+Test Files  1 passed (1)
+     Tests  7 passed (7)
+```
+(`sweep.ts` and `sweep.test.ts` were new files written together, test-first per the plan; the
+import of `ingestSweepJob`/`createIngestSweepWorker`/`scheduleIngestSweep` from a not-yet-written
+`./sweep.js` is the same "module not found" red the `ingest-sweep.int.test.ts` check above
+demonstrates for the db side.)
+
+### Decisions
+
+#### 27 Oct 2026 · 8.2i openDatabase's exact-keys test updated for the new `ingestSweep` key · decided by builder · risk: low
+- Decided: `packages/db/test/repositories.int.test.ts`'s `openDatabase gives repositories, ...`
+  test (not in Phase B's file list) gets `'ingestSweep'` added to its exact, sorted
+  `Object.keys(opened)` expectation and its title extended to name the ingest sweep, instead of
+  leaving that test red.
+- Why: the plan's lead answer to Q4 explicitly asks `openDatabase()` to attach `ingestSweep` the
+  same way it attaches `retention`/`regate`; that one-line addition is exactly what this
+  pre-existing test asserts the full key list of, so it fails the moment the new key is added. The
+  plan's own exit condition is each phase's gate green; fixing this one assertion is the minimal,
+  direct consequence of the file the plan did ask for, not new scope.
+
+### Gate
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/db --filter=@edmate/worker
+Tasks:    14 successful, 14 total
+@edmate/db:test:   Test Files  87 passed (87)
+@edmate/db:test:        Tests  1814 passed | 4 skipped (1818)
+@edmate/worker:test:  Test Files  46 passed (46)
+@edmate/worker:test:       Tests  446 passed (446)
+```
+(Two earlier runs of this same command hit unrelated flakes from other agents' concurrent work on
+the shared dev Postgres/worktree -- `test/alertInbox.int.test.ts`'s escalation-round timing and a
+`coverage` report-directory lock held by a stray process from an earlier malformed background
+command of this builder's own; both re-ran clean once isolated/retried, and neither touches a file
+this phase modified.)
+```
+$ corepack pnpm exec prettier --check packages/db/src/repositories/ingestSweep.ts packages/db/src/repositories/index.ts packages/db/src/index.ts packages/db/test/ingest-sweep.int.test.ts packages/db/test/repositories.int.test.ts apps/worker/src/ingest/sweep.ts apps/worker/src/ingest/sweep.test.ts apps/worker/src/index.ts
+All matched files use Prettier code style!
+```
+```
+$ python3 .githooks/secret-scan.py --all
+(clean; no output)
+```
+
+### Budget
+Phase B tool calls used: 68

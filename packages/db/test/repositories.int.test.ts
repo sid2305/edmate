@@ -6302,12 +6302,13 @@ describe.skipIf(!up)(
       expect(await snapshot()).toBe(before);
     });
 
-    it('openDatabase gives repositories, the identity store, retention jobs, the regate sweep and a close, without a raw handle', async () => {
+    it('openDatabase gives repositories, the identity store, retention jobs, the regate sweep, the ingest sweep and a close, without a raw handle', async () => {
       const opened = openDatabase({ DATABASE_URL: TEST_URL });
       try {
         expect(Object.keys(opened).sort()).toEqual([
           'close',
           'identity',
+          'ingestSweep',
           'regate',
           'repos',
           'retention',

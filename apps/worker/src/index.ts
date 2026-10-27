@@ -5,9 +5,10 @@
 // staff console acknowledges through the repository, not this worker) and
 // the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows) and
 // the publish-gate worker (8.7: one gate run at a time; models, content and suites from the
-// environment, failing closed per run when any is missing) and the regate sweep (13.regate:
+// environment, failing closed per run when any is missing), the regate sweep (13.regate:
 // every 15 minutes, re-runs the gate for a live agent whose material changed since its last
-// passed/published run).
+// passed/published run) and the stuck-`processing` ingest sweep (8.2i Phase B: every 15 minutes,
+// fails any document stuck `processing` for 30 minutes).
 // REDIS_URL and DATABASE_URL come from the environment (docker/compose.yaml sets both).
 import { S3Client } from '@aws-sdk/client-s3';
 import { openDatabase } from '@edmate/db';
@@ -26,6 +27,11 @@ import { COST_ALARM_QUEUE } from './alarms/schedule.js';
 import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
 import { createGateWorker, livePrepareGate } from './gate/workers.js';
 import { createIngestGateway, createIngestWorker } from './ingest/index.js';
+import {
+  createIngestSweepWorker,
+  INGEST_SWEEP_QUEUE,
+  scheduleIngestSweep,
+} from './ingest/sweep.js';
 import {
   createWeeklyInsightsWorker,
   insightsContentDir,
@@ -58,6 +64,7 @@ const weeklyInsightsQueue = new Queue(WEEKLY_INSIGHTS_QUEUE, { connection });
 const retentionQueue = new Queue(RETENTION_QUEUE, { connection });
 const alertQueue = new Queue(ALERT_QUEUE, { connection });
 const regateQueue = new Queue(REGATE_QUEUE, { connection });
+const ingestSweepQueue = new Queue(INGEST_SWEEP_QUEUE, { connection });
 const gateProducerQueue = createGateQueue(connection);
 
 // Task 3.9c (found by 3.9b): warm preGuard's pattern matchers before the first queue worker
@@ -157,6 +164,21 @@ const regate = createRegateSweepWorker({
   },
 });
 
+// The stuck-`processing` sweep (task 8.2i Phase B): every 15 minutes, marks `failed` any document
+// still `processing` 30 minutes after its last write (a worker that crashed, was redeployed or
+// lost its connection mid-attempt).
+const ingestSweep = createIngestSweepWorker({
+  connection,
+  deadLetter,
+  autorun: true,
+  deps: {
+    staleProcessing: (cutoff) => db.ingestSweep.staleProcessing(cutoff),
+    documents: db.repos.documents,
+    now: () => new Date(),
+    log,
+  },
+});
+
 // The ingest worker (task 8.2 Phase 2) needs the OpenAI key; without one it is skipped, same as a
 // dev box with no provider keys configured for the turn-side adapters.
 let ingest: ReturnType<typeof createIngestWorker> | undefined;
@@ -209,6 +231,7 @@ const workers = [
   safetyEvent,
   gate,
   regate,
+  ingestSweep,
   ...(ingest ? [ingest] : []),
 ];
 
@@ -242,6 +265,11 @@ scheduleRegateSweep(regateQueue).catch((error: unknown) => {
   process.exitCode = 1;
 });
 
+scheduleIngestSweep(ingestSweepQueue).catch((error: unknown) => {
+  log({ level: 'error', event: 'ingest_sweep.schedule_failed', error: describeError(error) });
+  process.exitCode = 1;
+});
+
 // Dead-letter entries expire after 7 days (FAILED_JOB_TTL_SECONDS): prune at start, then hourly.
 const PRUNE_EVERY_MS = 60 * 60 * 1_000;
 void pruneDeadLetters(deadLetter, log);
@@ -260,6 +288,7 @@ async function shutdown(signal: string): Promise<void> {
     retentionQueue.close(),
     alertQueue.close(),
     regateQueue.close(),
+    ingestSweepQueue.close(),
     gateProducerQueue.close(),
   ]);
   await db.close();
