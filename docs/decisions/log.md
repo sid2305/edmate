@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.4c evidenceSkip reason codes · decided by builder · risk: low
+- Decided: Use guard name `evidenceSkip` with `action: 'no_topic'` (no stored `practiceTopicId`)
+  or `action: 'bad_topic_id'` (stored but fails the `id()` shape), carried through
+  `TraceBuilder.addGuards` (name/ok/action only, already shipped, no contracts change).
+- Why: the plan asked for one of the two reason codes without naming the guard's `name` field or
+  distinguishing the two failure branches; `addGuards` is the one existing observability path that
+  needs no `packages/contracts` change (`TurnTraceSchema.guards` already types `name`/`action` as
+  plain strings), and splitting the two causes into distinct action codes matches the plan's own
+  wording ("no_topic / bad_topic_id").
+
+---
+
+### 27 Oct 2026 · 6.4c end route `'limit'` response shape · decided by builder · risk: low
+- Decided: Map `RepositoryError('limit')` to `apiError('limit_reached', MSG.limit, 409)`, the same
+  code/status `apps/web/src/studio/packages.ts`'s `packageLimit()` already uses for the identical
+  `RepositoryErrorKind`, but without that route's extra `reason` body field (session-ending has no
+  equivalent caller-facing reason to name).
+- Why: the plan said "find the existing mapping... and follow it"; `packages.ts` is the one
+  existing caller that already maps this exact repository error kind to a response, and session
+  end has no end-user-controllable packages cap this error would plausibly carry (no production
+  caller of `end`/`get`/`attachSummary`/`studentTurnScope` returns `'limit'` today — the case only
+  closes the switch's exhaustiveness for a future caller).
+
+---
+
+### 27 Oct 2026 · 6.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 107 harness-counted tool calls against a 55-call budget (1.95x); the lead also corrected the handoff's summary-test word count (80 words, not 310).
+- Why: the work stayed inside the plan's file list across two packages and the web route, and both reviewers approved with one LOW, which goes to 6.4d. Small multi-package LOW sweeps run long; future plans for them get about 90 calls.
+
+---
+
 ### 27 Oct 2026 · 13.3c sign-in session length · decided by builder · risk: high
 - Decided: `apps/web/src/auth/config.ts`'s `SESSION_MAX_AGE_S` is `7 * 24 * 60 * 60` (604,800
   seconds), replacing the prior 30-day value.
