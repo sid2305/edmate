@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2p budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (86 harness tool calls against a plan budget of 30; the builder reported 34).
+- Why: the index, the comment-only 0040 migration, its POST_MIGRATE_STEPS entry, the hand-made snapshot and journal, and the EXPLAIN test all landed as planned; the full db gate and its dependent CLI flake check account for most of the extra calls, and both reviewers approved with no findings.
+
+---
+
 ### 27 Oct 2026 · 9.3g merge of db repositories and staff consoles · decided by lead · risk: high
 - Decided: merge the setVerification stale-row audit and staff action (`packages/db/src/repositories/teacher-profiles.ts`), lift's returned agent status (`packages/db/src/repositories/takedowns.ts`, `README.md`), and the staff API handlers and consoles (`apps/web/app/api/staff/**`, `apps/web/app/staff/**`), all risky paths.
 - Why: security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved with no findings above LOW; staff-only gating is unchanged, the audit writes share the state change's transaction, and the new lock-order tests are real two-connection races.
