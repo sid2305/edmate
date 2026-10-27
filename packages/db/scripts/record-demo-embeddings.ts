@@ -2,7 +2,9 @@
 // the demo recall set, so the "with embeddings" recall run can use real vectors without calling a
 // model in tests. Never run by tests or CI; it refuses without `--live` and without the key.
 //
-// The human runs it once, from the repo root, with their own key in the environment only:
+// The human runs it once, from the repo root, with their own key in the environment only, on the
+// Node version this repo's engines field pins (22.x; Node 22.18+ strips `.ts` types natively, no
+// flag needed — on an older 22.x build add `--experimental-strip-types` before the script path):
 //   corepack pnpm turbo run build --filter=@edmate/db...
 //   EDMATE_OPENAI_API_KEY=<key> node packages/db/scripts/record-demo-embeddings.ts --live
 // The key is read only through the gateway's environment key source and never written anywhere.
