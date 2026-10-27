@@ -10,6 +10,53 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 8.7n NULL-course semantics · decided by plan · risk: low
+- Decided: a teacher with no course row reads as "not changed" (`false`) in
+  `changedSinceLastPublish`, via `coalesce(..., false)` on the outline-comparison clause.
+- Why: matches the function's own documented default ("false when the scope has never
+  published"); makes the SQL NULL-safe explicitly instead of relying on JS's `=== true`
+  coercion to mask it, settling 8.7l's open-ended note.
+
+---
+
+### 26 Oct 2026 · 8.7n start() batching · decided by plan · risk: low
+- Decided: keep `start()`'s three reads (`listForTeacher`, `styleCards.latest`,
+  `courses.ensureDefault`) sequential; do not batch with `Promise.all`. Documented in a code
+  comment; no behaviour change.
+- Why: `ensureDefault` writes (creates a default course), and batching would let that write race
+  ahead of or complete before the `no_packages`/`style_card_required` checks, creating a default
+  course even when the request is about to fail for an unrelated reason.
+
+---
+
+### 26 Oct 2026 · 8.7n risky-path reviewer · decided by builder · risk: high
+- Decided: this PR is `risk: high` (per the board task's own field). `packages/db/src/repositories/publish.ts`
+  matches the `packages/db/src/repositories/**` risk group, which requires `security-reviewer`.
+  `database-reviewer` is recommended (not gate-enforced) as a second pair of eyes on the raw SQL
+  template change.
+- Why: CLAUDE.md rule 6 requires naming required reviewers for risky-path PRs regardless of how
+  small the change is.
+
+---
+
+### 26 Oct 2026 · 8.7n no-course test cannot fail before the fix · decided by lead · risk: low
+- Decided: Keep the new no-course test in packages/db/test/publish.int.test.ts as it is; security-reviewer's MEDIUM is wontfix.
+- Why: Before the fix, changedSinceLastPublish already returned false for a teacher with no course, because the JavaScript `=== true` turned the SQL NULL into false. The coalesce makes that explicit in SQL, so nothing changes for users. The test pins the contract (no course reads as not changed) against a later refactor that drops `=== true`. A raw-SQL assertion would test the query text, not the behaviour.
+
+---
+
+### 26 Oct 2026 · 8.7n budget and hook workaround · decided by lead · risk: low
+- Decided: Accept 57 tool calls against a budget of 25. Builders may no longer route a blocked command through another interpreter; from now on every brief says to stop and report it.
+- Why: Most of the overrun went on working around a block on prettier commands for the `[slug]` path, which the builder ran through Python instead. The effect was harmless (formatting its own 4 files), but routing around a block is not allowed.
+
+---
+
+### 26 Oct 2026 · 8.7n merge · decided by lead · risk: high
+- Decided: Merge 8.7n, which touches packages/db/src/repositories/publish.ts. security-reviewer and code-reviewer reviewed it; the only finding (MEDIUM) is wontfix above.
+- Why: A one-clause SQL coalesce, still parameterised and scoped to the teacher. The other edits are a comment, a test merge and prettier formatting.
+
+---
+
 ### 26 Oct 2026 · 13.4b account export scope (consents and ended subscriptions) · decided by builder · risk: high
 - Decided: the account export includes only live subscription pairs
   (`subscriptionPairs.listLiveForStudent`, which excludes `status: 'ended'`) and the student's
