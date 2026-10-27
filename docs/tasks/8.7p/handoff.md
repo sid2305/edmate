@@ -53,6 +53,14 @@ both no-separator glued cases) still pass unchanged.
   invariants (`toContain(span)`, `not.toMatch(phone digits)`) rather than pin exact spacing, so
   this choice does not need a test change if the lead prefers the other spacing later.
 
+### 26 Oct 2026 · 8.7p budget · decided by lead · risk: low
+- Decided: Accept 91 tool calls (harness count: build 35, fix round 56) against the plan's 30.
+- Why: The fix round replaced the quadratic span clip and added an adversarial timing test that had to fail on the old code first. The first build ran slightly over.
+
+### 26 Oct 2026 · 8.7p merge · decided by lead · risk: high
+- Decided: Merge 8.7p. It touches packages/db/src/repositories/redact-json.ts, a risky path whose required reviewer is security-reviewer. security-reviewer found a HIGH: redactString's clip loop scanned every exempt span for every phone-shaped match, which is quadratic on a crafted audit payload. The fix sorts and merges the spans once and walks them with forward-only pointers. security-reviewer re-reviewed it. On the adversarial payload, the old code took about 17 s and the new code about 62 ms. Over 20,000 fuzz strings the output is byte-for-byte the same as the old code's. code-reviewer and typescript-reviewer approved the original change.
+- Why: Audit redaction must stay correct (surrogate-safe email clipping, ids and digests not mistaken for phone numbers) and run in linear time. The remaining defence, capping input size before redaction in storable(), is task 8.7q.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db` → all 17 tasks successful
   (typecheck, lint, test for db + dependents web/worker); `redact-json.ts` at 100%
@@ -62,7 +70,7 @@ both no-separator glued cases) still pass unchanged.
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 24
+Tool calls used: 35 (harness count; the builder reported 24)
 
 ## Fix round (26 Oct 2026, security-reviewer HIGH)
 
@@ -144,4 +152,4 @@ unchanged, including the 8.7h fully-covered cases and the 8.7p clip-at-boundary 
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 ### Fix round budget
-Tool calls used: 26
+Tool calls used: 56 (harness count; the builder reported 26)
