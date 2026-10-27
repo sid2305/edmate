@@ -11,6 +11,7 @@ import {
   MISTAKE_PROPOSALS_MAX,
   type Repositories,
   RepositoryError,
+  STYLE_CARD_LIMITS,
 } from '../src/index.js';
 import {
   createDatabase,
@@ -54,7 +55,9 @@ describe.skipIf(!up)(`mistakeProposals on Postgres${up ? '' : ` (${SKIP_REASON})
         (${A.teacherId}, '[mp] teacher A', 'en', 'test', 'teacher'),
         (${B.teacherId}, '[mp] teacher B', 'en', 'test', 'teacher'),
         ('stu_mp_c', '[mp] student C', 'en', 'test', 'student'),
-        ('tch_mp_d', '[mp] teacher D (no style card)', 'en', 'test', 'teacher')`,
+        ('tch_mp_d', '[mp] teacher D (no style card)', 'en', 'test', 'teacher'),
+        ('tch_mp_e', '[mp] teacher E (at tagsMax)', 'en', 'test', 'teacher'),
+        ('tch_mp_g', '[mp] teacher G (concurrency)', 'en', 'test', 'teacher')`,
     );
     repos = createRepositories(handle.db);
     raw = new pg.Client({ connectionString: TEST_URL });
@@ -225,5 +228,92 @@ describe.skipIf(!up)(`mistakeProposals on Postgres${up ? '' : ` (${SKIP_REASON})
     expect(
       await failure(repos.mistakeProposals.reject({ teacherId: 'stu_x' }, 'owned_by_a')),
     ).toEqual({ kind: 'not_found', method: 'mistakeProposals.reject' });
+  });
+
+  it('approve refuses a 21st tag past STYLE_CARD_LIMITS.tagsMax; no new style-card version', async () => {
+    const E = { teacherId: 'tch_mp_e' };
+    const tagsAtCap = Array.from({ length: STYLE_CARD_LIMITS.tagsMax }, (_, i) => `cap_${i}`);
+    await repos.styleCards.create(E, { text: '[E] style', mistakeTags: tagsAtCap });
+    await repos.mistakeProposals.record(E, [{ tag: 'one_too_many', count: 1, lastSeen: AT }]);
+    const before = await repos.styleCards.latest(E);
+    expect(await failure(repos.mistakeProposals.approve(E, 'one_too_many'))).toEqual({
+      kind: 'limit',
+      method: 'mistakeProposals.approve',
+    });
+    const after = await repos.styleCards.latest(E);
+    expect(after).toEqual(before);
+    expect((await repos.mistakeProposals.listPending(E)).map((p) => p.tag)).toContain(
+      'one_too_many',
+    );
+  });
+
+  it('record for an existing non-teacher user is scope, not a silent write', async () => {
+    expect(
+      await failure(
+        repos.mistakeProposals.record({ teacherId: 'stu_mp_c' }, [
+          { tag: 'student_cannot_record', count: 1, lastSeen: AT },
+        ]),
+      ),
+    ).toEqual({ kind: 'scope', method: 'mistakeProposals.record' });
+    const rowCount = Number(
+      (
+        await raw.query<{ n: string }>(
+          'select count(*) as n from mistake_tag_proposals where teacher_id = $1',
+          ['stu_mp_c'],
+        )
+      ).rows[0]?.n,
+    );
+    expect(rowCount).toBe(0);
+  });
+
+  it('record for a teacherId with no such user is not_found, not a silent write', async () => {
+    expect(
+      await failure(
+        repos.mistakeProposals.record({ teacherId: 'no_such_user_mp' }, [
+          { tag: 'never_written', count: 1, lastSeen: AT },
+        ]),
+      ),
+    ).toEqual({ kind: 'not_found', method: 'mistakeProposals.record' });
+  });
+
+  it('concurrent record calls for the same teacher never push the stored row count over MISTAKE_PROPOSALS_MAX', async () => {
+    const G = { teacherId: 'tch_mp_g' };
+    const batchSize = 40;
+    const batch = (prefix: string) =>
+      Array.from({ length: batchSize }, (_, i) => ({
+        tag: `${prefix}_${i}`,
+        count: 1,
+        lastSeen: AT,
+      }));
+    // Three concurrent batches of 40 distinct new tags each (120 total) against a 100-row cap,
+    // starting from zero rows for this teacher: without a lock serialising the count check against
+    // the write, each of the three transactions can see "0 existing" and all three would pass.
+    await Promise.allSettled([
+      repos.mistakeProposals.record(G, batch('race_x')),
+      repos.mistakeProposals.record(G, batch('race_y')),
+      repos.mistakeProposals.record(G, batch('race_z')),
+    ]);
+    const rowCount = Number(
+      (
+        await raw.query<{ n: string }>(
+          'select count(*) as n from mistake_tag_proposals where teacher_id = $1',
+          [G.teacherId],
+        )
+      ).rows[0]?.n,
+    );
+    expect(rowCount).toBeLessThanOrEqual(MISTAKE_PROPOSALS_MAX);
+  });
+
+  it('record with a lastSeen that is not a valid offset-bearing ISO datetime is invalid; no row written', async () => {
+    expect(
+      await failure(
+        repos.mistakeProposals.record(A, [
+          { tag: 'bad_last_seen', count: 1, lastSeen: 'not-a-date' },
+        ]),
+      ),
+    ).toEqual({ kind: 'invalid', method: 'mistakeProposals.record' });
+    expect((await repos.mistakeProposals.listPending(A)).map((p) => p.tag)).not.toContain(
+      'bad_last_seen',
+    );
   });
 });

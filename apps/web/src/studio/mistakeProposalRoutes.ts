@@ -7,7 +7,12 @@
 //
 //   GET  /api/studio/mistake-proposals  -> { proposals: MistakeProposalRow[] } (the teacher's own)
 //   POST /api/studio/mistake-proposals  -> { tag, action } -> { approved, card } | { rejected }
-import { RepositoryError, type Repositories, type TeacherScope } from '@edmate/db';
+import {
+  RepositoryError,
+  STYLE_CARD_LIMITS,
+  type Repositories,
+  type TeacherScope,
+} from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { apiError } from '../auth/errors';
@@ -29,8 +34,9 @@ const MSG = {
   failed: 'Something went wrong. Try again.',
 } as const;
 
-// Mirrors the repository's own tag shape; an overlong or empty tag is refused before any call.
-const Tag = z.string().trim().min(1).max(60);
+// Mirrors the repository's own tag shape (task 6.3f fix 5: the cap itself, not a copy of its
+// value); an overlong or empty tag is refused before any call.
+const Tag = z.string().trim().min(1).max(STYLE_CARD_LIMITS.tagMaxChars);
 
 const DecideSchema = z.strictObject({ tag: Tag, action: z.enum(['approve', 'reject']) });
 

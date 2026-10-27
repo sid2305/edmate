@@ -6,7 +6,12 @@
 //   POST /api/studio/style-card/draft  -> { draft: { text, mistakeTags } } (nothing written)
 //   PUT  /api/studio/style-card        -> 201 { card: StyleCard } (a new version)
 import { type ModelGateway, StyleCardSchema } from '@edmate/contracts';
-import { RepositoryError, type Repositories, type TeacherScope } from '@edmate/db';
+import {
+  RepositoryError,
+  STYLE_CARD_LIMITS,
+  type Repositories,
+  type TeacherScope,
+} from '@edmate/db';
 import { draftStyleCard, IngestError } from '@edmate/ingest';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -36,7 +41,7 @@ const MSG = {
 
 // Tag caps mirror the repository's (STYLE_CARD_LIMITS): a candidate the save would refuse is
 // refused here first, before any model call.
-const Candidate = z.string().trim().min(1).max(60);
+const Candidate = z.string().trim().min(1).max(STYLE_CARD_LIMITS.tagMaxChars);
 
 const answerShape = Object.fromEntries(
   STYLE_CARD_QUESTIONS.map((k) => [k, z.string().max(INTERVIEW_LIMITS.answerMaxChars).optional()]),
