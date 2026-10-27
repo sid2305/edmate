@@ -415,7 +415,9 @@ export function teacherProfilesRepo(db: Db) {
      * of the role column — this is a read, not a write, so no `FOR SHARE` is needed, unlike
      * `setVerification`'s `by` check). Joins `users` for the declared name and email, same
      * precedent as `identity.getUserByEmail`: staff need them to actually check identity. A
-     * malformed `by` is `invalid`; a well-formed `by` that is not staff is `scope`.
+     * malformed `by` is `invalid`; a well-formed `by` that is not staff is `scope`. Also carries
+     * the public display name (slug-fallback, same source as discovery's public reads, task
+     * 9.2g), so staff approve the name students will see.
      */
     async listPendingForStaff(by: unknown): Promise<TeacherVerificationQueueRow[]> {
       const method = 'teacherProfiles.listPendingForStaff';
@@ -427,6 +429,7 @@ export function teacherProfilesRepo(db: Db) {
           id: teacherProfiles.id,
           userId: teacherProfiles.userId,
           slug: teacherProfiles.slug,
+          displayName: sql<string>`coalesce(${teacherProfiles.displayName}, ${teacherProfiles.slug})`,
           subject: teacherProfiles.subject,
           verificationStatus: teacherProfiles.verificationStatus,
           name: users.name,
@@ -448,7 +451,9 @@ export function teacherProfilesRepo(db: Db) {
      * since 9.3e. This closes that console gap with a read, not a write (no lock, unlike
      * `setVerification`'s own `by` check). A malformed `by` or `slug` is `invalid` before any SQL
      * (both are parsed first, same as every other method); a well-formed `by` who is not staff
-     * right now is `scope`; an unknown slug is `null`.
+     * right now is `scope`; an unknown slug is `null`. Also carries the public display name
+     * (slug-fallback, same source as discovery's public reads, task 9.2g), so staff approve the
+     * name students will see.
      */
     async findBySlugForStaff(
       by: unknown,
@@ -464,6 +469,7 @@ export function teacherProfilesRepo(db: Db) {
           id: teacherProfiles.id,
           userId: teacherProfiles.userId,
           slug: teacherProfiles.slug,
+          displayName: sql<string>`coalesce(${teacherProfiles.displayName}, ${teacherProfiles.slug})`,
           subject: teacherProfiles.subject,
           verificationStatus: teacherProfiles.verificationStatus,
           name: users.name,

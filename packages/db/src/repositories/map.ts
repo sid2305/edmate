@@ -316,6 +316,8 @@ const TeacherVerificationQueueRowSchema = z.strictObject({
   id: z.string().min(1),
   teacherId: z.string().min(1),
   slug: z.string().min(1),
+  /** The public display name (slug-fallback, task 9.2g), same value a student would see. */
+  displayName: z.string().min(1),
   subject: z.string().min(1),
   verificationStatus: z.enum(['pending', 'verified', 'rejected']),
   /** The declared name and email staff use to check identity (task 12.1a: staff-only). */
@@ -335,6 +337,7 @@ export function toTeacherVerificationQueueRow(
     id: string;
     userId: string;
     slug: string;
+    displayName: string;
     subject: string;
     verificationStatus: string;
     name: string;
@@ -348,6 +351,7 @@ export function toTeacherVerificationQueueRow(
       id: row.id,
       teacherId: row.userId,
       slug: row.slug,
+      displayName: row.displayName,
       subject: row.subject,
       verificationStatus: row.verificationStatus,
       name: row.name,
