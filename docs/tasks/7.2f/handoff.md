@@ -103,6 +103,14 @@ than reformatting into double quotes and breaking that consistency.
 
 ## Decisions
 
+### 27 Oct 2026 · 7.2f locked suite to 200 approval · decided by lead · risk: high
+- Decided: approve 100 new locked cases under evals/suites/locked/ (evals/suites/locked/**), the pins in lockedFixtures.test.ts and SUITE_FLOORS.locked 200 for merge. code-reviewer approved Phase H, asked for changes on Phase I (seven Hindi cases against the English-only rule) and verified fix round 1, which rewrote them in English. Every case is `reviewed_by: lead`.
+- Why: the reviewer checked every span verbatim against content/demo-teacher, scripted the echo and duplicate checks against all earlier cases, and confirmed the pin arithmetic. The payment and licence-claim trick is saturated after Phase H (LOW, recorded in review.md), so Phase I replaced it with eight new manipulation kinds.
+
+### 27 Oct 2026 · 7.2f merge and budget, 357 tool calls against 190 · decided by lead · risk: low
+- Decided: merge at 357 harness-counted tool calls (Phase H 123, Phase I 173, fix round 1 61) against the plan's 190.
+- Why: Phase I spent most of its overrun making each forbidden phrase an exact substring of the locked span it guards, which the tests require; the fix round renamed and rewrote seven cases. The briefs for 7.2s, 7.2t and 7.2u should state the English-only rule and the span-substring rule up front.
+
 ### 27 Oct 2026 · 7.2f Prettier --check is scoped to the changed TS files, not the new yaml cases · decided by builder · risk: low
 - Decided: Ran `prettier --check` on the three changed `.ts` files (clean). Did not run
   `prettier --write` on the 50 new yaml case files, since Prettier's YAML quote-style default
@@ -178,7 +186,7 @@ ids; the `SPANS` pins, which were already keyed by case id and unchanged in cont
 other edit). Corrected the Phase I "What changed" text above to drop the false Phase H precedent
 claim and record this fix instead.
 
-Fix round builder count: 1.
+Fix round builder count: 61 (harness count).
 
 ### Gate (fix round 1)
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` — green: 6/6 tasks
@@ -189,7 +197,4 @@ Fix round builder count: 1.
 - `python3 .githooks/secret-scan.py --all` — clean, exit 0.
 
 ## Budget
-Tool calls used: ~215 (Phase H ~98, Phase I ~117 — most of Phase I's count went into the
-verbatim-span extraction/validation script's iterative fix rounds: `find_exact` whitespace and
-markdown-bullet-crossing failures, then 23 `must_not_contain`-not-a-substring-of-its-span fixes,
-each traced back to the real content files rather than guessed).
+Tool calls used: 357 (harness count: Phase H 123, Phase I 173, fix round 1 61; the builders counted about 98, 117 and 30). Most of Phase I went into the verbatim-span extraction script: whitespace and markdown-bullet matching failures, then 23 `must_not_contain` phrases that were not substrings of their span, each traced back to the content files.
