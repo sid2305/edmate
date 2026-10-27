@@ -6,7 +6,12 @@
 // agent is not live right now) is `not_found`, exactly like the turn routes. `created` is true or
 // false either way the reply is `{ ok: true }`: a duplicate report is not an error (12.2 design).
 import { createHash } from 'node:crypto';
-import { RepositoryError, type Repositories } from '@edmate/db';
+import {
+  REPORT_CATEGORIES,
+  RepositoryError,
+  type ReportCategory,
+  type Repositories,
+} from '@edmate/db';
 import { TurnInputSchema } from '@edmate/contracts';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -32,9 +37,8 @@ const ParamsSchema = z.object({ id: z.string().min(1).max(200) });
 const ReportBody = z.strictObject({
   agentId: agentIdShape,
   messageId: z.string().min(1).max(200),
-  category: z.enum(['harmful', 'inappropriate', 'wrong_information', 'copyright', 'other']),
+  category: z.enum(REPORT_CATEGORIES),
 });
-type ReportCategory = z.infer<typeof ReportBody.shape.category>;
 
 /**
  * Task 12.2h: a grammatical excerpt per category for the staff alert inbox. A plain
