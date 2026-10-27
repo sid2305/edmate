@@ -63,6 +63,22 @@ were touched.
   from a Route Handler as-is. Its failure is caught separately so it can never turn an already
   -successful delete into an error response to the client.
 
+### 26 Oct 2026 · 13.4b budget overrun · decided by lead · risk: low
+- Decided: Accept 113 tool calls against a budget of 55 (about 2x). The work is complete and all four reviewers approved it, so there is no re-run.
+- Why: The build spanned two packages plus the web route tests, and the integration tests needed the shared dev Postgres. Future two-package briefs get a larger budget or a split into phases.
+
+### 26 Oct 2026 · 13.4b export completeness deferred to 13.4d · decided by lead · risk: medium
+- Decided: Merge the account-wide export without consents and ended subscriptions. Task 13.4d adds them (a consents read in packages/db/src/identity/store.ts and an ended-inclusive read in packages/db/src/repositories/subscriptions.ts).
+- Why: Both files were out of bounds for this task, and security-reviewer judged deferral safer than reaching into them now. The human's B-59 (5) answer asked for one account-wide export across all teachers, which this delivers. The export must be complete before the pilot.
+
+### 26 Oct 2026 · 13.4b payment-dispute hold deferred to 13.4e · decided by lead · risk: medium
+- Decided: DELETE /api/me holds only on an open safety alert for now. The B-59 (3) hold on an open payment dispute comes with task 13.4e, after payments (10.4 and 10.6).
+- Why: Payment disputes do not exist yet (M10 comes last), so there is nothing to check.
+
+### 26 Oct 2026 · 13.4b merge · decided by lead · risk: high
+- Decided: Merge 13.4b, which touches the personal-data surface (account export and account delete) and packages/db/src/repositories/safety-alerts.ts. code-reviewer, typescript-reviewer, security-reviewer and database-reviewer all approved it, with no findings at MEDIUM or above.
+- Why: The DELETE acts only on the signed-in student, is held while a safety alert is open, and signs the student out after the delete. The export reads only that student's data and passes the do-not-leak scan.
+
 ## Gate
 
 ```
@@ -84,4 +100,4 @@ since they are unrelated to the diff and fixing them would mean touching files o
 
 ## Budget
 
-Tool calls used: 52
+Tool calls used: 113 (harness count; the builder reported 52)
