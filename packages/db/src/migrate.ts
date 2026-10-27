@@ -100,7 +100,8 @@ export function stepTimeoutMs(options: MigrateOptions = {}): number {
  */
 export type PostMigrateStep =
   | { readonly kind: 'validateConstraint'; readonly table: string; readonly constraint: string }
-  | { readonly kind: 'concurrentIndex'; readonly indexName: string; readonly sql: string };
+  | { readonly kind: 'concurrentIndex'; readonly indexName: string; readonly sql: string }
+  | { readonly kind: 'dropIndexConcurrently'; readonly indexName: string };
 
 /**
  * Migration 0009 (task 3.16) adds `sessions_package_version_fk`, `sessions_package_pin_complete`
@@ -141,6 +142,18 @@ export type PostMigrateStep =
  * Migration 0040 (task 8.2p) adds `documents_processing_updated_at_id_idx` the same schema-only
  * way: ingestSweep.staleProcessing's `status = 'processing'` filter plus its
  * `ORDER BY updated_at, id` keyset, in one partial index.
+ * Migration 0041 (task 8.2r, 8.2a review deferral) adds `documents_teacher_id_created_at_id_idx`
+ * the same schema-only way: documents.listForTeacher's `teacher_id = $1` filter plus its
+ * `ORDER BY created_at DESC, id DESC LIMIT 500` keyset, in one full (non-partial) index. It also
+ * drops and re-adds `documents_failure_reason_only_when_failed` (originally added by migration
+ * 0017 as a plain, immediately-validated `ADD CONSTRAINT ... CHECK`, unlike every other CHECK/FK
+ * in this list) as `NOT VALID`, validated here the same way, for hygiene with this list's
+ * convention -- not a behaviour change. At the 8.2q review's request, 0041 also replaces
+ * migration 0040's `documents_processing_updated_at_id_idx` with
+ * `documents_sweep_updated_at_id_idx` (same columns, widened predicate `status IN ('processing',
+ * 'uploading')`, matching 8.2q's widened ingestSweep.staleProcessing query): the new index is
+ * built CONCURRENTLY first, then the old one is dropped CONCURRENTLY, so there is no window with
+ * no usable index for the sweep.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -242,6 +255,28 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     indexName: 'documents_processing_updated_at_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "documents_processing_updated_at_id_idx" ON "documents" USING btree ("updated_at","id") WHERE "documents"."status" = 'processing'`,
   },
+  // Migration 0041 (task 8.2r, 8.2a review deferral): documents.listForTeacher's candidate scan.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'documents_teacher_id_created_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "documents_teacher_id_created_at_id_idx" ON "documents" USING btree ("teacher_id","created_at" DESC,"id" DESC)`,
+  },
+  // Migration 0041: validates documents_failure_reason_only_when_failed, dropped and re-added
+  // NOT VALID by the same migration for hygiene with this list's other CHECK/FK entries.
+  {
+    kind: 'validateConstraint',
+    table: 'documents',
+    constraint: 'documents_failure_reason_only_when_failed',
+  },
+  // Migration 0041 (8.2q review request): replaces documents_processing_updated_at_id_idx
+  // (migration 0040) with a wider predicate matching 8.2q's widened ingestSweep.staleProcessing
+  // query. Built before the old index is dropped, so the sweep always has a usable index.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'documents_sweep_updated_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "documents_sweep_updated_at_id_idx" ON "documents" USING btree ("updated_at","id") WHERE "documents"."status" IN ('processing', 'uploading')`,
+  },
+  { kind: 'dropIndexConcurrently', indexName: 'documents_processing_updated_at_id_idx' },
 ];
 
 /** True once `ALTER TABLE ... VALIDATE CONSTRAINT` has already succeeded for this constraint. */
@@ -288,7 +323,11 @@ async function isIndexInvalid(client: pg.Pool, indexName: string): Promise<boole
  * every step is idempotent: a `VALIDATE CONSTRAINT` already satisfied is skipped; an index left
  * INVALID by an earlier failed or killed `CREATE INDEX CONCURRENTLY` is dropped and rebuilt (both
  * steps still autocommit, outside any transaction); otherwise `CREATE INDEX CONCURRENTLY IF NOT
- * EXISTS` is a no-op on a second run.
+ * EXISTS` is a no-op on a second run. A `dropIndexConcurrently` step (task 8.2r, 8.2q review
+ * request: swapping one partial index for a wider-predicate replacement) is `DROP INDEX
+ * CONCURRENTLY IF EXISTS`, idempotent either way; ordered after its replacement's
+ * `concurrentIndex` step in `POST_MIGRATE_STEPS` so the sweep this backs is never left without a
+ * usable index between the two.
  *
  * Caller's caveat (task 3.16d, 3.16c review deferral): `CREATE`/`DROP INDEX CONCURRENTLY` must
  * wait out every transaction holding a snapshot that predates it, not just ones that touch the
@@ -306,6 +345,12 @@ export async function runPostMigrateSteps(
     if (step.kind === 'validateConstraint') {
       if (await isConstraintValidated(client, step.table, step.constraint)) continue;
       await client.query(`ALTER TABLE "${step.table}" VALIDATE CONSTRAINT "${step.constraint}"`);
+    } else if (step.kind === 'dropIndexConcurrently') {
+      // Always `IF EXISTS`: idempotent on retry, and a no-op on a database where the index this
+      // drops was never built (an already-migrated-past-this-point database, or one where the
+      // matching `concurrentIndex` step above never ran, e.g. task order in a fresh database's
+      // single pass).
+      await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${step.indexName}"`);
     } else {
       if (await isIndexInvalid(client, step.indexName)) {
         await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${step.indexName}"`);

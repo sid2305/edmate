@@ -10956,9 +10956,31 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: running
+  status: done
   branch: m13/8.2r-documents-index
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 986
+    tokens_in: 3310
+    tokens_out: 287877
+    cache_read_tokens: 122186464
+    wall_time_seconds: 6160
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 11.4i
   milestone: M13
   title: 'After 11.4d: lift apps/web''s 24 MB cap (MAX_UNSPLIT_MEDIA_BYTES) for audio/mp4, video/mp4 and video/webm now that the worker chunks them with ffmpeg; re-check the 15-minute searchable budget
@@ -11012,9 +11034,30 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: running
+  status: done
   branch: m13/6.4c-review-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 548
+    tokens_in: 1880
+    tokens_out: 208823
+    cache_read_tokens: 69032498
+    wall_time_seconds: 8603
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 1.4f
   milestone: M13
   title: '1.4e Part 2 (split by the lead): run the magic-link sandbox script against a local stack rebuilt on current code and record the result; waits on B-61 (who rebuilds the stack)'
@@ -11067,9 +11110,9 @@ tasks:
   deps:
   - 0.20g
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/0.20h-local-e2e
+  model: plan:lead build:sonnet
 - id: 13.3c
   milestone: M13
   title: 'B-60 (human, 27 Oct 2026): database sign-in sessions last 7 days, renewed on use; set SESSION_MAX_AGE_S in apps/web/src/auth/config.ts to 7 days (keep the daily SESSION_UPDATE_AGE_S renewal) and
@@ -11078,9 +11121,28 @@ tasks:
   deps:
   - 13.3b
   risk: risky
-  status: running
+  status: done
   branch: m13/13.3c-seven-day-sessions
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 13
+    tokens_in: 46
+    tokens_out: 173
+    cache_read_tokens: 381206
+    wall_time_seconds: 36
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 11.4j
   milestone: M13
   title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
@@ -11089,6 +11151,51 @@ tasks:
   accept: each item is fixed with a test; @edmate/worker typecheck, lint and test green.
   deps:
   - 11.4d
+  risk: low
+  status: review
+  branch: m13/11.4j-ffmpeg-hardening
+  model: plan:lead build:sonnet
+- id: 6.3e
+  milestone: M13
+  title: '6.3d review LOWs for packages/db/src/repositories/ports.ts profileStoreFor: name the unused third applyMistakes parameter _proposed so the omission reads as intentional; add a profile-store int
+    test that calls applyMistakes(scope, [], [proposedTag]) and checks it is a no-op'
+  accept: the test passes; @edmate/db typecheck, lint and test green.
+  deps:
+  - 6.3d
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.4d
+  milestone: M13
+  title: '6.4c review LOW: packages/harness/src/pipeline/runner.ts records an evidenceSkip guard with bad_topic_id when a stored practiceTopicId fails the id shape, but no test covers it; add that case
+    to runner.evidence.test.ts'
+  accept: the new case fails without the guard and passes with it; @edmate/harness typecheck, lint and test green.
+  deps:
+  - 6.4c
+  risk: low
+  status: running
+  branch: m13/6.4d-bad-topic-test
+  model: plan:lead build:sonnet
+- id: 8.2s
+  milestone: M13
+  title: '8.2r review MEDIUM: packages/db/src/schema/content.ts declares documents_teacher_id_created_at_id_idx with createdAt.desc() and id.desc() but no .nullsFirst(), so the drizzle snapshot records
+    NULLS LAST while the hand-written CONCURRENTLY SQL in migrate.ts uses the Postgres DESC default (NULLS FIRST); add .nullsFirst() as schema/operations.ts does and keep db:generate free of drift (no live
+    index change)'
+  accept: content.ts and the snapshot match the live index; db:generate emits nothing new; the documents-list-index EXPLAIN test still passes; @edmate/db typecheck, lint and test green.
+  deps:
+  - 8.2r
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 11.4k
+  milestone: M13
+  title: '11.4j review LOWs (comments only) in apps/worker/src/ingest/ffmpegChunker.ts: say in the outputWatchMs doc comment that the in-run cap is approximate (a fast writer can pass maxOutputBytes before
+    the next poll; the post-exit total check is exact), and note that a watch tick already in flight can abort sizeController after the run branch has read it, so later code must not re-read that signal'
+  accept: both comments are in place; @edmate/worker typecheck and lint green.
+  deps:
+  - 11.4j
   risk: low
   status: todo
   branch: null

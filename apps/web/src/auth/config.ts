@@ -21,7 +21,8 @@ declare module 'next-auth' {
   }
 }
 
-export const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
+// 7 days, per B-60 (docs/decisions/log.md, 27 Oct 2026): sign-in sessions last 7 days, renewed on use.
+export const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60;
 export const SESSION_UPDATE_AGE_S = 24 * 60 * 60;
 
 export interface AuthConfigDeps {
