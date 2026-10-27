@@ -67,14 +67,22 @@ function reasonKey(reason: string | undefined): (typeof REASON_KEYS)[number] | '
 
 const isActive = (d: DocumentView) => d.status === 'uploading' || d.status === 'processing';
 
+/** A teacher's module, as read for the upload centre's picker (8.2a Phase C: a real title, not a
+ * bare id -- `packages/db`'s `modules.list`). */
+export interface ModuleOption {
+  id: string;
+  title: string;
+}
+
 export interface UploadsViewProps {
-  /** The teacher's module ids (from the server); uploads are filed under one of them. */
-  moduleIds: readonly string[];
+  /** The teacher's modules (from the server); uploads are filed under one of them. */
+  modules: readonly ModuleOption[];
   /** The bucket PUT; tests inject one. */
   putFile?: PutFile;
 }
 
-export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewProps) {
+export function UploadsView({ modules, putFile = realPutFile }: UploadsViewProps) {
+  const moduleIds = modules.map((m) => m.id);
   const t = useTranslations('uploads');
   const [docs, setDocs] = useState<DocumentView[] | null>(null);
   const [banner, setBanner] = useState<ErrorKey | null>(null);
@@ -274,9 +282,9 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
                 value={moduleId}
                 onChange={(e) => setModuleId(e.target.value)}
               >
-                {moduleIds.map((id, i) => (
-                  <option key={id} value={id}>
-                    {t('moduleOption', { n: i + 1 })}
+                {modules.map((m, i) => (
+                  <option key={m.id} value={m.id}>
+                    {m.title.trim() === '' ? t('moduleOption', { n: i + 1 }) : m.title}
                   </option>
                 ))}
               </select>

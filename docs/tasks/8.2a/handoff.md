@@ -1,6 +1,6 @@
 # Handoff: 8.2a
 
-Status: PARTIAL (Phases A and B done; Phase C left)
+Status: DONE
 
 ## Phase A
 
@@ -65,6 +65,45 @@ UploadsView unmount guard (item 5).
 `onDelete`) touches state or fires a follow-up fetch after the component unmounts. Phase C (module
 names in the picker) is untouched.
 
+## Phase C
+
+Module names in the picker (item 6).
+
+- `packages/db/src/repositories/modules.ts` — new `list(scope)` method, same `teacherScope` guard
+  and `orderBy(asc(modules.id))` as the existing `ids`, returning `{ id, title }[]` (exported as
+  `ModuleListItem`). `ids` is unchanged (still used nowhere else in this diff, left in place for
+  any other caller).
+- `packages/db/src/repositories/index.ts` — exports `ModuleListItem` alongside the package's other
+  repository row types.
+- `packages/db/test/repositories.int.test.ts` — new `'modules.list'` case in the cross-teacher
+  isolation table (same shape as the existing `'modules.ids'` case: untargeted read, owner derived
+  from the id's teacher-letter suffix), required by `RepositoryMethod`'s union type (a new
+  repository method with no isolation case fails `tsc`). Green: `test/repositories.int.test.ts`
+  (192 tests, against the shared dev Postgres) passes, including the new case's cross-teacher
+  isolation check (another teacher's modules never appear).
+- `apps/web/app/teacher/uploads/page.tsx` — reads `repos.modules.list(...)` instead of `.ids(...)`
+  and passes the result as `UploadsView`'s new `modules` prop.
+- `apps/web/app/teacher/uploads/UploadsView.tsx` — `UploadsViewProps.moduleIds: string[]` replaced
+  with `modules: readonly ModuleOption[]` (`{ id, title }`, exported); the picker's `<option>` now
+  renders `m.title`, falling back to the existing `t('moduleOption', { n: i + 1 })` placeholder
+  only when a module's title is blank.
+- `apps/web/app/teacher/uploads/UploadsView.test.tsx` and `page.test.tsx` — every
+  `moduleIds={[...]}` call site updated to the new `modules` prop (a `mods(ids)` test helper gives
+  each synthetic id its own synthetic title); two new cases: the picker renders each module's real
+  title and never the word "Module 1" when titles are set, and falls back to the numbered
+  placeholder when a title is blank. Red: ran the new/updated tests against the unmodified
+  `UploadsView.tsx` (temporarily stashed just that one file with `git stash push -u` scoped to the
+  path, `git stash apply`, `git stash drop`) — every test in the file failed with a `TypeError`
+  (`moduleIds[0]` on `undefined`, since the old component still destructured `moduleIds`). Green:
+  after restoring the Phase C component, `UploadsView.test.tsx` (23 tests) and `page.test.tsx` (2
+  tests) pass.
+- `apps/web/messages/en.json` — unchanged; `uploads.moduleOption` is kept as the fallback string
+  for a module with a blank title, per the plan.
+
+**State after this phase**: the upload centre's module picker shows each module's real title; a
+module with no title falls back to the existing numbered placeholder rather than breaking. All
+three phases are complete.
+
 ## Decisions
 
 ### 27 Oct 2026 · 8.2a unmount test asserts no extra fetch call, not just no console warning · decided by builder · risk: low
@@ -78,6 +117,17 @@ names in the picker) is untouched.
   extra-fetch-call assertion is red against the unmodified component (5 calls instead of 4,
   verified by stashing just the component file) and green after the guard, which is what the plan's
   exit condition ("the unmount-guard test is red-then-green") requires.
+
+### 27 Oct 2026 · 8.2a packages/db/src/repositories/modules.ts gains a list() read method · decided by builder · risk: high
+- Decided: `modules.ts` (under the risky `packages/db/src/repositories/**` glob) gains a `list()`
+  method returning each of the scope's modules as `{ id, title }`, alongside the existing `ids()`.
+- Why: the upload centre's module picker needs a real title, not a bare id, and the title column
+  (`modules.title`, `packages/db/src/schema/content.ts`) already exists -- no migration. The new
+  method adds no write, no new table or column, and uses the exact same `teacherScope` guard and
+  `orderBy(asc(modules.id))` as `ids()`, so it opens no new access path; it is flagged `risk: high`
+  only because it falls under the risky repositories glob, per this repo's merge-gate rule (any
+  risky-path file makes the whole PR's decision `risk: high`), and needs security-reviewer plus
+  database-reviewer (this repo's standing convention for `packages/db` changes) before merge.
 
 ### 27 Oct 2026 · 8.2a create keeps write-before-sign, cleans up on signing failure · decided by builder · risk: low
 - Decided: `create` does not reorder to "sign then write" the way `replace` does. It keeps
@@ -124,7 +174,30 @@ names in the picker) is untouched.
   `--write` once (new test's formatting), then checked clean; `UploadsView.tsx` was already clean.
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
+### Phase C gate
+
+- `corepack pnpm --filter @edmate/db exec tsc --noEmit -p .` → clean.
+- `corepack pnpm --filter @edmate/db exec vitest run test/repositories.int.test.ts` → 192/192
+  passed (against the shared dev Postgres; includes the new `modules.list` cross-teacher isolation
+  case).
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web...` →
+  36/41 tasks ran (28 cached), 2 known flakes under machine load (both named in this task's brief):
+  `@edmate/web`'s `src/auth/route-coverage.test.ts > /api/sessions/x/reports` timed out, and
+  `@edmate/cli`'s `test/chatDbRetrieval.int.test.ts` hit a 10 s `beforeAll` hook timeout
+  (`createDatabase`/`migrateDatabase` under load). Re-ran each file alone once:
+  `vitest run src/auth/route-coverage.test.ts` → 45/45 passed; `vitest run
+  test/chatDbRetrieval.int.test.ts` (filtered to `@edmate/cli`) → 1 passed, 1 skipped. Every other
+  package/test in the filtered run passed first time.
+- `corepack pnpm --filter @edmate/web exec vitest run --coverage` → no coverage-threshold error
+  (statements 94.68%, branches 91.25%, functions 91.78%, lines 96.08%).
+- `corepack pnpm exec prettier --check` on every Phase C file (`UploadsView.tsx`,
+  `UploadsView.test.tsx`, `page.tsx`, `page.test.tsx`, `modules.ts`,
+  `packages/db/src/repositories/index.ts`, `repositories.int.test.ts`) → all clean, no `--write`
+  needed.
+- `python3 .githooks/secret-scan.py --all` → clean, no output.
+
 ## Budget
 
 Phase A tool calls used: 32
 Phase B tool calls used: 19
+Phase C tool calls used: 42
