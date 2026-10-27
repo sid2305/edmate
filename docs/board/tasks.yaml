@@ -11032,9 +11032,20 @@ tasks:
   accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
   deps: []
   risk: low
-  status: running
+  status: review
   branch: m0/0.20g-e2e-first-chat-warmup
   model: plan:sonnet build:sonnet
+- id: 0.20h
+  milestone: M13
+  title: 'local e2e failures found by 0.20g (pass in CI): full-flow.spec.ts "discover: search, open the teacher page, choose a package" times out in 10 of 10 fresh local runs, and teacher-packages-walkthrough.spec.ts
+    "create the first/second package from preset" fails in 6 of 10; find out whether the cause is local data left in the dev database or a real bug, and fix the test setup or the code'
+  accept: the cause is written in the handoff; both specs pass 5 fresh local runs in a row, and CI e2e stays green.
+  deps:
+  - 0.20g
+  risk: low
+  status: todo
+  branch: null
+  model: null
 - id: 11.4j
   milestone: M13
   title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
