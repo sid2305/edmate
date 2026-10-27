@@ -11033,9 +11033,31 @@ tasks:
   accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
   deps: []
   risk: low
-  status: review
+  status: done
   branch: m0/0.20g-e2e-first-chat-warmup
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 364
+    tokens_in: 1226
+    tokens_out: 88387
+    cache_read_tokens: 48707074
+    wall_time_seconds: 3386
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 0.20h
   milestone: M13
   title: 'local e2e failures found by 0.20g (pass in CI): full-flow.spec.ts "discover: search, open the teacher page, choose a package" times out in 10 of 10 fresh local runs, and teacher-packages-walkthrough.spec.ts
@@ -11045,6 +11067,16 @@ tasks:
   deps:
   - 0.20g
   risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 13.3c
+  milestone: M13
+  title: 'B-60 (human, 27 Oct 2026): database sign-in sessions last 7 days, renewed on use; set SESSION_MAX_AGE_S in apps/web/src/auth/config.ts to 7 days (keep the daily SESSION_UPDATE_AGE_S renewal) and update any test or doc that states 30 days'
+  accept: a test pins the 7-day max age and the daily renewal; @edmate/web typecheck, lint and test green.
+  deps:
+  - 13.3b
+  risk: risky
   status: todo
   branch: null
   model: null

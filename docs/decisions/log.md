@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 0.20g confirmed webServer-before-globalSetup ordering from source · decided by builder · risk: low
+- Decided: Built the fix on the plan's assumption (webServer starts before globalSetup) after
+  confirming it directly in the installed Playwright runner source (see Summary); no change to the
+  plan's approach was needed.
+- Why: The plan asked the builder to verify this before relying on it; recorded here as the
+  concrete evidence rather than a guess.
+
+---
+
+### 27 Oct 2026 · 0.20g deterministic full-flow/teacher-packages failures found but not fixed · decided by builder · risk: low
+- Decided: Left `full-flow.spec.ts` and `teacher-packages-walkthrough.spec.ts` untouched; reporting
+  their deterministic (not intermittent) failures to the lead as a separate follow-up rather than
+  investigating or fixing them here.
+- Why: Both files are out of bounds for this task's narrow one-file fix, the failures are
+  unrelated in shape (deterministic, inside a step that already has its own cold-start timeout
+  wrapper) to the cold-route-compile flake this task targets, and the budget (~40 tool calls) does
+  not cover a second investigation.
+
+---
+
 ### 27 Oct 2026 · US payment provider: Paddle as merchant of record (B-53, task 10.1) · decided by you · risk: high
 Decided: Paddle is the US merchant of record, so it handles sales tax. Before its adapter is built, the human describes Edmate to Paddle in writing (subscriptions to AI tutoring software; teachers paid by Edmate as content suppliers; live classes an included feature) and gets their OK. If Paddle refuses, Stripe Billing plus Stripe Tax, with Edmate filing US sales tax itself. Payouts to teachers stay manual in the pilot.
 Why: Signed, timestamped webhooks, a separate sandbox, clear proration and native pause/resume fit 10.2 and 10.3; the providers can refuse marketplaces, so the written OK comes first.
