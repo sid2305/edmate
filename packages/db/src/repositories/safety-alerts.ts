@@ -179,6 +179,23 @@ export function safetyAlertsRepo(db: Db) {
     },
 
     /**
+     * Task 13.4b: whether the student has any open (unacknowledged) safety alert, across every
+     * teacher -- serves only the student's own account-delete hold (`DELETE /api/me`), never
+     * staff's inbox. Returns a boolean only, never alert content. No alert at all is `false`,
+     * same as `isAcknowledged`'s missing-row case.
+     */
+    async hasOpenForStudent(studentId: string): Promise<boolean> {
+      const method = 'safetyAlerts.hasOpenForStudent';
+      const id = parseArg(IdSchema, studentId, method);
+      const [row] = await db
+        .select({ id: safetyAlerts.id })
+        .from(safetyAlerts)
+        .where(and(eq(safetyAlerts.studentId, id), isNull(safetyAlerts.acknowledgedAt)))
+        .limit(1);
+      return row !== undefined;
+    },
+
+    /**
      * The staff inbox. `by` must be staff right now (a plain read of the role: this writes
      * nothing, as in teacherProfiles.listPendingForStaff), else `scope`. Open alerts first,
      * escalated before unescalated, then oldest first; `status: 'open'` leaves acknowledged

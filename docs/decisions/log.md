@@ -10,6 +10,97 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 13.4b account export scope (consents and ended subscriptions) · decided by builder · risk: high
+- Decided: the account export includes only live subscription pairs
+  (`subscriptionPairs.listLiveForStudent`, which excludes `status: 'ended'`) and the student's
+  own identity fields (`identity.getUser`, minus `id`/`role`). It does not include consents rows
+  or ended subscriptions.
+- Why: the parent 13.4 Phase C text mentioned "every live/ended subscription pair" and "consents
+  rows," but no consents repository exists (consents live only inside
+  `packages/db/src/identity/store.ts`, out of bounds for 13.4b — another builder's file), and
+  `subscriptions.ts` (the only place that could add an ended-inclusive read) is also out of
+  bounds per this task's file list. Flagging `risk: high` because this names a personal-data
+  surface (account export) with a real, if narrow, completeness gap: a student's export omits
+  consent history and past (ended) subscriptions. Follow-up: a later task should either add a
+  consents-read method and an ended-inclusive subscription read, or confirm this narrower scope
+  is acceptable for the pilot.
+
+---
+
+### 26 Oct 2026 · 13.4b delete-on-hold response shape · decided by builder · risk: low
+- Decided: `DELETE /api/me` returns a custom `{ error: 'delete_on_hold', message }` 409 body
+  (not the standard `apiError()`/`ErrorCode` envelope) when the student has an open safety alert.
+- Why: `'delete_on_hold'` is not in the `ErrorCodeSchema` enum in `packages/contracts/src/shared.ts`,
+  and `packages/contracts` is out of bounds without an ADR. A one-off literal response matches
+  the plan's exact wording without touching contracts.
+
+---
+
+### 26 Oct 2026 · 13.4b sign-out reuse via signOut({redirect:false}) · decided by builder · risk: low
+- Decided: the delete handler calls NextAuth's `signOut({redirect: false})` directly from
+  `apps/web/src/account/delete.ts` rather than adding anything to `apps/web/src/auth/**`.
+- Why: `apps/web/src/auth/**` is out of bounds (another builder's area); `signOut` with
+  `redirect: false` already returns a URL instead of throwing/redirecting, so it can be called
+  from a Route Handler as-is. Its failure is caught separately so it can never turn an already
+  -successful delete into an error response to the client.
+
+---
+
+### 26 Oct 2026 · 13.4b budget overrun · decided by lead · risk: low
+- Decided: Accept 113 tool calls against a budget of 55 (about 2x). The work is complete and all four reviewers approved it, so there is no re-run.
+- Why: The build spanned two packages plus the web route tests, and the integration tests needed the shared dev Postgres. Future two-package briefs get a larger budget or a split into phases.
+
+---
+
+### 26 Oct 2026 · 13.4b export completeness deferred to 13.4d · decided by lead · risk: medium
+- Decided: Merge the account-wide export without consents and ended subscriptions. Task 13.4d adds them (a consents read in packages/db/src/identity/store.ts and an ended-inclusive read in packages/db/src/repositories/subscriptions.ts).
+- Why: Both files were out of bounds for this task, and security-reviewer judged deferral safer than reaching into them now. The human's B-59 (5) answer asked for one account-wide export across all teachers, which this delivers. The export must be complete before the pilot.
+
+---
+
+### 26 Oct 2026 · 13.4b payment-dispute hold deferred to 13.4e · decided by lead · risk: medium
+- Decided: DELETE /api/me holds only on an open safety alert for now. The B-59 (3) hold on an open payment dispute comes with task 13.4e, after payments (10.4 and 10.6).
+- Why: Payment disputes do not exist yet (M10 comes last), so there is nothing to check.
+
+---
+
+### 26 Oct 2026 · 13.4b merge · decided by lead · risk: high
+- Decided: Merge 13.4b, which touches the personal-data surface (account export and account delete) and packages/db/src/repositories/safety-alerts.ts. code-reviewer, typescript-reviewer, security-reviewer and database-reviewer all approved it, with no findings at MEDIUM or above.
+- Why: The DELETE acts only on the signed-in student, is held while a safety alert is open, and signs the student out after the delete. The export reads only that student's data and passes the do-not-leak scan.
+
+---
+
+### 26 Oct 2026 · 7.2m preGuard.test.ts and evals moderationJailbreak.test.ts also needed updating · decided by builder · risk: low
+- Decided: fixed `packages/harness/src/pipeline/steps/preGuard.test.ts` (one assertion,
+  `level: 'alert'` → `'critical'`) and `packages/evals/src/moderationJailbreak.test.ts` (the seeded
+  near-miss count and the misuse-alert-kind check), both outside the plan's named file list, to
+  keep the harness and evals gates green.
+- Why: the plan's files-to-modify list was written before the lead amendment broadened the
+  critical-alert scope to `threat`/`weapons` and before counting the two new near-miss eval cases
+  against this test's hard-coded totals; without these two fixes the gate in the plan's own "Gate
+  commands" section fails. Both are test-only changes with no behaviour change beyond what the
+  plan and its lead amendment already decided.
+
+---
+
+### 26 Oct 2026 · 7.2m budget overrun · decided by lead · risk: low
+- Decided: accept 87 tool calls against a plan budget of 45.
+- Why: the diff matches the plan and its amendment, it needed two test files outside the plan's list, and the full harness-dependents gate is slow; all three reviewers approved with no blocking finding.
+
+---
+
+### 26 Oct 2026 · 7.2m review LOWs deferred · decided by lead · risk: low
+- Decided: defer to board task 7.2n: packages/evals/src/moderationJailbreak.test.ts keeps its own copy of MISUSE_CODES instead of importing it from packages/harness/src/guardrails/moderationIn.ts (typescript-reviewer), and packages/queue/src/alertSink.ts escalates a critical alert on the same timer as a level 'alert' one (silent-failure-hunter, pre-existing).
+- Why: neither blocks the alert from reaching staff; MVP first.
+
+---
+
+### 26 Oct 2026 · 7.2m merge · decided by lead · risk: high
+- Decided: merge 7.2m. Moderation blocks for harm_to_others, threat and weapons now raise a misuse alert at level critical (the human's B-50 answer, with the lead's amendment that harm_to_others counts as a threat to hurt others); refusal replies are unchanged; two English near-miss eval cases stay alert-free.
+- Why: packages/harness/src/guardrails/** and evals/suites/safety/** are risky paths (reviewers: code-reviewer); code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+
+---
+
 ### 25 Oct 2026 · 8.7o EMAIL export is test-only · decided by builder · risk: low
 - Decided: export `EMAIL` from `redact-json.ts` itself (not from `src/repositories/index.ts` or
   `src/index.ts`) so the differential test can import it directly from the module path, instead of
