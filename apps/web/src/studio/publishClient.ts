@@ -69,7 +69,8 @@ export type PublishFailedCaseView = z.infer<typeof FailedCaseSchema>;
 export type PublishRun = z.infer<typeof RunSchema>;
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 /** The reply `loadLatestRun` resolves to: the run (or null before any publish) and, alongside
- * it, the agent's own status (null before any run has started -- never suspended by then). */
+ * it, the agent's own status (null only when the teacher has no agent yet -- a takedown can
+ * suspend a draft agent before its first run, task 12.2f fix round 1). */
 export interface LatestLoad {
   run: PublishRun | null;
   agentStatus: AgentStatus | null;

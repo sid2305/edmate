@@ -337,14 +337,35 @@ describe('POST /api/studio/publish', () => {
 });
 
 describe('GET /api/studio/publish', () => {
-  it('no run yet is {run: null}', async () => {
-    const { h, calls } = handlers();
+  it('no run yet and no packages (no agent to look up) is {run: null}, no agents.get call', async () => {
+    const { h, calls } = handlers({ rows: [] });
     const res = await h.latest(get(), ctx);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({ run: null });
-    expect(calls).toEqual([{ method: 'publish.latestRun', scope: SCOPE, input: undefined }]);
+    expect(calls.map((c) => c.method)).toEqual(['publish.latestRun', 'packages.listForTeacher']);
+    expect(calls.map((c) => c.method)).not.toContain('agents.get');
   });
+
+  it.each<['suspended' | 'draft', 'suspended' | 'draft']>([
+    ['suspended', 'suspended'],
+    ['draft', 'draft'],
+  ])(
+    'no run yet but a %s agent (task 12.2f fix round 1: a takedown can suspend a draft agent) ' +
+      'carries agentStatus %s',
+    async (agentStatus) => {
+      const { h, calls } = handlers({ agent: { status: agentStatus } });
+      const res = await h.latest(get(), ctx);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ run: null, agentStatus });
+      expect(calls.map((c) => c.method)).toEqual([
+        'publish.latestRun',
+        'packages.listForTeacher',
+        'agents.get',
+      ]);
+      expect(calls).toContainEqual({ method: 'agents.get', scope: SCOPE, input: 'agt_1' });
+    },
+  );
 
   it('a running run has no failed cases and is not asked for them', async () => {
     const { h, calls } = handlers({ latest: run({ status: 'running' }) });

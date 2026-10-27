@@ -457,3 +457,81 @@ Test Files  3 passed (3)
 ### Budget
 
 Phase D tool calls used: 32
+
+## Fix round 1
+
+Fix for the typescript-reviewer HIGH on `apps/web/src/studio/publish.ts:180`: the `latest` route
+returned `{ run: null }` on the no-run path before ever calling `agents.get`, so a teacher whose
+agent was suspended while still a draft (an agent takedown, `takeDownAgentInTx`, sets `suspended`
+on an agent of **any** status, not only `live`) never saw the standing "Removed by Edmate staff"
+banner until their first publish run existed.
+
+### What changed
+
+- `apps/web/src/studio/publish.ts` -- the no-run branch of `latest` no longer returns early with no
+  lookup. It now finds the teacher's own agent id the same way `start` already does, through
+  `repos.packages.listForTeacher(scope)` (no new repository method), and calls `repos.agents.get`
+  with that id. `{ run: null }` (no `agentStatus` field, matching the original shape) is returned
+  only when the teacher has no packages yet -- there is no agent to look up. Otherwise the reply is
+  `{ run: null, agentStatus }` (`agent?.status ?? 'draft'`), the same shape the run-exists branch
+  already returns. A new `teacherAgentId` helper holds the shared lookup.
+- `apps/web/src/studio/publish.test.ts` -- the existing "no run yet" test now covers the true
+  no-agent case (`rows: []`) and asserts no `agents.get` call; two new `it.each` cases cover a
+  no-run teacher whose agent is `suspended` and one whose agent is `draft`, each asserting
+  `agentStatus` round-trips and `packages.listForTeacher` + `agents.get` are both called.
+- `apps/web/src/studio/publishClient.ts` -- only the doc comment on `LatestLoad` changed (no type
+  or logic change -- `agentStatus` was already optional/nullable on the client, and already handled
+  a present-or-absent field on every path); the old wording claimed the no-run path could "never"
+  be suspended, which was the wrong premise this fix round corrects.
+
+### Red-then-green evidence
+
+Red (`git stash` on `publish.ts` and `publishClient.ts` only, test file kept, `vitest run
+src/studio/publish.test.ts`):
+```
+ FAIL  GET /api/studio/publish > no run yet and no packages (no agent to look up) is {run: null}, no agents.get call
+   expected [ 'publish.latestRun' ] to deeply equal [ 'publish.latestRun', 'packages.listForTeacher' ]
+ FAIL  GET /api/studio/publish > no run yet but a suspended agent ... carries agentStatus suspended
+   expected { run: null } to deeply equal { run: null, agentStatus: 'suspended' }
+ FAIL  GET /api/studio/publish > no run yet but a draft agent ... carries agentStatus draft
+   expected { run: null } to deeply equal { run: null, agentStatus: 'draft' }
+Test Files  1 failed (1)
+     Tests  3 failed | 29 passed (32)
+```
+
+Green (fix restored, same two files + `publish.test.ts`, run together with `publishClient.test.ts`):
+```
+Test Files  2 passed (2)
+     Tests  39 passed (39)
+```
+
+### Decisions
+
+### 27 Oct 2026 · 12.2f agentStatus on the no-run path · decided by builder · risk: low
+- Decided: `GET /api/studio/publish`'s no-run path now looks up the teacher's agent (via
+  `packages.listForTeacher` + `agents.get`) and returns `agentStatus` there too, exactly as the
+  run-exists path already does, except when the teacher has no packages yet (no agent exists to
+  look up -- `{ run: null }` with no `agentStatus` field, unchanged from before).
+- Why: the Phase D decision's premise -- "an agent takedown sets `suspended` only on a `live`
+  agent ... so `run === null` implies the agent can never be `suspended`" -- was wrong.
+  `takeDownAgentInTx` (`packages/db/src/repositories/takedowns.ts`) updates `agents.status` to
+  `suspended` unconditionally, regardless of the agent's current status; a draft agent (one that
+  has never had a publish run) can be taken down just as a live one can. Skipping the lookup on the
+  no-run path therefore hid a real "removed by staff" state from the teacher. The extra read this
+  adds is one `packages.listForTeacher` + one `agents.get` call on the single path per request that
+  used to return early with no reads at all -- the same cost the `start` handler already pays on
+  every call.
+
+### Gate
+
+- `corepack pnpm exec prettier --check` on `publish.ts`, `publish.test.ts`, `publishClient.ts` and
+  this handoff -- clean, no reformatting needed.
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run
+  typecheck lint test --filter=@edmate/web` -- **10 of 10 tasks successful** in one run (dev
+  Postgres was up this round, unlike Phase D's). No separate re-run of the flaky
+  `src/auth/index.guard-only.test.ts` was needed -- it passed inside this single green run.
+- `python3 .githooks/secret-scan.py --all` -- clean, no output.
+
+### Budget
+
+Fix round tool calls used: 19

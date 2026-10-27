@@ -175,9 +175,28 @@ function stale(b: PublishBackend, run: GateRunRow): boolean {
   return b.now().getTime() - Date.parse(run.createdAt) > STALE_QUEUE_MS;
 }
 
+/**
+ * The teacher's own agent id when there is no run yet (task 12.2f fix round 1): a takedown can
+ * suspend an agent before it has ever published, so the no-run path still needs a lookup. Reuses
+ * `packages.listForTeacher`, the same method `start` already uses to find the agent id -- no new
+ * repository method. `undefined` when the teacher has no packages yet (no agent to look up).
+ */
+async function teacherAgentId(b: PublishBackend, scope: TeacherScope): Promise<string | undefined> {
+  const rows = await b.repos.packages.listForTeacher(scope);
+  return rows[0]?.agentId;
+}
+
 const latest: Work = async (b, scope) => {
   const run = await b.repos.publish.latestRun(scope);
-  if (run === null) return ok({ run: null });
+  if (run === null) {
+    // A takedown (`takeDownAgentInTx`) sets `suspended` on an agent of any status, draft
+    // included, so the no-run path can still have a suspended agent behind it; look it up the
+    // same way `start` finds the agent id, through the teacher's own packages.
+    const agentId = await teacherAgentId(b, scope);
+    if (agentId === undefined) return ok({ run: null });
+    const agent = await b.repos.agents.get(scope, agentId);
+    return ok({ run: null, agentStatus: agent?.status ?? 'draft' });
+  }
   const isStale = stale(b, run);
   const status = isStale ? 'error' : run.status;
   const failed = run.status === 'failed' ? await b.repos.publish.failedCases(scope, run.id) : [];
