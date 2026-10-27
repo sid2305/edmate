@@ -11109,7 +11109,7 @@ tasks:
   deps:
   - 11.4d
   risk: low
-  status: running
+  status: review
   branch: m13/11.4j-ffmpeg-hardening
   model: plan:lead build:sonnet
 - id: 6.3e
@@ -11142,6 +11142,17 @@ tasks:
   accept: content.ts and the snapshot match the live index; db:generate emits nothing new; the documents-list-index EXPLAIN test still passes; @edmate/db typecheck, lint and test green.
   deps:
   - 8.2r
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 11.4k
+  milestone: M13
+  title: '11.4j review LOWs (comments only) in apps/worker/src/ingest/ffmpegChunker.ts: say in the outputWatchMs doc comment that the in-run cap is approximate (a fast writer can pass maxOutputBytes before
+    the next poll; the post-exit total check is exact), and note that a watch tick already in flight can abort sizeController after the run branch has read it, so later code must not re-read that signal'
+  accept: both comments are in place; @edmate/worker typecheck and lint green.
+  deps:
+  - 11.4j
   risk: low
   status: todo
   branch: null
