@@ -2,7 +2,8 @@
 // § Ingestion 4; ADR-0003, ADR-0007). Both signals filter by teacher and allowed module in the
 // same statement, before ranking; there is no unfiltered search.
 import { type Chunk, type ChunkKind, LIMITS, type RetrievalIndex } from '@edmate/contracts';
-import { DEFAULT_COVERAGE_THRESHOLD, type LockedIndex, lockedIndex } from '@edmate/harness';
+import { DEFAULT_COVERAGE_THRESHOLD } from '@edmate/harness';
+import { type LockedIndex, lockedIndex } from '@edmate/harness/locked-index';
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -20,7 +21,10 @@ export const RETRIEVAL_MAX_MODULES = 500;
 /** Most chunks one search returns. */
 export const SEARCH_MAX_K = 50;
 /** Candidates each signal contributes before fusion. */
-const PER_SIGNAL = 20;
+export const PER_SIGNAL = 20;
+// Task 5.3a fix round: the inner vector query over-fetches by this factor so the outer
+// (distance, id) tie-break has rows to choose the lowest ids from (see vectorRows below).
+const VECTOR_OVERFETCH = PER_SIGNAL * 2;
 /** Reciprocal-rank fusion constant. */
 const RRF_K = 60;
 /** Most query terms used for full text. */
@@ -226,35 +230,61 @@ async function rank(
     if (embedding === undefined) return [];
     const v = sql`${vectorToDriver(embedding)}::vector`;
     const distance = sql<number>`(${chunks.embedding} <=> ${v})::float8`;
-    // The id tie-break keeps this an exact scan today (the planner cannot take an HNSW order with
-    // a second sort key). Should it ever use the index, pgvector 0.8's iterative scan keeps going
-    // until the teacher and module filter has filled the list, instead of filtering ef_search
-    // (40) candidates after the scan; SET LOCAL ends with the transaction.
+    // Task 5.3a (fix round): the inner query orders by distance alone (no second sort key), so the
+    // planner can take an HNSW order for it; pgvector 0.8's iterative scan keeps going until the
+    // teacher and module filter has filled the list, instead of filtering ef_search (40) candidates
+    // after the scan. Adding `id` to that ORDER BY would force a sort step and lose that HNSW
+    // benefit, so the inner query over-fetches (VECTOR_OVERFETCH rows) and the outer query applies
+    // the real (distance, id) order and the PER_SIGNAL cut-off. Guarantee: the output is always in
+    // (distance, id) order; the selected PER_SIGNAL rows are the lowest-id rows among any group tied
+    // on distance, UNLESS that tie group is larger than VECTOR_OVERFETCH, in which case the inner
+    // query may have already dropped some of the tied lower ids before the outer tie-break sees
+    // them. HNSW search is approximate regardless, so this only affects exact ties. SET LOCAL ends
+    // with the transaction.
     return db.transaction(async (tx) => {
       await tx.execute(sql`set local hnsw.iterative_scan = strict_order`);
-      return tx
-        .select({ ...fields, distance })
+      const inner = tx
+        .select({ ...fields, distance: distance.as('distance') })
         .from(chunks)
         .where(scoped(isNotNull(chunks.embedding)))
-        .orderBy(asc(distance), asc(chunks.id))
+        .orderBy(asc(distance))
+        .limit(VECTOR_OVERFETCH)
+        .as('v');
+      return tx
+        .select({
+          id: inner.id,
+          teacherId: inner.teacherId,
+          documentId: inner.documentId,
+          moduleId: inner.moduleId,
+          kind: inner.kind,
+          text: inner.text,
+          sourceTitle: inner.sourceTitle,
+          locator: inner.locator,
+          distance: inner.distance,
+        })
+        .from(inner)
+        .orderBy(asc(inner.distance), asc(inner.id))
         .limit(PER_SIGNAL);
     });
   };
-  /** Each term's document frequency over the searched chunks, and their count. */
+  /**
+   * Each term's document frequency over the searched chunks, and their count, in one round trip
+   * (Task 5.3a): a `total` CTE counts the scope once, cross-joined into the per-term `GROUP BY` so
+   * every row carries the same shared `n` alongside its own `df`.
+   */
   const termStats = async (): Promise<{ df: Map<string, number>; n: number }> => {
     if (tsq === null) return { df: new Map(), n: 0 };
-    const [dfRows, countRows] = await Promise.all([
-      db.execute<{ term: string; df: number }>(
-        sql`select t.term, count(${chunks.id})::int as df from unnest(${termList}) as t(term) left join ${chunks} on ${chunks.search} @@ ${termQuery(sql`t.term`)} and ${scope} group by t.term`,
-      ),
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(chunks)
-        .where(scope),
-    ]);
+    const result = await db.execute<{ term: string; df: number; n: number }>(
+      sql`with total as (select count(*)::int as n from ${chunks} where ${scope})
+          select t.term, count(${chunks.id})::int as df, total.n
+          from unnest(${termList}) as t(term)
+          cross join total
+          left join ${chunks} on ${chunks.search} @@ ${termQuery(sql`t.term`)} and ${scope}
+          group by t.term, total.n`,
+    );
     return {
-      df: new Map(dfRows.rows.map((r) => [r.term, Number(r.df)])),
-      n: Number(countRows[0]?.n ?? 0),
+      df: new Map(result.rows.map((r) => [r.term, Number(r.df)])),
+      n: Number(result.rows[0]?.n ?? 0),
     };
   };
   const [byText, byVector, stats] = await Promise.all([textRows(), vectorRows(), termStats()]);
