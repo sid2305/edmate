@@ -1,6 +1,6 @@
 # Handoff: 12.2i
 
-Status: PARTIAL (Phase A done; Phase B to do)
+Status: DONE
 
 ## Phase A
 
@@ -53,7 +53,64 @@ After the fix, both pass, and the rest of the `@edmate/db` suite stays green:
 (`notTakenDown` and `takedown-predicate.ts` both show 100% statement/branch/function/line
 coverage in the full run's v8 report.)
 
+## Phase B
+
+Made the three apps/web report-category lists derive from `@edmate/db`'s single source
+(`REPORT_CATEGORIES`/`ReportCategory`, `packages/db/src/repositories/map.ts`) instead of three
+independently hand-maintained copies, per the plan.
+
+- **Modified** `apps/web/app/api/sessions/[id]/reports/handlers.ts` (server-only, already imports
+  `@edmate/db` at runtime): `ReportBody`'s `category` field now uses `z.enum(REPORT_CATEGORIES)`
+  (imported from `@edmate/db`); dropped the local `z.enum(['harmful', ...])` literal and the local
+  `type ReportCategory = z.infer<...>` in favour of the imported `ReportCategory` type.
+  `CATEGORY_EXCERPT: Record<ReportCategory, string>` is unchanged in shape, now typed over the
+  imported type.
+- **Modified** `apps/web/app/staff/reports/client.ts` (`'use client'`-bundled, deliberately avoids
+  importing `@edmate/db` at runtime — pulls in `pg`/server-only code): added a type-only import
+  `import type { ReportCategory as DbReportCategory } from '@edmate/db';` (erased by `tsc`, zero
+  runtime bundle cost). Changed the `REPORT_CATEGORIES` array declaration to
+  `as const satisfies readonly DbReportCategory[]` (catches an extra/wrong category) and added an
+  unused-at-runtime `const _categoryExhaustive: Record<DbReportCategory, true> = {...}; void
+  _categoryExhaustive;` (the codebase's existing exhaustiveness idiom, cf.
+  `packages/harness/src/pipeline/results.ts`'s `POLICY_REASONS`) so a category *added* to db and
+  missing here also fails `tsc`. `export type ReportCategory = (typeof
+  REPORT_CATEGORIES)[number];` is unchanged.
+- **Modified** `apps/web/src/chat/reportMessage.ts` (same `'use client'`-bundled pattern, same
+  reason): identical type-only import, `satisfies` clause and exhaustiveness guard.
+
+**Red-then-green evidence (compile-time, per the plan — no new runtime behaviour):**
+
+1. Baseline (before any edit): `app/staff/reports/client.test.ts` (16 tests),
+   `src/chat/reportMessage.test.ts` (16 tests) and
+   `app/api/sessions/[id]/reports/route.test.ts` (37 tests) all green.
+2. Made the edits above.
+3. Deliberate, reverted check (not committed): temporarily dropped `'other'` from
+   `client.ts`'s `REPORT_CATEGORIES` array and its `_categoryExhaustive` object, then ran
+   `corepack pnpm --filter @edmate/web exec tsc --noEmit`:
+   ```
+   app/staff/reports/client.ts(34,7): error TS2741: Property 'other' is missing in type
+   '{ harmful: true; inappropriate: true; wrong_information: true; copyright: true; }' but
+   required in type 'Record<"harmful" | "inappropriate" | "wrong_information" | "copyright" |
+   "other", true>'.
+   ```
+   (red — proves the guard catches a category dropped from the client-side list without a
+   matching `@edmate/db` change). Reverted the temporary deletion immediately after.
+4. Re-ran all three web test files (unchanged behaviour): all green, same counts as step 1.
+5. Full gate (below): green, including this check's final state.
+
 ## Decisions
+
+### 27 Oct 2026 · 12.2i apps/web/app/staff/reports/client.ts change · decided by builder · risk: high
+- Decided: `client.ts` is in `apps/web/app/staff/**`, a risky path per `risk-paths.txt`; this PR
+  needs security-reviewer (named group) plus the task's own named reviewer set
+  (typescript-reviewer, code-reviewer, silent-failure-hunter), per rule 6.
+- Why: the plan names this risk group explicitly for Phase B; logging it here so the merge gate
+  can require all four reviewers and `review.md` names them. (Phase A's own risk: high entry
+  below covers `packages/db/src/repositories/**`; both groups need the same four reviewers, so one
+  combined review can cover the whole PR.)
+
+No other decision beyond what the plan already made (Q5 followed as recommended: a type-only
+import of `@edmate/db` into the two client-bundled files is zero-runtime-cost).
 
 ### 27 Oct 2026 · 12.2i packages/db/src/repositories changes · decided by builder · risk: high
 - Decided: the cycle fix touches `packages/db/src/repositories/**` (chunks.ts, takedowns.ts,
@@ -67,7 +124,7 @@ No other decision beyond what the plan already made (Q1/Q2 followed as recommend
 `takedown-predicate.ts`; `reports.ts` imports it directly rather than through `takedowns.ts`'s
 re-export).
 
-## Gate
+## Gate (Phase A)
 
 ```
 $ corepack pnpm turbo run typecheck lint test --filter=...@edmate/db
@@ -88,6 +145,37 @@ $ python3 .githooks/secret-scan.py --all
 (no output — clean)
 ```
 
+## Gate (Phase B)
+
+```
+$ corepack pnpm turbo run typecheck lint test --filter=...@edmate/db
+Tasks:    20 successful, 20 total
+Cached:    17 cached, 20 total
+Time:    4m9.35s
+[exited with code 0]
+```
+(re-run after Phase B's edits: `@edmate/web:test` coverage report green, no failures; the earlier
+`apps/cli` chatDbRetrieval.int.test.ts Postgres-connection-drop flake named in the brief did not
+occur — no `fail` lines anywhere in the run's output.)
+
+```
+$ corepack pnpm exec prettier --check apps/web/app/staff/reports/client.ts
+All matched files use Prettier code style!
+$ corepack pnpm exec prettier --check apps/web/src/chat/reportMessage.ts
+All matched files use Prettier code style!
+$ corepack pnpm exec prettier --write apps/web/app/api/sessions   (then --check, bracket path in
+   apps/web/app/api/sessions/[id]/reports/handlers.ts could not be passed as a literal CLI arg in
+   this sandbox; ran prettier over the parent apps/web/app/api/sessions directory instead, which
+   covers the same file without the literal path argument)
+All matched files use Prettier code style!
+```
+
+```
+$ python3 .githooks/secret-scan.py --all
+(no output — clean)
+```
+
 ## Budget
 
 Phase A tool calls used: 26
+Phase B tool calls used: 32
