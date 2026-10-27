@@ -124,6 +124,14 @@ budget.
   `documents-sweep-index.int.test.ts` (EXPLAIN shows Index Scan, no Sort, for both query shapes)
   and by `ingest-sweep.int.test.ts`'s own EXPLAIN assertion (updated to the new index name).
 
+### 27 Oct 2026 · 8.2r approve merge of migration 0041 · decided by lead · risk: high
+- Decided: merge migration 0041 (the documents list index, the failure_reason CHECK dropped and re-added NOT VALID then validated, and the sweep index replaced) with its changes to `packages/db/src/migrate.ts` and `packages/db/src/schema/content.ts`. database-reviewer, code-reviewer and typescript-reviewer ran; none raised a CRITICAL or HIGH finding.
+- Why: the CHECK swap happens inside the migration's one transaction, so the constraint is never off; the new sweep index is built CONCURRENTLY before the old one is dropped; and the new predicate covers both the current sweep query and 8.2q's widened one, so merge order with 8.2q is safe. The database MEDIUM (nulls order in content.ts) goes to 8.2s.
+
+### 27 Oct 2026 · 8.2r budget overrun accepted · decided by lead · risk: low
+- Decided: accept 198 harness-counted tool calls against 60 (45 planned plus 15 for the sweep-index addition), about 3.3x.
+- Why: the lead added the sweep index mid-build, and the Postgres EXPLAIN tests needed several rounds to force index plans on small fixtures. The builder reported about 63 calls, so self-counts are unreliable here. Later migration tasks with EXPLAIN tests should plan about 120 calls, or split the EXPLAIN tests into their own phase.
+
 ## Gate
 - `corepack pnpm --filter @edmate/db exec tsc --noEmit -p .` — pre-existing unrelated errors in
   other test files (missing built `@edmate/contracts`/`@edmate/harness` types when run directly,
