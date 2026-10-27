@@ -12,6 +12,39 @@
 import { isIP } from 'node:net';
 import { Redis } from 'ioredis';
 
+/** Connect/command timeouts so a Redis outage fails open in milliseconds, not ~10 s (9.2e item 6). */
+const REDIS_CONNECT_TIMEOUT_MS = 1000;
+const REDIS_COMMAND_TIMEOUT_MS = 1000;
+
+const TAKE_COMMAND = 'edmateDiscoveryRateLimitTake';
+
+/**
+ * `KEYS[1]` the bucket's key; `ARGV`: `windowMs`. One atomic `EVAL` for `INCR` then, only on the
+ * first hit, `PEXPIRE` -- mirrors `packages/queue/src/turnLimits.ts`'s Lua-script pattern (no
+ * `redis.call('TIME')`, the fixed-window algorithm itself is unchanged) so a crash or a slow tick
+ * between two separate round trips can never leave the key with no TTL.
+ */
+const TAKE_SCRIPT = `
+local key = KEYS[1]
+local windowMs = tonumber(ARGV[1])
+local count = redis.call('INCR', key)
+if count == 1 then
+  redis.call('PEXPIRE', key, windowMs)
+end
+return count
+`;
+
+interface WithTakeCommand {
+  [TAKE_COMMAND](key: string, windowMs: string): Promise<number>;
+}
+
+/** Defines the Lua command on `redis` once (idempotent: ioredis just reassigns on a repeat call). */
+function ensureCommand(redis: Redis): asserts redis is Redis & WithTakeCommand {
+  const withCommand = redis as unknown as Record<string, unknown>;
+  if (typeof withCommand[TAKE_COMMAND] === 'function') return;
+  redis.defineCommand(TAKE_COMMAND, { numberOfKeys: 1, lua: TAKE_SCRIPT });
+}
+
 /** Requests allowed per client bucket per window. */
 export const DISCOVERY_RATE_LIMIT = 60;
 export const DISCOVERY_RATE_WINDOW_MS = 60_000;
@@ -64,7 +97,9 @@ export interface DiscoveryRateLimiterOptions {
 }
 
 /** A fixed-window limiter over `store`; a store failure fails open (see module doc above). */
-export function createDiscoveryRateLimiter(opts: DiscoveryRateLimiterOptions): DiscoveryRateLimiter {
+export function createDiscoveryRateLimiter(
+  opts: DiscoveryRateLimiterOptions,
+): DiscoveryRateLimiter {
   const limit = opts.limit ?? DISCOVERY_RATE_LIMIT;
   const windowMs = opts.windowMs ?? DISCOVERY_RATE_WINDOW_MS;
   const prefix = opts.prefix ?? DISCOVERY_RATE_PREFIX;
@@ -82,13 +117,16 @@ export function createDiscoveryRateLimiter(opts: DiscoveryRateLimiterOptions): D
   };
 }
 
-/** Plain `INCR`/`PEXPIRE`: the simplest correct fixed window for an advisory, non-security limit. */
+/**
+ * One atomic `EVAL` (`INCR` plus a conditional `PEXPIRE` on the first hit) -- see `TAKE_SCRIPT`
+ * above. Still the simplest correct fixed window for an advisory, non-security limit; only the
+ * two-round-trip race is removed.
+ */
 export function redisRateLimitStore(redis: Redis): RateLimitStore {
+  ensureCommand(redis);
   return {
     async increment(key, windowMs) {
-      const count = await redis.incr(key);
-      if (count === 1) await redis.pexpire(key, windowMs);
-      return count;
+      return redis[TAKE_COMMAND](key, String(windowMs));
     },
   };
 }
@@ -109,11 +147,17 @@ export function discoveryRateLimiter(
     limiter = { allow: () => Promise.resolve(true) };
     return limiter;
   }
-  const redis = new Redis(url, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+  const redis = new Redis(url, {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+    commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
+  });
   redis.on('error', (error: unknown) => console.error(`[discovery] redis ${errorName(error)}`));
   limiter = createDiscoveryRateLimiter({
     store: redisRateLimitStore(redis),
-    onStoreError: (error) => console.error(`[discovery] rate_limit_unavailable ${errorName(error)}`),
+    onStoreError: (error) =>
+      console.error(`[discovery] rate_limit_unavailable ${errorName(error)}`),
   });
   return limiter;
 }

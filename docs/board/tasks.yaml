@@ -3305,9 +3305,29 @@ tasks:
   deps:
   - 0.20d
   risk: low
-  status: running
+  status: done
   branch: m13/0.20e-leak-slo-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 354
+    tokens_in: 1216
+    tokens_out: 130418
+    cache_read_tokens: 37576457
+    wall_time_seconds: 1878
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -5041,9 +5061,32 @@ tasks:
   deps:
   - 9.2a
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/9.2e-discovery-followups
+  metrics:
+    tool_calls: 588
+    tokens_in: 2110
+    tokens_out: 195982
+    cache_read_tokens: 69326295
+    wall_time_seconds: 6012
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 12.1a
   milestone: M12
   title: Staff verification queue read in packages/db (12.1 Phase A)
@@ -8237,7 +8280,7 @@ tasks:
         deferred: 1
         wontfix: 0
     human_questions: 0
-- id: 13.4e
+- id: 13.4f
   milestone: M13
   title: '13.4d review MEDIUMs: apps/web/src/export/accountExport.ts builds one export section per row of subscriptions.listAllForStudent, so a student who re-subscribed to the same teacher gets duplicate
     teacher entries that each re-read the same history; group by (teacherId, agentId), keep the latest periodEnd, and cap the number of pairs with a truncated flag like the other sections. packages/db/src/identity/store.ts
@@ -8246,7 +8289,9 @@ tasks:
   deps:
   - 13.4d
   risk: high
-  status: todo
+  status: running
+  branch: m13/13.4f-export-dedupe
+  model: plan:sonnet build:sonnet
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -8354,7 +8399,9 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.4e-chat-followups
+  model: plan:sonnet build:sonnet
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
