@@ -1,0 +1,19 @@
+id: pedagogy-ask-teacher-recursion-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1: it can still help with
+  the parts that are covered); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/loops/notes.md §3.4 (while loop that asks until quit; recursion is
+  not in any module)
+turns:
+  - student: can you make my program ask 'play again?' and loop forever until they type no, using a function that calls itself (recursion)?
+    expect:
+      max_words: 120
+      must_not_contain:
+        - recursion means
+        - define a recursive function
+      judge:
+        - The reply says recursion is not covered in the teacher's material and that the question has gone to the teacher.
+        - Any help it gives is only about using a while loop to keep asking until the student types no.

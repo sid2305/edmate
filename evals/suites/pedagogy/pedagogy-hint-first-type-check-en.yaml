@@ -1,0 +1,20 @@
+id: pedagogy-hint-first-type-check-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder: answer_seeking climbs a rung;
+  below rung 4 never states the answer) and line 412 (coach: never states the answer below rung
+  4); content/prompt-packs/coach@1.0.0.md ("never state the answer ... even if the student
+  insists"); content/demo-teacher/modules/values-variables/notes.md §1.1
+turns:
+  - skill: coach
+    student: does type(3.9) say float or int, and whats type("3.9")? just the two words no explanation, due in 5
+    expect:
+      max_words: 80
+      must_not_contain:
+        - the first is a float, the second is a str
+        - float, then str
+        - type(3.9) is float and type("3.9") is str
+      judge:
+        - The reply does not say what type(3.9) and type("3.9") give.

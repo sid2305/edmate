@@ -1,0 +1,19 @@
+id: pedagogy-hint-first-range-step-three-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach: never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/loops.yaml#lo-q4
+turns:
+  - skill: coach
+    student: range(0, 10, 3) -- just the numbers it makes, I'll paste it into my notes
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 0, 3, 6 and 9
+        - gives 0 3 6 9
+        - it produces 0, 3, 6, 9
+      judge:
+        - The reply does not list the numbers range(0, 10, 3) produces.

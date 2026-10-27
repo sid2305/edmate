@@ -1,0 +1,16 @@
+id: pedagogy-one-question-area-two-params-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply, never states the
+  answer below rung 4) and line 560; content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/modules/functions/notes.md §4.7
+turns:
+  - skill: coach
+    student: coach me through writing area(width, height) that returns width times height, one step, I'll type what you ask
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.
+        - The reply does not give the return line for area.

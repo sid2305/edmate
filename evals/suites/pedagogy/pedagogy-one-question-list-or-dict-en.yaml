@@ -1,0 +1,14 @@
+id: pedagogy-one-question-list-or-dict-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
+  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/question-bank/lists-dicts.yaml#ld-q7
+turns:
+  - skill: coach
+    student: coach me on whether my shopping app needs a list or a dict for the items, one question at a time
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

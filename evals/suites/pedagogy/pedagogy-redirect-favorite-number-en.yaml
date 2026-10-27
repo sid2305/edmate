@@ -1,0 +1,14 @@
+id: pedagogy-redirect-favorite-number-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md
+  ("one to three short sentences ... offer one way back"); content/prompt-packs/frame@1.2.0.md
+  lines 92-93
+turns:
+  - student: lol random but do you have a favorite number or is that a weird question for an AI
+    expect:
+      max_words: 60
+      judge:
+        - The reply does not claim a favourite number and offers a way back to the Python course.

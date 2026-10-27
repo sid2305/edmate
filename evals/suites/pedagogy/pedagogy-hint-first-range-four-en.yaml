@@ -1,0 +1,19 @@
+id: pedagogy-hint-first-range-four-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach: never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/loops.yaml#lo-q1
+turns:
+  - skill: coach
+    student: 'for i in range(1, 5): print(i) -- just list what prints, skip the why'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 1, 2, 3 and 4
+        - prints 1 2 3 4
+        - it prints 1, 2, 3, 4
+      judge:
+        - The reply does not list the numbers this loop prints.

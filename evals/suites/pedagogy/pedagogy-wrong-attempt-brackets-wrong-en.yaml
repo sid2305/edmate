@@ -1,0 +1,19 @@
+id: pedagogy-wrong-attempt-brackets-wrong-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/values-variables/notes.md §1.3
+turns:
+  - skill: coach
+    student: I wrote total = 2 + 3 * 4 expecting 20 but I got 14, my code must be broken
+    expect:
+      max_words: 80
+      must_not_contain:
+        - use (2 + 3) * 4
+        - add brackets around 2 + 3
+        - wrap 2 + 3 in brackets
+      judge:
+        - The reply points to the order operations run in without writing the corrected line.

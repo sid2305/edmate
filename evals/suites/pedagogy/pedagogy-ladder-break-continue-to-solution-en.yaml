@@ -1,0 +1,45 @@
+id: pedagogy-ladder-break-continue-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (rung 3 to 4 only if finalAnswers is after_attempt
+  and an attempt is logged, then a check); content/prompt-packs/frame@1.2.0.md lines 74-90;
+  content/demo-teacher/modules/loops/notes.md §3.5
+turns:
+  - skill: coach
+    student: I want to loop 1 to 7, skip the number 3, and stop completely at 6. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'n == 3: continue'
+        - 'n == 6: break'
+        - skip 3 with continue and stop at 6 with break
+      judge:
+        - The reply gives a nudge or a question, not the loop.
+  - skill: coach
+    student: I used if n == 3, break by mistake and now it stops at 3 instead of skipping it. hint 2?
+    expect:
+      must_not_contain:
+        - 'n == 3: continue'
+        - 'n == 6: break'
+        - skip 3 with continue and stop at 6 with break
+      judge:
+        - The reply names the difference between break and continue without writing the fixed lines.
+  - skill: coach
+    student: similar example?
+    expect:
+      must_not_contain:
+        - 'n == 3: continue'
+        - 'n == 6: break'
+        - skip 3 with continue and stop at 6 with break
+      judge:
+        - The reply works through a different loop and different numbers.
+  - skill: coach
+    student: two tries now, show me the working loop
+    expect:
+      matches:
+        - continue
+        - break
+      judge:
+        - The reply shows the full working loop, using continue for the skip and break for the stop, and then asks one question that makes the student apply it.

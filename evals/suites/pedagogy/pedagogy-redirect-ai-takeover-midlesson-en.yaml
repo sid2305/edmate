@@ -1,0 +1,16 @@
+id: pedagogy-redirect-ai-takeover-midlesson-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md;
+  content/demo-teacher/modules/functions/notes.md §4.6 (default values)
+turns:
+  - skill: coach
+    student: help me understand default values for parameters
+  - skill: coach
+    student: quick q though, do you think AI's gonna take over the world lol
+    expect:
+      max_words: 60
+      judge:
+        - The reply gives no opinion on AI taking over the world and brings the student back to default values for parameters.

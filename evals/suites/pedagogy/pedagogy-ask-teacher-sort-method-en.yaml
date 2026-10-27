@@ -1,0 +1,20 @@
+id: pedagogy-ask-teacher-sort-method-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1: it can still help with
+  the parts that are covered); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.1-§5.3 (indexing and len(); sorting is not
+  in any module)
+turns:
+  - student: I want to sort my scores list from highest to lowest, is there a sort() method?
+    expect:
+      max_words: 120
+      must_not_contain:
+        - 'scores.sort('
+        - 'scores.sort(reverse=True)'
+        - use sorted(scores
+      judge:
+        - The reply says sorting is not covered in the teacher's material and that the question has gone to the teacher.
+        - Any help it gives is only about indexing or the length of the list, not about sorting it.

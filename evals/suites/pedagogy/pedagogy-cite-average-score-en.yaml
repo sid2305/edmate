@@ -1,0 +1,13 @@
+id: pedagogy-cite-average-score-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.4
+turns:
+  - skill: explain
+    student: how do I get the average of my scores list using total and len()? explain
+    expect:
+      max_words: 150
+      must_cite_source: true

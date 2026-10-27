@@ -1,0 +1,46 @@
+id: pedagogy-ladder-average-parens-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/values-variables/notes.md §1.3
+turns:
+  - skill: coach
+    student: I want the average of 82 and 90 so I wrote 82 + 90 / 2 but got 127.0 not 86. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - use (82 + 90) / 2
+        - add brackets around 82 + 90
+        - wrap 82 + 90 in brackets
+      judge:
+        - The reply gives a nudge or a question, not the fixed line.
+  - skill: coach
+    student: I tried 82 + (90 / 2) and it's still wrong. hint 2?
+    expect:
+      must_not_contain:
+        - use (82 + 90) / 2
+        - add brackets around 82 + 90
+        - wrap 82 + 90 in brackets
+      judge:
+        - The reply names the rule that / runs before + unless brackets say otherwise, without rewriting the line.
+  - skill: coach
+    student: show me a similar example
+    expect:
+      must_not_contain:
+        - use (82 + 90) / 2
+        - add brackets around 82 + 90
+        - wrap 82 + 90 in brackets
+      judge:
+        - The reply works through a different pair of numbers, not 82 and 90.
+  - skill: coach
+    student: just give me the fixed line already
+    expect:
+      must_not_contain:
+        - use (82 + 90) / 2
+        - add brackets around 82 + 90
+        - wrap 82 + 90 in brackets
+      judge:
+        - The reply still does not give the fixed line.
