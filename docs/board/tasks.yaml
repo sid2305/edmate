@@ -7223,9 +7223,9 @@ tasks:
   deps:
   - 12.4a
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.4e-agents-index
+  model: plan:sonnet build:sonnet
 - id: 12.5e
   milestone: M13
   title: 'Alert worker follow-up: alert.raise logs a store.record failure before awaiting notify, so a joint DB and notifier outage still logs safety_alert.store_failed (12.5b review)'
