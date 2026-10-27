@@ -5010,7 +5010,9 @@ tasks:
   deps:
   - 9.2a
   risk: medium
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/9.2e-discovery-followups
 - id: 12.1a
   milestone: M12
   title: Staff verification queue read in packages/db (12.1 Phase A)
@@ -5763,7 +5765,7 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: todo
+  status: planning
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
@@ -8153,6 +8155,15 @@ tasks:
   status: running
   branch: m13/8.7p-redact-span-surrogate
   model: plan:sonnet build:sonnet
+- id: 8.7q
+  milestone: M13
+  title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
+    checked, so redaction runs on input of any size. Reject an oversized plain JSON before redacting (allowing for REDACTED being longer than a short email), with a test.'
+  accept: storable() refuses an oversized value with RepositoryError invalid before calling redactPersonalData; a test proves redaction is not called for it.
+  deps:
+  - 8.7p
+  risk: high
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -9477,6 +9488,15 @@ tasks:
   status: running
   branch: m13/9.3m-subject-history
   model: plan:sonnet build:sonnet
+- id: 9.3n
+  milestone: M13
+  title: '9.3m review LOWs: apps/web/app/staff/verification-row.tsx keys the subjectHistory list on the array index (key on ts plus from/to instead); apps/web/app/api/staff/verifications route tests gain
+    a case where findSubjectHistoryForStaff (and findLastVerifyForStaff) throws inside enrichQueueRows and the handler still maps it to its 403/500 response.'
+  accept: Both items done, with tests.
+  deps:
+  - 9.3m
+  risk: high
+  status: todo
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
