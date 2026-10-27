@@ -58,6 +58,14 @@ Built, tests-first, the `teacher.subject` audit write and its staff-only read, p
   the assertions (not the feature) keeps the 100%-statement-coverage rule without weakening what
   each test actually checks.
 
+### 26 Oct 2026 · 9.3m budget · decided by lead · risk: low
+- Decided: Accept 267 tool calls (harness count: Phase A 117, Phase B 98, fix round 52) against the plan's 95.
+- Why: Both phases ran over. Phase A spent its extra calls on the staff route's real-Postgres tests, and the fix round on a two-connection race test that had to fail on the old code first. The work is complete and reviewed. Future briefs ask builders to count their own calls more honestly; their reports were about half the harness count.
+
+### 26 Oct 2026 · 9.3m merge · decided by lead · risk: high
+- Decided: Merge 9.3m. It touches packages/db/src/repositories/** and apps/web/app/api/staff/** (risky paths; the required reviewer is security-reviewer). database-reviewer found a CRITICAL race: teacherProfiles.update() read the old subject without a lock, so a concurrent update could write a stale "before" value into the teacher.subject audit row. security-reviewer raised the same race as MEDIUM, and the lead rated it HIGH. The fix adds FOR UPDATE to the prev CTE, plus a two-connection test that failed before the fix. database-reviewer and security-reviewer re-reviewed it and approved. code-reviewer and typescript-reviewer approved the original change. The LOWs move to 9.3n.
+- Why: Staff now see a teacher's last 10 subject changes on the verification queue (B-58). The audit trail behind that list must be correct under concurrent edits, and the lock makes it so with no new lock-order risk.
+
 ## Gate
 
 ```
@@ -88,7 +96,7 @@ on yet (the plan's own note — Phase A's gate only needs `@edmate/db`).
 
 ## Budget
 
-Tool calls used: 61
+Tool calls used: 117 (harness count; the builder reported 61)
 
 # 9.3m handoff — Phase B (apps/web)
 
@@ -181,7 +189,7 @@ is logged `risk: high` accordingly.
 
 ## Budget
 
-Tool calls used: 48
+Tool calls used: 98 (harness count; the builder reported 48)
 
 ## Fix round
 
@@ -232,7 +240,7 @@ $ python3 .githooks/secret-scan.py --all
   (clean, no output)
 ```
 
-Tool calls used: 24
+Tool calls used: 52 (harness count; the builder reported 24)
 
 ### Decisions
 
