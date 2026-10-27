@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 7.2l budget overrun · decided by lead · risk: low
+- Decided: accept 105 tool calls against a plan budget of 25.
+- Why: most of the extra calls polled a backgrounded gate run, which the brief forbids. The diff is small and both reviewers checked every pattern alternative before and after. The next harness briefs repeat the foreground-only rule.
+
+---
+
+### 26 Oct 2026 · 7.2l merge of the moderation guard changes · decided by lead · risk: high
+- Decided: merge the packages/harness/src/guardrails changes. The Devanagari past and habitual forms of the weapons-conceal and vapes-sell rules stay fail-closed (they block without an intent marker). The alternatives are reordered longest-first, and MISUSE_CODES is frozen.
+- Why: the pilot is English-only, and Devanagari is a safety-net table, as in 7.2j and 7.2k. A false block on a factual Hindi sentence is a smaller harm than a miss. code-reviewer and typescript-reviewer confirmed that every pattern matches the same set and that no behaviour changed beyond the new test.
+
+---
+
 ### 26 Oct 2026 · 8.7i no new v8 ignore for RunShape.createdAt · decided by builder · risk: low
 - Decided: did not add a `/* v8 ignore next */` comment for the new `createdAt: z.date()` field,
   despite the plan's wording suggesting one.
