@@ -42,7 +42,11 @@ No change needed to `apps/web/app/staff/repeat-infringers/page.tsx` or
   tests pass.
 
 ## Decisions
-None.
+
+### 27 Oct 2026 · 12.3g staff route follow-ups approval · decided by lead · risk: high
+- Decided: approve the changes under apps/web/app/api/staff/** (repeat-infringers/handlers.ts, route.test.ts and verifications/handlers.ts) for merge. security-reviewer approved with no findings: the optional pre-fetched takedown list only ever comes from the same request's staff-scoped read, and the /api/staff/verifications callers are unchanged.
+- Why: it closes the three 12.3d review LOWs with no behaviour change beyond one fewer database read per request.
+
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → 10 successful, 10 total (7
@@ -52,4 +56,4 @@ None.
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 17
+Tool calls used: 24 (harness count)
