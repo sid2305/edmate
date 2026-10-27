@@ -211,3 +211,55 @@ Phase B tool calls used: ~95 (over the ~50 planned; a session compaction mid-pha
 typecheck fixes on the mock gateway's `generateObject` signature, and re-running the gate to
 separate `@edmate/web`'s own clean result from the unrelated `@edmate/harness` contention flake
 accounted for most of the overrun)
+
+## Fix round 1
+
+typescript-reviewer (HIGH): a generated (non-bank) practice item's `topicId` was always
+`<moduleId>:practice` (`parseGeneratedId`'s own shape, a harness-internal label). Phase A's
+`topicIdFor` (`packages/harness/src/tools/practice.ts`) fell back to it when the bank had no
+topic, and that value flowed through `IssuedItem.topicId` → `HelpState.practiceTopicId` →
+`EvidenceEvent.topicId`. `EvidenceEventSchema.topicId` is `id()` (`packages/contracts/src/
+formats.ts`, `^[A-Za-z0-9_-]+$`) — a `:` never fits — so every graded generated-item turn made
+`profiles.applyEvidence` (`commit.ts`, out of scope for this round) throw after the reply had
+already streamed.
+
+**Fix:**
+- `packages/harness/src/tools/practice.ts` — `topicIdFor` now returns only `bank.itemFor(itemId,
+  scope)?.topicId`, the bank's own, real topic row the teacher owns. The `parseGeneratedId`
+  fallback is gone; a generated item gets no `topicId` at all (same place `issuedItem()` already
+  omits the field when `topicIdFor` returns `undefined` — no change needed there).
+- `packages/harness/src/pipeline/runner.ts` — `evidenceFor` adds a one-line belt-and-braces guard:
+  a stored `practiceTopicId` that doesn't fit `EvidenceEventSchema`'s `id()` shape
+  (`^[A-Za-z0-9_-]{1,128}$`, matched inline — contracts itself is untouched) is treated the same as
+  "no topic stored" and skipped. Optional per the brief; kept at one line.
+- `packages/harness/src/tools/practice.test.ts` — the generated-item `issuedItem()` case now
+  asserts no `topicId` property (was asserting `'module-arithmetic:practice'`).
+
+### Red-then-green evidence
+- `packages/harness/src/pipeline/runner.evidence.test.ts` — new `describe('runner: a generated
+  practice item never emits evidence (fix round 1)')`: drives the real `practice.next_item` tool
+  and the real `generate`/`postGuard` steps (not the hand-picked `'linear'` fixture the rest of
+  this file uses) to issue a generated item with an empty bank, then grades it `correct` in a
+  second turn. Verified red first: with `topicIdFor`'s fallback temporarily restored, this test
+  failed both ways it checks the bug — `savedHelp` had `practiceTopicId: 'mod_test_01:practice'`
+  (not absent) after the issuing turn, and (separately confirmed via the existing
+  `practice.test.ts` case) `issuedItem()` returned that same colon-bearing `topicId`. Restored, the
+  new test and the updated `practice.test.ts` case both pass.
+- Full `@edmate/harness` suite (leaf, run alone, no other workspace package competing for CPU):
+  **128 files / 5682 tests passed** (one more test than the original handoff's 5681 — the new
+  case), including `runner.evidence.test.ts` (7/7, up from 6) and `practice.test.ts`.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness` (dependents form): the
+  same two pre-existing, machine-contention timing flakes already named in this handoff's original
+  Gate section (`src/pedagogy/modelRequest.test.ts`'s linear-time ratio check,
+  `src/pipeline/runner.test.ts`'s hardcoded-2000ms-timeout soft-hit case) failed under load; neither
+  touches anything this fix round changed. Re-run alone
+  (`vitest run src/pedagogy/modelRequest.test.ts src/pipeline/runner.test.ts`): **138/138 passed**.
+- `corepack pnpm exec prettier --check` on the four touched files: `runner.evidence.test.ts` needed
+  one `--write` (the new block); the other three already matched.
+- `python3 .githooks/secret-scan.py --all`: clean.
+
+Fix tool calls used: 34
+
+No new decisions in this round (the fix matches the finding and the brief's recommended shape
+exactly: drop the fallback, add the one-line belt-and-braces guard, update the one test whose
+expectation encoded the bug).

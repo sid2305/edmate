@@ -1213,13 +1213,16 @@ class Turn {
    * steering signal, not a settled outcome); only the `practice` skill (Q2); weight is always 1
    * (Q3, BKT math stays the db adapter's job). `ctx` is this turn's context when one was built; no
    * context (an early error/blocked turn) or no stored topic (a defensive gap: an item issued
-   * before this task, or a non-practice answerKey) means no event — never throws.
+   * before this task, a generated item with no real topic row, or a non-practice answerKey) means
+   * no event — never throws. Fix round 1: a belt-and-braces check that `topicId` also fits
+   * `EvidenceEventSchema`'s `id()` shape (contracts), in case a future caller of `topicIdFor`
+   * (practice.ts) ever stores something that isn't a real topic id again.
    */
   private evidenceFor(e: Entitled, ctx: TurnContext | undefined): EvidenceEvent[] | undefined {
     if (ctx === undefined || this.turnSkill !== 'practice') return undefined;
     if (ctx.attempt !== 'correct' && ctx.attempt !== 'wrong') return undefined;
     const topicId = this.loadedHelp?.help.practiceTopicId;
-    if (topicId === undefined) return undefined;
+    if (topicId === undefined || !/^[A-Za-z0-9_-]{1,128}$/.test(topicId)) return undefined;
     return [
       {
         studentId: e.entitlement.studentId,

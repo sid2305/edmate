@@ -3,13 +3,24 @@
 // (its stored `practiceTopicId`) onto `CommitRecord.evidence`, the already-shipped consumer
 // `commit.ts`'s `profiles.applyEvidence` reads (3.17). No topic stored, no practice skill, or an
 // unsettled attempt (`'none'`/`'partial'`) all mean no event; the producer never throws.
-import { demoPedagogyDecision, demoTurnInput, learnerProfileNew } from '@edmate/contracts/fixtures';
+import {
+  demoPedagogyDecision,
+  demoTurnInput,
+  learnerProfileNew,
+  usageMain,
+} from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { copyHelp, type HelpState, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { driveTurn } from '../testing/driveTurn.js';
+import { memoryToolRegistry } from '../testing/memoryToolRegistry.js';
+import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import { testDecideResult, testDeps, testSteps, type TestSteps } from '../testing/testSteps.js';
+import { demoPracticeBank } from '../tools/demoPracticeBank.js';
+import { practiceNextItemTool } from '../tools/practice.js';
 import { runTurn } from './runner.js';
-import type { Attempt } from '@edmate/contracts';
+import { defaultSteps } from './steps/index.js';
+import type { Steps } from './types.js';
+import type { Attempt, ModelChunk, PedagogyDecision } from '@edmate/contracts';
 
 const heldHelp = (extra: Partial<HelpState> = {}): HelpState =>
   copyHelp({
@@ -95,5 +106,92 @@ describe('runner: graded-check EvidenceEvent (6.4a)', () => {
     delete (help as { practiceTopicId?: string }).practiceTopicId;
     const { commit } = await turnWith({ attempt: 'correct', help });
     expect(commit?.evidence).toBeUndefined();
+  });
+});
+
+// Fix round 1: a generated (non-bank) practice item has no real topic row (its own `topicId` is
+// always `<moduleId>:practice`, a harness-internal label `EvidenceEventSchema.topicId`'s `id()`
+// shape rejects — a `:` is not in `^[A-Za-z0-9_-]+$`). Driven through the real `practice.next_item`
+// tool and the real `generate` step (not the hand-picked 'linear' fixture above), so
+// `topicIdFor`/`issuedItem` actually resolve the item's topic the way production does, this
+// confirms a graded generated item emits no evidence and the turn still commits (never throws, the
+// bug this fix round closes: before it, `topicId` was `module-arithmetic:practice`, which commit's
+// real `profiles.applyEvidence` consumer — out of scope here — would reject).
+describe('runner: a generated practice item never emits evidence (fix round 1)', () => {
+  const say = (text: string): ModelChunk => ({ type: 'text', text });
+  const used: ModelChunk = { type: 'usage', usage: usageMain };
+  const callItem: ModelChunk = {
+    type: 'tool_call',
+    id: 'c1',
+    name: 'practice.next_item',
+    args: {},
+  };
+  const decision: PedagogyDecision = {
+    ...demoPedagogyDecision,
+    move: 'ask',
+    mustNotReveal: [],
+    tools: ['practice.next_item'],
+  };
+  const main = (...steps: ModelChunk[]) => ({
+    match: (r: { tier: string }) => r.tier === 'main',
+    steps: [...steps],
+  });
+  // `defaultSteps.generate` (the real generate step) loads the agent's own prompt pack version;
+  // the fixture packs are only registered under `FIXTURE_PROMPT_PACK_VERSION` (as in
+  // runner.practiceAnswerKey.test.ts's `fixtureEntitle`).
+  const fixtureEntitle: Steps['entitle'] = async (env) => {
+    const e = await testSteps().entitle(env);
+    return { ...e, agent: { ...e.agent, promptPackVersion: FIXTURE_PROMPT_PACK_VERSION } };
+  };
+
+  it('issuing, then grading, a generated item: no evidence, the turn still commits', async () => {
+    const tools = memoryToolRegistry([practiceNextItemTool(demoPracticeBank([]))]);
+    const issueDeps = testDeps({
+      overrides: { tools },
+      script: { stream: [main(callItem, used), main(say('Here.'), used)] },
+    });
+    const issueSteps = testSteps({
+      entitle: fixtureEntitle,
+      route: { run: () => Promise.resolve({ intent: 'on_task', attempt: 'none', usage: [] }) },
+      decide: { run: () => Promise.resolve(testDecideResult(decision)) },
+      generate: defaultSteps.generate,
+      postGuard: defaultSteps.postGuard,
+    });
+    await driveTurn(
+      runTurn(demoTurnInput, { deps: issueDeps.deps, steps: issueSteps }),
+      issueDeps.clock,
+    );
+    const savedHelp = issueSteps.commits[0]?.next?.help;
+    expect(savedHelp?.practiceItemId).toMatch(/^gen:/);
+    expect(savedHelp).not.toHaveProperty('practiceTopicId');
+
+    const gradeDeps = testDeps({
+      overrides: { tools },
+      script: { stream: [main(say('Nice work.'), used)] },
+    });
+    const gradeSteps = testSteps({
+      entitle: fixtureEntitle,
+      route: { run: () => Promise.resolve({ intent: 'on_task', attempt: 'correct', usage: [] }) },
+      buildContext: () =>
+        Promise.resolve({
+          profile: learnerProfileNew,
+          history: [],
+          retrieved: [],
+          lockedHit: false,
+          helpRung: 0,
+          helpState: savedHelp ?? copyHelp(INITIAL_HELP_STATE),
+        }),
+      decide: { run: () => Promise.resolve(testDecideResult({ ...decision, tools: [] })) },
+      generate: defaultSteps.generate,
+      postGuard: defaultSteps.postGuard,
+    });
+    const { events } = await driveTurn(
+      runTurn(demoTurnInput, { deps: gradeDeps.deps, steps: gradeSteps }),
+      gradeDeps.clock,
+    );
+    expect(events.some((e) => e.type === 'error')).toBe(false);
+    const graded = gradeSteps.commits[0];
+    expect(graded).toBeDefined();
+    expect(graded?.evidence).toBeUndefined();
   });
 });

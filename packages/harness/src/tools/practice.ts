@@ -186,14 +186,12 @@ export function practiceNextItemTool(
     if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
     return generatedAnswerKeyFor(itemId);
   };
-  // 6.4a: the item's topic, server-side, the same way answerKeyFor resolves it — the bank first
-  // (its own `topicId`), then the generator's parsed id. Undefined for an id outside scope.
+  // 6.4a fix round 1: a generated item's own `topicId` is always `<moduleId>:practice`, a
+  // harness-internal label the student never sees — not a real topic row the teacher owns. Only
+  // the bank's own `topicId` (a real topic, EvidenceEventSchema's `id()` shape) is usable here;
+  // a generated item gets no topicId at all, so evidenceFor (runner.ts) skips emitting for it.
   const topicIdFor = (itemId: string, scope: PracticeScope): string | undefined => {
-    const fromBank = bank.itemFor(itemId, scope)?.topicId;
-    if (fromBank !== undefined) return fromBank;
-    const g = parseGeneratedId(itemId);
-    if (g === undefined || !scope.allowedModuleIds.includes(g.moduleId)) return undefined;
-    return g.topicId;
+    return bank.itemFor(itemId, scope)?.topicId;
   };
   // 5.6b: the active item, rebuilt inside the turn's entitlement: the bank first, then the
   // generator (its prompt and key recomputed from the id). Outside scope: undefined.
