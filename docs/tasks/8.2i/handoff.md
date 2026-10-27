@@ -3,7 +3,22 @@
 Status: DONE
 
 ## Decisions
-None.
+
+### 27 Oct 2026 · 8.2i merge of db repositories and ADR-0014 · decided by lead · risk: high
+- Decided: merge the `failIfStorageKey` compare-and-set (`packages/db/src/repositories/chunks.ts`), the new `ingestSweep` repository (`packages/db/src/repositories/ingestSweep.ts`, `index.ts`), the worker's stuck-ingest sweep and pinned-transport Host header, and the ADR-0014 wording change (`docs/adr/0014-web-link-egress.md`), all risky paths.
+- Why: security-reviewer, architect, typescript-reviewer, code-reviewer and database-reviewer reviewed the branch; both HIGHs were fixed in one round and the reviewers who raised them approved the fix; the index MEDIUM is deferred to 8.2p.
+
+### 27 Oct 2026 · 8.2i sweep checks the ingest job before failing a row · decided by lead · risk: high
+- Decided: before failing a stuck `processing` row, `apps/worker/src/ingest/sweep.ts` looks up the BullMQ job `jobId.ingest(documentId, storageKey)`; waiting, delayed, prioritized, waiting-children or active skips the row (logged `ingest_sweep.still_queued`); a missing, completed or failed job fails the row as before.
+- Why: `documents.updated_at` is set once on entering `processing`, so without this a slow or backlogged job past 30 minutes was failed and then finished into a `failed` row with indexed chunks (database-reviewer HIGH, typescript-reviewer MEDIUM). A job lookup fixes it without a heartbeat column or a migration.
+
+### 27 Oct 2026 · 8.2i IPv6 Host header keeps its brackets · decided by lead · risk: low
+- Decided: `apps/worker/src/webLink/pinnedTransport.ts` sends `Host: [addr]` for an IPv6 literal, plus `:port` only for a non-default port; names and IPv4 are unchanged.
+- Why: a bare IPv6 Host header is malformed (RFC 7230/3986) and was a regression from this branch (code-reviewer and typescript-reviewer HIGH, security-reviewer MEDIUM, architect LOW).
+
+### 27 Oct 2026 · 8.2i budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (308 harness tool calls across three phases and one fix round, against a budget of 130; the builders reported 150).
+- Why: Phase B carried the sweep, a new repository and the worker wiring, and the fix round added the job-state lookup; each phase stayed on scope.
 
 ## Phase A
 
@@ -378,3 +393,5 @@ $ python3 .githooks/secret-scan.py --all
 
 ### Budget
 Fix round tool calls used: 26
+
+Tool calls used: 308 (harness count: Phase A 66, Phase B 129, Phase C 56, fix round 57; the builders reported 150)
