@@ -2,7 +2,8 @@
 // § Ingestion 4; ADR-0003, ADR-0007). Both signals filter by teacher and allowed module in the
 // same statement, before ranking; there is no unfiltered search.
 import { type Chunk, type ChunkKind, LIMITS, type RetrievalIndex } from '@edmate/contracts';
-import { DEFAULT_COVERAGE_THRESHOLD, type LockedIndex, lockedIndex } from '@edmate/harness';
+import { DEFAULT_COVERAGE_THRESHOLD } from '@edmate/harness';
+import { type LockedIndex, lockedIndex } from '@edmate/harness/locked-index';
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';

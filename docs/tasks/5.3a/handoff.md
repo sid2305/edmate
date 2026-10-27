@@ -1,7 +1,6 @@
-# 5.3a handoff (Phase A)
+# 5.3a handoff
 
-Status: DONE (Phase A only; Phase B is left — the `lockedIndex.ts` re-export, the import-path
-swap in `retrieval.ts`, and the `record-demo-embeddings.ts` header note).
+Status: DONE (both phases).
 
 ## Summary
 
@@ -107,3 +106,68 @@ Result: clean, no output.
 ## Budget
 
 Tool calls used: 33
+
+## Phase B
+
+### Summary
+
+Phase B did the small, low-risk cleanups named in the plan, no behaviour change:
+
+- `packages/harness/src/lockedIndex.ts` (new) — re-exports only `{ lockedIndex, type LockedIndex
+  }` from `./guardrails/lockedMatch.js`, outside `guardrails/**` on purpose so this file matches
+  no risk-paths.txt glob.
+- `packages/harness/package.json` — added a `"./locked-index"` entry to `exports`, alongside the
+  existing `"."` and `"./testing"` entries, pointing at `dist/lockedIndex.{d.ts,js}`.
+- `packages/db/src/repositories/retrieval.ts` — split the single `@edmate/harness` barrel import
+  into two lines: `DEFAULT_COVERAGE_THRESHOLD` still from the barrel, `lockedIndex`/`LockedIndex`
+  now from `@edmate/harness/locked-index`. No logic change.
+- `packages/db/scripts/record-demo-embeddings.ts` — added a line to the header comment stating
+  the Node version this repo's `engines` field pins (22.x) and that Node 22.18+ strips `.ts`
+  types natively (no flag), with `--experimental-strip-types` named as the fallback for an older
+  22.x build.
+
+No new test assertions (no behaviour change); re-ran `retrieval.test.ts` and the Phase A int
+tests unchanged via the gate below, confirming the import swap didn't break anything.
+
+### Decisions
+
+### 26 Oct 2026 · 5.3a Phase B import-swap re-export location · decided by builder · risk: high
+- Decided: touched `packages/db/src/repositories/retrieval.ts` (a risk-paths.txt path) again in
+  Phase B, for the one-line import-path change only (no query or retrieval-behaviour change), and
+  added the new `packages/harness/src/lockedIndex.ts` outside `guardrails/**` so the risky-path
+  reviewer group for this change is `security-reviewer` + `code-reviewer` + `typescript-reviewer`
+  only — no `database-reviewer`/`rag-pipeline-reviewer` needed here, per the plan.
+- Why: the plan calls for this risk level and reviewer set explicitly (Phase B "Risky paths
+  touched"), since `retrieval.ts` is still a risk-paths.txt file even though this edit carries no
+  behaviour change.
+
+(Carrying forward, for the record: item 7 is declined — no caller passes a `Tx` into
+`retrievalRepo` today, dormant until the HNSW rewrite the code comment already flags; items 4 and
+11 are declined and bundled, recommending the lead open a new task `5.3c` to widen the
+out-of-course calibration set and design a per-course recalibration path once a second course
+exists to validate against; items 3 and 8 are already done, landed by task 5.4 — see plan.md for
+the file/line evidence for all five.)
+
+### Gate
+
+```
+export TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate
+corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=...@edmate/db
+```
+Result: `Tasks: 38 successful, 38 total`, clean — ran once, no flakes this time.
+
+```
+corepack pnpm exec prettier --check packages/harness/src/lockedIndex.ts \
+  packages/harness/package.json packages/db/src/repositories/retrieval.ts \
+  packages/db/scripts/record-demo-embeddings.ts
+```
+Result: clean.
+
+```
+python3 .githooks/secret-scan.py --all
+```
+Result: clean, no output.
+
+### Budget
+
+Phase B tool calls used: 15
