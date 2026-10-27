@@ -119,7 +119,7 @@ Phase A tool calls used: 39 (harness count; the builder reported 21)
 
 ## Phase B
 
-Status: PARTIAL
+Phase B status: PARTIAL (accepted by the lead; see the top `## Decisions`)
 
 Dev-mode bug not fixed: the fix this plan expected to try (`serverExternalPackages`) was tried and
 confirmed not to clear it, as the plan's own exit condition (b) anticipates. Calling this `DONE`
