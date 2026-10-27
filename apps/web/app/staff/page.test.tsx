@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   listAlertsForStaff: vi.fn(),
   listActiveForStaff: vi.fn(),
   findLastVerifyForStaff: vi.fn(),
+  findSubjectHistoryForStaff: vi.fn(),
   seen: [] as unknown[],
 }));
 
@@ -25,7 +26,10 @@ vi.mock('../../src/auth', () => ({
       teacherProfiles: { listPendingForStaff: state.listPendingForStaff },
       safetyAlerts: { listForStaff: state.listAlertsForStaff },
       takedowns: { listActiveForStaff: state.listActiveForStaff },
-      audit: { findLastVerifyForStaff: state.findLastVerifyForStaff },
+      audit: {
+        findLastVerifyForStaff: state.findLastVerifyForStaff,
+        findSubjectHistoryForStaff: state.findSubjectHistoryForStaff,
+      },
     },
   }),
 }));
@@ -86,6 +90,8 @@ beforeEach(() => {
   state.listActiveForStaff.mockResolvedValue([]);
   state.findLastVerifyForStaff.mockReset();
   state.findLastVerifyForStaff.mockResolvedValue(null);
+  state.findSubjectHistoryForStaff.mockReset();
+  state.findSubjectHistoryForStaff.mockResolvedValue([]);
   state.seen = [];
 });
 
@@ -107,13 +113,17 @@ describe('/staff', () => {
             email: 'asha@example.test',
             activeTakedowns: [],
             lastDecision: null,
+            subjectHistory: [],
           },
         ],
       },
     ]);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Teacher verification');
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(nav).getByRole('link', { name: 'Verification' })).toHaveAttribute('href', '/staff');
+    expect(within(nav).getByRole('link', { name: 'Verification' })).toHaveAttribute(
+      'href',
+      '/staff',
+    );
   });
 
   it('the SSR initial prop carries active takedowns and the last decision (9.3h)', async () => {
@@ -145,8 +155,36 @@ describe('/staff', () => {
             subject: 'Math',
             name: 'Asha',
             email: 'asha@example.test',
-            activeTakedowns: [{ kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' }],
+            activeTakedowns: [
+              { kind: 'document', category: 'other', createdAt: '2026-10-20T00:00:00.000Z' },
+            ],
             lastDecision: { status: 'rejected', ts: '2026-10-19T00:00:00.000Z' },
+            subjectHistory: [],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('the SSR initial prop carries subject history (9.3m, B-58)', async () => {
+    state.requireRole.mockResolvedValueOnce({ userId: 'stf_1', role: 'staff' });
+    state.listPendingForStaff.mockResolvedValueOnce([ROW]);
+    state.findSubjectHistoryForStaff.mockResolvedValueOnce([
+      { from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' },
+    ]);
+    render(await StaffPage());
+    expect(state.seen).toEqual([
+      {
+        initial: [
+          {
+            teacherId: 'tch_a',
+            slug: 'asha-math',
+            subject: 'Math',
+            name: 'Asha',
+            email: 'asha@example.test',
+            activeTakedowns: [],
+            lastDecision: null,
+            subjectHistory: [{ from: 'Math', to: 'Physics', ts: '2026-10-20T00:00:00.000Z' }],
           },
         ],
       },
@@ -173,10 +211,15 @@ describe('/staff', () => {
   it('shows the open/escalated alert banner, linking to /staff/alerts', async () => {
     state.requireRole.mockResolvedValueOnce({ userId: 'stf_1', role: 'staff' });
     state.listPendingForStaff.mockResolvedValueOnce([]);
-    state.listAlertsForStaff.mockResolvedValueOnce([ALERT_ROW, { ...ALERT_ROW, id: 'alr_2', escalatedAt: null }]);
+    state.listAlertsForStaff.mockResolvedValueOnce([
+      ALERT_ROW,
+      { ...ALERT_ROW, id: 'alr_2', escalatedAt: null },
+    ]);
     render(await StaffPage());
     expect(state.listAlertsForStaff).toHaveBeenCalledWith('stf_1', { status: 'open', limit: 50 });
-    const link = screen.getByRole('link', { name: '2 open safety alerts, 1 escalated. Go to the alert inbox.' });
+    const link = screen.getByRole('link', {
+      name: '2 open safety alerts, 1 escalated. Go to the alert inbox.',
+    });
     expect(link).toHaveAttribute('href', '/staff/alerts');
   });
 

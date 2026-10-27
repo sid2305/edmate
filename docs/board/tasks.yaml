@@ -3296,6 +3296,18 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 0.20e
+  milestone: M13
+  title: 'packages/db/test/retrieval-leak.int.test.ts flakes under load: the SLO block (p95 <= 50 ms, p99 <= 100 ms per batch) and the 1,000 ms matching bound at line 184 failed twice on 26 Oct 2026 (13.5a
+    and 13.4d builder runs) while three builders shared dev Postgres. Make the timing checks robust to machine load (for example best-of-N rounds, or a CPU-time or step-count measure) without loosening
+    them so far that a real SLO regression passes; keep ADR-0007 point 6 as the bound.'
+  accept: the SLO and matching-time checks pass repeatedly under parallel load (for example 5 runs alongside another int test run), and a deliberately slowed leakCheck still fails them.
+  deps:
+  - 0.20d
+  risk: low
+  status: running
+  branch: m13/0.20e-leak-slo-flake
+  model: plan:lead build:sonnet
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -5614,7 +5626,9 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: todo
+  status: running
+  branch: m13/8.7i-eval-runs-lows
+  model: plan:sonnet build:sonnet
 - id: 9.2f
   milestone: M13
   title: '9.2c review follow-ups (LOW): scope the next-intl Translate double cast in teachers/[slug]/page.tsx and discovery/format.ts to the dynamic skills key only; scorecard.ts guards byKey.get(key) instead
@@ -5796,6 +5810,7 @@ tasks:
   accept: the leak case passes; EXPLAIN on the staff queue uses the partial index; the comment and title match the code.
   deps:
   - 12.1a
+  - 9.6f
   risk: high
   status: todo
 - id: 8.7k
@@ -7279,8 +7294,31 @@ tasks:
   deps:
   - 13.4b
   risk: high
-  status: todo
-  branch: null
+  status: done
+  branch: m13/13.4d-export-consents-subs
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 441
+    tokens_in: 1574
+    tokens_out: 131062
+    cache_read_tokens: 53450538
+    wall_time_seconds: 7489
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 13.4e
   milestone: M13
   title: '13.4b follow-up (B-59 (3), payments): DELETE /api/me is also held while the student has an open payment dispute, once disputes exist in the ledger and refunds work (apps/web/src/account/delete.ts)'
@@ -8173,9 +8211,41 @@ tasks:
   deps:
   - 8.7m
   risk: low
-  status: running
+  status: done
   branch: m13/8.7p-redact-span-surrogate
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 267
+    tokens_in: 936
+    tokens_out: 91290
+    cache_read_tokens: 33155012
+    wall_time_seconds: 2040
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 13.4e
+  milestone: M13
+  title: '13.4d review MEDIUMs: apps/web/src/export/accountExport.ts builds one export section per row of subscriptions.listAllForStudent, so a student who re-subscribed to the same teacher gets duplicate
+    teacher entries that each re-read the same history; group by (teacherId, agentId), keep the latest periodEnd, and cap the number of pairs with a truncated flag like the other sections. packages/db/src/identity/store.ts
+    listConsentsForStudent casts row.grantedBy to self or parent; parse it with a zod enum instead.'
+  accept: a student with two subscriptions to one teacher gets one teacher entry; the pair count is capped with a truncated flag; a bad grantedBy value fails loud in a test.
+  deps:
+  - 13.4d
+  risk: high
+  status: todo
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -8184,7 +8254,9 @@ tasks:
   deps:
   - 8.7p
   risk: high
-  status: todo
+  status: running
+  branch: m13/8.7q-audit-precap
+  model: plan:lead build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -9526,9 +9598,32 @@ tasks:
   deps:
   - 9.3k
   risk: high
-  status: running
+  status: done
   branch: m13/9.3m-subject-history
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 1288
+    tokens_in: 4544
+    tokens_out: 416516
+    cache_read_tokens: 137653466
+    wall_time_seconds: 7365
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 4
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 3
 - id: 9.3n
   milestone: M13
   title: '9.3m review LOWs: apps/web/app/staff/verification-row.tsx keys the subjectHistory list on the array index (key on ts plus from/to instead); apps/web/app/api/staff/verifications route tests gain
@@ -9605,7 +9700,30 @@ tasks:
   deps:
   - '13.5'
   risk: risky
-  status: todo
+  status: done
+  branch: m13/13.5a-cost-followups
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 279
+    tokens_in: 938
+    tokens_out: 85059
+    cache_read_tokens: 37846479
+    wall_time_seconds: 2212
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 13.3a
   milestone: M13
   title: 'Security headers (13.3 Phase D MEDIUM): apps/web/next.config.ts headers() sets a CSP that works with Next.js (nonce or hash for inline scripts), X-Frame-Options DENY, X-Content-Type-Options nosniff,

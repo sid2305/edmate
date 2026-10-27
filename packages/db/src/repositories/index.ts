@@ -123,6 +123,7 @@ export {
   AUDIT_JSON_MAX_LENGTH,
   AUDIT_MAX_LIMIT,
   type AuditEntryInput,
+  SUBJECT_HISTORY_MAX_LIMIT,
   SYSTEM_ACTOR_PREFIX,
 } from './audit.js';
 export type { SessionRow } from './sessions.js';
@@ -290,7 +291,11 @@ export {
   type SubmitClassQuestionInput,
   type TopicQuestionGroup,
 } from './class-questions.js';
-export { type ClusterableQuestion, clusterQuestions, type QuestionCluster } from './question-similarity.js';
+export {
+  type ClusterableQuestion,
+  clusterQuestions,
+  type QuestionCluster,
+} from './question-similarity.js';
 export {
   REPORT_CATEGORIES,
   REPORT_CITED_DOCUMENTS_MAX,

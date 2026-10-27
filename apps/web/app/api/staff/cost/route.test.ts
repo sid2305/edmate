@@ -18,12 +18,15 @@ const ctx = (principal: Principal = STAFF): RoleContext => ({
   principal,
   params: Promise.resolve({}),
 });
-const get = (query = ''): NextRequest => new NextRequest(`${ORIGIN}${PATH}${query}`, { method: 'GET' });
+const get = (query = ''): NextRequest =>
+  new NextRequest(`${ORIGIN}${PATH}${query}`, { method: 'GET' });
 async function codeOf(res: Response): Promise<string> {
   return ((await res.json()) as { error: { code: string } }).error.code;
 }
 
-function config(o: Partial<PackageConfig> & { id: string; name: string; teacherId: string; agentId: string }): PackageConfig {
+function config(
+  o: Partial<PackageConfig> & { id: string; name: string; teacherId: string; agentId: string },
+): PackageConfig {
   return {
     version: 1,
     moduleIds: [],
@@ -42,8 +45,26 @@ function config(o: Partial<PackageConfig> & { id: string; name: string; teacherI
 function memory() {
   const usageLedger = {
     costByPackageSince: vi.fn(async () => [
-      { teacherId: 'tch_a', packageId: 'pkg_1', calls: 10, recorded: 8, unknown: 1, unpriced: 1, costMicroUsd: 500_000, distinctTurns: 5 },
-      { teacherId: 'tch_a', packageId: 'pkg_2', calls: 0, recorded: 0, unknown: 0, unpriced: 0, costMicroUsd: 0, distinctTurns: 0 },
+      {
+        teacherId: 'tch_a',
+        packageId: 'pkg_1',
+        calls: 10,
+        recorded: 8,
+        unknown: 1,
+        unpriced: 1,
+        costMicroUsd: 500_000,
+        distinctTurns: 5,
+      },
+      {
+        teacherId: 'tch_a',
+        packageId: 'pkg_2',
+        calls: 0,
+        recorded: 0,
+        unknown: 0,
+        unpriced: 0,
+        costMicroUsd: 0,
+        distinctTurns: 0,
+      },
     ]),
   };
   const subscriptions = {
@@ -54,18 +75,50 @@ function memory() {
   };
   const packages = {
     listForTeacher: vi.fn(async () => [
-      { packageId: 'pkg_1', agentId: 'agt_1', liveVersion: 2, config: config({ id: 'pkg_1', name: 'Latest Draft Name', teacherId: 'tch_a', agentId: 'agt_1' }) },
-      { packageId: 'pkg_2', agentId: 'agt_1', liveVersion: null, config: config({ id: 'pkg_2', name: 'No Live Yet', teacherId: 'tch_a', agentId: 'agt_1' }) },
-      { packageId: 'pkg_3', agentId: 'agt_1', liveVersion: 1, config: config({ id: 'pkg_3', name: 'Pkg Three', teacherId: 'tch_a', agentId: 'agt_1' }) },
+      {
+        packageId: 'pkg_1',
+        agentId: 'agt_1',
+        liveVersion: 2,
+        config: config({
+          id: 'pkg_1',
+          name: 'Latest Draft Name',
+          teacherId: 'tch_a',
+          agentId: 'agt_1',
+        }),
+      },
+      {
+        packageId: 'pkg_2',
+        agentId: 'agt_1',
+        liveVersion: null,
+        config: config({ id: 'pkg_2', name: 'No Live Yet', teacherId: 'tch_a', agentId: 'agt_1' }),
+      },
+      {
+        packageId: 'pkg_3',
+        agentId: 'agt_1',
+        liveVersion: 1,
+        config: config({ id: 'pkg_3', name: 'Pkg Three', teacherId: 'tch_a', agentId: 'agt_1' }),
+      },
     ]),
   };
   const packageVersions = {
     get: vi.fn(async (_scope: unknown, ref: { packageId: string; version: number }) => {
       if (ref.packageId === 'pkg_1') {
-        return config({ id: 'pkg_1', name: 'Live Name', teacherId: 'tch_a', agentId: 'agt_1', pricePerMonth: { amountMinor: 2000, currency: 'USD' } });
+        return config({
+          id: 'pkg_1',
+          name: 'Live Name',
+          teacherId: 'tch_a',
+          agentId: 'agt_1',
+          pricePerMonth: { amountMinor: 2000, currency: 'USD' },
+        });
       }
       if (ref.packageId === 'pkg_3') {
-        return config({ id: 'pkg_3', name: 'Pkg Three', teacherId: 'tch_a', agentId: 'agt_1', pricePerMonth: { amountMinor: 0, currency: 'USD' } });
+        return config({
+          id: 'pkg_3',
+          name: 'Pkg Three',
+          teacherId: 'tch_a',
+          agentId: 'agt_1',
+          pricePerMonth: { amountMinor: 0, currency: 'USD' },
+        });
       }
       return null;
     }),
@@ -75,7 +128,11 @@ function memory() {
     Repositories,
     'usageLedger' | 'subscriptions' | 'packages' | 'packageVersions'
   >;
-  const h = createStaffCostHandlers({ repos: () => repos, log: (line) => logs.push(line), now: () => NOW });
+  const h = createStaffCostHandlers({
+    repos: () => repos,
+    log: (line) => logs.push(line),
+    now: () => NOW,
+  });
   return { h, logs, usageLedger, subscriptions, packages, packageVersions };
 }
 
@@ -148,7 +205,9 @@ describe('GET: the staff cost dashboard', () => {
 
   it('a repository throw is 500 provider_error, with no raw error text', async () => {
     const m = memory();
-    m.usageLedger.costByPackageSince.mockRejectedValueOnce(new RepositoryError('failed', 'usageLedger.costByPackageSince'));
+    m.usageLedger.costByPackageSince.mockRejectedValueOnce(
+      new RepositoryError('failed', 'usageLedger.costByPackageSince'),
+    );
     const res = await m.h.list(get(), ctx());
     expect(res.status).toBe(500);
     expect(await codeOf(res)).toBe('provider_error');
@@ -156,9 +215,156 @@ describe('GET: the staff cost dashboard', () => {
 
   it('an unexpected throw logs only the error name', async () => {
     const m = memory();
-    m.subscriptions.activeCountByPackage.mockRejectedValueOnce(new TypeError('secret detail person@example.test'));
+    m.subscriptions.activeCountByPackage.mockRejectedValueOnce(
+      new TypeError('secret detail person@example.test'),
+    );
     const res = await m.h.list(get(), ctx());
     expect(res.status).toBe(500);
     expect(m.logs).toEqual(['[staff] cost.list failed: TypeError']);
+  });
+
+  // 13.5a finding 5: a `scope`-kind RepositoryError from the repo can only be this route's own
+  // bug (its Query schema already validated since/until), not bad user input -- 500, not 400.
+  it('a scope-kind repository error is 500 provider_error, not 400', async () => {
+    const m = memory();
+    m.usageLedger.costByPackageSince.mockRejectedValueOnce(
+      new RepositoryError('scope', 'usageLedger.costByPackageSince'),
+    );
+    const res = await m.h.list(get(), ctx());
+    expect(res.status).toBe(500);
+    expect(await codeOf(res)).toBe('provider_error');
+  });
+
+  // 13.5a finding 3: a since/until span beyond MAX_SPAN_MS (366 days) is 400, a span just under
+  // the cap still succeeds.
+  describe('max span cap', () => {
+    const since = '2020-01-01T00:00:00.000Z';
+
+    it('a span over 366 days is 400 validation', async () => {
+      const m = memory();
+      const until = new Date(new Date(since).getTime() + 367 * 24 * 60 * 60 * 1000).toISOString();
+      const res = await m.h.list(get(`?since=${since}&until=${until}`), ctx());
+      expect(res.status).toBe(400);
+      expect(await codeOf(res)).toBe('validation');
+    });
+
+    it('a span of exactly 366 days still succeeds', async () => {
+      const m = memory();
+      const until = new Date(new Date(since).getTime() + 366 * 24 * 60 * 60 * 1000).toISOString();
+      const res = await m.h.list(get(`?since=${since}&until=${until}`), ctx());
+      expect(res.status).toBe(200);
+    });
+  });
+
+  // 13.5a finding 4: the per-teacher and per-package reads below the top-level Promise.all are
+  // parallelized too, but the joined rows must still be correct (behaviour-preserving).
+  it('still joins correctly across two teachers x two packages-with-a-live-version after parallelizing the per-teacher/per-package reads', async () => {
+    const usageLedger = {
+      costByPackageSince: vi.fn(async () => [
+        {
+          teacherId: 'tch_a',
+          packageId: 'pkg_1',
+          calls: 2,
+          recorded: 2,
+          unknown: 0,
+          unpriced: 0,
+          costMicroUsd: 100,
+          distinctTurns: 1,
+        },
+        {
+          teacherId: 'tch_b',
+          packageId: 'pkg_2',
+          calls: 3,
+          recorded: 3,
+          unknown: 0,
+          unpriced: 0,
+          costMicroUsd: 200,
+          distinctTurns: 2,
+        },
+      ]),
+    };
+    const subscriptions = {
+      activeCountByPackage: vi.fn(async () => [
+        { teacherId: 'tch_a', packageId: 'pkg_1', activeStudents: 1 },
+        { teacherId: 'tch_b', packageId: 'pkg_2', activeStudents: 2 },
+      ]),
+    };
+    const packages = {
+      listForTeacher: vi.fn(async (scope: { teacherId: string }) =>
+        scope.teacherId === 'tch_a'
+          ? [
+              {
+                packageId: 'pkg_1',
+                agentId: 'agt_1',
+                liveVersion: 1,
+                config: config({ id: 'pkg_1', name: 'A1', teacherId: 'tch_a', agentId: 'agt_1' }),
+              },
+            ]
+          : [
+              {
+                packageId: 'pkg_2',
+                agentId: 'agt_1',
+                liveVersion: 1,
+                config: config({ id: 'pkg_2', name: 'B2', teacherId: 'tch_b', agentId: 'agt_1' }),
+              },
+            ],
+      ),
+    };
+    const packageVersions = {
+      get: vi.fn(async (_scope: unknown, ref: { packageId: string; version: number }) =>
+        ref.packageId === 'pkg_1'
+          ? config({
+              id: 'pkg_1',
+              name: 'Live A1',
+              teacherId: 'tch_a',
+              agentId: 'agt_1',
+              pricePerMonth: { amountMinor: 1000, currency: 'USD' },
+            })
+          : config({
+              id: 'pkg_2',
+              name: 'Live B2',
+              teacherId: 'tch_b',
+              agentId: 'agt_1',
+              pricePerMonth: { amountMinor: 2000, currency: 'USD' },
+            }),
+      ),
+    };
+    const repos = { usageLedger, subscriptions, packages, packageVersions } as unknown as Pick<
+      Repositories,
+      'usageLedger' | 'subscriptions' | 'packages' | 'packageVersions'
+    >;
+    const h = createStaffCostHandlers({ repos: () => repos, now: () => NOW });
+    const res = await h.list(get(), ctx());
+    const body = (await res.json()) as { rows: Array<Record<string, unknown>> };
+    expect(body.rows).toEqual([
+      {
+        teacherId: 'tch_a',
+        packageId: 'pkg_1',
+        packageName: 'Live A1',
+        activeStudents: 1,
+        costMicroUsd: 100,
+        calls: 2,
+        unknown: 0,
+        unpriced: 0,
+        costPerTurnMicroUsd: 100,
+        costPerActiveStudentMicroUsd: 100,
+        pricePerMonth: { amountMinor: 1000, currency: 'USD' },
+        costAsPctOfPrice: 0.001,
+      },
+      {
+        teacherId: 'tch_b',
+        packageId: 'pkg_2',
+        packageName: 'Live B2',
+        activeStudents: 2,
+        costMicroUsd: 200,
+        calls: 3,
+        unknown: 0,
+        unpriced: 0,
+        costPerTurnMicroUsd: 100,
+        costPerActiveStudentMicroUsd: 100,
+        pricePerMonth: { amountMinor: 2000, currency: 'USD' },
+        costAsPctOfPrice: 0.001,
+      },
+    ]);
   });
 });

@@ -2085,6 +2085,41 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 13.4d (account export): the student's own subscriptions across every teacher, every
+  // status, every agent status -- the mirror of `listLiveForStudent` with no exclusions at all.
+  'subscriptions.listAllForStudent': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      for (const st of ['1', '2'] as const) {
+        const got = await r.subscriptions.listAllForStudent(studentId(st));
+        expect(got, `stu_${st}'s own list`).toEqual(
+          TEACHERS.map((t) => ({
+            agentId: ids.agent(t),
+            teacherId: teacherId(t),
+            status: 'active',
+            periodEnd: expect.any(String),
+          })),
+        );
+        n += 1;
+      }
+      const rand = prng(1304);
+      for (let i = 0; i < 20; i += 1) {
+        expect(await r.subscriptions.listAllForStudent(randomId(rand))).toEqual([]);
+        n += 1;
+      }
+      for (const bad of ['', 'has space', 'x'.repeat(129), undefined, 42]) {
+        await expectFailsClosed(
+          () => r.subscriptions.listAllForStudent(bad as never),
+          ['scope'],
+          `listAllForStudent(${String(bad).slice(0, 10)})`,
+        );
+        n += 1;
+      }
+      return n;
+    },
+  },
   // Task 13.5 (cost dashboard): a system read across every teacher and package, like
   // `usageLedger.teacherIdsWithUsageSince`. Exact counts and the ended-exclusion are checked
   // against raw SQL in cost-alarm.int.test.ts's own describe block.
@@ -4191,6 +4226,57 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         kind: 'integrity',
       });
       return 7;
+    },
+  },
+  // Task 9.3m (B-58): the last SUBJECT_HISTORY_MAX_LIMIT subject changes on record, staff-only.
+  // A fixture of its own (not A/B), same precedent as the 9.3h fixture above.
+  'audit.findSubjectHistoryForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      for (const by of [teacherId('A'), studentId('2'), 'stf_ghost']) {
+        await expect(
+          r.audit.findSubjectHistoryForStaff(by, teacherId('A'), 10),
+        ).rejects.toMatchObject({ kind: 'scope' });
+      }
+      const t = 'tch_93m';
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93m teacher', 'en', 'test', 'teacher')`,
+        [t],
+      );
+      await raw.query(
+        `insert into teacher_profiles (id, user_id, slug, subject, verification_status)
+         values ('tp_93m', $1, 'teacher-93m', '93m subject one', 'pending')`,
+        [t],
+      );
+      await expect(r.audit.findSubjectHistoryForStaff(ISO_STAFF, t, 11)).rejects.toMatchObject({
+        kind: 'invalid',
+      });
+      expect(await r.audit.findSubjectHistoryForStaff(ISO_STAFF, t, 10)).toEqual([]);
+      await r.teacherProfiles.update({ teacherId: t }, { subject: '93m subject two' });
+      await r.teacherProfiles.update({ teacherId: t }, { subject: '93m subject three' });
+      const history = await r.audit.findSubjectHistoryForStaff(ISO_STAFF, t, 10);
+      expect(history).toEqual([
+        { from: '93m subject two', to: '93m subject three', ts: expect.any(String) },
+        { from: '93m subject one', to: '93m subject two', ts: expect.any(String) },
+      ]);
+      expect(await r.audit.findSubjectHistoryForStaff(ISO_STAFF, t, 1)).toEqual([
+        { from: '93m subject two', to: '93m subject three', ts: expect.any(String) },
+      ]);
+      const tBad = 'tch_93m_bad';
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93m bad teacher', 'en', 'test', 'teacher')`,
+        [tBad],
+      );
+      await raw.query(
+        `insert into audit_log (id, actor, actor_role, action, target, teacher_id, before, after)
+         values ('al_93m_bad', $1, 'teacher', 'teacher.subject', $2, $3, '{"bogus": true}'::jsonb, '{"bogus": true}'::jsonb)`,
+        [tBad, `teacher:${tBad}`, tBad],
+      );
+      await expect(r.audit.findSubjectHistoryForStaff(ISO_STAFF, tBad, 10)).rejects.toMatchObject({
+        kind: 'integrity',
+      });
+      return 9;
     },
   },
   // Task 12.3b: a teacher's copyright takedown count is that teacher's alone. Lifted at the end,
@@ -6430,6 +6516,7 @@ describe.skipIf(!up)(
         'appendForStudent',
         'appendForTeacher',
         'findLastVerifyForStaff',
+        'findSubjectHistoryForStaff',
         'listForStudent',
         'listForTeacher',
       ]);
@@ -6544,6 +6631,55 @@ describe.skipIf(!up)(
       ]);
       expect(await repos.subscriptions.listLiveForStudent(OTHER)).toEqual([
         { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
+      ]);
+
+      // Task 13.4d: listAllForStudent carries all six rows, including the ended one and the
+      // suspended/draft-agent ones, with no exclusions at all.
+      expect(await repos.subscriptions.listAllForStudent(S)).toEqual([
+        {
+          agentId: 'agt_94a1',
+          teacherId: 'tch_94a1',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a2',
+          teacherId: 'tch_94a2',
+          status: 'paused',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a3',
+          teacherId: 'tch_94a3',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a4',
+          teacherId: 'tch_94a4',
+          status: 'trial',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a5',
+          teacherId: 'tch_94a5',
+          status: 'ended',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a6',
+          teacherId: 'tch_94a6',
+          status: 'past_due',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+      ]);
+      expect(await repos.subscriptions.listAllForStudent(OTHER)).toEqual([
+        {
+          agentId: 'agt_94a1',
+          teacherId: 'tch_94a1',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
       ]);
     });
   },
