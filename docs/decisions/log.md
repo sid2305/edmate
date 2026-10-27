@@ -10,6 +10,25 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 0.20h local e2e failures · decided by builder · risk: low
+
+- Decided: fixed `full-flow.spec.ts` and `teacher-packages-walkthrough.spec.ts`'s stale-DB-row
+  causes in the test files only (no DB reset, no deletes); left the newly-found Next dev-overlay
+  click-hang bug undocumented-in-code and reported it here instead, per the plan's instruction not
+  to fix an app/environment bug in this task.
+- Why: the plan explicitly scopes this task to `apps/web/e2e/**` and to making specs independent
+  of leftover rows; the overlay bug is a dev-server/build concern outside that scope and outside
+  the no-delete, no-docker constraints this task operates under.
+
+---
+
+### 27 Oct 2026 · 0.20h merge and budget, walkthrough check moved to 0.20j · decided by lead · risk: low
+- Decided: merge 0.20h's test-only fixes (full-flow.spec.ts passed 5 of 5 fresh local runs; the walkthrough's create path runs in CI). The local proof of teacher-packages-walkthrough.spec.ts's at-cap path, and the warm-up comment fix, move to 0.20j, which fixes the dev overlay click hang the builder found.
+- Why: the hang is a separate app bug in local `next dev` (a node:worker_threads Edge warning brings up the dev overlay). The plan said not to fix app bugs in this task. Holding the test fixes back gains nothing.
+- Budget: about 169 tool calls across two sessions against a 60-call plan (2.8x). Most of it went on 900 s hangs and diagnosing them. 0.20j's brief sets a Playwright actionTimeout first, so a blocked click fails fast.
+
+---
+
 ### 27 Oct 2026 · 6.3e applyMistakes proposed param · decided by lead · risk: high
 - Decided: approve the change to ports.ts (packages/db/src/repositories/ports.ts) for merge: the third `applyMistakes` parameter is named `_proposed` and ignored, with an int test. security-reviewer and code-reviewer approved; the MEDIUM test-coverage finding is deferred to 6.3a Phase A.
 - Why: no behaviour change; the repositories path is a risk group, so the lead records the approval.
