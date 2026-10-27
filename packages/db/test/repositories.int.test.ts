@@ -6624,14 +6624,20 @@ describe.skipIf(!up)(
         [OTHER],
       );
 
-      expect(await repos.subscriptions.listLiveForStudent(S)).toEqual([
-        { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
-        { agentId: 'agt_94a2', teacherId: 'tch_94a2', status: 'paused' },
-        { agentId: 'agt_94a6', teacherId: 'tch_94a6', status: 'past_due' },
-      ]);
-      expect(await repos.subscriptions.listLiveForStudent(OTHER)).toEqual([
-        { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
-      ]);
+      // `listLiveForStudent` has no `.orderBy()` (unlike `listAllForStudent`), so its row order
+      // is not guaranteed; sort both sides by `agentId` before comparing (9.4f item 3).
+      const byAgentId = <T extends { agentId: string }>(a: T, b: T) =>
+        a.agentId.localeCompare(b.agentId);
+      expect((await repos.subscriptions.listLiveForStudent(S)).slice().sort(byAgentId)).toEqual(
+        [
+          { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
+          { agentId: 'agt_94a2', teacherId: 'tch_94a2', status: 'paused' },
+          { agentId: 'agt_94a6', teacherId: 'tch_94a6', status: 'past_due' },
+        ].sort(byAgentId),
+      );
+      expect((await repos.subscriptions.listLiveForStudent(OTHER)).slice().sort(byAgentId)).toEqual(
+        [{ agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' }].sort(byAgentId),
+      );
 
       // Task 13.4d: listAllForStudent carries all six rows, including the ended one and the
       // suspended/draft-agent ones, with no exclusions at all.

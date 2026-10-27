@@ -33,4 +33,9 @@ describe('apiError', () => {
       error: { code: 'rate_limited', message: 'slow down', retryable: true },
     });
   });
+
+  it('rejects a cache-control key in headers at compile time (9.4f item 4)', () => {
+    // @ts-expect-error - headers must never carry 'cache-control'; apiError always sets it.
+    apiError('rate_limited', 'slow down', 429, { 'cache-control': 'public' });
+  });
 });
