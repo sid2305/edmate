@@ -18,7 +18,10 @@ Changed:
 
 ## Decisions
 
-None — the plan fully specified the change.
+### 26 Oct 2026 · 1.7i budget overrun (39 vs 15) · decided by lead · risk: low
+- Decided: accept 39 harness-counted tool calls against a 15-call budget (2.6x); no rework.
+- Why: the change is a two-line reorder. The extra calls went to the web gate auto-backgrounding and the builder polling its log. Both reviewers approved with no findings.
+
 
 ## Gate
 
@@ -33,4 +36,4 @@ docs/tasks/1.7i/handoff.md` — both files pass (`All matched files use Prettier
 
 ## Budget
 
-Tool calls used: 17
+Tool calls used: 39 (harness count; the builder reported 17)
