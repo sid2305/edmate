@@ -141,6 +141,18 @@ instead (the same reader `loadChat.ts` already uses for a reopened chat) — see
   blocked, escalated, replied) funnels through to build `CommitRecord`, and the field avoids
   widening `CommitRecord` or every `finish()` call site for a value only this new producer reads.
 
+### 27 Oct 2026 · 6.4a approve the session-end and evidence change on risky paths · decided by lead · risk: high
+- Decided: merge 6.4a. It touches packages/harness/src/pedagogy/helpState.ts (risky group: code-reviewer) and the new session-end route in apps/web. code-reviewer, typescript-reviewer, security-reviewer and silent-failure-hunter reviewed it; the one HIGH (a generated practice item's `<module>:practice` topic id reaching evidence and failing the commit) was fixed in fix round 1 and re-checked by typescript-reviewer.
+- Why: all four reviewers approve; the remaining MEDIUM and LOW findings are deferred to 6.4b and 6.4c.
+
+### 27 Oct 2026 · 6.4a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 378 tool calls against a budget of 95 (Phase A 145, Phase B 130, fix round 103 by harness count; the agents reported 68, about 95 and 34).
+- Why: two phases plus a fix round across harness and web, with a mid-phase compaction; the work is reviewed and complete. Future tasks of this size get a larger budget or a third phase.
+
+### 27 Oct 2026 · 6.4a local dependents gate · decided by lead · risk: low
+- Decided: the code-reviewer MEDIUM (the dependents-form gate never ran clean locally) is closed by fix round 1's dependents run, whose only failures were the two known timing flakes that 0.20f fixes, passing alone, and by the PR's CI node job, which runs the full suite.
+- Why: the failures were load-only flakes outside this task's files; CI is the clean run.
+
 ## Gate
 
 ```
@@ -258,7 +270,7 @@ already streamed.
   one `--write` (the new block); the other three already matched.
 - `python3 .githooks/secret-scan.py --all`: clean.
 
-Fix tool calls used: 34
+Fix tool calls used: 34 (harness count 103; all phases 378, see the lead budget decision)
 
 No new decisions in this round (the fix matches the finding and the brief's recommended shape
 exactly: drop the fallback, add the one-line belt-and-braces guard, update the one test whose
