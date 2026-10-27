@@ -1813,7 +1813,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     attempt: async (r, scope) => {
       const tag = `mistake_${++counter}`;
       const lastSeen = new Date(Date.UTC(2026, 9, 19, 14, 0, counter)).toISOString();
-      await r.learnerProfiles.applyMistakes(scope, [{ tag, count: 1, lastSeen }]);
+      await r.learnerProfiles.applyMistakes(scope, [{ tag, count: 1, lastSeen }], [tag]);
       return { tag, lastSeen };
     },
     verify: async (r, actor, result) => {
