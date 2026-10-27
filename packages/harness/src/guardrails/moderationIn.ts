@@ -46,7 +46,11 @@ const NAME = 'moderationIn';
  * Codes that leave a critical misuse alert for the runner to raise (B-50 and its amendment):
  * these always raise a level `critical` misuse alert.
  */
-export const MISUSE_CODES: readonly ModerationCode[] = ['harm_to_others', 'threat', 'weapons'];
+export const MISUSE_CODES: readonly ModerationCode[] = Object.freeze([
+  'harm_to_others',
+  'threat',
+  'weapons',
+] as const);
 
 /**
  * A SafetyAlert about this turn: `kind` distress (self-harm, level `alert`) or misuse
