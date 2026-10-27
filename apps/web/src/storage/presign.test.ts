@@ -59,6 +59,26 @@ describe('storageConfigFromEnv in production', () => {
     },
   );
 
+  it.each(['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'] as const)(
+    'refuses %s set to its own dev-default placeholder value, a copy-paste from docker/env.example',
+    (name) => {
+      const DEV = {
+        S3_ENDPOINT: 'http://localhost:9000',
+        S3_ACCESS_KEY_ID: 'edmate-dev',
+        S3_SECRET_ACCESS_KEY: 'edmate-dev-storage',
+        S3_BUCKET: 'edmate-dev',
+      };
+      let caught: unknown;
+      try {
+        storageConfigFromEnv({ ...PROD, [name]: DEV[name] });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(StorageConfigError);
+      expect(caught).toMatchObject({ code: `${name}_placeholder` });
+    },
+  );
+
   it('refuses a plain-http endpoint, and the error never quotes it', () => {
     let caught: unknown;
     try {

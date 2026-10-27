@@ -19,5 +19,24 @@ export function modulesRepo(db: Db) {
         .orderBy(asc(modules.id));
       return rows.map((r) => r.id);
     },
+
+    /**
+     * 8.2a Phase C: every module of the scope's teacher with its title, in id order (same scope
+     * and order as `ids`) -- for a picker that must show a real name, not a placeholder.
+     */
+    async list(scope: TeacherScope): Promise<ModuleListItem[]> {
+      const method = 'modules.list';
+      const { teacherId } = teacherScope(scope, method);
+      return db
+        .select({ id: modules.id, title: modules.title })
+        .from(modules)
+        .where(eq(modules.teacherId, teacherId))
+        .orderBy(asc(modules.id));
+    },
   };
+}
+
+export interface ModuleListItem {
+  id: string;
+  title: string;
 }

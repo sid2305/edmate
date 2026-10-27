@@ -761,6 +761,13 @@
     "cancel": "Cancel",
     "thanks": "Thanks, our team will review this."
   },
+  "endSession": {
+    "button": "End chat",
+    "confirm": "End this chat? You can start a new one any time.",
+    "ending": "Ending…",
+    "cancel": "Keep chatting",
+    "failed": "Could not end the chat. Try again."
+  },
   "staffAlerts": {
     "nav": "Alerts",
     "title": "Safety alert inbox",

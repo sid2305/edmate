@@ -897,6 +897,16 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     // mod_a1 -> A
     owners: (xs: string[]) => xs.map((m) => m.slice(4, 5).toUpperCase()),
   },
+  // 8.2a Phase C: same scope and id order as modules.ids, plus the title the upload-centre picker
+  // needs; same cross-teacher isolation.
+  'modules.list': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.modules.list(scope),
+    random: (r, _scope, rid) => r.modules.list({ teacherId: rid }),
+    owners: (xs: { id: string; title: string }[]) => xs.map((m) => m.id.slice(4, 5).toUpperCase()),
+  },
   // Task 8.3: the studio outline. Reads are scoped selects; replaceOutline locks the named modules
   // and topics (all the scope's, else not_found) and checks every chunk id in the link insert.
   'courses.get': {

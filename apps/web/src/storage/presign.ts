@@ -72,7 +72,9 @@ export function storageConfigFromEnv(env: Env): StorageConfig {
   const production = env.NODE_ENV === 'production';
   if (production) {
     for (const name of REQUIRED_IN_PRODUCTION) {
-      if ((env[name] ?? '').trim() === '') throw new StorageConfigError(`${name}_missing`);
+      const value = (env[name] ?? '').trim();
+      if (value === '') throw new StorageConfigError(`${name}_missing`);
+      if (value === DEV_DEFAULTS[name]) throw new StorageConfigError(`${name}_placeholder`);
     }
   }
   // Plain http under production only on the dev stack's explicit opt-in (docker/compose.yaml).

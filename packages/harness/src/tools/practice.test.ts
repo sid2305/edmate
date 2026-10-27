@@ -303,6 +303,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     expect(t.issuedItem(out, fr)).toEqual({
       itemId: 'demo:fractions:2:a',
       moduleId: MODULE_FRACTIONS,
+      topicId: 'fractions',
       answerKey: ['1/2'],
       shown: [(out as { prompt: string }).prompt],
     });
@@ -315,16 +316,18 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     expect(t.issuedItem(out, two)?.moduleId).toBe(MODULE_FRACTIONS);
   });
 
-  it('issuedItem: a generated item gives the generator’s key and its module', async () => {
+  it('issuedItem: a generated item gives the generator’s key and its module, but no topicId (fix round 1: a generated item has no real topic, so evidence must not attach one)', async () => {
     const t = practiceNextItemTool(demoPracticeBank(), { exclude: ['demo:arithmetic:1:a'] });
     const out = await t.tool.run({ level: 1 }, two);
     const id = idOf(out);
-    expect(t.issuedItem(out, two)).toEqual({
+    const issued = t.issuedItem(out, two);
+    expect(issued).toEqual({
       itemId: id,
       moduleId: MODULE_ARITHMETIC,
       answerKey: [...(generatedAnswerKeyFor(id) ?? [])],
       shown: [(out as { prompt: string }).prompt],
     });
+    expect(issued).not.toHaveProperty('topicId');
   });
 
   it('issuedItem: undefined (fail closed) for an invalid output, an unknown id or one outside the scope', () => {
