@@ -104,6 +104,41 @@ point 7 above and the empty-array case for `recordProposedMistakes`, which close
 - Why: the risk-paths group requires `risk: high` for this path regardless of change size, same as
   6.3d's own precedent for the same file.
 
+### 27 Oct 2026 · 6.3a decide uses POST, not PATCH (Q2) · decided by builder · risk: low
+- Decided: the single decide endpoint (`{tag, action: 'approve'|'reject'}`) is `POST
+  /api/studio/mistake-proposals`, not `PATCH` as the plan's Q2 recommended.
+- Why: `src/auth/policy.ts`'s `ROUTE_POLICY` row for `/api/studio/**` allows only
+  `GET, POST, PUT, DELETE`; `route-coverage.test.ts` fails any exported HTTP method with no
+  matching policy row (deny by default). Extending that row to add `PATCH` would touch
+  `apps/web/src/auth/**`, which this task's own "Files out of bounds" list reserves ("reuse
+  requireRole/withRole as-is") and which this builder's brief also forbids touching. `POST` is
+  already allowed for teachers on this path and carries the same body shape, so no behaviour is
+  lost.
+
+### 27 Oct 2026 · 6.3a no optimistic removal on decide (plan's own line, confirmed in the test) · decided by builder · risk: low
+- Decided: `StyleCardView`'s proposed-tags list only drops a tag after `decideMistakeProposal`
+  resolves `ok: true`; a failed call leaves the tag listed and shows the existing error banner.
+- Why: matches the plan's acceptance line for Phase B ("approving one removes it from the pending
+  list client-side ... rejecting removes it without changing the card") read together with the
+  existing `onSave`/`onDraft` pattern in the same file, which never assumes success before the
+  response is in.
+
+### 27 Oct 2026 · 6.3a Phase A repositories approval · decided by lead · risk: high
+- Decided: approve the packages/db changes for merge: mistake-proposals.ts (packages/db/src/repositories/mistake-proposals.ts), the extracted insertNextVersion in style-cards.ts, ports.ts recordProposedMistakes, and migration 0042. security-reviewer, database-reviewer and code-reviewer found no CRITICAL or HIGH issues. The three security MEDIUMs and a LOW move to 6.3f, which must merge before the pilot.
+- Why: teacher scoping, idempotent approve/reject and parameterised SQL were all verified. The MEDIUMs are bounded: an over-cap card needs 20 tags already, `record` is only reached through the bound teacher id, and a race overshoots the 100-row cap by a few rows at most.
+
+### 27 Oct 2026 · 6.3a content.ts pending index without last_seen · decided by lead · risk: low
+- Decided: keep the partial `(teacher_id, status)` index in content.ts (packages/db/src/schema/content.ts) without `last_seen`.
+- Why: a teacher has at most 100 proposal rows, so the in-memory sort is negligible.
+
+### 27 Oct 2026 · 6.3a Phase B review LOWs not fixed · decided by lead · risk: low
+- Decided: leave the unused `_log` parameter in mistakeProposalRoutes.ts (apps/web/src/studio/mistakeProposalRoutes.ts) and the two sequential reads in page.tsx (apps/web/app/teacher/style-card/page.tsx) as they are. The hardcoded 60-character tag limit and a rate limit on approve and reject move to 6.3f.
+- Why: the parameter is deliberate, and one extra round trip on a server page costs nothing at pilot scale.
+
+### 27 Oct 2026 · 6.3a merge and budget, 264 tool calls against 120 · decided by lead · risk: low
+- Decided: merge at 264 harness-counted tool calls (Phase A 156, Phase B 82, fix round 26) against the plan's 120.
+- Why: Phase A ran over through a session restart and a coverage fix round, and Phase B and its fix stayed close to plan. Both phases are reviewed and green.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` → green: 8/8 tasks successful,
@@ -122,10 +157,7 @@ point 7 above and the empty-array case for `recordProposedMistakes`, which close
 
 ## Budget
 
-Tool calls used: ~55 (this session continued from an earlier session's context; this count covers
-only the coverage fix-round, gate re-runs, prettier/secret-scan and this handoff — the schema/
-repo/test authoring itself happened in the prior context window, within the plan's ~65-call budget
-for Phase A).
+Tool calls used: 264 (harness count: Phase A 156, Phase B 82, fix round 1 26; the builders counted ~55, 47 and 12).
 
 ## Phase B
 
@@ -185,26 +217,7 @@ failed decision shows the error banner with the tag still listed) — red (no su
 No change needed to `packages/db`; Phase B called only the four `mistakeProposals` methods and
 constants the Phase A handoff documented, with no further db edits.
 
-## Decisions (Phase B)
-
-### 27 Oct 2026 · 6.3a decide uses POST, not PATCH (Q2) · decided by builder · risk: low
-- Decided: the single decide endpoint (`{tag, action: 'approve'|'reject'}`) is `POST
-  /api/studio/mistake-proposals`, not `PATCH` as the plan's Q2 recommended.
-- Why: `src/auth/policy.ts`'s `ROUTE_POLICY` row for `/api/studio/**` allows only
-  `GET, POST, PUT, DELETE`; `route-coverage.test.ts` fails any exported HTTP method with no
-  matching policy row (deny by default). Extending that row to add `PATCH` would touch
-  `apps/web/src/auth/**`, which this task's own "Files out of bounds" list reserves ("reuse
-  requireRole/withRole as-is") and which this builder's brief also forbids touching. `POST` is
-  already allowed for teachers on this path and carries the same body shape, so no behaviour is
-  lost.
-
-### 27 Oct 2026 · 6.3a no optimistic removal on decide (plan's own line, confirmed in the test) · decided by builder · risk: low
-- Decided: `StyleCardView`'s proposed-tags list only drops a tag after `decideMistakeProposal`
-  resolves `ok: true`; a failed call leaves the tag listed and shows the existing error banner.
-- Why: matches the plan's acceptance line for Phase B ("approving one removes it from the pending
-  list client-side ... rejecting removes it without changing the card") read together with the
-  existing `onSave`/`onDraft` pattern in the same file, which never assumes success before the
-  response is in.
+Phase B decisions are under `## Decisions` above.
 
 ## Gate (Phase B)
 
@@ -215,9 +228,9 @@ constants the Phase A handoff documented, with no further db edits.
   (new/extended test and view files); re-checked clean afterward.
 - `python3 .githooks/secret-scan.py --all` → clean (no output).
 
-## Budget (Phase B)
+## Phase B tool calls
 
-Tool calls used: 47.
+Phase B builder count: 47.
 
 ## Fix round 1
 
@@ -242,4 +255,4 @@ Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → gre
 `corepack pnpm exec prettier --check` on `StyleCardView.tsx`/`StyleCardView.test.tsx` → clean.
 `python3 .githooks/secret-scan.py --all` → clean.
 
-Tool calls used: 12.
+Fix round builder count: 12.
