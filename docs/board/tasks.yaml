@@ -5029,9 +5029,32 @@ tasks:
   deps:
   - 8.7e
   risk: medium
-  status: running
+  status: done
   branch: m13/13.regate-material-regate
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 643
+    tokens_in: 2206
+    tokens_out: 175033
+    cache_read_tokens: 78952760
+    wall_time_seconds: 4047
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 2
 - id: 13.regatea
   milestone: M13
   title: '13.regate review MEDIUM: a partial index on eval_runs for the regate sweep''s last passed, published gate-suite run per agent (database-reviewer, security-reviewer), with a migration and EXPLAIN
