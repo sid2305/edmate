@@ -683,7 +683,8 @@
       "generic": "Something went wrong. Try again.",
       "loadFailed": "Could not load the verification queue. Try again."
     },
-    "alertsBanner": "{open} open safety alerts, {escalated} escalated. Go to the alert inbox."
+    "alertsBanner": "{open} open safety alerts, {escalated} escalated. Go to the alert inbox.",
+    "repeatInfringersBanner": "{count} teachers flagged as repeat infringers. Go to the list."
   },
   "liveClassesStudio": {
     "title": "Live classes",
@@ -942,5 +943,12 @@
     "grievanceLabel": "Grievance contact: {contact}",
     "grievanceFallback": "A grievance contact for this market has not yet been published.",
     "repeatInfringerNote": "Repeated upheld takedowns can end a teacher's account on Edmate."
+  },
+  "staffRepeatInfringers": {
+    "title": "Repeat infringers",
+    "intro": "Teachers with 3 or more upheld copyright takedowns in the last 12 months, by profile URL. Rejecting a flagged teacher blocks new subscriptions; tick the safety-concern checkbox to also cut off current students at once.",
+    "empty": "No teachers are currently flagged as repeat infringers.",
+    "reload": "Reload",
+    "reloading": "Reloading…"
   }
 }

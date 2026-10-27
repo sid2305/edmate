@@ -6,6 +6,10 @@
 // Task 12.5c: a small banner with the open and escalated safety-alert counts, linking to
 // `/staff/alerts`. A failed count read just hides the banner (logging only the error's name): it
 // never blocks the verification queue.
+//
+// Task 12.3d (B-63): a second banner with the repeat-infringer count, linking to
+// `/staff/repeat-infringers`, read through the same `listRepeatInfringersForStaff` helper the new
+// page and API route use. A failed read hides the banner the same way.
 import { SAFETY_ALERT_LIST_MAX_LIMIT } from '@edmate/db';
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
@@ -14,6 +18,7 @@ import { requireRole, serverDatabase } from '../../src/auth';
 import { describeError } from '../../src/auth/describe-error';
 import { AppShell } from '../../src/ui/AppShell';
 import { toAlertView } from '../api/staff/alerts/handlers';
+import { listRepeatInfringersForStaff } from '../api/staff/repeat-infringers/handlers';
 import { enrichQueueRows, toQueueItem, type QueueItem } from '../api/staff/verifications/handlers';
 import { signOutAndRedirect } from '../home/actions';
 import { StaffQueueView } from './view';
@@ -47,6 +52,13 @@ export default async function StaffPage() {
   } catch (error) {
     console.error(`[staff] page alert count read failed: ${describeError(error)}`);
   }
+  let repeatInfringerCount: number | null = null;
+  try {
+    const repos = serverDatabase().repos;
+    repeatInfringerCount = (await listRepeatInfringersForStaff(repos, principal.userId)).length;
+  } catch (error) {
+    console.error(`[staff] page repeat-infringer count read failed: ${describeError(error)}`);
+  }
   const shell = await getTranslations('shell');
   const t = await getTranslations('staff');
   const staffAgents = await getTranslations('staffAgents');
@@ -68,6 +80,13 @@ export default async function StaffPage() {
         <p className="staff-alerts-banner">
           <a href="/staff/alerts">
             {t('alertsBanner', { open: alertBanner.open, escalated: alertBanner.escalated })}
+          </a>
+        </p>
+      )}
+      {repeatInfringerCount === null || repeatInfringerCount === 0 ? null : (
+        <p className="staff-repeat-infringers-banner">
+          <a href="/staff/repeat-infringers">
+            {t('repeatInfringersBanner', { count: repeatInfringerCount })}
           </a>
         </p>
       )}
