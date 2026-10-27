@@ -51,6 +51,11 @@ const BASE_URL = `http://localhost:${PORT}`;
  * importing back would create a cycle. Literal, commented as mirroring that constant. */
 const DEMO_AGENT_ID = 'demo-agent';
 
+/** 0.20g review (MEDIUM/LOW): each warm-up fetch's own ceiling, comfortably under the
+ * `webServer.timeout` (60 s) global-setup itself runs inside -- a hung warm-up must never make
+ * the whole run wait out Playwright's own timeout instead of this file's best-effort catch. */
+const WARM_UP_TIMEOUT_MS = 60_000;
+
 /**
  * Task 0.20g: `chat.spec.ts`'s first test is the first visitor in the whole e2e run of
  * `GET /learn/[agentId]` and `POST /api/sessions` -- both routes' auth checks run *after*
@@ -64,20 +69,24 @@ const DEMO_AGENT_ID = 'demo-agent';
  * failure must never fail the run, so every error is swallowed with a one-line warning.
  */
 async function warmRoutes(): Promise<void> {
-  try {
-    await fetch(`${BASE_URL}/learn/${DEMO_AGENT_ID}`);
-  } catch (error) {
+  // Each in its own try/catch and run together (0.20h, Part 3): independent best-effort warm-ups,
+  // so one hanging (or failing) never delays or skips the other -- and `AbortSignal.timeout`
+  // guarantees neither ever runs past `WARM_UP_TIMEOUT_MS`, even against a dev server wedged
+  // mid-compile.
+  const learn = fetch(`${BASE_URL}/learn/${DEMO_AGENT_ID}`, {
+    signal: AbortSignal.timeout(WARM_UP_TIMEOUT_MS),
+  }).catch((error: unknown) => {
     console.warn('e2e global setup: warm-up GET /learn failed (non-fatal)', error);
-  }
-  try {
-    await fetch(`${BASE_URL}/api/sessions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    });
-  } catch (error) {
+  });
+  const sessions = fetch(`${BASE_URL}/api/sessions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+    signal: AbortSignal.timeout(WARM_UP_TIMEOUT_MS),
+  }).catch((error: unknown) => {
     console.warn('e2e global setup: warm-up POST /api/sessions failed (non-fatal)', error);
-  }
+  });
+  await Promise.all([learn, sessions]);
 }
 
 function run(script: string): void {
