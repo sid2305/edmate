@@ -113,12 +113,12 @@ The background full-suite run also finished clean: `Test Files  127 passed (127)
 - Why: the change is test-only; the earlier HIGH (the step count missed regex work) is fixed by an absolute 2,000 ms ceiling over the real functions, confirmed by both reviewers.
 
 ### 27 Oct 2026 · 0.20f budget overrun accepted · decided by lead · risk: low
-- Decided: accept 145 tool calls against a budget of 40 (build 48, fix round 97 by harness count; the agents reported 29 and 44).
+- Decided: accept 177 tool calls against a budget of 40 (build 48, fix round 1 97, fix round 2 32 by harness count; the agents reported 29, 44 and 14).
 - Why: the fix round had to measure timings under load to pick a ceiling and a self-test size; the work is done and both reviewers approved.
 
-### 27 Oct 2026 · 0.20f backtracking self-test margin left as is · decided by lead · risk: low
-- Decided: wontfix the MEDIUM on packages/harness/src/pedagogy/modelRequest.test.ts: the backtracking self-test (k=25, about 2.9 s locally) is only about 1.5x over the 2,000 ms ceiling. If it is ever seen passing too fast (not throwing), open a task then.
-- Why: CI runners are slower than the dev Mac, so the margin is wider there, not thinner; raising k makes the test exponentially slower (k=26 hit 17.6 s under load), which risks the 20 s test timeout, a worse flake.
+### 27 Oct 2026 · 0.20f backtracking self-test grows its input until it crosses the ceiling · decided by lead · risk: low
+- Decided: replace the fixed k=25 in the backtracking self-test of packages/harness/src/pedagogy/modelRequest.test.ts with a search: k grows from 16 by 1 until the first run passes the 2,000 ms ceiling (capped at 40, test timeout about 30 s), then the test asserts expectUnderCeiling throws. This fixes the reviewers' thin-margin MEDIUM and the CI timeout (fix round 2). No re-review: the change is test-only, inside the self-test, and leaves expectUnderCeiling, the ceiling and the real-input test unchanged.
+- Why: an earlier lead call left the margin as is, reasoning that CI runners are slower so the margin is wider; that was wrong in the other direction: on CI the fixed k=25 took 28.8 s and hit the 20 s test timeout. A search adapts to the machine's speed either way.
 
 ## Gate
 
@@ -303,4 +303,4 @@ Fix round 2 tool calls used: 14
 ## Budget
 
 Tool calls used (round 1): 29
-Fix tool calls used: 44 (harness count 97; build harness count 48; total 145, see the lead budget decision)
+Fix tool calls used: 44 + 14 (harness counts 97 + 32; build harness count 48; total 177, see the lead budget decision)
