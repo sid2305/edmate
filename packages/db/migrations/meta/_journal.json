@@ -253,6 +253,13 @@
       "when": 1793069823856,
       "tag": "0035_sessions_messages_export_cursor_index",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793077536593,
+      "tag": "0036_teacher_profiles_pending_index",
+      "breakpoints": true
     }
   ]
 }

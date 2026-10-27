@@ -127,7 +127,10 @@ export type PostMigrateStep =
  * `sessions_teacher_id_student_id_created_at_id_idx` and `messages_session_id_created_at_id_idx`
  * the same schema-only way, with `CREATE INDEX CONCURRENTLY` (not a plain migration-file
  * `CREATE INDEX`, unlike 0034's `agents` index): both `sessions` and `messages` are big,
- * high-write tables, same reasoning as the package-pin and open-session indexes above.
+ * high-write tables, same reasoning as the package-pin and open-session indexes above. Migration
+ * 0036 (task 12.1c, 12.1a review follow-up) adds `teacher_profiles_pending_created_at_id_idx` the
+ * same schema-only way: `listPendingForStaff`'s `verification_status = 'pending'` filter plus its
+ * (created_at, id) keyset order, in one partial index.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -202,6 +205,13 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'messages_session_id_created_at_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "messages_session_id_created_at_id_idx" ON "messages" USING btree ("session_id","created_at","id")`,
+  },
+  // Migration 0036 (task 12.1c, 12.1a review follow-up): teacherProfiles.listPendingForStaff's
+  // keyset-paging index.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'teacher_profiles_pending_created_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "teacher_profiles_pending_created_at_id_idx" ON "teacher_profiles" USING btree ("created_at","id") WHERE "teacher_profiles"."verification_status" = 'pending'`,
   },
 ];
 

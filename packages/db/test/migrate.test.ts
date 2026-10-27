@@ -236,6 +236,14 @@ describe('runPostMigrateSteps', () => {
         indexName: 'messages_session_id_created_at_id_idx',
         sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
       },
+      // Task 12.1c (12.1a review follow-up): listPendingForStaff's keyset-paging index.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'teacher_profiles_pending_created_at_id_idx',
+        sql: expect.stringMatching(
+          /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"verification_status" = 'pending'/,
+        ),
+      },
     ]);
   });
 });
