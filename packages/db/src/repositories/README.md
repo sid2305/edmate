@@ -448,6 +448,14 @@ underneath it.
 ASC, id ASC`, `limit` capped at `EVIDENCE_LIST_MAX` (10 000). It fetches `limit + 1` rows to set
 `truncated`, so a cut export always says so instead of silently looking complete.
 
+Task 6.5a adds a `memory_reset_at` watermark, stamped by `reset`. `evidenceEvents.append` now
+locks the profile row first (matching `appendAndFold`), and both `append` and `appendAndFold`
+drop any event dated strictly before the watermark before it is inserted or folded, so a job
+queued before a reset cannot re-seed memory when it lands after it. `sessions.end` checks the same
+watermark, read `FOR UPDATE` in the same sessions-then-profile order, against the ended session's
+own `created_at`: a session that started before the reset still ends, but its summary is never
+written onto the profile.
+
 ## Agent bootstrap and packages (task 8.6b)
 
 `agents.ensureDraft(scope, { courseId, styleCardId, promptPackVersion, modelPolicy })` returns
