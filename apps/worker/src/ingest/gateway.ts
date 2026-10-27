@@ -10,6 +10,7 @@ import {
   loadProviderKeys,
 } from '@edmate/gateway';
 import { storageConfigFromEnv } from '../storage/roundtrip.js';
+import { createFfmpegChunker } from './ffmpegChunker.js';
 
 export interface IngestGateway {
   /** Absent when `EDMATE_INGEST_EMBEDDINGS=off`: chunks are stored for full text only (D3). */
@@ -40,6 +41,9 @@ export async function createIngestGateway(
   const s3Host = new URL(storageConfigFromEnv(env).endpoint).host;
   return {
     embedder: createEmbeddingAdapter(openaiKeys),
-    transcriber: createWhisperTranscriber(openaiKeys, { allowedHosts: [s3Host] }),
+    transcriber: createWhisperTranscriber(openaiKeys, {
+      allowedHosts: [s3Host],
+      chunker: createFfmpegChunker(),
+    }),
   };
 }

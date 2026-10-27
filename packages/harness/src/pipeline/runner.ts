@@ -16,6 +16,7 @@
 import {
   type EvidenceEvent,
   type Intent,
+  type LearnerProfile,
   type PedagogyDecision,
   type SafetyAlert,
   type Skill,
@@ -30,6 +31,7 @@ import {
 } from '@edmate/contracts';
 import type { z } from 'zod';
 import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
+import { classifyMistakeTags } from '../memory/mistakeTags.js';
 import {
   copyHelp,
   type HelpState,
@@ -1102,6 +1104,7 @@ class Turn {
     alertDelivered?: Promise<void>,
   ): Promise<TurnRunResult> {
     const evidence = this.evidenceFor(e, rec.context);
+    const mistakes = this.mistakesFor(e, rec.context);
     const record: CommitRecord = {
       ...this.withStopFlag(this.withPractice(rec)),
       turnId: this.turnId,
@@ -1113,6 +1116,8 @@ class Turn {
       entitled: e,
       ...(this.escalatedText === undefined ? {} : { escalatedText: this.escalatedText }),
       ...(evidence === undefined ? {} : { evidence }),
+      ...(mistakes?.known === undefined ? {} : { mistakesKnown: mistakes.known }),
+      ...(mistakes?.proposed === undefined ? {} : { mistakesProposed: mistakes.proposed }),
     };
     // Usage from a metered turn gateway was metered at the gateway (2.4); only the rest goes here.
     const usage = this.meterable.map((u) => ({ ...u }));
@@ -1237,6 +1242,34 @@ class Turn {
   }
 
   /**
+   * Mistake-tag classification for a wrong graded-check (6.3c; harness-internal producer for
+   * `CommitRecord.mistakesKnown`/`mistakesProposed`, whose consumer, `commit.ts`'s
+   * `profiles.applyMistakes`/`recordProposedMistakes`, 6.3c lands alongside). Only `'wrong'`
+   * counts (a correct answer has no mistake to tag); only the `practice` skill, parallel to
+   * `evidenceFor`. Reads the loaded help state's `practiceMistakeTag`; when present, classifies it
+   * against the style card's `mistakeTags` (`classifyMistakeTags`) into `known` (a member of the
+   * list) and `proposed` (not a member) -- never throws. No stored tag (a defensive gap: an item
+   * issued before this task, or a generated item with no tag) means no result.
+   */
+  private mistakesFor(
+    e: Entitled,
+    ctx: TurnContext | undefined,
+  ): { known?: LearnerProfile['mistakes']; proposed?: LearnerProfile['mistakes'] } | undefined {
+    if (ctx === undefined || this.turnSkill !== 'practice') return undefined;
+    if (ctx.attempt !== 'wrong') return undefined;
+    const tag = this.loadedHelp?.help.practiceMistakeTag;
+    if (tag === undefined) return undefined;
+    const { known, proposed } = classifyMistakeTags(
+      [{ tag, ts: isoAt(this.deps.clock.now()) }],
+      e.styleCard.mistakeTags,
+    );
+    return {
+      ...(known.length === 0 ? {} : { known }),
+      ...(proposed.length === 0 ? {} : { proposed }),
+    };
+  }
+
+  /**
    * The practice state to save (5.6, ADR-0010 §4). The practice fields of the loaded state ride
    * along on every saved state (decide's ladder rebuilds it without them, as for groundingAsks).
    * When an item went out this turn, on any outcome, the saved state holds its key (the union of
@@ -1278,6 +1311,7 @@ class Turn {
       practiceItemId: last.itemId,
       practiceModuleId: last.moduleId,
       ...(last.topicId === undefined ? {} : { practiceTopicId: last.topicId }),
+      ...(last.mistakeTag === undefined ? {} : { practiceMistakeTag: last.mistakeTag }),
       practiceServed: [...prior.filter((id) => !ids.includes(id)), ...ids].slice(
         -PRACTICE_SERVED_MAX,
       ),

@@ -92,7 +92,13 @@ function record(o: Partial<CommitRecord> = {}): CommitRecord {
     },
     next: {
       rung: 2,
-      help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: [CANARY], lockedStopped: false },
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: false,
+        answerKey: [CANARY],
+        lockedStopped: false,
+      },
     },
     replyText: 'What do you notice about the denominators?',
     ...o,
@@ -228,7 +234,13 @@ describe('commit', () => {
         record({
           next: {
             rung: 0,
-            help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [big], lockedStopped: false },
+            help: {
+              stuckTurns: 0,
+              attemptLogged: false,
+              pendingCheck: false,
+              answerKey: [big],
+              lockedStopped: false,
+            },
           },
         }),
       ),
@@ -258,6 +270,50 @@ describe('commit', () => {
     const w = world();
     await commit(w.env, record({ evidence: [] }));
     expect(w.profiles.applied).toEqual([]);
+  });
+
+  // Task 6.3c: mistake tags (ADR-0017).
+  const mistake = (tag: string) => ({ tag, count: 1, lastSeen: '2026-10-27T10:00:00.000Z' });
+  const scope = {
+    studentId: demoEntitlementSubscription.studentId,
+    teacherId: demoEntitlementSubscription.teacherId,
+  };
+
+  it('calls applyMistakes only when mistakesKnown or mistakesProposed is non-empty', async () => {
+    const w = world();
+    await commit(w.env, record());
+    expect(w.profiles.appliedMistakes).toEqual([]);
+
+    const known = [mistake('sign_error')];
+    await commit(w.env, record({ mistakesKnown: known }));
+    expect(w.profiles.appliedMistakes).toEqual([{ scope, known, proposed: [] }]);
+  });
+
+  it('calls recordProposedMistakes only when mistakesProposed is non-empty', async () => {
+    const w = world();
+    await commit(w.env, record({ mistakesKnown: [mistake('sign_error')] }));
+    expect(w.profiles.proposedMistakes).toEqual([]);
+
+    const proposed = [mistake('off_by_one')];
+    await commit(w.env, record({ mistakesProposed: proposed }));
+    expect(w.profiles.appliedMistakes).toContainEqual({ scope, known: [], proposed });
+    expect(w.profiles.proposedMistakes).toEqual([{ scope, proposed }]);
+  });
+
+  it('never calls applyMistakes/recordProposedMistakes for empty/undefined mistake arrays', async () => {
+    const w = world();
+    await commit(w.env, record({ mistakesKnown: [], mistakesProposed: [] }));
+    expect(w.profiles.appliedMistakes).toEqual([]);
+    expect(w.profiles.proposedMistakes).toEqual([]);
+  });
+
+  it('a ProfileStore lacking the optional mistake methods is a safe no-op, never throws', async () => {
+    const w = world();
+    const bare = { get: w.profiles.get, applyEvidence: w.profiles.applyEvidence };
+    const env: StepEnv = { ...w.env, deps: { ...w.env.deps, profiles: bare } };
+    await expect(
+      commit(env, record({ mistakesKnown: [mistake('sign_error')] })),
+    ).resolves.toBeUndefined();
   });
 
   it('opens a TeacherQuestion as a fallback only when the move is ask_teacher and no id is set', async () => {
