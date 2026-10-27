@@ -10,6 +10,32 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.5c review and merge · decided by lead · risk: high
+- Decided: merge with code-reviewer, typescript-reviewer, security-reviewer and database-reviewer, all APPROVE with no findings. The change touches packages/db/src/repositories/** (learner.ts, sessions.ts), so security-reviewer was required.
+- Why: the evidence job now appends and folds mastery in one transaction under the profile-row lock, so two concurrent jobs for one learner both count. A retried job still cannot double-count (a stable event id and ON CONFLICT DO NOTHING). The new debug log lines carry only counts and ids, never student text.
+
+---
+
+### 27 Oct 2026 · 6.5c moves the worker's evidence job onto `appendAndFold` · decided by builder · risk: high
+- Decided: `apps/worker/src/commit/processors.ts`'s `JOB.evidence` handler now calls
+  `repos.evidenceEvents.appendAndFold` instead of `append` followed by a separate
+  `learnerProfiles.get`/`applyMastery` pair, closing the same class of lost-update race 6.2 fixed
+  for `profileStoreFor.applyEvidence` — the write and the fold now share one `FOR UPDATE` lock
+  inside one transaction. `packages/db/src/repositories/learner.ts` and `sessions.ts` each gain
+  one `node:util` `debuglog('edmate:db')` call (no behavior change, no signature change) so a
+  reset watermark drop is distinguishable, in logs, from a replayed duplicate, and so a
+  stale-summary skip in `sessions.end` is no longer silent.
+- Why: a job queued, retried or re-delivered twice for one learner must never lose one of two
+  genuinely distinct updates to that learner's mastery; `appendAndFold`'s lock already gives this
+  guarantee everywhere else it's used — the worker's own evidence path was the one place left on
+  the older, two-transaction shape. (Per the lead's Q1/Q2 answers: `debuglog` now, no new
+  `JobOutcome` value.)
+
+Deferred (not fixed here, per plan): threading a real logger through `packages/db`; a
+`JobOutcome` taxonomy expansion; exposing `memory_reset_at` anywhere student-facing.
+
+---
+
 ### 27 Oct 2026 · 6.5b budget overrun accepted · decided by lead · risk: low
 - Decided: accept 44 tool calls against the plan's budget of 35 (1.26x).
 - Why: one phase, three approving reviews with no findings, and the extra calls went on prettier passes and on running the web gate; no scope was added.

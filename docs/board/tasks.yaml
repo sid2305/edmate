@@ -3391,9 +3391,29 @@ tasks:
   deps:
   - 6.5a
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/6.5c-evidence-fold
+  metrics:
+    tool_calls: 383
+    tokens_in: 1328
+    tokens_out: 101651
+    cache_read_tokens: 48771877
+    wall_time_seconds: 2186
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
@@ -5108,7 +5128,9 @@ tasks:
   deps:
   - 13.regate
   risk: medium
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/13.regatea-eval-runs-index
 - id: 8.9d
   milestone: M13
   title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes; 8.9c review
@@ -10383,5 +10405,13 @@ tasks:
   accept: per docs/tasks/13.3/review.md deferred 13.3b findings; db and web typecheck, lint and test green.
   deps:
   - '13.3'
+  risk: risky
+  status: todo
+- id: 12.2h
+  milestone: M13
+  title: '12.2f review MEDIUM/LOW: packages/db/src/repositories/reports.ts listOpenForStaff''s per-row catch skips bad rows with no signal; return a dropped-row count or log one line per call (counts only, no row content) so a shrinking staff queue is visible, and narrow the catch if the coverage gate allows (silent-failure-hunter, security-reviewer, typescript-reviewer); the trust-inbox excerpt in apps/web/app/api/sessions/[id]/reports/handlers.ts reads "a inappropriate reply" / "a other reply": use a category-to-label map (code-reviewer)'
+  accept: a skipped staff report row leaves a countable signal; every report category gives grammatical inbox copy; db and web typecheck, lint and test green
+  deps:
+  - 12.2f
   risk: risky
   status: todo

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { debuglog } from 'node:util';
 import { countWords, LIMITS } from '@edmate/contracts';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -15,6 +16,8 @@ import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { iso } from './map.js';
 import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
+
+const debug = debuglog('edmate:db');
 
 /** A study session as stored. No contract type exists for it; help_state's shape belongs to 3.5. */
 export interface SessionRow {
@@ -349,6 +352,13 @@ export function sessionsRepo(db: Db) {
               profile?.memoryResetAt != null &&
               closed[0] !== undefined &&
               closed[0].createdAt.getTime() < profile.memoryResetAt.getTime();
+            if (stale) {
+              debug(
+                '%s: skipped a stale summary for session %s (ended, but started before the reset watermark)',
+                method,
+                id,
+              );
+            }
             if (!stale) {
               await tx
                 .insert(learnerProfiles)
