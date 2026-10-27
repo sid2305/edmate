@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 7.2n critical escalation timing: no change · decided by lead · risk: medium
+- Decided: `packages/queue/src/alertSink.ts` keeps one delay (`ALERT_ESCALATION_MS`, 15 minutes)
+  for every level.
+- Why: self-harm distress alerts (level `alert`) are at least as urgent as a threat to others, so
+  a shorter delay only for `critical` would rank them the wrong way round, and the 15-minute
+  on-call check was set in 4.3. A per-level delay is a safety-policy change for the human.
+
+---
+
+### 26 Oct 2026 · 7.2n MISUSE_CODES export · decided by builder · risk: high
+- Decided: exported `MISUSE_CODES` from `packages/harness/src/guardrails/moderationIn.ts` (also
+  re-exported from `packages/harness/src/guardrails/index.ts`), touching the risky
+  `packages/harness/src/guardrails/**` path.
+- Why: this is an export-only change (no behaviour change) so one eval file can import the one
+  list instead of keeping a second copy in sync by hand; the existing harness and evals tests are
+  the check, and they pass unchanged.
+
+---
+
+### 26 Oct 2026 · 7.2n budget and review LOW · decided by lead · risk: low
+- Decided: Accept 40 tool calls against a budget of 20. The review LOW (Object.freeze on the exported MISUSE_CODES) is deferred to 7.2l, the guardrails follow-up task.
+- Why: Most of the overrun was the turbo test run across harness's dependents. Mutating the array needs a deliberate cast, so freezing it is hardening, not a fix.
+
+---
+
+### 26 Oct 2026 · 7.2n merge · decided by lead · risk: high
+- Decided: Merge 7.2n, which touches packages/harness/src/guardrails/moderationIn.ts and guardrails/index.ts. code-reviewer approved it.
+- Why: It exports an existing list with no change to the guard's behaviour. The evals test now uses the same list, and the alertSink change is a comment.
+
+---
+
 ### 26 Oct 2026 · 8.7n NULL-course semantics · decided by plan · risk: low
 - Decided: a teacher with no course row reads as "not changed" (`false`) in
   `changedSinceLastPublish`, via `coalesce(..., false)` on the outline-comparison clause.
