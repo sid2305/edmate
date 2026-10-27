@@ -2,7 +2,12 @@
 // is `ready`. The sign-in counters wait for `ready` with a bounded timeout, then fail closed.
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readyCounters, RedisNotReadyError, REDIS_READY_TIMEOUT_MS, whenReady } from './redis-ready';
+import {
+  readyCounters,
+  RedisNotReadyError,
+  REDIS_READY_TIMEOUT_MS,
+  whenReady,
+} from './redis-ready';
 
 function fakeRedis(status: string) {
   return Object.assign(new EventEmitter(), { status });
@@ -55,6 +60,34 @@ describe('whenReady', () => {
     redis.emit('ready');
     await expect(Promise.all(calls)).resolves.toEqual(new Array(20).fill(undefined));
     expect(redis.listenerCount('ready')).toBe(0);
+  });
+
+  it('a second caller with a shorter timeout rejects at its own deadline while the first still waits', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 1_000);
+    const second = whenReady(redis, 200);
+    const checkSecond = expect(second).rejects.toBeInstanceOf(RedisNotReadyError);
+    await vi.advanceTimersByTimeAsync(200);
+    await checkSecond;
+    expect(redis.listenerCount('ready')).toBe(1); // first is still waiting
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(first).resolves.toBeUndefined();
+  });
+
+  it('a second caller with a longer timeout resolves if ready fires after the first deadline but before its own', async () => {
+    vi.useFakeTimers();
+    const redis = fakeRedis('connecting');
+    const first = whenReady(redis, 200);
+    const second = whenReady(redis, 1_000);
+    const checkFirst = expect(first).rejects.toBeInstanceOf(RedisNotReadyError);
+    await vi.advanceTimersByTimeAsync(200);
+    await checkFirst;
+    expect(redis.listenerCount('ready')).toBe(1); // second is still waiting, listener stays
+    redis.status = 'ready';
+    redis.emit('ready');
+    await expect(second).resolves.toBeUndefined();
   });
 
   it('a second outage after the first resolves registers a fresh listener (not stuck cached)', async () => {

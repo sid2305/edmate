@@ -24,30 +24,63 @@ export class RedisNotReadyError extends Error {
 
 // One in-flight "ready" promise per Redis instance (task 1.4d): N concurrent sign-in requests
 // during an outage previously registered N `once('ready', …)` listeners (a MaxListeners warning
-// past 10); now every concurrent caller awaits the same promise, and only its first caller
-// registers a listener.
-const pending = new WeakMap<ReadySource, Promise<void>>();
+// past 10); now every concurrent caller awaits the same shared promise, and only its first
+// caller registers a listener.
+//
+// 1.4e: that shared promise ignored every caller but the first's own `timeoutMs`. So the shared
+// promise itself now has no timeout of its own and only resolves (it never rejects, which also
+// means there is no risk of an un-awaited rejection on it turning into an unhandled rejection).
+// Each caller races it against its own timer, which rejects with RedisNotReadyError after that
+// caller's own `timeoutMs`. The `ready` listener is removed, and the entry is dropped, once the
+// last still-waiting caller has either resolved or timed out.
+interface PendingReady {
+  readonly promise: Promise<void>;
+  readonly dropListener: () => void;
+  waiters: number;
+}
+
+const pending = new WeakMap<ReadySource, PendingReady>();
+
+function sharedReady(redis: ReadySource): PendingReady {
+  const existing = pending.get(redis);
+  if (existing) return existing;
+  let resolveShared: () => void;
+  const promise = new Promise<void>((resolve) => {
+    resolveShared = resolve;
+  });
+  const onReady = () => {
+    pending.delete(redis);
+    resolveShared();
+  };
+  redis.once('ready', onReady);
+  const entry: PendingReady = {
+    promise,
+    dropListener: () => redis.removeListener('ready', onReady),
+    waiters: 0,
+  };
+  pending.set(redis, entry);
+  return entry;
+}
 
 /** Resolves when `redis` is ready; rejects with RedisNotReadyError after `timeoutMs`. */
 export function whenReady(redis: ReadySource, timeoutMs: number): Promise<void> {
   if (redis.status === 'ready') return Promise.resolve();
-  const inFlight = pending.get(redis);
-  if (inFlight) return inFlight;
-  const promise = new Promise<void>((resolve, reject) => {
-    const onReady = () => {
-      clearTimeout(timer);
-      pending.delete(redis);
-      resolve();
-    };
+  const entry = sharedReady(redis);
+  entry.waiters += 1;
+  return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
-      redis.removeListener('ready', onReady);
-      pending.delete(redis);
+      entry.waiters -= 1;
+      if (entry.waiters === 0) {
+        entry.dropListener();
+        pending.delete(redis);
+      }
       reject(new RedisNotReadyError());
     }, timeoutMs);
-    redis.once('ready', onReady);
+    void entry.promise.then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
-  pending.set(redis, promise);
-  return promise;
 }
 
 /** Wraps both counters so every take first waits for `redis` to be ready. */
