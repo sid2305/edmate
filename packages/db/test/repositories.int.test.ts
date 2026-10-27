@@ -6229,10 +6229,16 @@ describe.skipIf(!up)(
       expect(await snapshot()).toBe(before);
     });
 
-    it('openDatabase gives repositories, the identity store, retention jobs and a close, without a raw handle', async () => {
+    it('openDatabase gives repositories, the identity store, retention jobs, the regate sweep and a close, without a raw handle', async () => {
       const opened = openDatabase({ DATABASE_URL: TEST_URL });
       try {
-        expect(Object.keys(opened).sort()).toEqual(['close', 'identity', 'repos', 'retention']);
+        expect(Object.keys(opened).sort()).toEqual([
+          'close',
+          'identity',
+          'regate',
+          'repos',
+          'retention',
+        ]);
         expect(await opened.repos.learnerProfiles.get(sScope('1B'))).not.toBeNull();
       } finally {
         await opened.close();

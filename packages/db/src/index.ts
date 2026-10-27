@@ -10,7 +10,9 @@ import {
 import {
   createRepositories,
   retentionRepo,
+  regateRepo,
   type RetentionRepo,
+  type RegateRepo,
   type Repositories,
 } from './repositories/index.js';
 
@@ -42,6 +44,8 @@ export function openDatabase(
   identity: IdentityStore;
   /** Task 13.4 (Phase A): the scheduled retention jobs (apps/worker's Phase B calls these). */
   retention: RetentionRepo;
+  /** Task 13.regate: the regate sweep's candidate list (apps/worker's Phase B calls this). */
+  regate: RegateRepo;
   close: () => Promise<void>;
 } {
   const { db, close } = createDb(env);
@@ -49,12 +53,7 @@ export function openDatabase(
     repos: createRepositories(db),
     identity: createIdentityStore(db, options.identity),
     retention: retentionRepo(db),
+    regate: regateRepo(db),
     close,
   };
 }
-
-// Task 13.regate (Phase A): `regateRepo` is exported (above, via `./repositories/index.js`) for
-// apps/worker's Phase B to call directly, the same standalone shape as `retentionRepo`. It is
-// deliberately not wired into `openDatabase`'s return here: that object's shape is pinned by an
-// exhaustive-keys assertion in `test/repositories.int.test.ts`, a file another task is editing
-// concurrently (9.2g) -- Phase B wires `regate` into `openDatabase` once that lands.

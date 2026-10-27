@@ -87,7 +87,11 @@ Isolation between teachers and between students is enforced here, not by Postgre
     are the same kind of unscoped system read -- totals and active-student counts grouped by
     `(teacherId, packageId)` across every teacher, no student-level detail. The staff-only
     `/api/staff/cost` route is the one caller: it joins the two by `(teacherId, packageId)` after
-    checking the caller is staff.
+    checking the caller is staff. `regateRepo(db).liveAgentsWithMaterialChange(limit?)` (task
+    13.regate) is the same kind of unscoped system read for the scheduled regate sweep: the
+    `{teacherId, agentId}` of every live agent whose material has changed since its newest
+    passed/published run, oldest-changed-first, capped at `REGATE_SWEEP_MAX` -- only
+    `apps/worker`'s sweep job calls it, via `openDatabase().regate`.
 
     `teacherProfiles.listPendingForStaff(by)` (task 12.1a) is not a public read -- it takes no
     `TeacherScope`/`StudentScope`, but it is staff-only, checked by a plain (unlocked) read of

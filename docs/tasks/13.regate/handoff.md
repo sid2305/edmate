@@ -1,6 +1,6 @@
 # Handoff: 13.regate, Phase A
 
-Status: DONE (Phase A)
+Status: DONE (Phases A, B and B2)
 
 ## Summary
 
@@ -139,22 +139,6 @@ the shutdown `close()` calls all depend on either a live `db` handle for `regate
 `schedule.ts`) is finished and tested in isolation; only its wiring into the running process is
 blocked on 9.2g.
 
-### Left to do (blocked on 9.2g landing on `origin/main`)
-
-1. `packages/db/src/index.ts`: add `regate: regateRepo(db)` to `openDatabase`'s return, next to
-   `retention`.
-2. `packages/db/test/repositories.int.test.ts`: add `'regate'` to the
-   `Object.keys(opened).sort()` key-list assertion (line ~6220).
-3. `packages/db/src/repositories/README.md`: the one-sentence README note the lead answers moved
-   to Phase B (next to the `teacherIdsWithUsageSince` / `costByPackageSince` paragraph).
-4. `apps/worker/src/index.ts`: `const regateQueue = new Queue(REGATE_QUEUE, {connection})`; a
-   `gateProducerQueue = createGateQueue(connection)` (`@edmate/queue`) to call `enqueueGate` from;
-   `createRegateSweepWorker({..., deps: {candidates: () => db.regate.liveAgentsWithMaterialChange(),
-   repos: db.repos, pins: () => regatePinsFromEnv(process.env), enqueue: (job) =>
-   enqueueGate(gateProducerQueue, job), log}})` added to the `workers` array; `scheduleRegateSweep(regateQueue).catch(...)`
-   next to `scheduleCostAlarm`; `regateQueue.close()` and `gateProducerQueue.close()` added to the
-   shutdown `Promise.all`.
-
 ### Decisions
 
 ### 27 Oct 2026 · 13.regate pins reuses `GateUnavailableReason`, not its own four-reason copy · decided by builder · risk: low
@@ -207,3 +191,72 @@ blocked on 9.2g.
 ### Budget
 
 Phase B tool calls used: 68
+
+## Phase B2
+
+Status: DONE
+
+### Summary
+
+Finished the wiring Phase B left blocked on 9.2g landing on `origin/main` (it has: the newest
+commit touching `repositories.int.test.ts` is now `cebe2249`, 9.2g itself). Four changes, all in
+the files the brief named:
+
+- `packages/db/src/index.ts`: `openDatabase`'s return now includes `regate: regateRepo(db)` next
+  to `retention`, with its own one-line doc comment (same style as `retention`'s). Removed the
+  Phase A comment explaining why `regate` was deliberately left unwired.
+- `packages/db/test/repositories.int.test.ts`: the `openDatabase` key-list assertion
+  (`Object.keys(opened).sort()`) now includes `'regate'`; its test title and multi-line array
+  match the file's existing style for a 5-key list.
+- `packages/db/src/repositories/README.md`: a one-sentence note on `regateRepo(db)
+  .liveAgentsWithMaterialChange(limit?)` next to the `teacherIdsWithUsageSince` /
+  `costByPackageSince` system-read paragraph (same "unscoped system read" framing).
+- `apps/worker/src/index.ts`: `regateQueue` (`new Queue(REGATE_QUEUE, {connection})`) and
+  `gateProducerQueue` (`createGateQueue(connection)`, `@edmate/queue`) alongside the other
+  producer queues; `createRegateSweepWorker({..., deps: {candidates: () =>
+  db.regate.liveAgentsWithMaterialChange(), repos: db.repos, pins: () =>
+  regatePinsFromEnv(process.env), enqueue: (job) => enqueueGate(gateProducerQueue, job), log}})`
+  added to the `workers` array (as `regate`, after `gate`); `scheduleRegateSweep(regateQueue)
+  .catch(...)` next to `scheduleRetention`; `regateQueue.close()` and `gateProducerQueue.close()`
+  added to the shutdown `Promise.all`. The file header comment now names the regate sweep
+  alongside the other scheduled jobs it describes.
+
+No test file exists for `apps/worker/src/index.ts` itself (checked: none of the other scheduled
+jobs' wiring — cost alarm, weekly insights, retention — has an `index.test.ts` either, so there is
+no pattern to follow for this entrypoint's module-scope wiring). Per the brief, saying so here
+instead of adding one.
+
+Red-then-green: before the edit, `packages/db/test/repositories.int.test.ts`'s `openDatabase`
+test asserted the old 4-key list, which — once `index.ts`'s return gained the `regate` field —
+would fail `toEqual` on the extra key; the key-list edit was made together with the `index.ts`
+edit so the two never diverged in a commit, and the full db/worker gate run below is the first
+(and only) run, green.
+
+### Decisions
+
+### 27 Oct 2026 · 13.regate no index.test.ts for the worker wiring · decided by builder · risk: low
+
+- Decided: no new test file for `apps/worker/src/index.ts`'s regate wiring.
+- Why: the brief asked to add a test "if the worker index has a test pattern for the other
+  scheduled jobs" and to say so otherwise. Checked `apps/worker/src/index.ts`'s existing wiring
+  for the cost alarm, weekly insights and retention jobs (each built and reviewed in earlier
+  tasks): none has a corresponding `index.test.ts`, so there is no pattern to extend. The sweep
+  job's own logic is already fully tested in isolation (`apps/worker/src/regate/*.test.ts`, 17
+  tests, Phase B); this phase only wires fakes-free, scripted singletons that match the shape of
+  the retention/cost-alarm wiring already in the file.
+
+### Gate
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/worker... --filter=@edmate/db...`
+  → green, **38 successful, 38 total**. `@edmate/db:test`: 1791 passed, 4 skipped (the same four
+  pre-existing, unrelated skips as Phase A/B — no new skips). `@edmate/db` coverage: 100%
+  stmts/funcs/lines on `src/index.ts`, package-wide 99.67%/97.88%/99.65%/99.72%
+  stmts/branch/funcs/lines. `@edmate/worker` included unchanged.
+- `corepack pnpm exec prettier --check` on the 4 changed files (`packages/db/src/index.ts`,
+  `packages/db/test/repositories.int.test.ts`, `packages/db/src/repositories/README.md`,
+  `apps/worker/src/index.ts`) → clean.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Budget
+
+Phase B2 tool calls used: 26
