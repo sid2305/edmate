@@ -92,6 +92,36 @@ see Decisions below. No file outside the plan's "Files to create/modify" list wa
   after → `All matched files use Prettier code style!`.
 - `python3 .githooks/secret-scan.py --all` — clean, no output, exit 0.
 
+## Fix round
+
+Fixed two follow-up findings:
+
+- `apps/web/src/auth/errors.ts` (HIGH, security-reviewer + typescript-reviewer; code-reviewer
+  MEDIUM): the `{ 'cache-control'?: never }` type guard only blocked the exact lowercase key —
+  `{ 'Cache-Control': 'public' }` typechecked, and at runtime the spread kept both keys so
+  `Headers` combined them into `cache-control: public, no-store`, letting a caller override the
+  intended `no-store`. Replaced the spread with a real `Headers` instance: `new Headers(headers)`
+  then `.set('cache-control', 'no-store')`, which replaces any existing entry regardless of case.
+  Dropped the now-unneeded `& { 'cache-control'?: never }` type guard and rewrote the doc comment
+  to describe the actual guarantee (last-write-wins `Headers.set`, not a compile-time block).
+  `errors.test.ts`: replaced the `@ts-expect-error` compile-time test with a runtime test that
+  passes `{ 'Cache-Control': 'public, max-age=3600', 'Retry-After': '60' }` and asserts
+  `res.headers.get('cache-control')` is exactly `'no-store'` while `Retry-After` still passes
+  through.
+- `packages/db/src/repositories/README.md` (LOW, typescript-reviewer): reworded the bare-id
+  exception sentence — `lockRole` itself returns `Role | null`; it is the calling repository
+  method that throws `RepositoryError('scope')` when `lockRole` returns `null`.
+
+### Fix round evidence
+- `corepack pnpm turbo run build --filter=@edmate/web^...` — green, `7 successful, 7 total`.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — green, `10 successful,
+  10 total`.
+- `corepack pnpm exec prettier --check` on the three changed files — `All matched files use
+  Prettier code style!`.
+- `python3 .githooks/secret-scan.py --all` — clean, no output.
+
 ## Budget
 
 Tool calls used: 19
+
+Fix round tool calls used: 11

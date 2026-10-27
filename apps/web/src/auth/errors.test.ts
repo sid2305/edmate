@@ -34,8 +34,12 @@ describe('apiError', () => {
     });
   });
 
-  it('rejects a cache-control key in headers at compile time (9.4f item 4)', () => {
-    // @ts-expect-error - headers must never carry 'cache-control'; apiError always sets it.
-    apiError('rate_limited', 'slow down', 429, { 'cache-control': 'public' });
+  it('overrides a caller-supplied Cache-Control with no-store, regardless of case (9.4f item 4)', async () => {
+    const res = apiError('rate_limited', 'slow down', 429, {
+      'Cache-Control': 'public, max-age=3600',
+      'Retry-After': '60',
+    });
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('Retry-After')).toBe('60');
   });
 });
