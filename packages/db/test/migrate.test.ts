@@ -149,7 +149,7 @@ describe('runPostMigrateSteps', () => {
   });
 
   it('the default step list runs the three 0009 VALIDATEs, the three 0023 VALIDATEs, the 0024 VALIDATE, the 0033 VALIDATE, the two 0014 VALIDATEs and the package-pin and open-session indexes', () => {
-    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(10);
+    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(11);
     expect(
       POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint' && s.table === 'documents'),
     ).toEqual([
@@ -162,6 +162,11 @@ describe('runPostMigrateSteps', () => {
         kind: 'validateConstraint',
         table: 'documents',
         constraint: 'documents_teacher_id_live_class_id_live_classes_fk',
+      },
+      {
+        kind: 'validateConstraint',
+        table: 'documents',
+        constraint: 'documents_failure_reason_only_when_failed',
       },
     ]);
     expect(
@@ -267,6 +272,28 @@ describe('runPostMigrateSteps', () => {
           /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"status" = 'processing'/,
         ),
       },
+      // Task 8.2r (8.2a review deferral): listForTeacher's keyset-paging index.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'documents_teacher_id_created_at_id_idx',
+        sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
+      },
+      // Task 8.2r (8.2q review request): the widened stuck-processing/uploading sweep index,
+      // replacing documents_processing_updated_at_id_idx above (that entry is left in place and
+      // becomes a no-op once the index it names no longer exists).
+      {
+        kind: 'concurrentIndex',
+        indexName: 'documents_sweep_updated_at_id_idx',
+        sql: expect.stringMatching(
+          /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"status" IN \('processing', 'uploading'\)/,
+        ),
+      },
+    ]);
+  });
+
+  it('the default step list drops documents_processing_updated_at_id_idx after replacing it (task 8.2r)', () => {
+    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'dropIndexConcurrently')).toEqual([
+      { kind: 'dropIndexConcurrently', indexName: 'documents_processing_updated_at_id_idx' },
     ]);
   });
 });

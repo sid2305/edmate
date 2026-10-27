@@ -421,9 +421,18 @@ const DROP_INDEX = /DROP INDEX "(\w+)";/g;
  * a composite FK, documents_teacher_id_live_class_id_live_classes_fk, that enforces a stronger
  * version of the same rule (a linked class must belong to the same teacher) -- no row is
  * touched or deleted by the drop.
+ *
+ * Task 8.2r (8.2a review deferral): 0041 drops documents_failure_reason_only_when_failed and
+ * immediately re-adds the exact same CHECK expression, NOT VALID (hygiene with this repo's
+ * later NOT VALID -> VALIDATE convention; 0017 originally added it as a plain, immediately
+ * validated ADD CONSTRAINT). No row is touched or deleted by the drop, and the constraint is
+ * never unenforced between the DROP and the ADD.
  */
 const REVIEWED_CONSTRAINT_DROPS: Record<string, string[]> = {
   '0033_document_live_class_teacher.sql': ['documents_live_class_id_live_classes_id_fk'],
+  '0041_documents_list_index_failure_reason_validate.sql': [
+    'documents_failure_reason_only_when_failed',
+  ],
 };
 const DROP_CONSTRAINT = /ALTER TABLE "\w+" DROP CONSTRAINT "(\w+)";/g;
 
