@@ -43,7 +43,7 @@ type RepeatInfringerRepos = Pick<Repositories, 'takedowns' | 'teacherProfiles' |
  */
 export async function listRepeatInfringersForStaff(
   repos: RepeatInfringerRepos,
-  by: unknown,
+  by: string,
   now: number = Date.now(),
 ): Promise<LookupItem[]> {
   const active = await repos.takedowns.listActiveForStaff(by);
@@ -70,7 +70,7 @@ export async function listRepeatInfringersForStaff(
       row !== null && row.verificationStatus !== 'rejected',
   );
 
-  const enriched = await enrichQueueRows(repos, typeof by === 'string' ? by : '', survivors);
+  const enriched = await enrichQueueRows(repos, by, survivors, active);
   const items = enriched
     .map((r) => toLookupItem(r, r.activeTakedowns, r.lastDecision, r.subjectHistory))
     .sort((a, b) => a.slug.localeCompare(b.slug));
