@@ -274,6 +274,18 @@ State after this round: `routes.test.ts` has 90 tests, all green.
   fail a document that was replaced while it ran"); the 436 reference in the raw finding's line
   list appears to be a copy artifact from grepping every `markFailed` call site, not a second bug.
 
+### 27 Oct 2026 · 8.2q approved for merge · decided by lead · risk: high
+- Decided: Merge 8.2q. It changes risky paths chunks.ts and ingestSweep.ts (packages/db/src/repositories/): a key-compared processing write (markProcessingIfStorageKey) and a sweep that also picks up stuck `uploading` rows. security-reviewer, database-reviewer, typescript-reviewer and code-reviewer ran; both HIGHs are fixed and re-verified (the index one through 8.2r on main).
+- Why: The required reviewers for packages/db/src/repositories/** ran, and the re-verifications found no new issue on the branch merged with current main.
+
+### 27 Oct 2026 · 8.2q sweep limit left at 1000 · decided by lead · risk: low
+- Decided: Keep INGEST_SWEEP_LIMIT at 1000 in ingestSweep.ts (packages/db/src/repositories/); no follow-up task.
+- Why: The sweep runs again on every tick and orders by updated_at, so a backlog past 1000 drains over a few runs. Stuck uploads are rare, and pilot volume is far below that limit.
+
+### 27 Oct 2026 · 8.2q budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 287 tool calls (harness count over three runs: Phases B, C and E 110; Phases A and D 114; fix round 1 63) against a plan budget of 150.
+- Why: The task spanned apps/web, apps/worker and packages/db across five phases plus a race fix. Future multi-package hardening tasks of this size should be split into separate board tasks of about 100 calls each.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/worker`:
