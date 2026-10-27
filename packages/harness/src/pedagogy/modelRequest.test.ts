@@ -461,18 +461,22 @@ describe('forged teacher-note marker (3.11d)', () => {
     // A fixed `k` (fix round 1 used `k = 25`, ~2.9 s on the dev Mac) cannot fit every machine:
     // a slower CI runner pushed that same `k` past this test's own timeout (fix round 2). So
     // instead, grow `k` from a small size, timing each real regex run, until the first run whose
-    // time exceeds the ceiling -- then assert `expectUnderCeiling` throws on exactly that run.
-    // Because backtracking time roughly doubles per step, the run that trips the ceiling is at
-    // most about 2x over it, and the sum of every run tried (a geometric series) is at most about
-    // 4x the ceiling (~8 s) on any machine, fast or slow. `MAX_K` caps the search so a regex
-    // engine that doesn't backtrack on this pattern fails fast with a clear message instead of
-    // spinning forever.
+    // time exceeds the ceiling -- then assert `expectUnderCeiling` throws on the *next* run
+    // (`k + 1`), one step past the tripping run, for margin: a run that only just cleared the
+    // ceiling could, run a second time inside `expectUnderCeiling`, land just under it instead
+    // (fix round 3). Because backtracking time roughly doubles per step, the `k + 1` run takes
+    // about 2x the tripping run's time, so it is clearly, not just barely, over the ceiling.
+    // Worst case total time: the tripping run itself is at most about 2x the ceiling (~4 s), the
+    // asserted `k + 1` run is at most about 4x the ceiling (~8 s), and the sum of every run tried
+    // before the tripping one (a geometric series) is at most about 2x the ceiling (~4 s) -- about
+    // 16 s total on any machine, fast or slow, which fits this test's 30 s timeout. `MAX_K` caps
+    // the search so a regex engine that doesn't backtrack on this pattern fails fast with a clear
+    // message instead of spinning forever.
     const MAX_K = 40;
     let k = 16;
     let elapsedMs = 0;
-    let hostile = '';
     for (; k <= MAX_K; k += 1) {
-      hostile = ' '.repeat(k) + 'x!';
+      const hostile = ' '.repeat(k) + 'x!';
       const start = Date.now();
       void /^(\s*)*$/.test(hostile);
       elapsedMs = Date.now() - start;
@@ -485,7 +489,8 @@ describe('forged teacher-note marker (3.11d)', () => {
           'be backtracking on this pattern.',
       );
     }
-    expect(() => expectUnderCeiling(() => void /^(\s*)*$/.test(hostile))).toThrow();
+    const asserted = ' '.repeat(k + 1) + 'x!';
+    expect(() => expectUnderCeiling(() => void /^(\s*)*$/.test(asserted))).toThrow();
   }, 30_000);
 });
 
