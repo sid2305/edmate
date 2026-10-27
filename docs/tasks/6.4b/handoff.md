@@ -84,6 +84,18 @@ cases against the not-yet-existing method gave a `TypeError: ... is not a functi
   freshly seeded session rather than reusing `endable`/`endable2` so it never races with those
   cases' own state.
 
+### 27 Oct 2026 · 6.4b approve merge · decided by lead · risk: high
+- Decided: 6.4b merges. It changes `packages/db/src/repositories/sessions.ts` (new `attachSummary`, scoped to the pair and conditional on an ended session with no summary) and the end route now claims the session before summarizing, so two concurrent end requests run the summarizer once. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; typescript-reviewer's HIGH (a history read failure after the claim returned an error for an ended session) was fixed in fix round 1 and re-verified.
+- Why: it closes 6.4a's security MEDIUM (unmetered duplicate summaries) using the existing atomic `end()` claim, without changing `end()`.
+
+### 27 Oct 2026 · 6.4b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 129 tool calls (build 85, fix round 44, by the harness count) against the plan's 90.
+- Why: the overrun is the fix round for a real HIGH; the build itself came in under budget.
+
+### 27 Oct 2026 · 6.4b three review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix for packages/db/src/repositories/sessions.ts (attachSummary reads the memory-reset watermark at attach time, which is the wanted behaviour), route.ts (the `endedAt` early return is only a fast path before the atomic claim) and route.test.ts (the in-memory concurrency test proves route ordering; cross-instance atomicity is `end()`'s conditional UPDATE, covered by the packages/db int tests), all under apps/web/app/api/sessions/[id]/end/.
+- Why: none is a defect; each reviewer marked it informational.
+
 ## Fix round 1
 
 typescript-reviewer HIGH: after the claim (`repos.sessions.end(scope, id, undefined)` returning
@@ -131,14 +143,6 @@ corepack pnpm --filter @edmate/web exec vitest run -t "end a session"
 ```
 
 GREEN.
-
-### 27 Oct 2026 · 6.4b approve merge · decided by lead · risk: high
-- Decided: 6.4b merges. It changes `packages/db/src/repositories/sessions.ts` (new `attachSummary`, scoped to the pair and conditional on an ended session with no summary) and the end route now claims the session before summarizing, so two concurrent end requests run the summarizer once. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; typescript-reviewer's HIGH (a history read failure after the claim returned an error for an ended session) was fixed in fix round 1 and re-verified.
-- Why: it closes 6.4a's security MEDIUM (unmetered duplicate summaries) using the existing atomic `end()` claim, without changing `end()`.
-
-### 27 Oct 2026 · 6.4b budget overrun accepted · decided by lead · risk: low
-- Decided: accept 129 tool calls (build 85, fix round 44, by the harness count) against the plan's 90.
-- Why: the overrun is the fix round for a real HIGH; the build itself came in under budget.
 
 ## Gate
 
