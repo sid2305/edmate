@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 5.8b ADR-0013 and role-play gate merge · decided by lead · risk: high
+- Decided: merge the ADR-0013 rewrite (docs/adr/0013-roleplay-state.md, Status Accepted with the B-37 answers) and the role-play coverage-gate code in packages/harness/src/pedagogy (roleplay.ts, policy.ts, skills.ts, compose.ts) and packages/content (promptPacks.ts, personaTemplates.ts). architect, security-reviewer, typescript-reviewer and code-reviewer reviewed it; fix round 1 fixed the two HIGH ADR wording findings and the MEDIUM `/pause.` punctuation finding, and all four re-reviews approved.
+- Why: it carries out the human's B-37 answers (q8: an ended role-play and a `/pause` with text meet the coverage gate; q9: every answer turn skips it), and a signed prerelease prompt pack or persona library can no longer outrank a signed release. No packages/contracts change.
+
+---
+
+### 27 Oct 2026 · 5.8b budget overrun · decided by lead · risk: low
+- Decided: accept 204 tool calls (harness count: Phase A 102, Phase B 59, fix round 43) against the plan's 70.
+- Why: Phase A rewrote the B-37 rule across policy, skills, compose and the ADR with a test per table row, which the plan under-counted at 45; the fix round was needed for review findings. Later role-play plans budget Phase A at about 90.
+
+---
+
+### 27 Oct 2026 · 5.8b coverage-gate row tests live in policy.test.ts · decided by lead · risk: low
+- Decided: accept the builder's choice to test every B-37 table row through decidePolicy in packages/harness/src/pedagogy/policy.test.ts rather than in roleplay.test.ts as the plan listed.
+- Why: the rows depend on the policy wiring (the control, pauseHasExtraText and the gate together), so testing them through decidePolicy covers more; code-reviewer confirmed every row is covered (review LOW).
+
+---
+
+### 27 Oct 2026 · 5.8b PersonaTemplateError: one throw, not two · decided by builder · risk: low
+- Decided: converted the single `throw new Error(...)` in `readPersonaLibrary` to
+  `PersonaTemplateError`, and did not add a second conversion in `readPersonaTemplateDir` or
+  anywhere else.
+- Why: the plan's file note says "use it ... in place of the bare `throw new Error(...)` at line
+  197 (and the directory-read throw above it)", but `readPersonaTemplateDir` has no throw — a
+  missing/non-directory input already returns `{ templates: [], issues: [...] }`, matching
+  `promptPacks.ts`'s precedent of never throwing from the directory-read step. `readPersonaLibrary`
+  has exactly one throw, which is now `PersonaTemplateError`. Read as a plan reference to the
+  single throw at that line, not a second site; flagging here since the file only has one.
+
+---
+
+### 27 Oct 2026 · 5.8b ADR-0013 rewrite · decided by builder · risk: high
+- Decided: rewrote ADR-0013 §1 "Rule order" to the final B-37 rule (two gate-meeting exceptions:
+  `ended` phase, and `/pause` with extra text; every other role-play turn skips the gate,
+  including N > 1 answers), set `Status: Accepted`, and updated the one stale Consequences bullet
+  that restated the old (now-reversed) rule so the ADR does not contradict itself.
+- Why: the plan scoped the edit to §1 and Status/Context, but left a "Coverage gate" bullet in
+  Consequences that quoted the Phase B draft's rule verbatim; leaving it would make the ADR
+  internally inconsistent once Status became Accepted. The edit is a restatement of the same
+  decision this task makes in §1, not new scope. Reviewers: architect, security-reviewer,
+  typescript-reviewer (risky path `docs/adr/**`, per the plan and lead answer).
+
+---
+
 ### 27 Oct 2026 · 13.3b scope checks on chunks.ts helpers · decided by lead · risk: high
 - Decided: merge the change to packages/db/src/repositories/chunks.ts and outline.ts (risky path packages/db/src/repositories/**): insertTopicLinks and topicSources take a TeacherScope and check it before their empty-input early returns. security-reviewer, code-reviewer and typescript-reviewer all approved with no findings.
 - Why: it closes the 13.3 review's LOW findings that these two helpers sat outside the scope test grid; every query already used the scoped teacher id, and a bad scope now throws instead of returning an empty result.

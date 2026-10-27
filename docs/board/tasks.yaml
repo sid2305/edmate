@@ -2974,9 +2974,32 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: running
+  status: done
   branch: m13/5.8b-roleplay-gate-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 963
+    tokens_in: 3272
+    tokens_out: 212207
+    cache_read_tokens: 115235109
+    wall_time_seconds: 479265
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 2
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 1
 - id: 6.3b
   milestone: M13
   title: '6.3 review follow-ups: a concurrent applyMistakes test (Promise.all on one tag, assert the summed count, like 6.2''s race test); cap the patch length and the stored mistakes array; applyMistakes
