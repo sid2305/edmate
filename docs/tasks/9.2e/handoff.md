@@ -1,5 +1,7 @@
 # 9.2e handoff
 
+Status: DONE (both phases done)
+
 ## Phase 1 (apps/web only)
 
 Status: DONE (Phase 1 only; Phase 2 — items 1, 2, 5, the `LanguageTag` re-export, and the
@@ -56,3 +58,74 @@ not touched, per the lead amendment and the "other builders" note.
 ## Budget
 
 Tool calls used: 24
+
+## Phase 2 (packages/db + apps/web/src/discovery/searchParams.ts)
+
+Status: DONE
+
+### Summary
+
+- `packages/db/test/discovery.int.test.ts` (item 1): split the shared `explain()` helper into
+  `explainWith(query, seqscanOff)` plus two thin wrappers, `explainDefault` and `explainSeqscanOff`.
+  "the real search statement never falls back to a sequential scan" now runs under
+  `explainDefault` (default planner settings), so it proves the planner actually chose a non-Seq-Scan
+  path, not that the alternative was switched off; "the search and language GIN indexes exist and
+  are usable on their own" keeps `explainSeqscanOff` (it needs the forced setting to make the GIN
+  the only remaining access path at this seed's scale, as the existing comment already explains).
+- `packages/db/src/cli.ts` (item 2): `runSeedDiscoveryCli`'s `.values(seed[table] as never)` loop
+  over `DISCOVERY_SEED_TABLES` is now six explicit branches (`users`, `teacherProfiles`, `agents`,
+  `agentVersions`, `packages`, `packageVersions`), each `tx.insert(<table>).values(seed.<table>)`
+  typed directly from the named schema export and `DiscoverySeed`'s own field, no cast. Imports
+  the six table objects by name from `./schema/index.js` instead of the `discoverySchema`
+  namespace import (dropped); `DISCOVERY_SEED_TABLES` is still imported and used for the final
+  `total` reduce. Insertion order is unchanged (same foreign-key order as the old loop).
+- `packages/db/src/repositories/discovery.ts` (item 5): added a comment at `teacherBySlug` noting
+  its `bio` is the full, untruncated text, unlike `search`'s card (`SEARCH_CARD_BIO_MAX`) -- no
+  behaviour change.
+- `packages/db/src/repositories/index.ts` (`LanguageTag` re-export): added `LanguageTag` to the
+  existing `export { ..., STAFF_QUEUE_MAX_LIMIT, ... } from './teacher-profiles.js'` line (barrel
+  only; `teacher-profiles.ts` itself untouched).
+- `apps/web/src/discovery/searchParams.ts` (item 7, web half): imports `LanguageTag` from
+  `@edmate/db` and calls `LanguageTag.safeParse(language).success` instead of the hand-copied
+  `LANGUAGE_RE` regex (removed, along with its doc comment explaining the duplication). Behaviour
+  is unchanged -- `LanguageTag` is the same regex, just no longer copied -- so
+  `searchParams.test.ts` needed no edits and stays green unmodified.
+
+Items 3 and 4 (batched migration pattern; one lateral join vs four correlated subqueries) are
+wontfix, per the plan's own reasons (quoted here since this is the final append to this handoff):
+item 3 -- no real teacher data yet, revisit when `teacher_profiles` is large enough for an
+`ACCESS EXCLUSIVE` rewrite to matter; item 4 -- the int test's measured p50/p95/max
+(2.7/4.4/7.3 ms) is nowhere near the 1 s bound, so this is a refactor for a scale problem that
+doesn't exist yet.
+
+### Decisions
+
+### 26 Oct 2026 · 9.2e LanguageTag re-export · decided by builder · risk: low
+- Decided: re-export `LanguageTag` (a zod schema) from `packages/db/src/repositories/index.ts`'s
+  public barrel, so `apps/web/src/discovery/searchParams.ts` imports it directly instead of
+  keeping a hand-copied regex.
+- Why: the lead approved this in the plan's Lead amendment (26 Oct 2026) -- a read-only widening
+  of `@edmate/db`'s public surface, not `packages/contracts`, so no ADR is needed; logged here per
+  that amendment's instruction.
+
+## Gate (Phase 2)
+
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web` --
+  green (20/20 tasks successful on the full run that also pulls in `@edmate/cli` as a `db`
+  dependent; one `@edmate/cli#test` run hit a transient dropped Postgres connection
+  ("terminating connection due to administrator command") unrelated to any file this task
+  touches -- a lone re-run of `turbo run test --filter=@edmate/cli --force` immediately after
+  passed 15/15 test files, 162/163 tests (1 pre-existing skip), confirming it was shared-Postgres
+  contention with another builder, not a regression; the subsequent full-gate re-run and the final
+  `--filter=@edmate/db` re-run after the prettier `--write` below were both clean, 20/20 and 8/8
+  tasks successful).
+- `corepack pnpm exec prettier --check` on the five changed files -- `cli.ts` and
+  `discovery.int.test.ts` needed one `--write` pass (now clean); `discovery.ts`, `index.ts` and
+  `searchParams.ts` were already clean. (`searchParams.test.ts`, listed in the plan's Phase B file
+  list but not touched in Phase 2, already fails `--check` before this task's changes -- pre-existing,
+  not introduced here, left as is since the plan doesn't ask Phase 2 to reformat it.)
+- `python3 .githooks/secret-scan.py --all` -- clean, no output.
+
+## Budget (Phase 2)
+
+Phase 2 tool calls used: 27

@@ -118,7 +118,11 @@ export type {
   TeacherProfileUpdate,
   TeacherVerificationInput,
 } from './teacher-profiles.js';
-export { STAFF_QUEUE_MAX_LIMIT, type TeacherVerificationQueueRow } from './teacher-profiles.js';
+export {
+  LanguageTag,
+  STAFF_QUEUE_MAX_LIMIT,
+  type TeacherVerificationQueueRow,
+} from './teacher-profiles.js';
 export {
   AUDIT_JSON_MAX_LENGTH,
   AUDIT_MAX_LIMIT,
