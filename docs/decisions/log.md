@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 13.5a guard boundary and span cap · decided by builder · risk: high
+- Decided: used the lead amendment's values verbatim — `until <= since` rejects (not strictly
+  `<`), and `MAX_SPAN_MS` is 366 days as a named constant in `handlers.ts`.
+- Why: the lead amendment at the end of the plan superseded the plan's own "builder's call" open
+  questions; following it exactly avoids a second round of review on a value the lead already
+  picked. Flagged `risk: high` per non-negotiable 6 (this task touches the money/cost-dashboard
+  read path named in the plan's risky-paths section: `packages/db/src/repositories/**` and
+  `apps/web/app/api/staff/**`); required reviewers per the lead amendment are
+  `security-reviewer` (required), `code-reviewer` and `typescript-reviewer`; `database-reviewer`
+  is skipped (no schema or query-shape change).
+
+---
+
+### 26 Oct 2026 · 13.5a budget overrun · decided by lead · risk: low
+- Decided: accept 79 tool calls against a budget of 40 (about 2x). The work is complete, and all three reviewers approved it.
+- Why: the overrun came from the int-test cross-check plus prettier churn in handlers.ts and route.test.ts; this is not worth a re-run. Future briefs for staff-route follow-ups should budget 60.
+
+---
+
+### 26 Oct 2026 · 13.5a merge of usage-ledger.ts and api/staff/cost · decided by lead · risk: high
+- Decided: merge. This touches packages/db/src/repositories/usage-ledger.ts and apps/web/app/api/staff/cost/handlers.ts (risk paths). security-reviewer, code-reviewer and typescript-reviewer all approved it with no blocking findings.
+- Why: it adds the `until <= since` guard, the 366-day span cap and narrower error mapping (`scope` now returns 500, not 400); staff-only access is unchanged.
+
+---
+
+### 26 Oct 2026 · 13.5a unbounded Promise.all fan-out · decided by lead · risk: low
+- Decided: wontfix for now. apps/web/app/api/staff/cost/handlers.ts loadCostRows runs Promise.all over every teacher and live package with no concurrency cap.
+- Why: at pilot scale there are only a handful of teachers, and the plan asked for this change. Revisit it (add a limiter) when the teacher count grows past the pilot.
+
+---
+
 ### 26 Oct 2026 · 8.7p item-1 clip region includes the separator · decided by builder · risk: low
 - Decided: when a raw `PHONE_CANDIDATE` match is clipped at an exempt span's boundary, the
   redacted `REDACTED` region covers from the span's end to the match's end — including any

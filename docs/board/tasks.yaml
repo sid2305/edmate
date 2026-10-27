@@ -9653,9 +9653,30 @@ tasks:
   deps:
   - '13.5'
   risk: risky
-  status: running
+  status: done
   branch: m13/13.5a-cost-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 279
+    tokens_in: 938
+    tokens_out: 85059
+    cache_read_tokens: 37846479
+    wall_time_seconds: 2212
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 13.3a
   milestone: M13
   title: 'Security headers (13.3 Phase D MEDIUM): apps/web/next.config.ts headers() sets a CSP that works with Next.js (nonce or hash for inline scripts), X-Frame-Options DENY, X-Content-Type-Options nosniff,
