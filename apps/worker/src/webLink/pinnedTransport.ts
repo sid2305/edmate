@@ -65,9 +65,13 @@ export type PinnedRequestOptions = https.RequestOptions & { readonly autoSelectF
 /** The request options for one pinned request; exported so the safety rules can be asserted. */
 export function pinnedRequestOptions(req: TransportRequest): PinnedRequestOptions {
   const host = bareHostName(req.url.hostname.replace(/^\[(.*)\]$/, '$1'));
+  // Explicit, so the wire's Host header always matches SNI's servername (both come from the same
+  // bare `host`): Node would otherwise derive Host from `req.url` as-is, trailing dot kept. Node's
+  // own default Host also carries a non-default port; an explicit value has to do that itself.
+  const hostHeader = req.url.port === '' ? host : `${host}:${req.url.port}`;
   return {
     method: 'GET',
-    headers: { ...req.headers },
+    headers: { ...req.headers, host: hostHeader },
     lookup: pinnedLookup(req.address, req.family),
     family: req.family,
     autoSelectFamily: false,

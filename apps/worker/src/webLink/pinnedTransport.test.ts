@@ -147,6 +147,15 @@ describe('createPinnedTransport: the pin', () => {
     expect(options.servername).toBe('teacher-site.test');
   });
 
+  it('the Host header drops every trailing dot too, matching SNI (8.2i)', () => {
+    const options = pinnedRequestOptions(
+      req(443, { url: new URL('https://Teacher-Site.test../x'), address: PUBLIC_V4 }),
+    );
+    const headers = options.headers as Record<string, unknown> | undefined;
+    expect(headers?.host).toBe('teacher-site.test');
+    expect(headers?.host).toBe(options.servername);
+  });
+
   it('an IP-literal host gets no SNI servername', () => {
     for (const [host, address, family] of [
       [PUBLIC_V4, PUBLIC_V4, 4],
@@ -227,8 +236,9 @@ describe('createPinnedTransport with the fetcher: caps and limits', () => {
       html: '<h1>Fractions</h1>',
     });
     expect(pinned).toEqual([PUBLIC_V4]);
-    // The local-server redirect adds its port to the Host header; the name is the URL's.
-    expect(server.seen[0]?.headers.host).toBe(`teacher-site.test:${String(server.port)}`);
+    // The Host header is the real URL's authority (default https port, so no port shown), not
+    // wherever the local-server redirect happens to connect the socket (8.2i).
+    expect(server.seen[0]?.headers.host).toBe('teacher-site.test');
   });
 
   it('a body over the cap stops, with and without a content-length', async () => {
