@@ -22,6 +22,10 @@ Closes the two findings deferred from docs/tasks/13.4f/review.md.
 
 ## Decisions
 
+### 26 Oct 2026 · 13.4g budget overrun (29 vs 20) · decided by lead · risk: low
+- Decided: accept 29 tool calls against the 20 budget (1.45x).
+- Why: a background-task wait and a commit retry; the change itself stayed inside the plan's three files, and all three reviewers approved with no findings.
+
 ### 26 Oct 2026 · 13.4g tie-break final key · decided by builder · risk: low
 - Decided: when `periodEnd` and the ended/non-ended split both tie, break the remaining tie by
   the smaller `status` string (not, say, insertion order or `agentId`).
@@ -49,4 +53,4 @@ Closes the two findings deferred from docs/tasks/13.4f/review.md.
 
 ## Budget
 
-Tool calls used: 17
+Tool calls used: 29 (harness count; the builder reported 17)
