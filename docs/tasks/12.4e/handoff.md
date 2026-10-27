@@ -50,6 +50,10 @@ No repository, `migrate.ts`, or other out-of-bounds file was touched.
   listing, so a consistent tag/filename pair is the safe rename — no SQL content changed, so this
   stays inside the "no unrelated diff from `db:generate`" rule.
 
+### 26 Oct 2026 · 12.4e budget overrun · decided by lead · risk: low
+- Decided: Accept 50 tool calls against a budget of 20. The work is complete, and database-reviewer approved it with no findings.
+- Why: A turbo gate run went to the background past its timeout, and a duplicate run collided on coverage directories. Briefs already say to run tests in the foreground with a 600000 ms timeout.
+
 ## Gate
 ```
 $ corepack pnpm turbo run typecheck lint test --filter=...@edmate/db
@@ -71,4 +75,4 @@ $ python3 .githooks/secret-scan.py --all
 ```
 
 ## Budget
-Tool calls used: 29
+Tool calls used: 50 (harness count; the builder reported 29)
