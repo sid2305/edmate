@@ -10576,3 +10576,13 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.2p
+  milestone: M13
+  title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first) has no supporting index, so each 15-minute run seq-scans documents; add a partial index on documents (updated_at, id) WHERE status = ''processing'' when the table grows past pilot scale'
+  accept: an EXPLAIN in an int test (or the migration test) shows the sweep query uses the new index; db typecheck, lint and test green
+  deps:
+  - 8.2i
+  risk: risky
+  status: todo
+  branch: null
+  model: null
