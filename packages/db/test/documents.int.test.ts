@@ -121,6 +121,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         rightsDeclaredAt: expect.any(String) as string,
         createdAt: expect.any(String) as string,
         updatedAt: expect.any(String) as string,
+        takenDown: false,
       });
       expect(Object.keys(row!)).not.toContain('failureReason');
     });

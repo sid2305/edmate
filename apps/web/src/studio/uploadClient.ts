@@ -14,6 +14,8 @@ export interface DocumentView {
   failureReason?: string;
   createdAt: string;
   updatedAt: string;
+  /** Task 12.2f Phase C: whether Edmate staff have taken this document down. */
+  takenDown: boolean;
 }
 
 export interface UploadTicket {

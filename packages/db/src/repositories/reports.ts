@@ -187,37 +187,62 @@ export function reportsRepo(db: Db) {
                   ),
                 )
                 .orderBy(asc(documents.createdAt), asc(documents.id))
+                // This cap is batch-wide (across the whole open queue), not per report, ordered
+                // by (createdAt, id) ascending. Once more than
+                // REPORTS_QUEUE_MAX_LIMIT * REPORT_CITED_DOCUMENTS_MAX distinct (teacher, title)
+                // document rows exist across the open queue, a report late in that order can have
+                // its citedDocuments silently truncated below its own per-report cap. Acceptable
+                // at today's queue sizes; revisit if the queue regularly nears the cap.
                 .limit(REPORTS_QUEUE_MAX_LIMIT * REPORT_CITED_DOCUMENTS_MAX);
 
-        return rows.map((r) => {
+        const out: StaffReportRow[] = [];
+        for (const r of rows) {
           const hasMessage = r.role !== null && r.text !== null && r.messageAt !== null;
           const wanted = new Set(cited(r));
-          return toStaffReportRow(
-            {
-              id: r.id,
-              category: r.reason,
-              status: r.status,
-              createdAt: iso(r.createdAt),
-              messageId: r.messageId,
-              teacherId: r.teacherId,
-              agentId: r.agentId,
-              teacherSlug: r.slug,
-              message: hasMessage
-                ? {
-                    role: r.role,
-                    text: r.text,
-                    ...(r.sources === null ? {} : { sources: r.sources }),
-                    createdAt: iso(r.messageAt!),
-                  }
-                : null,
-              citedDocuments: docs
-                .filter((d) => d.teacherId === r.teacherId && wanted.has(d.title))
-                .slice(0, REPORT_CITED_DOCUMENTS_MAX)
-                .map((d) => ({ id: d.id, title: d.title, kind: d.kind, takenDown: d.takenDown })),
-            },
-            method,
-          );
-        });
+          try {
+            out.push(
+              toStaffReportRow(
+                {
+                  id: r.id,
+                  category: r.reason,
+                  status: r.status,
+                  createdAt: iso(r.createdAt),
+                  messageId: r.messageId,
+                  teacherId: r.teacherId,
+                  agentId: r.agentId,
+                  teacherSlug: r.slug,
+                  message: hasMessage
+                    ? {
+                        role: r.role,
+                        text: r.text,
+                        ...(r.sources === null ? {} : { sources: r.sources }),
+                        createdAt: iso(r.messageAt!),
+                      }
+                    : null,
+                  citedDocuments: docs
+                    .filter((d) => d.teacherId === r.teacherId && wanted.has(d.title))
+                    .slice(0, REPORT_CITED_DOCUMENTS_MAX)
+                    .map((d) => ({
+                      id: d.id,
+                      title: d.title,
+                      kind: d.kind,
+                      takenDown: d.takenDown,
+                    })),
+                },
+                method,
+              ),
+            );
+          } catch {
+            // toStaffReportRow's only throw site is map.ts's `checked` helper, and it only ever
+            // throws RepositoryError('integrity', ...) — raised when a row's stored `reason`
+            // fails ReportCategorySchema (e.g. written before a category was removed from
+            // REPORT_CATEGORIES). Skip that row rather than throwing for the whole batch: one bad
+            // row drops out of the queue instead of hiding every row. Nothing to log here — this
+            // is a pure function, and the caller already logs only error names, not the error
+            // itself.
+          }
+        }
+        return out;
       });
     },
 

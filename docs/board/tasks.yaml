@@ -2960,9 +2960,9 @@ tasks:
   deps:
   - '6.2'
   risk: risky
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 5.8b
   milestone: M13
   title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
@@ -5128,9 +5128,30 @@ tasks:
   deps:
   - 13.regate
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/13.regatea-eval-runs-index
+  metrics:
+    tool_calls: 306
+    tokens_in: 1100
+    tokens_out: 94761
+    cache_read_tokens: 39318485
+    wall_time_seconds: 2279
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.9d
   milestone: M13
   title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes; 8.9c review
@@ -6839,9 +6860,32 @@ tasks:
   deps:
   - 12.2e
   risk: high
-  status: running
+  status: done
   branch: m13/12.2f-report-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1112
+    tokens_in: 3948
+    tokens_out: 283893
+    cache_read_tokens: 134437327
+    wall_time_seconds: 9266
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 12.2g
   milestone: M12
   title: '12.2e review follow-ups in apps/web/app/staff/reports: a stale poll must not bring back a dismissed report or lifted takedown (generation ref); a 400 on an action says "already actioned or no
@@ -10426,7 +10470,29 @@ tasks:
   deps:
   - '13.3'
   risk: risky
-  status: planning
+  status: done
+  branch: m13/13.3b-scope-followups
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 206
+    tokens_in: 694
+    tokens_out: 67954
+    cache_read_tokens: 32529094
+    wall_time_seconds: 3076
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 12.2h
   milestone: M13
   title: '12.2f review MEDIUM/LOW: packages/db/src/repositories/reports.ts listOpenForStaff''s per-row catch skips bad rows with no signal; return a dropped-row count or log one line per call (counts only,
@@ -10436,4 +10502,17 @@ tasks:
   deps:
   - 12.2f
   risk: risky
+  status: running
+  branch: m13/12.2h-report-signal
+  model: plan:lead build:sonnet
+- id: 5.8f
+  milestone: M13
+  title: '5.8b review LOW (typescript-reviewer): packages/harness/src/pedagogy/skills.ts SkillInput has two independent optional fields, rolePlayStep and rolePlayStepPersonaId, so a caller that sets one without the
+    other only fails at run time with an unclear "computed for a different persona" error; join them into one optional field, e.g. rolePlayStepFor: { step, personaId }'
+  accept: one optional field carries the role-play step with its persona id; a caller cannot pass one without the other; harness typecheck, lint and test green
+  deps:
+  - 5.8b
+  risk: low
   status: todo
+  branch: null
+  model: null

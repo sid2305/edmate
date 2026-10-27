@@ -316,10 +316,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
                 onChange={(e) => setLinkTitle(e.target.value)}
               />
             </p>
-            <button
-              type="submit"
-              disabled={linkBusy || linkUrl.trim() === '' || !rightsChecked}
-            >
+            <button type="submit" disabled={linkBusy || linkUrl.trim() === '' || !rightsChecked}>
               {t('addLink')}
             </button>
             {linkBannerError ? (
@@ -358,13 +355,17 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
             // A link has no bucket upload to retry or replace: it is deleted and added again.
             const canRetry =
               !isLink &&
-              (mine?.retry === true || (d.status === 'failed' && d.failureReason === 'enqueue_failed'));
+              (mine?.retry === true ||
+                (d.status === 'failed' && d.failureReason === 'enqueue_failed'));
             return (
               <li key={d.id} className="uploads-row">
                 <span className="uploads-title">{d.sourceTitle}</span>
                 <span className="uploads-status" aria-live="polite">
                   {statusText(d)}
                 </span>
+                {d.takenDown ? (
+                  <span className="uploads-taken-down">{t('takenDownBadge')}</span>
+                ) : null}
                 {d.status === 'failed' ? (
                   <span className="uploads-reason">
                     {t(`reasons.${reasonKey(d.failureReason)}`)}

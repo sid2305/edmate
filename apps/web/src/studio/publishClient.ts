@@ -55,12 +55,26 @@ const RunSchema = z.object({
   publishedAt: z.string().nullable(),
   changedSincePublish: z.boolean(),
 });
-const LatestSchema = z.object({ run: RunSchema.nullable() });
+/** Task 12.2f Phase D: the agent's own status, present whenever a run has ever started (so a
+ * staff takedown shows a standing badge even with no gate run in progress). */
+const AgentStatusSchema = z.enum(['draft', 'live', 'suspended']);
+const LatestSchema = z.object({
+  run: RunSchema.nullable(),
+  agentStatus: AgentStatusSchema.optional(),
+});
 const StartedSchema = z.object({ runId: z.string() });
 
 export type PublishGroup = z.infer<typeof GroupSchema>;
 export type PublishFailedCaseView = z.infer<typeof FailedCaseSchema>;
 export type PublishRun = z.infer<typeof RunSchema>;
+export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+/** The reply `loadLatestRun` resolves to: the run (or null before any publish) and, alongside
+ * it, the agent's own status (null only when the teacher has no agent yet -- a takedown can
+ * suspend a draft agent before its first run, task 12.2f fix round 1). */
+export interface LatestLoad {
+  run: PublishRun | null;
+  agentStatus: AgentStatus | null;
+}
 
 /** A failed call: the HTTP status (0 = network), the error code and the server's `reason`. */
 export interface PublishFailure {
@@ -105,10 +119,14 @@ async function call<T>(init: RequestInit, schema: z.ZodType<T>): Promise<Publish
   return { ok: false, status: res.status, code: 'malformed' };
 }
 
-/** The teacher's latest gate run, or null before the first publish. */
-export async function loadLatestRun(): Promise<PublishResult<PublishRun | null>> {
+/** The teacher's latest gate run (or null before the first publish), alongside the agent's own
+ * status (task 12.2f Phase D), so the page can show a standing "removed" badge independent of
+ * the run itself. */
+export async function loadLatestRun(): Promise<PublishResult<LatestLoad>> {
   const r = await call({ method: 'GET' }, LatestSchema);
-  return r.ok ? { ok: true, value: r.value.run } : r;
+  return r.ok
+    ? { ok: true, value: { run: r.value.run, agentStatus: r.value.agentStatus ?? null } }
+    : r;
 }
 
 /** Starts a publish; the gate runs on the worker. */
