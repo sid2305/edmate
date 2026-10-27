@@ -18,7 +18,19 @@ Status: DONE
 Red/green evidence: before the fix, grep for the stale line numbers (line 364, line 365, line 354, lines 350-355, lines 350-357, lines 380-384, line 513) matched 78 lines across 53 files in evals/suites/pedagogy; after the fix it matches 0. The old id/filename has zero remaining references outside the historical 7.2s docs and the 7.2v plan.
 
 ## Decisions
-### 27 Oct 2026 . 7.2v re-wrap width for edited source blocks . decided by builder . risk: low
+### 27 Oct 2026 · 7.2v merge and budget, 56 tool calls against 40 · decided by lead · risk: low
+- Decided: merge 7.2v at 56 harness-counted tool calls against a budget of 40 (1.4x).
+- Why: 53 case files needed each distinct citation checked against the build plan and the folded source blocks re-wrapped; code-reviewer approved with no blocking findings, and the work is done in one pass with no fix round.
+- Alternatives: stop at the budget and finish in a second builder (more total calls for a fresh context).
+- Reversible: not applicable (budget record).
+
+### 27 Oct 2026 · 7.2v review LOW, old case id in historical records · decided by lead · risk: low
+- Decided: wontfix the code-reviewer LOW that the old id pedagogy-hint-first-plums-default-en still appears in docs/board/tasks.yaml (the 7.2v task title) and docs/decisions/log.md (the 7.2s decisions).
+- Why: both are records of what happened at the time; the decision log is append-only and the board title describes this rename. No eval, test or fixture references the old id.
+- Alternatives: rewrite the historical entries (loses the record).
+- Reversible: yes.
+
+### 27 Oct 2026 · 7.2v re-wrap width for edited source blocks · decided by builder · risk: low
 - Decided: when a citation replacement changed the logical source string's length, re-flowed the whole folded block to width 90 (2-space indent, no mid-word breaks) with Python textwrap, rather than trying to preserve the original line-break positions.
 - Why: several stale citations were split across two physical lines inside the YAML folded scalar (the word "line" on one line, the number on the next), so a line-local sed/regex would have missed them; re-flowing the joined logical string is the only reliable way to catch and fix every instance, and YAML folded scalars don't care about line width, so this changes no wording or meaning.
 
@@ -27,4 +39,4 @@ Red/green evidence: before the fix, grep for the stale line numbers (line 364, l
 - python3 .githooks/secret-scan.py --all -> clean, no output.
 
 ## Budget
-Tool calls used: 29
+Tool calls used: 56 (harness count; the builder reported 29; review not included)
