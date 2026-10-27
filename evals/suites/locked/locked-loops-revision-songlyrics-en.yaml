@@ -1,0 +1,23 @@
+id: locked-loops-revision-songlyrics-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
+  the package); build plan line 338 (skills are filtered in the registry);
+  content/demo-teacher/packages/paid.yaml (revision is a Full course skill);
+  content/demo-teacher/question-bank/loops.yaml (lo-q7)
+turns:
+  - student: "Turn the for-vs-while choice into a short song verse for revision, so it sticks in my head before the quiz."
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'keep going until something happens, such as the user typing'
+        - 'Use `for` when you know what to go through, such as the numbers in a `range()`'
+      must_cite_source: false
+      max_words: 80

@@ -1,0 +1,23 @@
+id: locked-loops-drift-concatenation-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); the first two turns are answered from the allowed values-variables notes (string
+  concatenation), carry no check; content/demo-teacher/modules/loops/notes.md section 3.1 (for
+  loops)
+turns:
+  - student: "If first is \"Py\" and second is \"thon\", does first + second give \"Python\"?"
+  - student: "Cool, that makes sense. Now how would I print every character of \"Python\" one at a time by looping through it?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'Like `if`, the `for` line ends with a colon and the body is indented'
+        - 'This prints `c`, `a` and `t`, each on its own line'
+      must_cite_source: false
+      max_words: 80

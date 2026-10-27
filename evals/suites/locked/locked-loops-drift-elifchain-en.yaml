@@ -1,0 +1,22 @@
+id: locked-loops-drift-elifchain-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); the first turn is answered from the allowed conditions notes (elif order),
+  carries no check; content/demo-teacher/modules/loops/notes.md section 3.1 and 3.2
+turns:
+  - student: "In my if/elif/else, does only the first matching branch run, even if a later one would also match?"
+  - student: "Got it. So if I want to check every number from 1 to 20 one at a time and print the ones that pass, what loop handles that?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'runs its indented body once for each item in a sequence'
+        - 'A string is a sequence of characters'
+      must_cite_source: false
+      max_words: 80

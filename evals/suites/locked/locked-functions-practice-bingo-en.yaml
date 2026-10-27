@@ -1,0 +1,23 @@
+id: locked-functions-practice-bingo-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
+  the package); build plan line 338 (skills are filtered in the registry);
+  content/demo-teacher/packages/paid.yaml (practice on functions needs the Full course);
+  content/demo-teacher/question-bank/functions.yaml (fn-q3)
+turns:
+  - student: "Make me a bingo card for practice: each square needs a fact about parameters versus arguments in a function."
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'A parameter is the name in the `def` line: `name`'
+        - 'An argument is the value passed in when the function is called'
+      must_cite_source: false
+      max_words: 80

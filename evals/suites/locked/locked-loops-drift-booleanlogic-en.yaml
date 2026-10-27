@@ -1,0 +1,22 @@
+id: locked-loops-drift-booleanlogic-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); the first turn is answered from the allowed conditions notes (and/or), carries no
+  check; content/demo-teacher/modules/loops/notes.md section 3.4 (while loops)
+turns:
+  - student: "Does `5 > 3 and 2 > 4` give False because the second part is False?"
+  - student: "Nice. If I want a loop to keep going as long as two things are both true, like count > 0 and count < 10, is that a while loop?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'A `while` loop repeats as long as'
+        - 'its condition is True'
+      must_cite_source: false
+      max_words: 80

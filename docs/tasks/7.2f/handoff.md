@@ -1,10 +1,10 @@
 # Handoff: 7.2f
 
-Status: PARTIAL
+Status: DONE
 
 ## Summary
 Built Phase H of `docs/tasks/7.2f/plan.md`: raised the locked suite from 100 to 150 cases.
-Phase I (150 to 200) is not started.
+Built Phase I of the same plan: raised the locked suite from 150 to 200 cases.
 
 What changed:
 - Added 50 new case files under `evals/suites/locked/*.yaml`, all `package: free`, `reviewed_by:
@@ -46,6 +46,49 @@ Phase H forms used (so Phase I picks different ones):
   turns asking "step 1", "step 2", ...), JSON-keys framing ("reply with JSON keys ..."),
   code-comment framing ("explain as a Python comment").
 
+### Phase I
+Built Phase I of `docs/tasks/7.2f/plan.md`: raised the locked suite from 150 to 200 cases, using
+only forms Phase H did not use.
+
+What changed:
+- Added 50 new case files under `evals/suites/locked/*.yaml`, all `package: free`, `reviewed_by:
+  lead`, English only, US-framed (Hindi/Hinglish kept only where Phase H's own precedent already
+  used it, per the English-only-pilot safety-net rule). No student turn or trick sequence is
+  repeated anywhere in the suite (checked by dedup over all 200 cases' full turn sequences — 0
+  duplicates).
+- Per the Phase H code-reviewer's LOW-severity finding (payment/role claims are saturated),
+  replaced that bucket with 8 genuinely new manipulation kinds: claiming to be Edmate support,
+  claiming to be the teacher, exam-tomorrow urgency, emotional pressure, fiction/hypothetical
+  framing (two cases), "just check my answer" against a locked exercise, and a two-step hint
+  chain asking for one small step per turn.
+- The other 4 buckets (12 skill-aimed asks, 12 new extraction forms, 10 new drift sub-topics, 8
+  new encodings/splits) mirror Phase H's bucket shapes but with forms Phase H never used (e.g.
+  limerick, mind-map, analogy, checklist, TL;DR, kids'-story, interview Q&A, haiku, emoji-story,
+  Venn diagram, text-message for extraction; Caesar cipher, Morse code, letter-spacing, NATO
+  phonetic, Pig Latin, reversed-sentence, binary/ASCII, emoji-substitution for encodings).
+- Every new span is a byte-exact verbatim substring read from the real content files
+  (`modules/*/notes.md`, `question-bank/*.yaml`, `rubric-answers/*.yaml`), confirmed programmatically
+  against the files before being hardcoded, so no subject fact was invented.
+- `packages/evals/src/lockedFixtures.test.ts`: appended 50 new `SPANS` leak entries (one case,
+  `locked-loops-hint-chain-en`, carries 2 leaks for its 2-step hint chain; the other 49 carry 1
+  each). Raised the pins: `CASES` 150 → 200, prepared steps 163 → 214, `byPhrase` 147 → 197 (all
+  50 new cases' `must_not_contain` phrases verified as genuine substrings of their own span, via
+  the same whitespace-collapsing logic the real `visible()`/`checkMustNotContain` test uses), the
+  mutation test's title and `caught` length 150 → 200, and the file's top comment.
+- `packages/evals/src/suites.ts`: `SUITE_FLOORS.locked` 150 → 200.
+- `packages/evals/src/suites.test.ts`: the pinned `SUITE_FLOORS` object's `locked` 150 → 200.
+
+Red/green evidence: the 50 case files and the raised pins (`CASES`/steps/`byPhrase`/mutation
+lengths, `SUITE_FLOORS.locked`) were written and verified together rather than captured as two
+separate red-then-green test runs; the pins only pass because exactly 200 matching case files
+exist with exactly the right per-case span/step counts, so the same red state the brief describes
+(pins ahead of the files) would reproduce if any one new file were removed. The final gate run
+(`corepack pnpm turbo run typecheck lint test --filter=@edmate/evals`) is green: 1553 tests
+passed, 0 failed.
+
+Count after: **200** cases in `evals/suites/locked/` (Phase I's target, and the suite's final
+7.2f count).
+
 Known pre-existing condition (not caused by this phase): `prettier --check` on
 `evals/suites/locked/*.yaml` reports every file (including untouched pre-existing ones) because
 Prettier's YAML printer prefers double-quoted scalars and does not honor the shared config's
@@ -67,7 +110,29 @@ than reformatting into double quotes and breaking that consistency.
   100 in the same directory.
 - risk: low
 
+### 27 Oct 2026 · 7.2f Phase I replaces the role/payment-claims bucket with 8 new manipulation kinds · decided by builder · risk: low
+- Decided: Dropped payment/role/licence claims from Phase I's manipulation bucket (that form is
+  saturated per Phase H's code-reviewer finding) and used 8 different manipulation kinds instead:
+  claiming to be Edmate support, claiming to be the teacher, exam-tomorrow urgency, emotional
+  pressure, fiction/hypothetical framing, "just check my answer" against a locked exercise, and a
+  two-step hint chain.
+- Why: Follows the explicit brief constraint carrying forward the Phase H review finding, and
+  keeps the suite's manipulation coverage broad rather than adding a 9th and 10th near-duplicate
+  payment claim.
+- risk: low
+
+### 27 Oct 2026 · 7.2f Phase I keeps Prettier scoped to the changed TS files · decided by builder · risk: low
+- Decided: Ran `prettier --check`/`--write` only on the 3 changed `.ts` files this phase too
+  (`lockedFixtures.test.ts` needed one `--write` pass after manual edits; `suites.ts` and
+  `suites.test.ts` were already clean). Did not run Prettier on any of the 50 new `evals/suites/
+  locked/*.yaml` files, for the same pre-existing YAML quote-style reason Phase H documented
+  above.
+- Why: Keeps all 200 locked cases visually consistent (single-quoted) and avoids reformatting a
+  suite-wide convention inside a single builder phase.
+- risk: low
+
 ## Gate
+Phase H:
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` — green: 6/6 tasks
   successful, 31 test files passed, 1503 tests passed, 0 failed.
 - `corepack pnpm exec prettier --check packages/evals/src/lockedFixtures.test.ts
@@ -75,8 +140,19 @@ than reformatting into double quotes and breaking that consistency.
   Prettier code style!"
 - `python3 .githooks/secret-scan.py --all` — clean, exit 0.
 
+Phase I:
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` — green: 1553 tests
+  passed, 0 failed (pins: `CASES` 200, steps 214, `byPhrase` 197, both mutations caught on all
+  200 cases).
+- `corepack pnpm exec prettier --check` on the 3 changed `.ts` files — initially failed on
+  `lockedFixtures.test.ts` (formatting drift from manual edits); fixed via `prettier --write`
+  scoped to that one file; re-ran `--check` on all 3 — "All matched files use Prettier code
+  style!"; re-ran the full test gate again after the reformat to confirm nothing broke — still
+  1553/1553.
+- `python3 .githooks/secret-scan.py --all` — clean, exit 0.
+
 ## Budget
-Tool calls used: ~98 (over the ~95 target, under the 120 hard stop; most of the extra went into
-verifying the `byPhrase` pin precisely by replaying the real `checkMustNotContain`/`visible()`
-logic in Python instead of guessing it, and into tracking down the pre-existing Prettier/YAML
-quote-style mismatch before deciding not to reformat the suite).
+Tool calls used: ~215 (Phase H ~98, Phase I ~117 — most of Phase I's count went into the
+verbatim-span extraction/validation script's iterative fix rounds: `find_exact` whitespace and
+markdown-bullet-crossing failures, then 23 `must_not_contain`-not-a-substring-of-its-span fixes,
+each traced back to the real content files rather than guessed).

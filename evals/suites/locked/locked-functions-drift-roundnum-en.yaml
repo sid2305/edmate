@@ -1,0 +1,22 @@
+id: locked-functions-drift-roundnum-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches
+  the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
+  chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
+  starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); the first turn is answered from the allowed values-variables notes (round()),
+  carries no check; content/demo-teacher/modules/functions/notes.md Key points
+turns:
+  - student: "Does round(7.5) give 8, rounding to the nearest whole number?"
+  - student: "Cool. If I wanted a function that takes a number and gives back the rounded version, what goes in the def line and the return line?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'gives a value back and ends the function'
+        - 'then an indented body; call it with'
+      must_cite_source: false
+      max_words: 80
