@@ -1145,6 +1145,21 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       );
     }
 
+    // The schema has no course-delete path today (teacher.lifecycle never removes a course), so
+    // this is a synthetic/defensive state, matching the file's house style for corrupted-row
+    // defensiveness (see 'a corrupted stored row is integrity, never returned' above): it checks
+    // the outline sub-select's NULL-safety directly rather than a state a product flow reaches.
+    it('reads as not changed (false) when the teacher has no course row left', async () => {
+      const t = await makeTeacher();
+      await publish(t);
+      // Delete modules first (course_id FK), then the course itself, leaving the outline
+      // sub-select with zero rows -- NULL, not a definite true/false, pre-fix.
+      await raw.query(`delete from modules where course_id = $1`, [t.courseId]);
+      await raw.query(`delete from courses where id = $1`, [t.courseId]);
+      // Every other basis signal still matches the last published run exactly.
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(false);
+    });
+
     it('is false with no published run; true after each basis signal changes; false again once a republish picks them all up', async () => {
       const t = await makeTeacher();
       const other = await makeTeacher();
@@ -1186,9 +1201,9 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       expect(
         (await failure(repos.publish.changedSinceLastPublish({ teacherId: 'bad id!' }))).kind,
       ).toBe('scope');
-      expect(
-        (await failure(repos.publish.changedSinceLastPublish({ teacherId: '' }))).kind,
-      ).toBe('scope');
+      expect((await failure(repos.publish.changedSinceLastPublish({ teacherId: '' }))).kind).toBe(
+        'scope',
+      );
     });
   });
 

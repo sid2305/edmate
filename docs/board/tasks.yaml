@@ -5837,7 +5837,30 @@ tasks:
   deps:
   - 8.7l
   risk: high
-  status: todo
+  status: done
+  branch: m13/8.7n-publish-followups
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 196
+    tokens_in: 690
+    tokens_out: 55942
+    cache_read_tokens: 17703501
+    wall_time_seconds: 81686
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7m
   milestone: M13
   title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID
@@ -7017,13 +7040,56 @@ tasks:
 - id: 7.2l
   milestone: M13
   title: '7.2k review LOWs: in packages/harness/src/guardrails/moderationPatterns.ts the Devanagari past and habitual forms (बिकता, बेचा, छिपाया, ले गया ...) of the vapes and weapons rules block without
-    an intent marker, so a factual or news sentence can hard-block; decide (with 13.3) whether they need an intent marker or a near-miss set; order prefix-overlapping alternatives longest-first'
+    an intent marker, so a factual or news sentence can hard-block; decide (with 13.3) whether they need an intent marker or a near-miss set; order prefix-overlapping alternatives longest-first; from the
+    7.2n review (LOW): Object.freeze the exported MISUSE_CODES in packages/harness/src/guardrails/moderationIn.ts so a cast cannot mutate it'
   accept: near-miss tests for factual past/habitual sentences pass or a logged decision keeps them blocking; harness and evals green.
   deps:
   - 7.2k
   risk: high
   status: todo
   branch: null
+- id: 7.2m
+  milestone: M13
+  title: 'B-50 (human, 26 Oct 2026): threats to hurt others and weapons-to-school messages also raise a staff alert (kind misuse, level critical) in the 12.5 inbox, as well as the calm refusal. Route the
+    moderation guard''s threat and weapons rules to an alert like distress and abuse do; near-miss guard (a history essay about a school shooting, a game) stays alert-free; safety eval cases for both'
+  accept: harness guard test shows the threat and weapons rules raise a critical misuse alert and the near misses do not; the safety suite gains the cases; harness, worker and evals green.
+  deps:
+  - 7.2h
+  risk: high
+  status: done
+  branch: m13/7.2m-threat-alerts
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 91
+    tokens_in: 312
+    tokens_out: 23533
+    cache_read_tokens: 6097791
+    wall_time_seconds: 1771
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 1
+- id: 7.2n
+  milestone: M13
+  title: '7.2m review LOWs: export MISUSE_CODES from packages/harness/src/guardrails/moderationIn.ts and import it in packages/evals/src/moderationJailbreak.test.ts instead of a local copy; decide whether
+    packages/queue/src/alertSink.ts escalates a level critical alert sooner than a level alert one (today both use ALERT_ESCALATION_MS)'
+  accept: the evals test imports the harness list; a logged decision (and test, if changed) on critical escalation timing; harness, queue and evals green.
+  deps:
+  - 7.2m
+  risk: low
+  status: running
+  branch: m13/7.2n-misuse-codes
+  model: plan:lead build:sonnet
 - id: 9.1c
   milestone: M13
   title: '9.1a review LOW: /teacher scores exactly the 95 Lighthouse accessibility threshold in apps/web/test/lighthouse-a11y.test.ts; find what costs the points and fix it so a one-point drift does not
@@ -7095,8 +7161,30 @@ tasks:
   deps:
   - '13.4'
   risk: high
-  status: todo
-  branch: null
+  status: done
+  branch: m13/13.4b-account-export-delete
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 577
+    tokens_in: 2006
+    tokens_out: 105750
+    cache_read_tokens: 79434327
+    wall_time_seconds: 80834
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 2
+    human_questions: 2
 - id: 13.4c
   milestone: M13
   title: '13.4 Phase B review follow-ups (before retention leaves dry run): apps/worker/src/retention/workers.ts purgeTable logs the rows already deleted when a later call fails, and passes purgeLimit into
@@ -7129,6 +7217,27 @@ tasks:
         deferred: 0
         wontfix: 3
     human_questions: 0
+- id: 13.4d
+  milestone: M13
+  title: '13.4b follow-up (B-59 export scope): the account-wide export (apps/web/src/export/accountExport.ts) also includes the student''s consents and ended subscriptions; add a student-scoped consents
+    read beside identity.anonymise in packages/db/src/identity/store.ts and an ended-inclusive subscription read in packages/db/src/repositories/subscriptions.ts'
+  accept: GET /api/me/export lists consents and ended as well as live subscriptions for the signed-in student only; the do-not-leak scan still passes; db and web green; security-reviewer approves.
+  deps:
+  - 13.4b
+  risk: high
+  status: todo
+  branch: null
+- id: 13.4e
+  milestone: M13
+  title: '13.4b follow-up (B-59 (3), payments): DELETE /api/me is also held while the student has an open payment dispute, once disputes exist in the ledger and refunds work (apps/web/src/account/delete.ts)'
+  accept: a delete with an open dispute returns 409 delete_on_hold; a test covers it; security-reviewer approves.
+  deps:
+  - 13.4b
+  - '10.4'
+  - '10.6'
+  risk: high
+  status: todo
+  branch: null
 - id: 12.4e
   milestone: M13
   title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
@@ -7136,9 +7245,9 @@ tasks:
   deps:
   - 12.4a
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.4e-agents-index
+  model: plan:sonnet build:sonnet
 - id: 12.5e
   milestone: M13
   title: 'Alert worker follow-up: alert.raise logs a store.record failure before awaiting notify, so a joint DB and notifier outage still logs safety_alert.store_failed (12.5b review)'
@@ -7952,14 +8061,39 @@ tasks:
   deps:
   - 8.7m
   risk: low
-  status: running
+  status: done
   branch: m13/8.7o-email-linear
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 808
+    tokens_in: 2768
+    tokens_out: 273237
+    cache_read_tokens: 102398379
+    wall_time_seconds: 82408
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        CRITICAL: 1
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 8.7p
   milestone: M13
   title: '8.7m review follow-up: in packages/db/src/repositories/redact-json.ts a rp_<hex40> or other prefixed id, UUID or hex digest followed by one space and then a phone-shaped run is redacted together
     with the phone (PHONE_CANDIDATE extends across the space into the exempt span), so the id''s tail is lost; stop a phone candidate at an exempt span''s boundary so the id survives and the phone is still
-    redacted'
+    redacted; from the 8.7o re-review (typescript-reviewer, LOW after lead triage): redactEmails steps back over a low surrogate without checking the unit before it is a high surrogate, so a lone low surrogate
+    inside a local-part run over-redacts text before it (fails closed); check 0xd800-0xdbff before stepping and add an unpaired-surrogate case to the differential fuzz alphabet'
   accept: '"rp_<hex40> 555-010-0199" keeps the id and redacts the phone; same for a UUID and a hex digest; the differential tests against the old behaviour show no phone run survives; db typecheck, lint
     and test green.'
   deps:
@@ -8735,10 +8869,10 @@ tasks:
   accept: each item has a test or a logged decision; production refuses a pending notice
   deps:
   - '1.7'
-  status: planning
+  status: running
   risk: risky
-  branch: null
-  model: plan:sonnet
+  branch: m13/1.7a-age-consent-followups
+  model: plan:sonnet build:sonnet
 - id: 5.2a
   milestone: M13
   title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
@@ -8826,9 +8960,30 @@ tasks:
   deps:
   - 3.9c
   risk: low
-  status: running
+  status: done
   branch: m13/3.9e-warmup-trace
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 292
+    tokens_in: 1018
+    tokens_out: 75695
+    cache_read_tokens: 30736145
+    wall_time_seconds: 2569
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 3.9f
   milestone: M13
   title: 'CLI chat on the db retrieval index (deferred from 3.9a, 3.9 Q3): switch apps/cli edmate chat from the lexical retrieval index to the db-backed retrieval index, then re-test the reported same-topic
@@ -9238,12 +9393,15 @@ tasks:
 - id: 9.3m
   milestone: M13
   title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write
-    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). Waits on B-58; design start in docs/tasks/9.3k/plan.md.'
+    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). B-58 answered (human, 26 Oct 2026): audit each subject edit,
+    show staff the last 10 changes; design start in docs/tasks/9.3k/plan.md.'
   accept: editing a subject writes one teacher.subject audit row; a staff view test shows a teacher's past subject changes on a queue row; db and web typecheck, lint and test green.
   deps:
   - 9.3k
   risk: high
-  status: blocked
+  status: running
+  branch: m13/9.3m-subject-history
+  model: plan:sonnet build:sonnet
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

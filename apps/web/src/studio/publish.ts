@@ -126,6 +126,12 @@ const start: Work = async (b, scope, req) => {
   // Checked first and cheaply so an unverified teacher gets a clear 403; `startRun` re-checks
   // inside its transaction (profile FOR SHARE), and `goLive` once more.
   await b.repos.teacherProfiles.assertVerifiedForPublish(scope);
+  // Sequential by design (task 8.7n): `ensureDefault` writes (creates a default course row if
+  // the teacher has none), so it must stay gated behind both failure checks above it. Batching
+  // these three with `Promise.all` was considered and rejected -- it would let `ensureDefault`'s
+  // write race ahead of, or complete before, the `no_packages`/`style_card_required` checks,
+  // creating a default course even when the request is about to fail for an unrelated reason (a
+  // side effect that today happens only on the success path). No behaviour change here.
   const rows = await b.repos.packages.listForTeacher(scope);
   const agentId = rows[0]?.agentId;
   if (agentId === undefined) return fail('validation', MSG.noPackages, 409, 'no_packages');
@@ -179,7 +185,7 @@ const latest: Work = async (b, scope) => {
     status,
     changes: run.changes,
     groups: run.summary?.groups ?? [],
-    errorCode: isStale ? 'stale' : run.summary?.errorCode ?? null,
+    errorCode: isStale ? 'stale' : (run.summary?.errorCode ?? null),
     failedCases: failed.map((f) => ({ caseId: f.caseId, ...f.details })),
     scorecard: run.scorecard,
     startedAt: run.createdAt,

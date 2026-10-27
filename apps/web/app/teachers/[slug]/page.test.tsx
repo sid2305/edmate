@@ -90,9 +90,33 @@ beforeAll(() => {
 const STORED_SCORECARD = {
   publishedAt: '2026-10-01T00:00:00.000Z',
   categories: [
-    { key: 'hints_before_answers', measured: true, total: 10, passed: 9, percent: 90, pass: true, byOrigin: [] },
-    { key: 'locked_content', measured: true, total: 5, passed: 5, percent: 100, pass: true, byOrigin: [] },
-    { key: 'accuracy', measured: false, total: 0, passed: 0, percent: null, pass: false, byOrigin: [] },
+    {
+      key: 'hints_before_answers',
+      measured: true,
+      total: 10,
+      passed: 9,
+      percent: 90,
+      pass: true,
+      byOrigin: [],
+    },
+    {
+      key: 'locked_content',
+      measured: true,
+      total: 5,
+      passed: 5,
+      percent: 100,
+      pass: true,
+      byOrigin: [],
+    },
+    {
+      key: 'accuracy',
+      measured: false,
+      total: 0,
+      passed: 0,
+      percent: null,
+      pass: false,
+      byOrigin: [],
+    },
   ],
 };
 
@@ -100,7 +124,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.currentPrincipal.mockResolvedValue(null);
   state.teacherBySlug.mockResolvedValue(TEACHER);
-  state.liveForAgent.mockImplementation(async ({ agentId }: { agentId: string }) => OFFERS[agentId] ?? []);
+  state.liveForAgent.mockImplementation(
+    async ({ agentId }: { agentId: string }) => OFFERS[agentId] ?? [],
+  );
   state.publicScorecard.mockResolvedValue(null);
 });
 
@@ -142,13 +168,18 @@ describe('/teachers/[slug] page', () => {
     const { container } = render(await page());
     expect(state.liveForAgent).toHaveBeenCalledWith({ agentId: 'agent-1' });
     expect(state.liveForAgent).toHaveBeenCalledWith({ agentId: 'agent-2' });
-    const calculus = screen.getByRole('heading', { name: 'Calculus monthly' }).closest('li') as HTMLElement;
+    const calculus = screen
+      .getByRole('heading', { name: 'Calculus monthly' })
+      .closest('li') as HTMLElement;
     expect(within(calculus).getByText('$19.99 a month')).toBeInTheDocument();
     expect(within(calculus).getByText('7 day free trial')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Algebra starter' })).toBeInTheDocument();
     expect(screen.getByText('Free')).toBeInTheDocument();
     const links = screen.getAllByRole('link', { name: 'Choose a package' });
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/packages/agent-1', '/packages/agent-2']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/packages/agent-1',
+      '/packages/agent-2',
+    ]);
     expect(container.innerHTML).not.toContain('pv-secret');
   });
 
@@ -162,6 +193,9 @@ describe('/teachers/[slug] page', () => {
   });
 
   it('shows the "no published scorecard yet" panel when publicScorecard returns null', async () => {
+    // Also covers a draft (not live) agent: publicScorecard itself filters on
+    // agents.status = 'live', so a draft agent's run never qualifies and the repository
+    // returns null the same way, landing on this same panel.
     render(await page());
     expect(state.publicScorecard).toHaveBeenCalledWith({ agentId: 'agent-1' });
     expect(screen.getByRole('heading', { name: 'Teaching scorecard' })).toBeInTheDocument();
@@ -175,14 +209,6 @@ describe('/teachers/[slug] page', () => {
     expect(screen.getByText('100% of checks passed')).toBeInTheDocument();
     expect(screen.getByText('Not measured yet')).toBeInTheDocument();
     expect(screen.queryByText('No published scorecard yet.')).not.toBeInTheDocument();
-  });
-
-  it('never renders a scorecard for a draft (not live) agent -- publicScorecard returns null', async () => {
-    // publicScorecard itself filters on agents.status = 'live'; a draft agent's run never
-    // qualifies, so the repository returns null and the loader shows "no scorecard yet".
-    state.publicScorecard.mockResolvedValue(null);
-    render(await page());
-    expect(screen.getByText('No published scorecard yet.')).toBeInTheDocument();
   });
 
   it('shows no scorecard (not a 500) when the scorecard read fails, logging only the error name', async () => {

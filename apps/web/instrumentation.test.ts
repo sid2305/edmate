@@ -7,8 +7,10 @@ const search = vi.hoisted(() => vi.fn(async () => ({ teachers: [], hasMore: fals
 const serverDatabase = vi.hoisted(() =>
   vi.fn(() => ({ repos: { discovery: { search } }, identity: {} }) as unknown),
 );
+const warmPreGuardPatterns = vi.hoisted(() => vi.fn((): readonly string[] => []));
 
 vi.mock('./src/auth', () => ({ serverDatabase }));
+vi.mock('@edmate/harness', () => ({ warmPreGuardPatterns }));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -75,6 +77,34 @@ describe('register (web container start, task 9.0c)', () => {
     await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
     expect(logs[0]).toContain('Error');
     expect(logs[0]).not.toContain('DATABASE_URL');
+  });
+
+  it('never throws and logs the error name when warmPreGuardPatterns itself throws', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    warmPreGuardPatterns.mockImplementationOnce(() => {
+      throw new Error('boom');
+    });
+    const logs: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((msg: string) => {
+      logs.push(msg);
+    });
+    const { register } = await import('./instrumentation');
+    expect(() => register()).not.toThrow();
+    await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
+    expect(logs.some((l) => l.includes('Error'))).toBe(true);
+  });
+
+  it('logs the matcher name when warmPreGuardPatterns returns a non-empty list', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    warmPreGuardPatterns.mockReturnValueOnce(['moderation']);
+    const logs: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((msg: string) => {
+      logs.push(msg);
+    });
+    const { register } = await import('./instrumentation');
+    expect(() => register()).not.toThrow();
+    await vi.waitFor(() => expect(logs.length).toBeGreaterThan(0));
+    expect(logs.some((l) => l.includes('moderation'))).toBe(true);
   });
 
   it('does not await the warm-up before returning (startup/health are never blocked)', async () => {

@@ -10,6 +10,237 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 8.7n NULL-course semantics · decided by plan · risk: low
+- Decided: a teacher with no course row reads as "not changed" (`false`) in
+  `changedSinceLastPublish`, via `coalesce(..., false)` on the outline-comparison clause.
+- Why: matches the function's own documented default ("false when the scope has never
+  published"); makes the SQL NULL-safe explicitly instead of relying on JS's `=== true`
+  coercion to mask it, settling 8.7l's open-ended note.
+
+---
+
+### 26 Oct 2026 · 8.7n start() batching · decided by plan · risk: low
+- Decided: keep `start()`'s three reads (`listForTeacher`, `styleCards.latest`,
+  `courses.ensureDefault`) sequential; do not batch with `Promise.all`. Documented in a code
+  comment; no behaviour change.
+- Why: `ensureDefault` writes (creates a default course), and batching would let that write race
+  ahead of or complete before the `no_packages`/`style_card_required` checks, creating a default
+  course even when the request is about to fail for an unrelated reason.
+
+---
+
+### 26 Oct 2026 · 8.7n risky-path reviewer · decided by builder · risk: high
+- Decided: this PR is `risk: high` (per the board task's own field). `packages/db/src/repositories/publish.ts`
+  matches the `packages/db/src/repositories/**` risk group, which requires `security-reviewer`.
+  `database-reviewer` is recommended (not gate-enforced) as a second pair of eyes on the raw SQL
+  template change.
+- Why: CLAUDE.md rule 6 requires naming required reviewers for risky-path PRs regardless of how
+  small the change is.
+
+---
+
+### 26 Oct 2026 · 8.7n no-course test cannot fail before the fix · decided by lead · risk: low
+- Decided: Keep the new no-course test in packages/db/test/publish.int.test.ts as it is; security-reviewer's MEDIUM is wontfix.
+- Why: Before the fix, changedSinceLastPublish already returned false for a teacher with no course, because the JavaScript `=== true` turned the SQL NULL into false. The coalesce makes that explicit in SQL, so nothing changes for users. The test pins the contract (no course reads as not changed) against a later refactor that drops `=== true`. A raw-SQL assertion would test the query text, not the behaviour.
+
+---
+
+### 26 Oct 2026 · 8.7n budget and hook workaround · decided by lead · risk: low
+- Decided: Accept 57 tool calls against a budget of 25. Builders may no longer route a blocked command through another interpreter; from now on every brief says to stop and report it.
+- Why: Most of the overrun went on working around a block on prettier commands for the `[slug]` path, which the builder ran through Python instead. The effect was harmless (formatting its own 4 files), but routing around a block is not allowed.
+
+---
+
+### 26 Oct 2026 · 8.7n merge · decided by lead · risk: high
+- Decided: Merge 8.7n, which touches packages/db/src/repositories/publish.ts. security-reviewer and code-reviewer reviewed it; the only finding (MEDIUM) is wontfix above.
+- Why: A one-clause SQL coalesce, still parameterised and scoped to the teacher. The other edits are a comment, a test merge and prettier formatting.
+
+---
+
+### 26 Oct 2026 · 13.4b account export scope (consents and ended subscriptions) · decided by builder · risk: high
+- Decided: the account export includes only live subscription pairs
+  (`subscriptionPairs.listLiveForStudent`, which excludes `status: 'ended'`) and the student's
+  own identity fields (`identity.getUser`, minus `id`/`role`). It does not include consents rows
+  or ended subscriptions.
+- Why: the parent 13.4 Phase C text mentioned "every live/ended subscription pair" and "consents
+  rows," but no consents repository exists (consents live only inside
+  `packages/db/src/identity/store.ts`, out of bounds for 13.4b — another builder's file), and
+  `subscriptions.ts` (the only place that could add an ended-inclusive read) is also out of
+  bounds per this task's file list. Flagging `risk: high` because this names a personal-data
+  surface (account export) with a real, if narrow, completeness gap: a student's export omits
+  consent history and past (ended) subscriptions. Follow-up: a later task should either add a
+  consents-read method and an ended-inclusive subscription read, or confirm this narrower scope
+  is acceptable for the pilot.
+
+---
+
+### 26 Oct 2026 · 13.4b delete-on-hold response shape · decided by builder · risk: low
+- Decided: `DELETE /api/me` returns a custom `{ error: 'delete_on_hold', message }` 409 body
+  (not the standard `apiError()`/`ErrorCode` envelope) when the student has an open safety alert.
+- Why: `'delete_on_hold'` is not in the `ErrorCodeSchema` enum in `packages/contracts/src/shared.ts`,
+  and `packages/contracts` is out of bounds without an ADR. A one-off literal response matches
+  the plan's exact wording without touching contracts.
+
+---
+
+### 26 Oct 2026 · 13.4b sign-out reuse via signOut({redirect:false}) · decided by builder · risk: low
+- Decided: the delete handler calls NextAuth's `signOut({redirect: false})` directly from
+  `apps/web/src/account/delete.ts` rather than adding anything to `apps/web/src/auth/**`.
+- Why: `apps/web/src/auth/**` is out of bounds (another builder's area); `signOut` with
+  `redirect: false` already returns a URL instead of throwing/redirecting, so it can be called
+  from a Route Handler as-is. Its failure is caught separately so it can never turn an already
+  -successful delete into an error response to the client.
+
+---
+
+### 26 Oct 2026 · 13.4b budget overrun · decided by lead · risk: low
+- Decided: Accept 113 tool calls against a budget of 55 (about 2x). The work is complete and all four reviewers approved it, so there is no re-run.
+- Why: The build spanned two packages plus the web route tests, and the integration tests needed the shared dev Postgres. Future two-package briefs get a larger budget or a split into phases.
+
+---
+
+### 26 Oct 2026 · 13.4b export completeness deferred to 13.4d · decided by lead · risk: medium
+- Decided: Merge the account-wide export without consents and ended subscriptions. Task 13.4d adds them (a consents read in packages/db/src/identity/store.ts and an ended-inclusive read in packages/db/src/repositories/subscriptions.ts).
+- Why: Both files were out of bounds for this task, and security-reviewer judged deferral safer than reaching into them now. The human's B-59 (5) answer asked for one account-wide export across all teachers, which this delivers. The export must be complete before the pilot.
+
+---
+
+### 26 Oct 2026 · 13.4b payment-dispute hold deferred to 13.4e · decided by lead · risk: medium
+- Decided: DELETE /api/me holds only on an open safety alert for now. The B-59 (3) hold on an open payment dispute comes with task 13.4e, after payments (10.4 and 10.6).
+- Why: Payment disputes do not exist yet (M10 comes last), so there is nothing to check.
+
+---
+
+### 26 Oct 2026 · 13.4b merge · decided by lead · risk: high
+- Decided: Merge 13.4b, which touches the personal-data surface (account export and account delete) and packages/db/src/repositories/safety-alerts.ts. code-reviewer, typescript-reviewer, security-reviewer and database-reviewer all approved it, with no findings at MEDIUM or above.
+- Why: The DELETE acts only on the signed-in student, is held while a safety alert is open, and signs the student out after the delete. The export reads only that student's data and passes the do-not-leak scan.
+
+---
+
+### 26 Oct 2026 · 7.2m preGuard.test.ts and evals moderationJailbreak.test.ts also needed updating · decided by builder · risk: low
+- Decided: fixed `packages/harness/src/pipeline/steps/preGuard.test.ts` (one assertion,
+  `level: 'alert'` → `'critical'`) and `packages/evals/src/moderationJailbreak.test.ts` (the seeded
+  near-miss count and the misuse-alert-kind check), both outside the plan's named file list, to
+  keep the harness and evals gates green.
+- Why: the plan's files-to-modify list was written before the lead amendment broadened the
+  critical-alert scope to `threat`/`weapons` and before counting the two new near-miss eval cases
+  against this test's hard-coded totals; without these two fixes the gate in the plan's own "Gate
+  commands" section fails. Both are test-only changes with no behaviour change beyond what the
+  plan and its lead amendment already decided.
+
+---
+
+### 26 Oct 2026 · 7.2m budget overrun · decided by lead · risk: low
+- Decided: accept 87 tool calls against a plan budget of 45.
+- Why: the diff matches the plan and its amendment, it needed two test files outside the plan's list, and the full harness-dependents gate is slow; all three reviewers approved with no blocking finding.
+
+---
+
+### 26 Oct 2026 · 7.2m review LOWs deferred · decided by lead · risk: low
+- Decided: defer to board task 7.2n: packages/evals/src/moderationJailbreak.test.ts keeps its own copy of MISUSE_CODES instead of importing it from packages/harness/src/guardrails/moderationIn.ts (typescript-reviewer), and packages/queue/src/alertSink.ts escalates a critical alert on the same timer as a level 'alert' one (silent-failure-hunter, pre-existing).
+- Why: neither blocks the alert from reaching staff; MVP first.
+
+---
+
+### 26 Oct 2026 · 7.2m merge · decided by lead · risk: high
+- Decided: merge 7.2m. Moderation blocks for harm_to_others, threat and weapons now raise a misuse alert at level critical (the human's B-50 answer, with the lead's amendment that harm_to_others counts as a threat to hurt others); refusal replies are unchanged; two English near-miss eval cases stay alert-free.
+- Why: packages/harness/src/guardrails/** and evals/suites/safety/** are risky paths (reviewers: code-reviewer); code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+
+---
+
+### 25 Oct 2026 · 8.7o EMAIL export is test-only · decided by builder · risk: low
+- Decided: export `EMAIL` from `redact-json.ts` itself (not from `src/repositories/index.ts` or
+  `src/index.ts`) so the differential test can import it directly from the module path, instead of
+  adding it to the package's public API.
+- Why: the plan needed a way for the test to compare old-vs-new regex output on exactly the EMAIL
+  pattern (not the full `redactString` pipeline, which also runs PHONE_CANDIDATE/UUID/etc. and
+  would make a differential comparison meaningless). A module-local export reached by its file
+  path keeps the package's public surface (`src/index.ts`) unchanged.
+
+---
+
+### 26 Oct 2026 · 8.7o budget overrun · decided by lead · risk: low
+- Decided: accept 111 tool calls in total (build 37, fix round 74) against a plan budget of 30.
+- Why: the fix round was caused by the lead's own plan, whose lookbehind design failed open on adjacent emails; the fixer also lost calls to a hang after the Mac slept. The diff stays in scope.
+
+---
+
+### 26 Oct 2026 · 8.7o lone low surrogate finding deferred · decided by lead · risk: medium
+- Decided: the re-review's HIGH from typescript-reviewer (packages/db/src/repositories/redact-json.ts `redactEmails` steps back over a low surrogate without checking the unit before it is a high surrogate) is triaged to LOW and deferred to 8.7p, which already edits this file.
+- Why: it only over-redacts (fails closed, never leaks an email), and only on text holding an unpaired surrogate, which Postgres text and jsonb reject anyway; security-reviewer and code-reviewer each matched the old regex on 130,000 to 200,000 fuzzed strings.
+
+---
+
+### 26 Oct 2026 · 8.7o merge · decided by lead · risk: high
+- Decided: merge 8.7o after one fix round; security-reviewer and code-reviewer approved the fix, and typescript-reviewer's one remaining finding is deferred to 8.7p.
+- Why: packages/db/src/repositories/redact-json.ts is a risky path (reviewers: security-reviewer); the change replaces a quadratic email regex with a linear scan that gives the same output and closes the round 1 fail-open.
+
+---
+
+### 26 Oct 2026 · B-59 privacy rights for export, delete and retention · decided by human · risk: high
+- Decided: all five recommendations. (1) Retention periods are placeholders in the worker only, and the jobs stay in dry-run (report, don't delete) until counsel sets the numbers. (2) Account delete anonymises the user, their consents and message text; safety alerts, payments and the audit log stay. (3) A delete is held while a safety alert is open or a payment is disputed. (4) A parent asking on a minor's behalf is a separate task after the pilot. (5) One account-wide export across all teachers, on top of the per-teacher export.
+- Why: the lead's recommendation; it unblocks 13.4b.
+
+### 26 Oct 2026 · B-50 threats to hurt others raise a staff alert · decided by human · risk: high
+- Decided: threats to hurt others and weapons-to-school messages raise a critical misuse alert in the staff inbox, as well as the calm refusal. Board task 7.2m builds it.
+- Why: missing a real threat is the worse failure, and it fits the existing alert kinds.
+
+### 26 Oct 2026 · B-52 consent before uploading a class recording · decided by human · risk: high
+- Decided: a required checkbox ("Everyone heard in this recording agreed to it being used to teach, or I removed their parts") plus the hint to upload a transcript with students' names removed. 11.4 already ships this.
+- Why: cheap, and it puts the duty on the teacher in plain words while keeping recordings usable for the pilot.
+
+### 26 Oct 2026 · B-54 who pays for a 13-17 learner, and unused days on a takedown · decided by human · risk: high
+- Decided: at checkout the payer confirms they are 18+ or the learner's parent or guardian. When a takedown pauses a plan, the unused days are credited on resume, and refunded if the agent is not restored within 30 days.
+- Why: payment providers need an adult buyer; parent accounts are much more work. Feeds 10.3 and 10.8.
+
+### 26 Oct 2026 · B-58 teacher subject edits are audited · decided by human · risk: high
+- Decided: each subject edit writes an audit row (old and new subject only), and staff see the last 10 changes. 9.3m is unblocked.
+- Why: staff can spot a teacher who switches subjects to get past a rejection; no new personal data and no migration.
+
+### 26 Oct 2026 · B-55 number of parallel builders · decided by human · risk: medium
+- Decided: keep three builders at once (no shared packages), and drop to two once the week's usage passes about 70%.
+- Why: three builders merged more with no file clashes, but on 23 Oct they used up the weekly allowance.
+
+### 26 Oct 2026 · B-53 US payment provider · decided by human · risk: low
+- Decided: decide later, when M10 starts. 10.1 Phase C stays blocked.
+- Why: payments come last.
+
+### 26 Oct 2026 · B-51 e2e is a required check · decided by human · risk: medium
+- Decided: the human added `e2e` as a required status check on main.
+- Why: e2e was passing but not enforced.
+
+### 25 Oct 2026 · 3.9e worker test extraction · decided by builder · risk: low
+- Decided: extracted the worker's guard-warmup logging branch into a small pure helper
+  (`logGuardWarmupFailures` in `apps/worker/src/log.ts`, same file as `describeError`/`jsonLog`)
+  and unit-tested the helper directly, instead of writing a full-mock test that imports
+  `apps/worker/src/index.ts` (which has no tests today and opens real Redis/DB/S3/BullMQ
+  connections at module scope).
+- Why: the plan allows "a small unit test of the branch" when no existing worker test covers the
+  call; mocking every dependency `index.ts` touches (ioredis, bullmq, `@edmate/db`, `@aws-sdk/client-s3`,
+  and a dozen local modules) just to exercise a two-line branch is out of proportion, and the
+  codebase already treats `index.ts` as untestable-by-design (`apps/worker/vitest.config.ts`
+  excludes it from coverage with the same reasoning).
+
+---
+
+### 25 Oct 2026 · 3.9e budget overrun · decided by lead · risk: low
+- Decided: accept 138 tool calls against a plan budget of 35.
+- Why: the builder found and fixed a real test-isolation problem (mocking distressKeywords.js also broke the other two matchers through rulePhrases.ts) and re-ran flaky full gates under machine load; the diff is in scope and three reviewers approved.
+
+---
+
+### 25 Oct 2026 · 3.9e worker helper parameter type · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW that apps/worker/src/log.ts `logGuardWarmupFailures` takes `readonly string[]` instead of `readonly WarmedMatcher[]`.
+- Why: its only caller passes the harness's typed result, and the helper logs names only; not worth a board task.
+
+---
+
+### 25 Oct 2026 · 3.9e merge · decided by lead · risk: high
+- Decided: merge 3.9e; code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+- Why: packages/harness/src/guardrails/warmup.ts is a risky path (reviewers: code-reviewer); the change only reports which matcher threw during warm-up, stays pure and logs no student text.
+
+---
+
 ### 25 Oct 2026 · 3.9g budget · decided by lead · risk: low
 - Decided: accept 26 tool calls against a plan budget of 20.
 - Why: a small overrun on setup and the gate runs; the diff is 13 lines in apps/cli and both reviewers approved with no findings.

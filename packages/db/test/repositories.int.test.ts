@@ -3138,6 +3138,14 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return 1;
     },
   },
+  'safetyAlerts.hasOpenForStudent': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      expect(await r.safetyAlerts.hasOpenForStudent(uid('stu_iso_hos_missing'))).toBe(false);
+      return 1;
+    },
+  },
   'safetyAlerts.listForStaff': {
     scope: 'public',
     op: 'read',
