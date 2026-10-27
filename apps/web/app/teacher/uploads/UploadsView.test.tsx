@@ -490,4 +490,47 @@ describe('UploadsView', () => {
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
+
+  it('unmounting mid-upload never refreshes or touches state after unmount (8.2a Phase B)', async () => {
+    const calls: string[] = [];
+    let resolveComplete: (() => void) | undefined;
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push(`${method} ${url}`);
+      if (method === 'GET' && url === '/api/studio/documents') {
+        return json({ status: 200, body: { documents: [] } });
+      }
+      if (method === 'POST' && url === '/api/studio/documents') {
+        return json(ticket('doc_1', 'application/pdf'));
+      }
+      if (method === 'POST' && url === '/api/studio/documents/doc_1/complete') {
+        await new Promise<void>((resolve) => {
+          resolveComplete = resolve;
+        });
+        return json({ status: 200, body: { documentId: 'doc_1', status: 'ready' } });
+      }
+      return json(err(500, 'provider_error'));
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    await screen.findByText(/No files yet/);
+    checkRights();
+    const picker = screen.getByLabelText('Upload a file');
+    pick(picker, new File(['x'], 'a.pdf', { type: 'application/pdf' }));
+    await waitFor(() => expect(calls).toContain('POST /api/studio/documents/doc_1/complete'));
+    const callsBeforeUnmount = calls.length;
+    expect(() => unmount()).not.toThrow();
+    resolveComplete?.();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // A mounted guard skips `finish`'s post-completion `refresh()` once the component has
+    // unmounted, so no further fetch call fires after the late `complete` response lands.
+    expect(calls.length).toBe(callsBeforeUnmount);
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
 });

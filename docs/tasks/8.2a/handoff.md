@@ -1,6 +1,6 @@
 # Handoff: 8.2a
 
-Status: PARTIAL (Phase A done; Phases B and C left)
+Status: PARTIAL (Phases A and B done; Phase C left)
 
 ## Phase A
 
@@ -40,7 +40,44 @@ never leaves an orphan `uploading` row after a signing failure (by cleanup rathe
 reordering, see Decisions). Phases B (UploadsView unmount guard) and C (module names in the
 picker) are untouched.
 
+## Phase B
+
+UploadsView unmount guard (item 5).
+
+- `apps/web/app/teacher/uploads/UploadsView.tsx` — added a `mounted` ref set in a `useEffect`
+  cleanup, checked before every `setDocs`/`setBanner`/`patch` call that follows an `await` in
+  `refresh`, `send`, `finish` and `onDelete` (`patch` itself also guards, as a second layer for any
+  caller). After an unmount, a late response from `listDocuments`, `completeDocument`,
+  `deleteDocument` or `putFile`'s `onProgress` callback is a no-op instead of touching state.
+- `apps/web/app/teacher/uploads/UploadsView.test.tsx` — new case: start an upload, let it reach the
+  in-flight `completeDocument` ("complete") request, unmount, then resolve that request. Red:
+  against the unmodified component, `finish`'s post-completion `refresh()` still fired after
+  unmount, adding one more `GET /api/studio/documents` fetch call (5 calls where 4 were expected);
+  confirmed by temporarily stashing just the component file (`git stash push -u` scoped to that one
+  path, `git stash apply`, then `git stash drop`) and re-running the test, which failed with
+  "expected 5 to be 4". (React 19 no longer warns on a post-unmount `setState`, so the test asserts
+  no extra fetch call fires rather than spying on `console.error` for a warning that no longer
+  exists; a `console.error` spy is kept in the test as a belt-and-suspenders check, asserting it is
+  never called for any other reason.) Green: after restoring the guarded component, the same test
+  passes (`UploadsView.test.tsx`, 21 tests).
+
+**State after this phase**: no `UploadsView` async handler (`refresh`, `send`, `finish`,
+`onDelete`) touches state or fires a follow-up fetch after the component unmounts. Phase C (module
+names in the picker) is untouched.
+
 ## Decisions
+
+### 27 Oct 2026 · 8.2a unmount test asserts no extra fetch call, not just no console warning · decided by builder · risk: low
+- Decided: the Phase B unmount test's primary assertion is that no extra `fetch` call fires after
+  unmount (checked by comparing the call count before and after the late response resolves), with
+  a `console.error` spy kept as a secondary check.
+- Why: the plan's test sketch (spy `console.error` for "state update on an unmounted component")
+  no longer applies under React 19 — React removed that warning because a post-unmount `setState`
+  is a silent no-op, not a bug to warn about. A console.error-only assertion would pass even
+  against the unfixed component (confirmed: it did), so it would not be red before the fix. The
+  extra-fetch-call assertion is red against the unmodified component (5 calls instead of 4,
+  verified by stashing just the component file) and green after the guard, which is what the plan's
+  exit condition ("the unmount-guard test is red-then-green") requires.
 
 ### 27 Oct 2026 · 8.2a create keeps write-before-sign, cleans up on signing failure · decided by builder · risk: low
 - Decided: `create` does not reorder to "sign then write" the way `replace` does. It keeps
@@ -76,6 +113,18 @@ picker) are untouched.
   Prettier parser for this extension, same as before this change; skipped.)
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
+### Phase B gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` → 34/34 tasks successful
+  (31 cached).
+- `corepack pnpm --filter @edmate/web exec vitest run app/teacher/uploads/UploadsView.test.tsx` →
+  21/21 passed (run standalone; the full-suite coverage run from Phase A already covered this
+  package, re-run once more below for Phase B's own changed file).
+- `corepack pnpm exec prettier --check` on the two changed files → `UploadsView.test.tsx` needed
+  `--write` once (new test's formatting), then checked clean; `UploadsView.tsx` was already clean.
+- `python3 .githooks/secret-scan.py --all` → clean, no output.
+
 ## Budget
 
 Phase A tool calls used: 32
+Phase B tool calls used: 19
