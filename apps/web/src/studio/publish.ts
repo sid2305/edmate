@@ -41,6 +41,8 @@ export interface PublishBackend {
       Repositories['publish'],
       'startRun' | 'finishRun' | 'latestRun' | 'failedCases' | 'changedSinceLastPublish'
     >;
+    /** Task 12.2f Phase D: the agent's own status, for the teacher's standing suspended badge. */
+    agents: Pick<Repositories['agents'], 'get'>;
   };
   /** The newest signed prompt-pack set's version. */
   promptPackVersion: string;
@@ -180,6 +182,10 @@ const latest: Work = async (b, scope) => {
   const status = isStale ? 'error' : run.status;
   const failed = run.status === 'failed' ? await b.repos.publish.failedCases(scope, run.id) : [];
   const changedSincePublish = await b.repos.publish.changedSinceLastPublish(scope);
+  // Task 12.2f Phase D: the agent's own status, so a staff takedown shows a standing badge even
+  // when the run itself didn't fail (e.g. the agent was suspended after a passed, already-live run).
+  const agent = await b.repos.agents.get(scope, run.agentId);
+  const agentStatus = agent?.status ?? 'draft';
   const view: PublishRunView = {
     runId: run.id,
     status,
@@ -193,7 +199,7 @@ const latest: Work = async (b, scope) => {
     publishedAt: run.publishedAt,
     changedSincePublish,
   };
-  return ok({ run: view });
+  return ok({ run: view, agentStatus });
 };
 
 /** A thrown error mapped to a fixed response; only a code (and an error name) is logged. */

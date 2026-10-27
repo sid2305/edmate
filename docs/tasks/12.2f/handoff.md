@@ -338,3 +338,122 @@ Test Files  3 passed (3)
 ### Budget
 
 Phase C tool calls used: 44
+
+## Phase D
+
+Phase D status: DONE
+
+### Summary
+
+Adds a persistent "Removed by Edmate staff" banner to the teacher's publish page, visible on page
+load whenever their agent is suspended -- with no action (no gate run, no start attempt) needed.
+
+- `apps/web/src/studio/publish.ts` -- `PublishBackend.repos` gains `agents: Pick<Repositories['agents'],
+  'get'>` (no new repository method). The `latest` `Work` function (the route backing the client's
+  `loadLatestRun`): when `publish.latestRun` returns a run, it also calls `repos.agents.get(scope,
+  run.agentId)` and returns `agentStatus` (`agent?.status ?? 'draft'`) as a field alongside `run` in
+  the JSON body. When there is no run yet (`{ run: null }`), the reply is left exactly as before --
+  an agent that has never had a publish run can never be `suspended` (an agent takedown sets
+  `suspended` only on a `live` agent, confirmed in `takedowns.ts`'s header comment: every
+  student-facing read requires `live`), so there is nothing to look up and no extra query on that
+  path.
+- `apps/web/src/studio/publishClient.ts` -- `loadLatestRun`'s resolved value widens from
+  `PublishRun | null` to a new `LatestLoad` interface: `{ run: PublishRun | null; agentStatus:
+  AgentStatus | null }` (`AgentStatus = 'draft' | 'live' | 'suspended'`). The server's `agentStatus`
+  field is optional in the parse schema (absent on the no-run path) and defaults to `null` client-side.
+- `apps/web/app/teacher/publish/PublishView.tsx` -- a new `suspended` boolean state, set from
+  `agentStatus === 'suspended'` on every load/poll; renders `<p role="alert">{t('suspendedBanner')}</p>`
+  whenever true, additive to (not replacing) the existing `idle`/`RunDetails` rendering and the
+  existing `suspended` entries in `RUN_ERROR_KEYS`/`START_ERROR_KEYS` (those stay for a failed
+  run/start attempt; this banner is the new standing notice).
+- `apps/web/messages/en.json` -- one new key, `publish.suspendedBanner`, value `"Removed by Edmate
+  staff"` (lead answer Q3: identical wording to Phase C's document badge), appended inside the
+  existing `publish` block (verified the diff adds only this one key).
+
+### Red-then-green evidence
+
+Red (`git stash push -u` on `publish.ts`, `publishClient.ts`, `PublishView.tsx` and `en.json` only,
+test files kept, then `vitest run`):
+
+`src/studio/publish.test.ts`:
+```
+ FAIL  GET /api/studio/publish > a running run has no failed cases and is not asked for them
+   expected [ 'publish.latestRun', 'publish.changedSinceLastPublish' ] to deeply equal
+   [ ..., 'agents.get' ]
+ FAIL  GET /api/studio/publish > carries the agent status (task 12.2f Phase D): live by default, suspended after a takedown
+   AssertionError: expected undefined to be 'live'
+ FAIL  GET /api/studio/publish > an error run carries its code; a passed run its scorecard and published time
+   expected [...] to deeply equal [ ..., 'agents.get' ]
+Test Files  1 failed (1)
+     Tests  3 failed | 27 passed (30)
+```
+
+`src/studio/publishClient.test.ts`:
+```
+ FAIL  loadLatestRun parses a well-formed run and its agent status
+   - Expected: { ok: true, value: { agentStatus: 'live', run: {...} } }
+   + Received: { ok: true, value: {...run fields, no wrapper...} }
+ FAIL  loadLatestRun defaults agentStatus to null when the server omits it (no run yet)
+   - Expected: { ok: true, value: { run: null, agentStatus: null } }
+   + Received: { ok: true, value: null }
+```
+
+`app/teacher/publish/PublishView.test.tsx`:
+```
+ FAIL  task 12.2f Phase D: a suspended agent shows a standing badge with no run or start attempt
+   TestingLibraryElementError: Unable to find role="alert"
+Test Files  3 failed (3)
+     Tests  3 failed | 40 passed (43)
+```
+
+Green (`git stash apply` + `git stash drop`, re-run all three together):
+```
+Test Files  3 passed (3)
+     Tests  73 passed (73)
+```
+
+### Decisions
+
+### 27 Oct 2026 · 12.2f Phase D agentStatus placement and no-run path · decided by builder · risk: low
+- Decided: `agentStatus` is a top-level field of the `GET /api/studio/publish` JSON body, sibling
+  to `run` (not nested inside the `PublishRunView`/`run` object), and is **only computed and
+  returned when a run already exists** (`run !== null`); the `{ run: null }` no-run reply is
+  unchanged, with no `agents.get` call on that path. Client-side, `loadLatestRun`'s resolved value
+  becomes `{ run, agentStatus }` (`agentStatus: null` when the server omitted it).
+- Why: the plan's wording ("add `agentStatus` ... alongside the existing run fields" /
+  "`PublishRun`-adjacent load result type") was read literally as a field next to `run`, not inside
+  it, matching publishClient.ts's own file header lesson ("loose objects so an extra server field
+  never breaks the page" -- a sibling field, not a nested one, keeps `PublishRun`'s own shape
+  untouched for every other caller). Skipping the lookup on the no-run path is a real behaviour
+  choice the plan didn't spell out for that branch: an agent takedown only ever sets `suspended` on
+  a `live` agent (confirmed in `takedowns.ts`'s header comment -- every student-facing read already
+  requires `live`), and a `live` agent can only exist after a passed publish run, so `run === null`
+  implies the agent has never been anything but `draft` and can never be `suspended`; querying
+  `agents.get` there would be a correct but needless extra read on the one path per request that
+  already returns early.
+
+### Gate
+
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run
+  typecheck lint test --filter=@edmate/web` -- **9 of 10 tasks successful** (typecheck and lint for
+  `@edmate/web` both cache-hit clean; `@edmate/web#test` failed). The failure is four pre-existing
+  integration-test suites unrelated to any Phase D file --
+  `app/api/staff/agents/route.int.test.ts`, `app/api/staff/verifications/route.int.test.ts`,
+  `app/api/staff/alerts/route.int.test.ts`, `app/api/staff/reports/route.int.test.ts` -- all failing
+  with `connect ECONNREFUSED 127.0.0.1:55432` / a failed `migrate.js` against that same port: the
+  shared dev Postgres container (`edmate-postgres-1`) had exited partway through this session
+  (confirmed via `docker ps -a`, not stopped by this builder; the brief's docker/psql restriction
+  means it was not restarted here). All 167 other test files passed (2665 tests), including every
+  Phase D file. Ran the three Phase D test files alone separately, green: `Test Files 3 passed (3)`,
+  `Tests 73 passed (73)` (`src/studio/publish.test.ts`, `src/studio/publishClient.test.ts`,
+  `app/teacher/publish/PublishView.test.tsx`).
+- The known-flaky `src/auth/index.guard-only.test.ts` -- run alone, once: passed (1 passed, no
+  re-run needed).
+- `corepack pnpm exec prettier --check` then `--write` then `--check` again on every file this
+  phase touched -- clean after one `--write` pass (five files needed formatting); the three
+  Phase D test files re-run green after the formatting pass (see above).
+- `python3 .githooks/secret-scan.py --all` -- clean, no output.
+
+### Budget
+
+Phase D tool calls used: 32
