@@ -139,6 +139,10 @@ answers were followed as given, with no deviation.
 - Decided: wontfix the three review LOWs: in `apps/web/src/auth/config.ts`, no Google self-link while signed in (the shared-device rule), and `hasLinkedAccount` not try/caught; in `packages/db/src/identity/store.ts`, the `sql\`1\`` select style.
 - Why: each fails closed or is style only, and each matches the existing pattern in its file; none is a takeover path.
 
+### 27 Oct 2026 · 1.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 99 tool calls (harness count: build 53, CI coverage fix 46) against a budget of 55 (1.8x).
+- Why: the build itself came in under budget; the overrun is one CI fix round for a coverage gap (src/auth/** must stay at 100% statements), mostly a full web coverage run on a loaded machine. The lesson for briefs: auth tasks run the coverage gate locally before pushing.
+
 ## Gate
 
 ```
@@ -169,7 +173,7 @@ No `apps/cli` test run in this task (only `@edmate/db` and `@edmate/web` filters
 gate commands); no chatDbRetrieval.int.test.ts involvement.
 
 ## Budget
-Tool calls used: 53 (harness count from the builder transcript; the builder reported 34)
+Tool calls used: 99 (harness count from the builder transcripts: build 53, CI coverage fix 46; the builders reported 34 and 17)
 
 ## Fix round (CI coverage)
 
