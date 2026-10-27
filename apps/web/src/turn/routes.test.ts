@@ -8,7 +8,11 @@ import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import { memoryBackend, says, type MemoryBackendOptions } from '../../test/turn-backend';
 import { devModelAdapter } from './devModel';
-import { failingSessionRateLimiter, fakeSessionRateLimiter } from './sessionRateLimit';
+import {
+  failingSessionRateLimiter,
+  fakeSessionRateLimiter,
+  SESSION_START_WINDOW_MS,
+} from './sessionRateLimit';
 import { createGuard, type GuardDeps, type Principal } from '../auth/guard';
 import {
   createSessionHandlers,
@@ -108,7 +112,10 @@ describe('clearance (consent done) on both routes', () => {
     const start = await r.start(post('/api/sessions', 'parent', { agentId: 'agt_a' }));
     expect(start.status).toBe(403);
     expect(await errorOf(start)).toBe('forbidden');
-    const turn = await r.turn(post('/api/sessions/ses_1a/turns', 'parent', turnBody()), ctx('ses_1a'));
+    const turn = await r.turn(
+      post('/api/sessions/ses_1a/turns', 'parent', turnBody()),
+      ctx('ses_1a'),
+    );
     expect(turn.status).toBe(403);
     expect(await errorOf(turn)).toBe('forbidden');
     expect(r.world.sessions).toHaveLength(sessions);
@@ -120,7 +127,9 @@ describe('clearance (consent done) on both routes', () => {
   it('an age_needed student gets 403; a teacher gets 403; anonymous gets 401', async () => {
     const r = routes();
     expect((await r.start(post('/api/sessions', 'age', { agentId: 'agt_a' }))).status).toBe(403);
-    expect((await r.start(post('/api/sessions', 'teacher', { agentId: 'agt_a' }))).status).toBe(403);
+    expect((await r.start(post('/api/sessions', 'teacher', { agentId: 'agt_a' }))).status).toBe(
+      403,
+    );
     const anon = await r.turn(post('/api/sessions/ses_1a/turns', null, turnBody()), ctx('ses_1a'));
     expect(anon.status).toBe(401);
     expect(r.seen.streams).toBe(0);
@@ -184,7 +193,9 @@ describe('POST /api/sessions', () => {
 
   it('a body naming a student, or bad JSON, is 400 validation', async () => {
     const r = routes();
-    const named = await r.start(post('/api/sessions', 'clear', { agentId: 'agt_a', studentId: 'stu_2' }));
+    const named = await r.start(
+      post('/api/sessions', 'clear', { agentId: 'agt_a', studentId: 'stu_2' }),
+    );
     expect(named.status).toBe(400);
     expect(await errorOf(named)).toBe('validation');
     expect((await r.start(post('/api/sessions', 'clear', '{nope'))).status).toBe(400);
@@ -202,7 +213,9 @@ describe('POST /api/sessions', () => {
   });
 
   it('a backend that cannot be built is 503 provider_error (retryable)', async () => {
-    const handlers = createSessionHandlers(() => Promise.reject(new TurnUnavailableError('REDIS_URL')));
+    const handlers = createSessionHandlers(() =>
+      Promise.reject(new TurnUnavailableError('REDIS_URL')),
+    );
     const start = guard.withRole(['student'], handlers.startSession);
     const res = await start(post('/api/sessions', 'clear', { agentId: 'agt_a' }));
     expect(res.status).toBe(503);
@@ -213,7 +226,9 @@ describe('POST /api/sessions', () => {
 describe('POST /api/sessions per-student rate limit (9.4a)', () => {
   function limited(limit: number) {
     let t = 0;
-    const r = routes({ sessionRateLimit: fakeSessionRateLimiter({ limit, windowMs: 1000, now: () => t }) });
+    const r = routes({
+      sessionRateLimit: fakeSessionRateLimiter({ limit, windowMs: 1000, now: () => t }),
+    });
     return { r, advance: (ms: number) => void (t += ms) };
   }
   const start = (r: ReturnType<typeof routes>, who: string, agentId = 'agt_a') =>
@@ -228,6 +243,9 @@ describe('POST /api/sessions per-student rate limit (9.4a)', () => {
     const res = await start(r, 'clear');
     expect(res.status).toBe(429);
     expect(res.headers.get('cache-control')).toBe('no-store');
+    // 9.4e item 8: a conservative, fixed Retry-After (the limiter reports no exact remaining
+    // time), in whole seconds.
+    expect(res.headers.get('Retry-After')).toBe(String(Math.ceil(SESSION_START_WINDOW_MS / 1000)));
     expect(await res.json()).toMatchObject({ error: { code: 'rate_limited', retryable: true } });
     expect(r.world.sessions.length).toBe(before);
     // Refused before any entitlement or DB work.
@@ -266,12 +284,16 @@ describe('POST /api/sessions per-student rate limit (9.4a)', () => {
   });
 
   it('an unreachable limiter fails closed: 503 provider_error, logged by name, no session', async () => {
-    const r = routes({ sessionRateLimit: failingSessionRateLimiter(new TypeError('ECONNREFUSED 10.0.0.1')) });
+    const r = routes({
+      sessionRateLimit: failingSessionRateLimiter(new TypeError('ECONNREFUSED 10.0.0.1')),
+    });
     const res = await start(r, 'clear');
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: { code: 'provider_error', retryable: true } });
     expect(r.world.sessions.filter((s) => s.id.startsWith('ses_new_'))).toEqual([]);
-    expect(r.logs).toEqual([{ event: 'sessions.rate_limit_failed', fields: { error: 'TypeError' } }]);
+    expect(r.logs).toEqual([
+      { event: 'sessions.rate_limit_failed', fields: { error: 'TypeError' } },
+    ]);
   });
 
   it('a hung limiter (black-holed Redis) is 503 within the deadline, not a hang (9.4d)', async () => {
@@ -285,7 +307,9 @@ describe('POST /api/sessions per-student rate limit (9.4a)', () => {
       await vi.advanceTimersByTimeAsync(1);
       const res = await pending;
       expect(res.status).toBe(503);
-      expect(await res.json()).toMatchObject({ error: { code: 'provider_error', retryable: true } });
+      expect(await res.json()).toMatchObject({
+        error: { code: 'provider_error', retryable: true },
+      });
       expect(r.world.sessions.filter((s) => s.id.startsWith('ses_new_'))).toEqual([]);
       expect(r.logs).toEqual([
         { event: 'sessions.rate_limit_failed', fields: { error: 'SessionLimitTimeoutError' } },
@@ -309,7 +333,10 @@ describe('POST /api/sessions per-student rate limit (9.4a)', () => {
   it('turns are not limited by the session-start limiter', async () => {
     const r = routes({ sessionRateLimit: { take: async () => false } });
     expect((await start(r, 'clear')).status).toBe(429);
-    const res = await r.turn(post('/api/sessions/ses_1a/turns', 'clear', turnBody()), ctx('ses_1a'));
+    const res = await r.turn(
+      post('/api/sessions/ses_1a/turns', 'clear', turnBody()),
+      ctx('ses_1a'),
+    );
     expect(res.status).toBe(200);
     expect((await events(res)).at(-1)?.type).toBe('done');
   }, 20_000);
@@ -318,7 +345,10 @@ describe('POST /api/sessions per-student rate limit (9.4a)', () => {
 describe('POST /api/sessions/:id/turns', () => {
   it('streams SSE with the right headers: tokens, then done', async () => {
     const r = routes({ stream: [says('Hello', ' there.')] });
-    const res = await r.turn(post('/api/sessions/ses_1a/turns', 'clear', turnBody()), ctx('ses_1a'));
+    const res = await r.turn(
+      post('/api/sessions/ses_1a/turns', 'clear', turnBody()),
+      ctx('ses_1a'),
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
     expect(res.headers.get('cache-control')).toBe('no-cache, no-transform');
@@ -379,7 +409,10 @@ describe('POST /api/sessions/:id/turns', () => {
       ['ses_1b', {}], // own session with teacher B, but the body names agt_a (teacher A)
     ];
     for (const [id, extra] of cases) {
-      const res = await r.turn(post(`/api/sessions/${id}/turns`, 'clear', turnBody('hi', extra)), ctx(id));
+      const res = await r.turn(
+        post(`/api/sessions/${id}/turns`, 'clear', turnBody('hi', extra)),
+        ctx(id),
+      );
       expect(res.status, id).toBe(404);
       expect(res.headers.get('content-type')).toContain('application/json');
       expect(await errorOf(res)).toBe('not_found');
@@ -390,7 +423,7 @@ describe('POST /api/sessions/:id/turns', () => {
     expect(r.seen.streams).toBe(0);
   });
 
-  it("an own session of another agent of the same teacher is 404", async () => {
+  it('an own session of another agent of the same teacher is 404', async () => {
     const r = routes();
     r.world.sessions.push({
       id: 'ses_1a_other',
@@ -402,7 +435,10 @@ describe('POST /api/sessions/:id/turns', () => {
       packageVersion: 2,
       endedAt: null,
     });
-    const res = await r.turn(post('/api/sessions/ses_1a_other/turns', 'clear', turnBody()), ctx('ses_1a_other'));
+    const res = await r.turn(
+      post('/api/sessions/ses_1a_other/turns', 'clear', turnBody()),
+      ctx('ses_1a_other'),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -423,7 +459,11 @@ describe('POST /api/sessions/:id/turns', () => {
     const r = routes();
     const got = await events(
       await r.turn(
-        post('/api/sessions/ses_1a/turns', 'clear', turnBody('Explain photosynthesis sunlight chlorophyll sugar')),
+        post(
+          '/api/sessions/ses_1a/turns',
+          'clear',
+          turnBody('Explain photosynthesis sunlight chlorophyll sugar'),
+        ),
         ctx('ses_1a'),
       ),
     );
@@ -431,7 +471,7 @@ describe('POST /api/sessions/:id/turns', () => {
     expect(got.at(-1)?.type).toBe('done');
   }, 20_000);
 
-  it("a pre-guard failure ends with error guard_blocked and no reply", async () => {
+  it('a pre-guard failure ends with error guard_blocked and no reply', async () => {
     // No classifier answers: preGuard fails closed.
     const r = routes({ objects: [] });
     const got = await events(
@@ -467,7 +507,8 @@ describe('POST /api/sessions/:id/turns', () => {
     const decoder = new TextDecoder();
     setTimeout(() => abort.abort(), 500);
     let text = '';
-    for (let c = await reader.read(); !c.done; c = await reader.read()) text += decoder.decode(c.value);
+    for (let c = await reader.read(); !c.done; c = await reader.read())
+      text += decoder.decode(c.value);
     // Count work, don't time it (docs/lessons.md, "Wall-clock bounds fail on shared CI runners"):
     // the script has 100 dots behind 100 ms pacing sleeps, so a stream that ran to its end would
     // have emitted every one; the hang-up must have stopped it well short of that. Under load the
@@ -481,7 +522,9 @@ describe('POST /api/sessions/:id/turns', () => {
   it('a hint request runs as a turn', async () => {
     const r = routes();
     const body = turnBody(undefined, { kind: 'hint_request' });
-    const got = await events(await r.turn(post('/api/sessions/ses_1a/turns', 'clear', body), ctx('ses_1a')));
+    const got = await events(
+      await r.turn(post('/api/sessions/ses_1a/turns', 'clear', body), ctx('ses_1a')),
+    );
     expect(['done', 'error']).toContain(got.at(-1)?.type);
   }, 20_000);
 
@@ -490,13 +533,19 @@ describe('POST /api/sessions/:id/turns', () => {
     r.backend.sessions.get = async () => {
       throw new Error('db down');
     };
-    const res = await r.turn(post('/api/sessions/ses_1a/turns', 'clear', turnBody()), ctx('ses_1a'));
+    const res = await r.turn(
+      post('/api/sessions/ses_1a/turns', 'clear', turnBody()),
+      ctx('ses_1a'),
+    );
     expect(res.status).toBe(500);
     r.backend.sessions.get = async () => ({ agentId: 'agt_a', endedAt: null });
     r.backend.depsFor = () => {
       throw new TurnUnavailableError('provider_key');
     };
-    const unavailable = await r.turn(post('/api/sessions/ses_1a/turns', 'clear', turnBody()), ctx('ses_1a'));
+    const unavailable = await r.turn(
+      post('/api/sessions/ses_1a/turns', 'clear', turnBody()),
+      ctx('ses_1a'),
+    );
     expect(unavailable.status).toBe(503);
     expect(r.logs.map((l) => l.event)).toEqual(['turns.start_failed', 'turns.start_failed']);
   });
@@ -567,7 +616,11 @@ describe('request body cap (64 KB) on both routes', () => {
 
   it('a false, small content-length can not bypass the cap', async () => {
     const r = routes();
-    const s = streamed('/api/sessions/ses_1a/turns', [JSON.stringify(turnBody('hi', { pad: BIG }))], '10');
+    const s = streamed(
+      '/api/sessions/ses_1a/turns',
+      [JSON.stringify(turnBody('hi', { pad: BIG }))],
+      '10',
+    );
     const res = await r.turn(s.req, ctx('ses_1a'));
     expect(res.status).toBe(413);
     expect(r.seen.streams).toBe(0);
@@ -631,7 +684,8 @@ describe('sseBody', () => {
     const run = {
       events: {
         [Symbol.asyncIterator]: () => ({
-          next: () => Promise.resolve({ done: false as const, value: { type: 'token' as const, text: 'a' } }),
+          next: () =>
+            Promise.resolve({ done: false as const, value: { type: 'token' as const, text: 'a' } }),
           return: () => {
             returned = true;
             return Promise.resolve({ done: true as const, value: undefined });

@@ -1,13 +1,18 @@
 // The dev model (task 9.0, D2): local-only, exact flag; replies quote the first retrieved material;
 // classifiers get fixed "all clear" verdicts; an unknown schema and embed fail closed.
-import { AttemptSchema, IntentSchema, type ModelChunk, type ModelRequest } from '@edmate/contracts';
+import type { ModelChunk, ModelRequest } from '@edmate/contracts';
 import {
   ADVICE_JUDGE_SYSTEM,
+  AdviceVerdictSchema,
   DistressVerdictSchema,
   GROUNDING_JUDGE_SYSTEM,
+  GroundingVerdictSchema,
   JailbreakVerdictSchema,
   ModerationVerdictSchema,
   parseGroundingVerdict,
+  RouteFallbackSchema,
+  RouteIntentVerdictSchema,
+  SessionSummarySchema,
 } from '@edmate/harness';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -21,7 +26,12 @@ import {
 import { TurnUnavailableError } from './routes';
 
 function req(system: string, tier: ModelRequest['tier'] = 'main'): ModelRequest {
-  return { tier, system, messages: [{ role: 'user', content: 'What is the lesson fact?' }], maxOutputTokens: 100 };
+  return {
+    tier,
+    system,
+    messages: [{ role: 'user', content: 'What is the lesson fact?' }],
+    maxOutputTokens: 100,
+  };
 }
 
 /** Material the way the composer renders it (compose.ts materialBlock: `[n] title · locator · kind`, fenced). */
@@ -43,11 +53,18 @@ const textOf = (chunks: ModelChunk[]) =>
 describe('devModelEnabled', () => {
   it('is off when the flag is unset or empty, whatever AUTH_URL is', () => {
     expect(devModelEnabled({})).toBe(false);
-    expect(devModelEnabled({ EDMATE_DEV_MODEL: '', AUTH_URL: 'https://edmate.example' })).toBe(false);
+    expect(devModelEnabled({ EDMATE_DEV_MODEL: '', AUTH_URL: 'https://edmate.example' })).toBe(
+      false,
+    );
   });
 
   it('is on for exactly `scripted` with a local http AUTH_URL', () => {
-    for (const url of ['http://localhost:8080', 'http://127.0.0.1:18080', 'http://[::1]:8080', 'http://localhost']) {
+    for (const url of [
+      'http://localhost:8080',
+      'http://127.0.0.1:18080',
+      'http://[::1]:8080',
+      'http://localhost',
+    ]) {
       expect(devModelEnabled({ EDMATE_DEV_MODEL: 'scripted', AUTH_URL: url })).toBe(true);
     }
   });
@@ -73,9 +90,9 @@ describe('devModelEnabled', () => {
 
   it('accepts only the exact value', () => {
     for (const flag of ['yes', 'Scripted', ' scripted', 'scripted ', 'true', '1', ' ']) {
-      expect(() => devModelEnabled({ EDMATE_DEV_MODEL: flag, AUTH_URL: 'http://localhost:8080' })).toThrow(
-        'EDMATE_DEV_MODEL',
-      );
+      expect(() =>
+        devModelEnabled({ EDMATE_DEV_MODEL: flag, AUTH_URL: 'http://localhost:8080' }),
+      ).toThrow('EDMATE_DEV_MODEL');
     }
   });
 });
@@ -90,7 +107,9 @@ describe('firstMaterial', () => {
 
 describe('devModelAdapter.stream', () => {
   it('starts with [dev model] and quotes the first retrieved material, then reports usage', async () => {
-    const chunks = await collect(devModelAdapter('claude-haiku-4-5').stream(req(SYSTEM_WITH_MATERIAL)));
+    const chunks = await collect(
+      devModelAdapter('claude-haiku-4-5').stream(req(SYSTEM_WITH_MATERIAL)),
+    );
     const text = textOf(chunks);
     expect(text.startsWith('[dev model]')).toBe(true);
     expect(text).toContain('The Zorblat river freezes every Tuesday.');
@@ -99,7 +118,11 @@ describe('devModelAdapter.stream', () => {
     const last = chunks.at(-1);
     expect(last?.type).toBe('usage');
     if (last?.type === 'usage') {
-      expect(last.usage).toMatchObject({ model: 'claude-haiku-4-5', tier: 'main', costMicroUsd: 0 });
+      expect(last.usage).toMatchObject({
+        model: 'claude-haiku-4-5',
+        tier: 'main',
+        costMicroUsd: 0,
+      });
       expect(last.usage.inputTokens).toBeGreaterThan(0);
       expect(last.usage.outputTokens).toBeGreaterThan(0);
     }
@@ -132,38 +155,34 @@ describe('devModelAdapter.stream for the post-guard judges (9.0 Phase C)', () =>
 });
 
 describe('devModelAdapter.generateObject', () => {
-  // The three classifier schemas are the harness's own exports. The other four are hand-copied:
-  // `@edmate/harness` (out of bounds for 9.4a) does not export `guardrails/grounding.ts`'s and
-  // `guardrails/adviceGuard.ts`'s `VerdictSchema`, `routing/modelFallback.ts`'s
-  // `RouteIntentVerdictSchema` (the `routing` module is not re-exported), `pipeline/results.ts`'s
-  // `RouteFallbackSchema` or `memory/sessionSummary.ts`'s `SessionSummarySchema`. Swap each for
-  // the real one as soon as the harness exports it; until then the route test
-  // (`routes.test.ts`, the real pipeline over the dev model) is what pins the real shapes.
   const schemas = {
     moderation: [ModerationVerdictSchema, { category: 'none' }],
     jailbreak: [JailbreakVerdictSchema, { category: 'none' }],
     distress: [DistressVerdictSchema, { distress: false }],
-    grounding: [z.strictObject({ grounded: z.boolean() }), { grounded: true }],
-    advice: [z.strictObject({ personalAdvice: z.boolean() }), { personalAdvice: false }],
-    routeIntent: [z.strictObject({ intent: IntentSchema }), { intent: 'on_task' }],
-    routeFallback: [z.strictObject({ intent: IntentSchema, attempt: AttemptSchema }), { intent: 'on_task', attempt: 'none' }],
+    grounding: [GroundingVerdictSchema, { grounded: true }],
+    advice: [AdviceVerdictSchema, { personalAdvice: false }],
+    routeIntent: [RouteIntentVerdictSchema, { intent: 'on_task' }],
+    routeFallback: [RouteFallbackSchema, { intent: 'on_task', attempt: 'none' }],
   } as const;
 
   for (const [name, [schema, expected]] of Object.entries(schemas)) {
     it(`answers the ${name} schema all clear`, async () => {
-      await expect(devModelAdapter('m').generateObject(req(''), schema as z.ZodType)).resolves.toEqual(expected);
+      await expect(
+        devModelAdapter('m').generateObject(req(''), schema as z.ZodType),
+      ).resolves.toEqual(expected);
     });
   }
 
   it('answers a session summary schema', async () => {
-    const schema = z.strictObject({ summary: z.string().max(400) });
-    const out = await devModelAdapter('m').generateObject(req(''), schema);
+    const out = await devModelAdapter('m').generateObject(req(''), SessionSummarySchema);
     expect(out.summary).toContain('[dev model]');
   });
 
   it('throws on a schema no fixed answer fits', async () => {
     const schema = z.strictObject({ somethingElse: z.number() });
-    await expect(devModelAdapter('m').generateObject(req(''), schema)).rejects.toThrow('no fixed answer');
+    await expect(devModelAdapter('m').generateObject(req(''), schema)).rejects.toThrow(
+      'no fixed answer',
+    );
   });
 });
 

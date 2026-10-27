@@ -105,7 +105,8 @@ export const ADVICE_REWRITE_SYSTEM =
 
 /** A verdict longer than this is not the strict JSON object, so it is not read. */
 const MAX_VERDICT_LENGTH = 200;
-const VerdictSchema = z.strictObject({ personalAdvice: z.boolean() });
+export const AdviceVerdictSchema = z.strictObject({ personalAdvice: z.boolean() });
+const VerdictSchema = AdviceVerdictSchema;
 
 /** True only for the strict JSON `{"personalAdvice": false}` (whitespace around it allowed). */
 export function adviceVerdictClean(text: string | undefined): boolean {

@@ -10,6 +10,83 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 9.6f follow-up task renamed 9.6g → 9.6j · decided by lead · risk: low
+- Decided: the M13 board task holding 9.6f's deferred EXPLAIN MEDIUM and LOW is now 9.6j, its plan is docs/tasks/9.6j/plan.md, and docs/tasks/9.6f/review.md cites `deferred 9.6j`. The 9.6f decision above that says "9.6g" means this task.
+- Why: 9.6g was already the id of a done M9 task (m9/9.6g-export-fixes), whose task folder the new plan had landed in.
+
+### 26 Oct 2026 · 9.4e risky paths merge · decided by lead · risk: high
+- Decided: merge 9.4e's changes on risky paths: packages/harness/src/guardrails/** (adviceGuard.ts, grounding.ts, index.ts export the existing verdict schemas; no behaviour change), apps/web/src/auth/errors.ts (apiError gains an optional headers param; cache-control no-store always wins) and packages/db/src/repositories/README.md (doc only).
+- Why: code-reviewer, security-reviewer and typescript-reviewer approved with LOWs only; the only headers caller passes a server-computed Retry-After constant.
+
+---
+
+### 26 Oct 2026 · 9.4e deferred items and review LOWs to 9.4f · decided by lead · risk: low
+- Decided: plan items 1 (Playwright --webpack), 4 (ports.ts reads users.market twice) and 6 (listLiveForStudent grid case order), plus the review LOWs (apiError headers type, layout.test.tsx loose props, README sentence wording), go to board task 9.4f.
+- Why: MVP-first; none is a bug, and items 4 and 6 touch busy packages/db files.
+
+---
+
+### 26 Oct 2026 · 9.4e liveChats teacherIds/liveIds derivation · decided by builder · risk: low
+- Decided: `homeLinks` computes `liveIds` and `teacherIds` from `classifyHomeLinks`'s own
+  `chats`/`paused` output (`new Set([...chats, ...paused])`, then filtering `live` rows by that
+  set), not from a fresh `live.filter((row) => row.status !== 'ended')`.
+- Why: the plan's item 10 asks to drop the duplicate `ended` filter and rely on
+  `classifyHomeLinks`'s own check, but `liveIds`/`teacherIds` also need an `ended` row excluded
+  (the existing `an ended subscription leaves its agent startable again` test requires it) and
+  `classifyHomeLinks` only returns agent ids split into `chats`/`paused`, not a filtered row list.
+  Deriving `liveIds`/`teacherIds` from its output keeps exactly one place that excludes `ended`
+  (`classifyHomeLinks`) while leaving every existing test's expected output unchanged.
+
+---
+
+### 26 Oct 2026 · 9.4e turn-backend NaN guard scope · decided by builder · risk: low
+- Decided: guard only `Number.isNaN(ms)` (clamp to 0), not every non-finite value via
+  `Number.isFinite`.
+- Why: `Infinity`/`-Infinity` already clamp correctly through the existing
+  `Math.min(Math.max(ms, 0), MAX_REAL_SLEEP_MS)` (neither breaks `Math.min`/`Math.max`'s
+  ordering); only `NaN` is neither greater than nor less than any number, so it is the one value
+  that needs an explicit guard. Treating `Infinity` as `0` instead of `MAX_REAL_SLEEP_MS` would
+  be a behaviour change beyond the plan's "sleep clamps NaN" item.
+
+---
+
+### 26 Oct 2026 · 9.3n budget overrun (43 vs 25) · decided by lead · risk: low
+- Decided: accept 43 tool calls against a budget of 25 (the builder reported 24).
+- Why: the work stayed inside the plan's three files; the extra calls were @edmate/web test and lint runs.
+
+---
+
+### 26 Oct 2026 · 9.3n index-suffixed key left as it is in apps/web/app/staff/verification-row.tsx · decided by lead · risk: low
+- Decided: wontfix the code-review LOW that the `ts|from|to|index` key in apps/web/app/staff/verification-row.tsx still changes when an entry is added at the head of the list.
+- Why: the list items hold no state or focus, so a remount is harmless, and the suffix keeps keys unique if one edit is audited twice in a millisecond.
+
+---
+
+### 26 Oct 2026 · 9.3n subject-history key always suffixes the index · decided by builder · risk: low
+- Decided: the key is `` `${change.ts}|${change.from}|${change.to}|${i}` `` -- the index suffix is
+  always present, not only added when a collision is possible.
+- Why: the plan allowed adding the index "only then" (when two changes can share all three
+  fields), but detecting that case would need a second pass over the array just to decide the key
+  shape. Always including `i` is simpler, still gives React a stable identity across renders of
+  the same list (the index is a tiebreaker, not the only key), and costs nothing since
+  `subjectHistory` is never reordered in place.
+
+---
+
+### 26 Oct 2026 · 9.3n merge touches apps/web/app/api/staff (tests only) · decided by builder · risk: high
+- Decided: this PR's only change under `apps/web/app/api/staff/**` is to
+  `route.test.ts` (new test cases); `handlers.ts` is byte-for-byte unchanged.
+- Why: that path is in the risk-paths list, so the merge gate needs the risk-high decision logged
+  even though the change is test-only and found no new finding against the handler.
+
+---
+
+### 26 Oct 2026 · 5.2a real-transcriber timing check split to 5.2b · decided by lead · risk: low
+- Decided: the third 5.2 review LOW (a real-transcriber timing check against the 15-minute budget) is not part of 5.2a; it is board task 5.2b, run by a human.
+- Why: it needs a real model call, which tests may not make; the two type LOWs are done here.
+
+---
+
 ### 26 Oct 2026 · 13.4f merge touches packages/db/src/identity/store.ts · decided by lead · risk: high
 - Decided: merge 13.4f. It changes `packages/db/src/identity/store.ts` (a risky path): `listConsentsForStudent` now parses `grantedBy` with a zod enum through an exported pure `parseConsentRow` instead of casting it. security-reviewer, code-reviewer and typescript-reviewer approved.
 - Why: a bad stored value now fails loud instead of being trusted; the only caller stays inside the guarded store methods, which scrub the error, and zod's enum message does not echo the bad value.

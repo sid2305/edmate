@@ -21,7 +21,7 @@ import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { ClientTurnSchema, StartSessionSchema, toTurnInput } from './clientInput';
 import { studentTurnScope, type AgentOwners } from './scope';
-import type { SessionRateLimiter } from './sessionRateLimit';
+import { SESSION_START_WINDOW_MS, type SessionRateLimiter } from './sessionRateLimit';
 
 /** A session as the turn route needs it. */
 export interface TurnSessionRow {
@@ -110,6 +110,13 @@ export function errorName(error: unknown): string {
  */
 export const SESSION_LIMIT_DEADLINE_MS = 3_000;
 
+/**
+ * Task 9.4e item 8: the session-start 429's `Retry-After`, in whole seconds. A fixed,
+ * conservative value -- `sessionRateLimit.take()` reports no exact time remaining in its
+ * window, and changing its shape to carry one is out of scope here.
+ */
+const SESSION_RETRY_AFTER_SECONDS = Math.ceil(SESSION_START_WINDOW_MS / 1000);
+
 class SessionLimitTimeoutError extends Error {
   override name = 'SessionLimitTimeoutError';
 }
@@ -134,7 +141,9 @@ export const MAX_BODY_BYTES = 64 * 1024;
 export const TOO_LARGE = Symbol('too large');
 
 /** The body's bytes, or TOO_LARGE as soon as more than the cap has been read. */
-async function readCapped(body: ReadableStream<Uint8Array>): Promise<Uint8Array | typeof TOO_LARGE> {
+async function readCapped(
+  body: ReadableStream<Uint8Array>,
+): Promise<Uint8Array | typeof TOO_LARGE> {
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -250,12 +259,19 @@ export function createSessionHandlers(backend: () => Promise<TurnBackend>) {
     // (never the body). A limiter that can't answer refuses the start (fail closed, 503).
     let allowed: boolean;
     try {
-      allowed = await withDeadline(b.sessionRateLimit.take(principal.userId), SESSION_LIMIT_DEADLINE_MS);
+      allowed = await withDeadline(
+        b.sessionRateLimit.take(principal.userId),
+        SESSION_LIMIT_DEADLINE_MS,
+      );
     } catch (error) {
       b.log.error('sessions.rate_limit_failed', { error: errorName(error) });
       return apiError('provider_error', MSG.unavailable, 503);
     }
-    if (!allowed) return apiError('rate_limited', MSG.tooManySessions, 429);
+    if (!allowed) {
+      return apiError('rate_limited', MSG.tooManySessions, 429, {
+        'Retry-After': String(SESSION_RETRY_AFTER_SECONDS),
+      });
+    }
     try {
       const scope = await studentTurnScope(b.agents, principal, agentId);
       if (scope === null) return notFound(MSG.agent);

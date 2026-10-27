@@ -7,5 +7,5 @@ Reviewers: database-reviewer, typescript-reviewer, security-reviewer, code-revie
 - [HIGH] [fixed] packages/db/src/repositories/messages.ts — listForStudent sent one uncapped query per session (N+1); now one CROSS JOIN LATERAL statement (typescript-reviewer; MEDIUM from security-reviewer and database-reviewer)
 - [MEDIUM] [fixed] packages/db/test/export-cursor-paging.int.test.ts — no test for a created_at tie across two sessions on a page boundary; added (code-reviewer)
 - [LOW] [fixed] packages/db/src/repositories/messages.ts — stale "joins sessions" doc comment (code-reviewer)
-- [MEDIUM] [deferred 9.6g] packages/db/test/export-cursor-paging.int.test.ts — no EXPLAIN of the real lateral statement messages.listForStudent sends (database-reviewer)
-- [LOW] [deferred 9.6g] packages/db/test/export-cursor-paging.int.test.ts — the mid-range EXPLAIN tests run hand-written copies of the repositories' SQL (database-reviewer)
+- [MEDIUM] [deferred 9.6j] packages/db/test/export-cursor-paging.int.test.ts — no EXPLAIN of the real lateral statement messages.listForStudent sends (database-reviewer)
+- [LOW] [deferred 9.6j] packages/db/test/export-cursor-paging.int.test.ts — the mid-range EXPLAIN tests run hand-written copies of the repositories' SQL (database-reviewer)
