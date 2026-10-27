@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // Task 9.2 Phase B. Written and red before page.tsx exists (TDD). Repos mocked, no database, no
 // model, no real Redis.
+import { RepositoryError } from '@edmate/db';
 import { render, screen } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -79,7 +80,10 @@ describe('/teachers page', () => {
 
   it('shows a card per teacher with name, subject, excerpt, languages and a free badge, linking to the slug', async () => {
     render(await page());
-    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/teachers/ada-lovelace');
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute(
+      'href',
+      '/teachers/ada-lovelace',
+    );
     expect(screen.getByText('Mathematics')).toBeInTheDocument();
     expect(screen.getByText('Teaches calculus and algebra.')).toBeInTheDocument();
     expect(screen.getByText('en')).toBeInTheDocument();
@@ -111,6 +115,12 @@ describe('/teachers page', () => {
     await expect(page()).rejects.toThrow('db down');
   });
 
+  it('shows the empty state, not a thrown error, when discovery.search rejects with a scope error (9.2a decision)', async () => {
+    state.search.mockRejectedValue(new RepositoryError('scope', 'discovery.search'));
+    render(await page({ q: 'astrophysics' }));
+    expect(screen.getByText(/No teachers found/)).toBeInTheDocument();
+  });
+
   it('shows Home and a sign-out button for a signed-in student, instead of Sign in', async () => {
     state.currentPrincipal.mockResolvedValue({ userId: 'u1', role: 'student' });
     render(await page());
@@ -122,7 +132,9 @@ describe('/teachers page', () => {
   it('shows the rate-limited state and does not query the repository when over the limit', async () => {
     state.allow.mockResolvedValue(false);
     render(await page());
-    expect(screen.getByRole('status')).toHaveTextContent('Too many searches. Try again in a minute.');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Too many searches. Try again in a minute.',
+    );
     expect(state.search).not.toHaveBeenCalled();
   });
 

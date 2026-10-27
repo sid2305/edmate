@@ -18,6 +18,9 @@ export interface PublicNav {
 const ROLE_HOME: Partial<Record<Principal['role'], string>> = {
   student: HOME_PATH,
   teacher: TEACHER_PATH,
+  // Task 9.2e item 8: a literal path, not a new `src/auth/**` export (same read-only-import
+  // convention 9.2b already set for this module).
+  staff: '/staff',
 };
 
 /** `principal` comes from `currentPrincipal()`, which never throws (it reads as signed out). */

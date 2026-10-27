@@ -1,6 +1,25 @@
 // Task 9.2b. Written and red before rateLimit.ts exists (TDD). A fake store stands in for Redis
 // (lessons.md / plan: no real Redis in unit tests).
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// 9.2e item 6: a mocked `ioredis` constructor so the "no hang on a Redis outage" assertion can
+// check the options object passed to `new Redis(...)`, without ever opening a real connection.
+const redisCtor = vi.hoisted(() => vi.fn());
+vi.mock('ioredis', () => ({
+  Redis: class {
+    constructor(...args: unknown[]) {
+      redisCtor(...args);
+    }
+    on() {
+      // no-op: the real client's error listener is irrelevant here.
+    }
+    defineCommand(name: string, _opts: unknown) {
+      void _opts;
+      (this as unknown as Record<string, unknown>)[name] = () => Promise.resolve(1);
+    }
+  },
+}));
+
 import {
   DISCOVERY_RATE_WINDOW_MS,
   UNKNOWN_CLIENT,
@@ -132,23 +151,71 @@ describe('createDiscoveryRateLimiter', () => {
 });
 
 describe('redisRateLimitStore', () => {
-  it('increments and sets the window to expire only on the first hit', async () => {
-    const calls: string[] = [];
-    const redis = {
-      incr: vi.fn(async (key: string) => {
-        calls.push(`incr:${key}`);
-        return calls.filter((c) => c === `incr:${key}`).length;
-      }),
-      pexpire: vi.fn(async (key: string, ms: number) => {
-        calls.push(`pexpire:${key}:${ms}`);
-        return 1;
+  // 9.2e item 6: INCR+PEXPIRE is now one atomic EVAL, not two separate round trips, so a store
+  // that only simulates a single Redis command (the defined Lua command) exercises the real
+  // "no gap between count and TTL" guarantee, not just two calls happening to run in order.
+  function fakeEvalRedis() {
+    let defined: ((key: string, windowMs: string) => Promise<number> | number) | undefined;
+    const ttls = new Map<string, number>();
+    const counts = new Map<string, number>();
+    const redis: Record<string, unknown> = {
+      defineCommand: vi.fn((name: string, opts: { lua: string }) => {
+        expect(opts.lua).toContain('INCR');
+        expect(opts.lua).toContain('PEXPIRE');
+        defined = (key: string, windowMs: string) => {
+          const count = (counts.get(key) ?? 0) + 1;
+          counts.set(key, count);
+          if (count === 1) ttls.set(key, Number(windowMs));
+          return count;
+        };
+        redis[name] = defined;
       }),
     };
+    return { redis, ttls, counts };
+  }
+
+  it('increments and sets the window to expire only on the first hit, via one atomic command', async () => {
+    const { redis, ttls } = fakeEvalRedis();
     const store = redisRateLimitStore(redis as never);
     expect(await store.increment('k', 1000)).toBe(1);
-    expect(redis.pexpire).toHaveBeenCalledWith('k', 1000);
+    expect(ttls.get('k')).toBe(1000);
     expect(await store.increment('k', 1000)).toBe(2);
-    expect(redis.pexpire).toHaveBeenCalledTimes(1);
+    expect(ttls.size).toBe(1);
+  });
+
+  it('defines the Lua command only once even across repeat calls', async () => {
+    const { redis } = fakeEvalRedis();
+    redisRateLimitStore(redis as never);
+    redisRateLimitStore(redis as never);
+    expect(
+      (redis as { defineCommand: ReturnType<typeof vi.fn> }).defineCommand,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('two near-simultaneous increments on the same key still set the TTL exactly once', async () => {
+    const { redis, ttls } = fakeEvalRedis();
+    const store = redisRateLimitStore(redis as never);
+    const [a, b] = await Promise.all([store.increment('k', 1000), store.increment('k', 1000)]);
+    expect([a, b].sort()).toEqual([1, 2]);
+    expect(ttls.size).toBe(1);
+  });
+});
+
+describe('discoveryRateLimiter (lazy singleton) Redis options', () => {
+  afterEach(() => {
+    resetDiscoveryRateLimiter();
+    redisCtor.mockClear();
+  });
+
+  it('passes connectTimeout and commandTimeout so a store failure cannot hang ~10s before failing open', () => {
+    discoveryRateLimiter({ REDIS_URL: 'redis://localhost:6379' });
+    expect(redisCtor).toHaveBeenCalledWith(
+      'redis://localhost:6379',
+      expect.objectContaining({
+        connectTimeout: expect.any(Number),
+        commandTimeout: expect.any(Number),
+      }),
+    );
   });
 });
 
