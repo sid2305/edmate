@@ -2,11 +2,27 @@
 // 4). The scope always comes from the signed-in student's principal and the live agent's owner,
 // never from the request body.
 import type { EvidenceEvent, LearnerProfile } from '@edmate/contracts';
-import { RepositoryError } from '@edmate/db';
+import { EVIDENCE_LIST_MAX, RepositoryError } from '@edmate/db';
 import { NextRequest } from 'next/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Principal, RoleContext } from '../auth/guard';
-import { createMemoryHandlers, type MemoryBackend } from './routes';
+import { createMemoryHandlers, memoryHandlers, type MemoryBackend } from './routes';
+
+const shared = vi.hoisted(() => ({
+  owner: vi.fn(),
+  get: vi.fn(),
+  list: vi.fn(),
+  reset: vi.fn(),
+}));
+vi.mock('../auth', () => ({
+  serverDatabase: () => ({
+    repos: {
+      agents: { owner: shared.owner },
+      learnerProfiles: { get: shared.get, reset: shared.reset },
+      evidenceEvents: { list: shared.list },
+    },
+  }),
+}));
 
 const STUDENT: Principal = { userId: 'std_amy', role: 'student' };
 
@@ -44,12 +60,17 @@ function req(method: string, agentId: string, body?: unknown): NextRequest {
   });
 }
 
-function fakeBackend(overrides: {
-  owner?: (scope: { agentId: string }) => Promise<{ teacherId: string } | null>;
-  get?: (scope: unknown) => Promise<LearnerProfile | null>;
-  list?: (scope: unknown, options: unknown) => Promise<{ events: EvidenceEvent[]; truncated: boolean }>;
-  reset?: (scope: unknown) => Promise<{ reset: boolean }>;
-} = {}) {
+function fakeBackend(
+  overrides: {
+    owner?: (scope: { agentId: string }) => Promise<{ teacherId: string } | null>;
+    get?: (scope: unknown) => Promise<LearnerProfile | null>;
+    list?: (
+      scope: unknown,
+      options: unknown,
+    ) => Promise<{ events: EvidenceEvent[]; truncated: boolean }>;
+    reset?: (scope: unknown) => Promise<{ reset: boolean }>;
+  } = {},
+) {
   const calls: { method: string; scope?: unknown; options?: unknown }[] = [];
   const owner = vi.fn(async (scope: { agentId: string }) => {
     calls.push({ method: 'owner' });
@@ -86,7 +107,9 @@ describe('GET /api/me/memory/:agentId (export)', () => {
     const res = await exportMemory(req('GET', 'agt_1'), ctxFor(STUDENT, 'agt_1'));
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(res.headers.get('content-disposition')).toBe('attachment; filename="edmate-memory.json"');
+    expect(res.headers.get('content-disposition')).toBe(
+      'attachment; filename="edmate-memory.json"',
+    );
     expect(await res.json()).toEqual({ profile: PROFILE, evidence: EVIDENCE, truncated: false });
   });
 
@@ -180,5 +203,39 @@ describe('DELETE /api/me/memory/:agentId (reset)', () => {
     const { reset: resetHandler } = createMemoryHandlers(backend);
     const res = await resetHandler(req('DELETE', 'agt_1'), ctxFor(STUDENT, 'agt_1'));
     expect(res.status).toBe(500);
+  });
+});
+
+describe('memoryHandlers (the wired export, over a mocked serverDatabase)', () => {
+  beforeEach(() => {
+    shared.owner.mockReset();
+    shared.get.mockReset();
+    shared.list.mockReset();
+    shared.reset.mockReset();
+  });
+
+  it('export resolves the scope through serverDatabase().repos and returns the shape', async () => {
+    shared.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });
+    shared.get.mockResolvedValueOnce(PROFILE);
+    shared.list.mockResolvedValueOnce({ events: EVIDENCE, truncated: false });
+    const res = await memoryHandlers.export(req('GET', 'agt_1'), ctxFor(STUDENT, 'agt_1'));
+    expect(res.status).toBe(200);
+    expect(shared.owner).toHaveBeenCalledWith({ agentId: 'agt_1' });
+    expect(shared.get).toHaveBeenCalledWith({ studentId: 'std_amy', teacherId: 'tch_asha' });
+    expect(shared.list).toHaveBeenCalledWith(
+      { studentId: 'std_amy', teacherId: 'tch_asha' },
+      { limit: EVIDENCE_LIST_MAX },
+    );
+    expect(await res.json()).toEqual({ profile: PROFILE, evidence: EVIDENCE, truncated: false });
+  });
+
+  it('reset resolves the scope through serverDatabase().repos and returns the shape', async () => {
+    shared.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });
+    shared.reset.mockResolvedValueOnce({ reset: true });
+    const res = await memoryHandlers.reset(req('DELETE', 'agt_1'), ctxFor(STUDENT, 'agt_1'));
+    expect(res.status).toBe(200);
+    expect(shared.owner).toHaveBeenCalledWith({ agentId: 'agt_1' });
+    expect(shared.reset).toHaveBeenCalledWith({ studentId: 'std_amy', teacherId: 'tch_asha' });
+    expect(await res.json()).toEqual({ reset: true });
   });
 });

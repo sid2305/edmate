@@ -83,12 +83,18 @@ export function createMemoryHandlers(backend: MemoryBackend): { export: Handler;
     }
   };
 
+  // `learnerProfiles.reset` (packages/db) ends the pair's open sessions before it checks whether
+  // a profile row exists, so `{ reset: false }` means there was no mastery/evidence to clear, not
+  // that nothing happened -- any open session still ended and nothing else was written.
   const reset: Handler = async (_req, ctx) => {
     const scope = await resolveScope(ctx);
     if (scope === null) return notFound();
     try {
       const { reset: didReset } = await backend.learnerProfiles.reset(scope);
-      return Response.json({ reset: didReset }, { status: 200, headers: { 'cache-control': 'no-store' } });
+      return Response.json(
+        { reset: didReset },
+        { status: 200, headers: { 'cache-control': 'no-store' } },
+      );
     } catch (error) {
       return fromError(error);
     }
