@@ -10,6 +10,170 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 1.4c Google sign-in links to an existing email-verified user; Google's own dangerous-linking flag is on, gated entirely by Edmate's own check · decided by builder · risk: high
+
+- Decided:
+  - **Flag.** The Google provider's `allowDangerousEmailAccountLinking` changes from `false` (1.3)
+    to `true`. This is necessary, not cosmetic: in the installed `@auth/core` 0.41.3, the `signIn`
+    callback (`handleAuthorized`, `lib/actions/callback/index.js:63`) runs **before**
+    `handleLoginOrRegister` (`:70`), which is where the email-match lookup or the
+    `OAuthAccountNotLinked` throw happens (`handle-login.js:236-250`). With the flag `false`, that
+    throw fires regardless of what `signIn` would have returned, so the flag must be `true` for
+    linking to ever be possible; because `signIn` runs first, refusing there stops the link before
+    any row is written — confirmed directly against the real handlers in `flow.test.ts`'s new
+    cases (not just inferred).
+  - **The real gate.** The `signIn` callback refuses the sign-in (returns `false`, same as every
+    other refusal in this callback) unless: Google reports `email_verified: true` (already true
+    since 1.3) **and** the existing user this email belongs to already has `emailVerifiedAt` set
+    (only ever true today for a user who verified by the email-link flow) **and** that user has no
+    other `google` account already linked (`identity.hasLinkedAccount`, new). Any one of those
+    failing refuses the sign-in and links nothing; `@auth/core` never gets to call `linkAccount` in
+    that case.
+  - **Why this is "narrow", not "flip and hope".** The flag alone (Auth.js's documented "dangerous"
+    default) links by email with no verification at all. Edmate never relies on that: every path
+    that could reach `linkAccount` must first pass the three checks above, which is the officially
+    recommended mitigation for this exact flag — the flag only changes *when `@auth/core` is
+    willing to try*, Edmate's callback decides *whether it's allowed to*.
+  - **Unaffected.** The email magic-link provider's own branch of `signIn`; the shared-device
+    check; the under-age block; a returning Google user (resolved by `getUserByAccount`, never
+    reaching the new block) — all re-run unmodified in this build and still pass.
+- Why: this is the only point in `next-auth@5.0.0-beta.32`'s OAuth callback lifecycle where
+  Edmate's own code can decide whether a by-email link is trustworthy; the three-part check
+  (verified on both sides, no existing different link) is exactly the acceptance criteria and
+  mirrors README rule 7's existing data-layer invariant, made explicit and tested instead of left
+  to a driver-error. This decision replaces the Google-provider bullet of the 18 Oct 2026 1.3 entry
+  in `docs/decisions/log.md`.
+- Alternatives:
+  - Keep the flag `false` and try to link inside the callback: rejected, the throw happens earlier
+    in the lifecycle than the callback runs, so there's nothing left for Edmate's code to prevent.
+  - Allow linking on Google's `email_verified` alone, ignoring the existing user's own verification
+    state: rejected, it would let an attacker's freshly-created, Google-verified account silently
+    annex any pre-existing, never-verified Edmate user at that address.
+  - A Better-Auth-style custom OAuth flow: an ADR-level change to the tech stack, out of proportion
+    to this task.
+- Reversible: yes. The flag and the `signIn` block both sit in `createAuthConfig`; reverting to
+  1.3's behaviour is a two-line change with no data migration (no schema change in this task at
+  all).
+
+No further decisions beyond the plan's draft; the plan's open questions (Q1-Q5) and the lead's
+answers were followed as given, with no deviation.
+
+---
+
+### 27 Oct 2026 · 1.4c approve Google linking to a verified email-link account · decided by lead · risk: high
+- Decided: merge 1.4c. This replaces the Google-provider part of the 1.3 decision (18 Oct 2026) that kept `allowDangerousEmailAccountLinking` false. The flag is now true on the Google provider only, and Edmate's `signIn` callback refuses the link unless Google reports `email_verified` true, the existing user's `emailVerifiedAt` is set, and that user has no Google account linked yet. The email-link provider is unchanged.
+- Why: the lead and the security reviewer checked the installed `@auth/core` 0.41.3 and confirmed that `signIn` runs before `handleLoginOrRegister` links anything, so a refusal writes nothing; flow tests against the real handlers prove the linked same-user case and every refusal. The unique `(user_id, provider)` index backs the app check. Security, database, code and typescript reviewers approved with LOW notes only.
+
+---
+
+### 27 Oct 2026 · 1.4c review LOWs left as is · decided by lead · risk: low
+- Decided: wontfix the three review LOWs: in `apps/web/src/auth/config.ts`, no Google self-link while signed in (the shared-device rule), and `hasLinkedAccount` not try/caught; in `packages/db/src/identity/store.ts`, the `sql\`1\`` select style.
+- Why: each fails closed or is style only, and each matches the existing pattern in its file; none is a takeover path.
+
+---
+
+### 27 Oct 2026 · 1.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 99 tool calls (harness count: build 53, CI coverage fix 46) against a budget of 55 (1.8x).
+- Why: the build itself came in under budget; the overrun is one CI fix round for a coverage gap (src/auth/** must stay at 100% statements), mostly a full web coverage run on a loaded machine. The lesson for briefs: auth tasks run the coverage gate locally before pushing.
+
+---
+
+### 27 Oct 2026 · 12.2i apps/web/app/staff/reports/client.ts change · decided by builder · risk: high
+- Decided: `client.ts` is in `apps/web/app/staff/**`, a risky path per `risk-paths.txt`; this PR
+  needs security-reviewer (named group) plus the task's own named reviewer set
+  (typescript-reviewer, code-reviewer, silent-failure-hunter), per rule 6.
+- Why: the plan names this risk group explicitly for Phase B; logging it here so the merge gate
+  can require all four reviewers and `review.md` names them. (Phase A's own risk: high entry
+  below covers `packages/db/src/repositories/**`; both groups need the same four reviewers, so one
+  combined review can cover the whole PR.)
+
+No other decision beyond what the plan already made (Q5 followed as recommended: a type-only
+import of `@edmate/db` into the two client-bundled files is zero-runtime-cost).
+
+---
+
+### 27 Oct 2026 · 12.2i packages/db/src/repositories changes · decided by builder · risk: high
+- Decided: the cycle fix touches `packages/db/src/repositories/**` (chunks.ts, takedowns.ts,
+  reports.ts, new takedown-predicate.ts), a risky path per `risk-paths.txt`; this PR needs
+  security-reviewer (named group) plus the task's own named reviewer set (typescript-reviewer,
+  code-reviewer, silent-failure-hunter), per rule 6.
+- Why: the plan names this risk group explicitly and it is unchanged in Phase A; logging it here
+  so the merge gate can require all four reviewers and `review.md` names them.
+
+No other decision beyond what the plan already made (Q1/Q2 followed as recommended: module name
+`takedown-predicate.ts`; `reports.ts` imports it directly rather than through `takedowns.ts`'s
+re-export).
+
+---
+
+### 27 Oct 2026 · 12.2i approve the import-cycle fix on risky paths · decided by lead · risk: high
+- Decided: merge 12.2i. It touches packages/db/src/repositories/** (a new leaf module, takedown-predicate.ts, that chunks.ts, takedowns.ts and reports.ts now import the takedown predicate from) and apps/web/app/staff/reports/client.ts (a type-only import plus compile-time category guards). security-reviewer, typescript-reviewer, code-reviewer and silent-failure-hunter all approved; the takedown SQL is unchanged and every exported name stays where it was.
+- Why: the cycle made the db package crash with a TDZ error when reports.ts or takedowns.ts was imported first; the fix moves code without changing behaviour, and the new import-order tests catch the bug.
+
+---
+
+### 27 Oct 2026 · 12.2i budget overrun accepted · decided by lead · risk: low
+- Decided: accept 127 tool calls (harness count: Phase A 58, Phase B 69) against a budget of 90 (1.4x). The builders reported 26 and 32.
+- Why: both phases finished green on the first pass with no fix round; the extra calls went on full dependents gate runs on a loaded machine.
+
+---
+
+### 27 Oct 2026 · 12.2i stale comment in the reports handler left as is · decided by lead · risk: low
+- Decided: leave the CATEGORY_EXCERPT comment in apps/web/app/api/sessions/[id]/reports/handlers.ts (it says "the route's own category enum", which now comes from @edmate/db) for the next change that touches the file.
+- Why: wording only, no behaviour change; not worth a fix round.
+
+---
+
+### 27 Oct 2026 · 6.3a parked behind a new task 6.3c · decided by lead · risk: medium
+- Decided: 6.3a (teacher-approved mistake tags) goes back to todo and now depends on a new task, 6.3c, which wires classifyMistakeTags and learnerRepo.applyMistakes into graded practice turns after 6.4a. The 6.3a plan stays in docs/tasks/6.3a/plan.md for later. Also added 0.20f for the harness timing tests that still flake after 0.20d (91.43 against 64 on PR #369).
+- Why: the 6.3a planner found that nothing in production calls the classifier or applyMistakes, so a proposals table would have no producer. 6.3c and 6.4a both hook into graded practice answers, so 6.3c follows 6.4a.
+
+### 27 Oct 2026 · 6.3b prettier reformatted the whole of `profile-store.int.test.ts` · decided by builder · risk: low
+- Decided: ran `prettier --write` on the file (as the gate requires `prettier --check` to pass)
+  rather than hand-formatting only the new test bodies; this rewrote every existing `it(...)`
+  call in the file from an explicit multi-line `it(\n'desc',\nasync () => {...},\n15_000,\n)`
+  shape to prettier 3.9.10's own single-line-where-it-fits shape — a large diff, but no behaviour
+  change (confirmed: all pre-existing tests in the file still pass, 23/23). The file already
+  failed `prettier --check` before this task touched it (pre-existing drift, not introduced
+  here); fixing only my own additions by hand would have left the file still failing the check.
+- Why: the gate names `prettier --check` on changed files as a required command; the only way to
+  make it pass on this file, given its pre-existing drift, is a full-file `--write`.
+risk: low
+
+---
+
+### 27 Oct 2026 · 6.3b caps and re-check implemented as planned · decided by builder · risk: low
+- Decided: shipped `MAX_MISTAKES_PATCH_LENGTH = 50`, `MAX_MISTAKES_ENTRIES = 200`, required
+  `allowedTags`, and reject-whole-write (`'limit'`, no truncation) exactly as the plan's Q1/Q2/Q3
+  and the lead's answers specified — no deviation.
+- Why: the lead's answers in the plan closed all three open questions before the build started.
+risk: low
+
+---
+
+### 27 Oct 2026 · 6.3b `applyMistakes`'s signature and logic change in `learner.ts` (risky path) · decided by builder · risk: high
+- Decided: shipped the new `allowedTags` parameter, the patch-length cap and the stored-array
+  cap in `packages/db/src/repositories/learner.ts` (and its `index.ts` export), a
+  `packages/db/src/repositories/**` risky path (security-reviewer group).
+- Why: the merge gate's rule requires `risk: high` for any change to this path regardless of the
+  change's actual size; reviewers for this PR: security-reviewer, code-reviewer,
+  typescript-reviewer, database-reviewer (per the plan).
+risk: high
+
+---
+
+### 27 Oct 2026 · 6.3b `applyMistakes` takes a required `allowedTags` and enforces the caps · decided by lead · risk: high
+- Decided: approve the `learner.ts` change (a risky path): `applyMistakes(scope, patch, allowedTags)` rejects an off-list tag (`scope`), a patch over `MAX_MISTAKES_PATCH_LENGTH` (50, `invalid`) and a stored list over `MAX_MISTAKES_ENTRIES` (200, `limit`, whole write rolled back). `allowedTags` is a list the caller supplies and trusts; it is not looked up for the teacher.
+- Why: security, database, code and typescript reviewers all approved; the scope check on (teacher, student) is unchanged, so a wrong list can only reject or accept tags inside the caller's own row. No production caller exists yet. The first real caller must pass the teacher's style-card `mistakeTags` (noted for 6.3a).
+
+---
+
+### 27 Oct 2026 · 6.3b budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (69 harness tool calls against a plan budget of 45; the builder reported 32).
+- Why: the plan was delivered in full; most of the extra calls went to the full db gate and the prettier reformat of a non-compliant test file.
+
+---
+
 ### 27 Oct 2026 · 8.2p budget overrun · decided by lead · risk: low
 - Decided: accept the overrun (86 harness tool calls against a plan budget of 30; the builder reported 34).
 - Why: the index, the comment-only 0040 migration, its POST_MIGRATE_STEPS entry, the hand-made snapshot and journal, and the EXPLAIN test all landed as planned; the full db gate and its dependent CLI flake check account for most of the extra calls, and both reviewers approved with no findings.

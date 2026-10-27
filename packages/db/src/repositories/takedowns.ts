@@ -4,8 +4,10 @@
 // - `target` is `document:<id>` or `agent:<id>`; `reason` is one REPORT_CATEGORIES category;
 //   `status` is `active` or `lifted`. At most one active takedown per target, serialised by the
 //   target row's lock (there is no unique index, so no migration).
-// - A document takedown is a filter, not a delete (12.2 Q4): `notTakenDown` below is the only
-//   place that writes the predicate. retrieval.ts adds it to `rank()`'s one scope fragment (text,
+// - A document takedown is a filter, not a delete (12.2 Q4): `notTakenDown` (re-exported here
+//   from `./takedown-predicate.js`, task 12.2i — a leaf module with no back-edge to chunks.ts,
+//   so importing this file or reports.ts first can never hit a TDZ error) is the only place that
+//   writes the predicate. retrieval.ts adds it to `rank()`'s one scope fragment (text,
 //   vector and term stats) and to `material()` (leakCheck's locked index); chunks.ts adds it to
 //   `listForModule` (the outline drafter). The chunks stay, so a lift brings them back, and a
 //   replace of the same document id can't. Create and lift bump the teacher's material revision,
@@ -31,8 +33,7 @@
 //
 // Repeat infringers (task 12.3b): `countUpheld` is a read only, with no caller and no threshold
 // yet (enforcement is 12.3d, next to B-12's strike policy). It takes no lock.
-import { and, desc, eq, getTableName, or, sql, type SQL } from 'drizzle-orm';
-import type { PgColumn } from 'drizzle-orm/pg-core';
+import { and, desc, eq, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { lockRole } from '../role-lock.js';
@@ -59,8 +60,9 @@ import {
   toStaffTakedownRow,
 } from './map.js';
 import { IdSchema, parseArg, type TeacherScope, teacherScope } from './scope.js';
+import { notTakenDown } from './takedown-predicate.js';
 
-export { TAKEDOWN_KINDS, type StaffTakedownRow, type TakedownKind };
+export { notTakenDown, TAKEDOWN_KINDS, type StaffTakedownRow, type TakedownKind };
 
 /** The staff list shows at most this many active takedowns, newest first. */
 export const TAKEDOWNS_ACTIVE_MAX_LIMIT = 200;
@@ -80,20 +82,6 @@ export type TakedownCreateInput = z.infer<typeof CreateInput>;
 
 const LiftInput = z.strictObject({ note: Note.optional() });
 export type TakedownLiftInput = z.infer<typeof LiftInput>;
-
-const qualified = (c: PgColumn): SQL =>
-  sql`${sql.identifier(getTableName(c.table))}.${sql.identifier(c.name)}`;
-
-/**
- * The one takedown predicate: true when the document whose id is in `documentId` has no active
- * takedown. Every column is qualified by hand, so the outer column can never bind to a takedowns
- * column inside the subquery. It probes `takedowns_target_idx` (target equality).
- */
-export function notTakenDown(documentId: PgColumn): SQL {
-  return sql`not exists (select 1 from ${sql.identifier(getTableName(takedowns))} where ${qualified(
-    takedowns.target,
-  )} = 'document:' || ${qualified(documentId)} and ${qualified(takedowns.status)} = 'active')`;
-}
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 

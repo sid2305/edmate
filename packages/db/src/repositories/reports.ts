@@ -35,7 +35,7 @@ import {
 } from './map.js';
 import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
 import { ownSession } from './sessions.js';
-import { notTakenDown } from './takedowns.js';
+import { notTakenDown } from './takedown-predicate.js';
 
 export { REPORT_CATEGORIES, REPORT_CITED_DOCUMENTS_MAX, type ReportCategory, type StaffReportRow };
 

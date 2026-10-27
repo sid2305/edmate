@@ -219,18 +219,71 @@ describe('Google sign-in through Auth.js', () => {
     expect(t.jar.values.has(SESSION_COOKIE)).toBe(false);
   });
 
-  it('does not link a new Google account to an existing email (no dangerous linking)', async () => {
+  it('1.4c: links Google to an existing user who signed up by link, once both sides are verified', async () => {
+    const existing = await t.identity.createStudent({
+      email: 'asha.student@example.test',
+      // The shape a link sign-up leaves behind: emailVerifiedAt set, no Google account yet.
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      name: 'Existing',
+    });
+    const { callback } = await t.signIn();
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get('location')).toBe(`${ORIGIN}/`);
+    expect(t.identity.users.size).toBe(1);
+    expect((await principalOf(t.identity, t.jar))?.userId).toBe(existing.id);
+    expect(t.identity.linked).toEqual([
+      {
+        userId: existing.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: 'google-sub-123',
+      },
+    ]);
+    expect(t.identity.accounts.size).toBe(1);
+  });
+
+  it('1.4c: an existing user whose email is not verified refuses the Google sign-in; nothing links (fails signIn, before the first signIn redirect)', async () => {
     await t.identity.createStudent({
       email: 'asha.student@example.test',
       emailVerifiedAt: null,
       name: 'Existing',
     });
     const { callback } = await t.signIn();
-    expect(callback.headers.get('location')).toContain('error=OAuthAccountNotLinked');
+    expect(callback.headers.get('location')).toContain('/api/auth/error?error=AccessDenied');
     expect(t.identity.accounts.size).toBe(0);
     expect(t.identity.sessions.size).toBe(0);
-    // The logger printed the error name only, never the email.
     expect(t.logs.join('\n')).not.toMatch(/asha|example\.test/i);
+  });
+
+  it("1.4c: Google's own email not verified still refuses before any lookup (unchanged)", async () => {
+    await t.identity.createStudent({
+      email: 'asha.student@example.test',
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      name: 'Existing',
+    });
+    t.google.user = verifiedUser({ email_verified: false, sub: 'google-sub-unverified' });
+    const { callback } = await t.signIn();
+    expect(callback.headers.get('location')).toContain('/api/auth/error?error=AccessDenied');
+    expect(t.identity.accounts.size).toBe(0);
+  });
+
+  it('1.4c: a second Google account cannot claim an already-linked address', async () => {
+    const existing = await t.identity.createStudent({
+      email: 'asha.student@example.test',
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      name: 'Existing',
+    });
+    await t.identity.linkAccount({
+      userId: existing.id,
+      type: 'oidc',
+      provider: 'google',
+      providerAccountId: 'g-a',
+    });
+    // A different Google sub, same email: refused, no second account linked.
+    t.google.user = verifiedUser({ sub: 'g-b' });
+    const { callback } = await t.signIn();
+    expect(callback.headers.get('location')).toContain('/api/auth/error?error=AccessDenied');
+    expect(t.identity.accounts.size).toBe(1);
   });
 
   it('a bad authorization code fails the callback without a session', async () => {
