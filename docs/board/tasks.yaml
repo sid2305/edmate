@@ -593,10 +593,31 @@ tasks:
   accept: a user who signed up by link can then sign in with Google on the same verified address; an unverified Google email never links; auth tests pass
   deps:
   - '1.4'
-  status: running
+  status: done
   risk: risky
   branch: m13/1.4c-google-link
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 676
+    tokens_in: 2366
+    tokens_out: 208207
+    cache_read_tokens: 92736218
+    wall_time_seconds: 5601
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: '1.5'
   milestone: M1
   title: 'Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions'
@@ -2521,9 +2542,10 @@ tasks:
   accept: a production worker or web with missing or dev storage config refuses to start ingest or uploads and logs only a code; no orphan uploading row after a signing failure.
   deps:
   - '8.2'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/8.2a-storage-hardening
   risk: risky
+  model: plan:sonnet build:sonnet
 - id: 5.10b
   milestone: M13
   title: '5.10 review follow-ups: teacherQuestions.answer locks the group rows in one id-ordered statement (no 40P01 deadlock between two answers in one group) and takes the agent lock first like open;
@@ -8336,8 +8358,9 @@ tasks:
   deps:
   - 11.4b
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/11.4d-ffmpeg-chunker
+  model: plan:sonnet
 - id: 8.2n
   milestone: M13
   title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words;
@@ -10764,3 +10787,36 @@ tasks:
   status: running
   branch: m13/0.20f-harness-timing-flake
   model: plan:lead build:sonnet review:sonnet
+- id: 8.2q
+  milestone: M13
+  title: 'Upload-centre race, retry and quota hardening (deferred from 8.2a, see docs/tasks/8.2a/plan.md): complete compares storageKey before setting processing (409 on mismatch, like failIfStorageKey);
+    dropObject retries a failed S3 delete 2-3 times before logging; create gets a per-teacher rate limit like addLink'
+  accept: a replace during complete answers 409 and leaves the row unchanged; a failed S3 delete is retried before it is logged; create past the limit answers 429; web and db tests green.
+  deps:
+  - 8.2a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 8.2r
+  milestone: M13
+  title: 'Documents list index and 0017 validate-at-scale hygiene (deferred from 8.2a): composite index (teacher_id, created_at desc, id desc) for documents.listForTeacher, and a new migration that re-adds
+    documents_failure_reason_only_when_failed as NOT VALID then VALIDATE CONSTRAINT'
+  accept: the new migration applies cleanly on a fresh and a migrated database; listForTeacher uses the composite index (EXPLAIN in a db int test or the handoff); db tests green.
+  deps:
+  - 8.2a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 11.4i
+  milestone: M13
+  title: 'After 11.4d: lift apps/web''s 24 MB cap (MAX_UNSPLIT_MEDIA_BYTES) for audio/mp4, video/mp4 and video/webm now that the worker chunks them with ffmpeg; re-check the 15-minute searchable budget
+    for a long video; a human builds the worker image once and records whether its ffmpeg is a GPL or LGPL build (swap to the ADR''s LGPL-only fallback if needed)'
+  accept: a teacher can upload an MP4, WebM or M4A over 24 MB and it becomes searchable; the ffmpeg build's licence is recorded in the handoff; web tests green.
+  deps:
+  - 11.4d
+  risk: low
+  status: todo
+  branch: null
+  model: null

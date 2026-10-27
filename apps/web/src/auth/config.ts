@@ -160,6 +160,15 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
         // A blocked erase (fix round 1) deletes the linked account row along with every other
         // sign-in row, so the account must also be found by email to be refused by id.
         const owner = linkedOwner ?? (await identity.getUserByEmail(googleEmail));
+        // 1.4c: a Google sign-in whose email matches an existing, not-yet-linked user may link
+        // (allowDangerousEmailAccountLinking is on below) only if both sides are verified: the
+        // existing user reached emailVerifiedAt only through the email-link flow (Google never
+        // sets it), and that user has no other Google account already bound. Either failing
+        // refuses the sign-in before @auth/core ever calls linkAccount.
+        if (!linkedOwner && owner) {
+          if (!owner.emailVerifiedAt) return false;
+          if (await identity.hasLinkedAccount(owner.id, 'google')) return false;
+        }
         if (owner && (await isAgeBlocked(identity, owner.id))) return false;
         const current = await currentPrincipal(deps.request.cookies);
         if (!current) return true;
@@ -195,7 +204,13 @@ function providers(deps: AuthConfigDeps): NextAuthConfig['providers'] {
       Google({
         clientId: env.google.id,
         clientSecret: env.google.secret,
-        allowDangerousEmailAccountLinking: false,
+        // 1.4c (replaces part of the 1.3 decision): true, so @auth/core's own account-resolution
+        // step (which runs before our signIn callback, and would otherwise throw
+        // OAuthAccountNotLinked right there) doesn't refuse an email match before Edmate's own
+        // check gets a say. The flag only changes when @auth/core is willing to try; the signIn
+        // callback above is what decides whether the link is allowed (verified on both sides, no
+        // existing different Google account) — it is the only gate that actually matters.
+        allowDangerousEmailAccountLinking: true,
         // Auth.js defaults to PKCE only; state and nonce add CSRF and replay protection.
         checks: ['pkce', 'state', 'nonce'],
         // Only these fields reach createUser (no photo). Auth.js itself passes emailVerified: null

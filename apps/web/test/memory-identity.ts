@@ -139,6 +139,12 @@ export function memoryIdentity(
       const u = id ? users.get(id) : undefined;
       return u ? { ...u } : null;
     },
+    async hasLinkedAccount(userId, provider) {
+      for (const [k, id] of accounts) {
+        if (id === userId && k.startsWith(`${provider}:`)) return true;
+      }
+      return false;
+    },
     async markEmailVerified(userId, at) {
       const u = users.get(userId);
       if (!u) throw new Error('identity.markEmailVerified: not_found');

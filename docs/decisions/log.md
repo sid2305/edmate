@@ -10,6 +10,74 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 1.4c Google sign-in links to an existing email-verified user; Google's own dangerous-linking flag is on, gated entirely by Edmate's own check · decided by builder · risk: high
+
+- Decided:
+  - **Flag.** The Google provider's `allowDangerousEmailAccountLinking` changes from `false` (1.3)
+    to `true`. This is necessary, not cosmetic: in the installed `@auth/core` 0.41.3, the `signIn`
+    callback (`handleAuthorized`, `lib/actions/callback/index.js:63`) runs **before**
+    `handleLoginOrRegister` (`:70`), which is where the email-match lookup or the
+    `OAuthAccountNotLinked` throw happens (`handle-login.js:236-250`). With the flag `false`, that
+    throw fires regardless of what `signIn` would have returned, so the flag must be `true` for
+    linking to ever be possible; because `signIn` runs first, refusing there stops the link before
+    any row is written — confirmed directly against the real handlers in `flow.test.ts`'s new
+    cases (not just inferred).
+  - **The real gate.** The `signIn` callback refuses the sign-in (returns `false`, same as every
+    other refusal in this callback) unless: Google reports `email_verified: true` (already true
+    since 1.3) **and** the existing user this email belongs to already has `emailVerifiedAt` set
+    (only ever true today for a user who verified by the email-link flow) **and** that user has no
+    other `google` account already linked (`identity.hasLinkedAccount`, new). Any one of those
+    failing refuses the sign-in and links nothing; `@auth/core` never gets to call `linkAccount` in
+    that case.
+  - **Why this is "narrow", not "flip and hope".** The flag alone (Auth.js's documented "dangerous"
+    default) links by email with no verification at all. Edmate never relies on that: every path
+    that could reach `linkAccount` must first pass the three checks above, which is the officially
+    recommended mitigation for this exact flag — the flag only changes *when `@auth/core` is
+    willing to try*, Edmate's callback decides *whether it's allowed to*.
+  - **Unaffected.** The email magic-link provider's own branch of `signIn`; the shared-device
+    check; the under-age block; a returning Google user (resolved by `getUserByAccount`, never
+    reaching the new block) — all re-run unmodified in this build and still pass.
+- Why: this is the only point in `next-auth@5.0.0-beta.32`'s OAuth callback lifecycle where
+  Edmate's own code can decide whether a by-email link is trustworthy; the three-part check
+  (verified on both sides, no existing different link) is exactly the acceptance criteria and
+  mirrors README rule 7's existing data-layer invariant, made explicit and tested instead of left
+  to a driver-error. This decision replaces the Google-provider bullet of the 18 Oct 2026 1.3 entry
+  in `docs/decisions/log.md`.
+- Alternatives:
+  - Keep the flag `false` and try to link inside the callback: rejected, the throw happens earlier
+    in the lifecycle than the callback runs, so there's nothing left for Edmate's code to prevent.
+  - Allow linking on Google's `email_verified` alone, ignoring the existing user's own verification
+    state: rejected, it would let an attacker's freshly-created, Google-verified account silently
+    annex any pre-existing, never-verified Edmate user at that address.
+  - A Better-Auth-style custom OAuth flow: an ADR-level change to the tech stack, out of proportion
+    to this task.
+- Reversible: yes. The flag and the `signIn` block both sit in `createAuthConfig`; reverting to
+  1.3's behaviour is a two-line change with no data migration (no schema change in this task at
+  all).
+
+No further decisions beyond the plan's draft; the plan's open questions (Q1-Q5) and the lead's
+answers were followed as given, with no deviation.
+
+---
+
+### 27 Oct 2026 · 1.4c approve Google linking to a verified email-link account · decided by lead · risk: high
+- Decided: merge 1.4c. This replaces the Google-provider part of the 1.3 decision (18 Oct 2026) that kept `allowDangerousEmailAccountLinking` false. The flag is now true on the Google provider only, and Edmate's `signIn` callback refuses the link unless Google reports `email_verified` true, the existing user's `emailVerifiedAt` is set, and that user has no Google account linked yet. The email-link provider is unchanged.
+- Why: the lead and the security reviewer checked the installed `@auth/core` 0.41.3 and confirmed that `signIn` runs before `handleLoginOrRegister` links anything, so a refusal writes nothing; flow tests against the real handlers prove the linked same-user case and every refusal. The unique `(user_id, provider)` index backs the app check. Security, database, code and typescript reviewers approved with LOW notes only.
+
+---
+
+### 27 Oct 2026 · 1.4c review LOWs left as is · decided by lead · risk: low
+- Decided: wontfix the three review LOWs: in `apps/web/src/auth/config.ts`, no Google self-link while signed in (the shared-device rule), and `hasLinkedAccount` not try/caught; in `packages/db/src/identity/store.ts`, the `sql\`1\`` select style.
+- Why: each fails closed or is style only, and each matches the existing pattern in its file; none is a takeover path.
+
+---
+
+### 27 Oct 2026 · 1.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 99 tool calls (harness count: build 53, CI coverage fix 46) against a budget of 55 (1.8x).
+- Why: the build itself came in under budget; the overrun is one CI fix round for a coverage gap (src/auth/** must stay at 100% statements), mostly a full web coverage run on a loaded machine. The lesson for briefs: auth tasks run the coverage gate locally before pushing.
+
+---
+
 ### 27 Oct 2026 · 12.2i apps/web/app/staff/reports/client.ts change · decided by builder · risk: high
 - Decided: `client.ts` is in `apps/web/app/staff/**`, a risky path per `risk-paths.txt`; this PR
   needs security-reviewer (named group) plus the task's own named reviewer set
