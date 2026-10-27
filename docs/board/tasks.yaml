@@ -3993,7 +3993,7 @@ tasks:
 - id: 7.2v
   milestone: M13
   title: 'Stale source citations (7.2s Phase J review): the Phase C pedagogy cases cite build-plan lines 350-365 and 513, which now hold the turn-pipeline table and a payments row; re-point each source
-    line at the right build-plan or content/demo-teacher line'
+    line at the right build-plan or content/demo-teacher line; also rename pedagogy-hint-first-plums-default-en.yaml (and its id) to match its dict-key-overwrite trick (7.2s fix round 1)'
   accept: every evals/suites/pedagogy case source line points at the line it means; evals tests green.
   deps:
   - 7.2s
@@ -4009,9 +4009,29 @@ tasks:
   deps:
   - 12.3d
   risk: risky
-  status: running
+  status: done
   branch: m13/12.3g-repeat-infringer-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 58
+    tokens_in: 214
+    tokens_out: 22330
+    cache_read_tokens: 5445209
+    wall_time_seconds: 281
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 7.4c
   milestone: M7
   title: 'Per-scope gate deadline (7.2 plan risk): GATE_DEADLINE_MS is 15 minutes for every scope, but a live first-publish or prompt-pack gate takes about 45-80 minutes and fails closed; give each change
@@ -11249,6 +11269,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 1.4g
+  milestone: M13
+  title: 'Test flake: apps/web src/auth/index.test.ts:524 "linkBindingCookie: an HMAC of the address under AUTH_SECRET" compares the HMAC of two calls that each stamp Date.now(), so it fails when the clock
+    ticks between them (failed PR #398 CI, 27 Oct 2026); pass a fixed now or use fake timers. Test-only change.'
+  accept: the test pins the time (fake timers or an explicit now) and passes 50 repeated runs; no change to src/auth/confirm.ts behaviour.
+  deps: []
+  risk: risky
+  status: running
+  branch: m13/1.4g-link-cookie-clock
+  model: plan:lead build:sonnet
 - id: 0.20g
   milestone: M13
   title: 'e2e flake: apps/web e2e/chat.spec.ts:43 "normal: a message gets a streamed, then final, reply" times out waiting for "Hello there!" (5 s) on the first chat test of the run; failed on PR #369 and

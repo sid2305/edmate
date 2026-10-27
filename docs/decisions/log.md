@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 12.3g staff route follow-ups approval · decided by lead · risk: high
+- Decided: approve the changes under apps/web/app/api/staff/** (repeat-infringers/handlers.ts, route.test.ts and verifications/handlers.ts) for merge. security-reviewer approved with no findings: the optional pre-fetched takedown list only ever comes from the same request's staff-scoped read, and the /api/staff/verifications callers are unchanged.
+- Why: it closes the three 12.3d review LOWs with no behaviour change beyond one fewer database read per request.
+
+---
+
 ### 27 Oct 2026 · 12.3d repeat-infringer flag approval · decided by lead · risk: high
 - Decided: approve the new staff-only GET route under apps/web/app/api/staff/repeat-infringers/** and the page under apps/web/app/staff/repeat-infringers/** (risk groups apps/web/app/api/staff/** and apps/web/app/staff/**) for merge. security-reviewer approved with no findings: staff-only through withRole and ROUTE_POLICY, no new write path, the same data the verification queue already shows, bounded lists. code-reviewer approved with three LOWs, deferred to 12.3g.
 - Why: it carries out the human's B-63 answer with no table, column or contracts change; "suspend" is the existing reject path (B-46), so current students keep access unless staff tick the existing safety-concern box.
