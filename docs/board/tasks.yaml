@@ -2987,9 +2987,9 @@ tasks:
   - 6.4a
   - 6.3b
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.3c-mistake-tagging
+  model: plan:sonnet build:sonnet
 - id: 6.2a
   milestone: M13
   title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
@@ -10930,6 +10930,18 @@ tasks:
     suite'
   accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
   deps: []
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 11.4j
+  milestone: M13
+  title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
+    add an error listener to the drained stdout/stderr streams; keep the error name (not content) when a run() failure is mapped to a validation error, so a missing binary differs from bad input; make the
+    oversized-output test count reads instead of checking the directory after cleanup'
+  accept: each item is fixed with a test; @edmate/worker typecheck, lint and test green.
+  deps:
+  - 11.4d
   risk: low
   status: todo
   branch: null
