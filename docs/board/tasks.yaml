@@ -11218,6 +11218,6 @@ tasks:
   deps:
   - 11.4j
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4k-chunker-comments
+  model: plan:lead build:sonnet
