@@ -62,6 +62,14 @@ Status: DONE
   mechanical (no behaviour change to any existing method), scoped to exactly what the interface
   change required.
 
+### 26 Oct 2026 · 13.4d budget overrun · decided by lead · risk: low
+- Decided: accept 78 tool calls against a budget of 45 (1.7x). The work is complete, and all four reviewers approved it.
+- Why: the extra calls went on two forced follow-ups (the test fake and the scope grid), on a prettier pass, and on re-running tests around flakes from the shared dev Postgres. A re-run would cost more than it saves.
+
+### 26 Oct 2026 · 13.4d merge of identity/store.ts and repositories/subscriptions.ts · decided by lead · risk: high
+- Decided: merge. This touches packages/db/src/repositories/subscriptions.ts (a risk path) plus identity/store.ts. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved it. The account export now lists every consent and every subscription the student ever had (B-59 point 5), scoped to the signed-in student.
+- Why: both new reads filter by the student id, use explicit column lists, and are called only with the principal's own id. The two MEDIUM findings (duplicate teacher entries when a student re-subscribes, and the unchecked grantedBy cast) are deferred to 13.4e.
+
 ## Gate
 
 - `export TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate && corepack pnpm turbo run typecheck lint test --filter=@edmate/db --filter=@edmate/web`
@@ -78,4 +86,4 @@ Status: DONE
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 44
+Tool calls used: 78 (harness count; the builder reported 44)
