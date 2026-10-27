@@ -7024,6 +7024,17 @@ tasks:
   risk: high
   status: todo
   branch: null
+- id: 7.2m
+  milestone: M13
+  title: 'B-50 (human, 26 Oct 2026): threats to hurt others and weapons-to-school messages also raise a staff alert (kind misuse, level critical) in the 12.5 inbox, as well as the calm refusal. Route the
+    moderation guard''s threat and weapons rules to an alert like distress and abuse do; near-miss guard (a history essay about a school shooting, a game) stays alert-free; safety eval cases for both'
+  accept: harness guard test shows the threat and weapons rules raise a critical misuse alert and the near misses do not; the safety suite gains the cases; harness, worker and evals green.
+  deps:
+  - 7.2h
+  risk: high
+  status: running
+  branch: m13/7.2m-threat-alerts
+  model: plan:sonnet build:sonnet
 - id: 9.1c
   milestone: M13
   title: '9.1a review LOW: /teacher scores exactly the 95 Lighthouse accessibility threshold in apps/web/test/lighthouse-a11y.test.ts; find what costs the points and fix it so a one-point drift does not
@@ -7095,8 +7106,9 @@ tasks:
   deps:
   - '13.4'
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/13.4b-account-export-delete
+  model: plan:lead build:sonnet
 - id: 13.4c
   milestone: M13
   title: '13.4 Phase B review follow-ups (before retention leaves dry run): apps/worker/src/retention/workers.ts purgeTable logs the rows already deleted when a later call fails, and passes purgeLimit into
@@ -7919,9 +7931,30 @@ tasks:
   deps:
   - 11.4e
   risk: low
-  status: running
+  status: done
   branch: m13/11.4h-document-class-fk
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 292
+    tokens_in: 1000
+    tokens_out: 81336
+    cache_read_tokens: 38131263
+    wall_time_seconds: 2707
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.7o
   milestone: M13
   title: '8.7m security review follow-up: the EMAIL regex in packages/db/src/repositories/redact-json.ts (unchanged since before 8.7m) is quadratic on adversarial input such as ''a1_''.repeat(N), about
@@ -8805,9 +8838,30 @@ tasks:
   deps:
   - 3.9c
   risk: low
-  status: running
+  status: done
   branch: m13/3.9e-warmup-trace
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 292
+    tokens_in: 1018
+    tokens_out: 75695
+    cache_read_tokens: 30736145
+    wall_time_seconds: 2569
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 3.9f
   milestone: M13
   title: 'CLI chat on the db retrieval index (deferred from 3.9a, 3.9 Q3): switch apps/cli edmate chat from the lexical retrieval index to the db-backed retrieval index, then re-test the reported same-topic
@@ -8816,7 +8870,9 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: todo
+  status: running
+  branch: m13/3.9f-cli-db-retrieval
+  model: plan:sonnet build:sonnet
 - id: 3.9g
   milestone: M13
   title: '3.9a review LOWs: apps/cli/src/commands/chat.test.ts SIGINT test asserts process.listenerCount(''SIGINT'') is back to its baseline after the run; apps/cli/src/commands/chat.ts does not print a
@@ -8825,7 +8881,28 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: todo
+  status: done
+  branch: m13/3.9g-cli-sigint-lows
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 16
+    tokens_in: 62
+    tokens_out: 1891
+    cache_read_tokens: 494614
+    wall_time_seconds: 502
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
@@ -8834,9 +8911,30 @@ tasks:
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/3.9a-cli-chat-followups
+  metrics:
+    tool_calls: 570
+    tokens_in: 2014
+    tokens_out: 166238
+    cache_read_tokens: 73252476
+    wall_time_seconds: 3255
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against
@@ -9173,12 +9271,14 @@ tasks:
 - id: 9.3m
   milestone: M13
   title: 'Staff see a teacher''s subject-edit history (each subject change with its date) on the verification queue and lookup rows. Subject edits are not audited today: teacherProfiles.update() would write
-    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). Waits on B-58; design start in docs/tasks/9.3k/plan.md.'
+    a teacher.subject audit row (before/after subject only) in its single statement, plus a staff read audit.findSubjectHistoryForStaff (last N). B-58 answered (human, 26 Oct 2026): audit each subject edit,
+    show staff the last 10 changes; design start in docs/tasks/9.3k/plan.md.'
   accept: editing a subject writes one teacher.subject audit row; a staff view test shows a teacher's past subject changes on a queue row; db and web typecheck, lint and test green.
   deps:
   - 9.3k
   risk: high
-  status: blocked
+  status: todo
+  branch: null
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx

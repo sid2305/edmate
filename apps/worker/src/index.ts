@@ -34,7 +34,7 @@ import {
 import { createRetentionWorker, RETENTION_QUEUE, scheduleRetention } from './retention/index.js';
 import { createWorkerWebFetcher, WebLinkConfigError } from './webLink/index.js';
 import type { WebFetcher } from '@edmate/ingest';
-import { describeError, jsonLog } from './log.js';
+import { describeError, jsonLog, logGuardWarmupFailures } from './log.js';
 import { storageConfigFromEnv } from './storage/roundtrip.js';
 import { createStorageClient } from './storage/client.js';
 import { createNoopWorker } from './worker.js';
@@ -54,8 +54,11 @@ const alertQueue = new Queue(ALERT_QUEUE, { connection });
 // starts, so a freshly started process's first turn does not pay the cold regex-compile cost
 // against preGuard's budget. Pure, synchronous CPU work; must not throw out of module scope (that
 // would crash the process), so it is caught here like every other startup error in this file.
+// 3.9e (3.9c review LOW): warmPreGuardPatterns() itself never throws -- it returns the names of
+// any matchers that failed instead, so a failure that would otherwise leave no trace is logged
+// (logGuardWarmupFailures, apps/worker/src/log.ts).
 try {
-  warmPreGuardPatterns();
+  logGuardWarmupFailures(warmPreGuardPatterns(), log);
 } catch (error) {
   log({ level: 'error', event: 'guard_warmup.failed', error: describeError(error) });
 }

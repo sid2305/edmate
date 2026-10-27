@@ -51,7 +51,17 @@ async function warmPool(): Promise<void> {
 
 function warmGuardPatterns(): void {
   import('@edmate/harness')
-    .then(({ warmPreGuardPatterns }) => warmPreGuardPatterns())
+    .then(({ warmPreGuardPatterns }) => {
+      // Task 3.9e (3.9c review LOW): warmPreGuardPatterns() never throws -- it returns the names
+      // of any matchers that failed instead, so a failure that would otherwise leave no trace is
+      // logged here (names only, never the sample text or an error).
+      const failedMatchers = warmPreGuardPatterns();
+      if (failedMatchers.length > 0) {
+        console.error(
+          `[instrumentation] guard warm-up matcher failed: ${failedMatchers.join(',')}`,
+        );
+      }
+    })
     .catch((error: unknown) => {
       console.error(`[instrumentation] guard warm-up failed: ${errorName(error)}`);
     });

@@ -1,6 +1,15 @@
 // Data model rows: courses / modules / topics, documents / chunks, style_cards, corrections.
 import { sql } from 'drizzle-orm';
-import { bigint, check, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  check,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import {
   chunkKind,
   documentStatus,
@@ -87,7 +96,7 @@ export const documents = pgTable(
      * The teacher's own live class this document records (task 11.4a); null for any other upload.
      * `ON DELETE SET NULL`: deleting a class unlinks its recordings, it never blocks or removes them.
      */
-    liveClassId: text('live_class_id').references(() => liveClasses.id, { onDelete: 'set null' }),
+    liveClassId: text('live_class_id'),
     ...timestamps(),
   },
   (t) => [
@@ -100,6 +109,19 @@ export const documents = pgTable(
       'documents_failure_reason_only_when_failed',
       sql`${t.failureReason} is null or ${t.status} = 'failed'`,
     ),
+    // A linked class must belong to the same teacher (task 11.4h): composite FK against
+    // live_classes' (teacher_id, id) unique index, same shape as sessions_package_version_fk
+    // (schema/learning.ts) referencing package_versions' unique (package_id, version) index.
+    // The migration's hand-edited SQL uses the column-list form, `ON DELETE SET NULL
+    // ("live_class_id")` (Postgres 15+), so only live_class_id is nulled on delete, not
+    // teacher_id (which is NOT NULL) -- drizzle-orm's `.onDelete()` can't express a column
+    // list, so `.onDelete('set null')` here is schema-only bookkeeping for `db:generate`'s
+    // no-op check; the deployed clause is in the migration file, not generated from this.
+    foreignKey({
+      name: 'documents_teacher_id_live_class_id_live_classes_fk',
+      columns: [t.teacherId, t.liveClassId],
+      foreignColumns: [liveClasses.teacherId, liveClasses.id],
+    }).onDelete('set null'),
   ],
 );
 

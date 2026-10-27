@@ -8,7 +8,8 @@
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import type { ModelGateway, TurnEvent, TurnInput } from '@edmate/contracts';
-import { defaultSteps, PersonaStartPayloadSchema, runTurn } from '@edmate/harness';
+import { cancelSource, defaultSteps, PersonaStartPayloadSchema, runTurn } from '@edmate/harness';
+import { z } from 'zod';
 import type { CliIo } from '../cli.js';
 import { buildChatDeps, type ChatDepsOptions, type ChatSetup } from './chat/deps.js';
 import type { Env } from './chat/gateway.js';
@@ -85,6 +86,19 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** `--package`'s two accepted values (`chatTurnInput`'s `ids` carry no package; the pipeline
+ * reads it from `deps.entitlements`, built from `ChatDepsOptions.packageId`). */
+const PACKAGE_FLAG_SCHEMA = z.enum(['free', 'paid']);
+/** `--source`'s two accepted values (`ChatDepsOptions.source`, the pipeline's `entitlementSource`). */
+const SOURCE_FLAG_SCHEMA = z.enum(['teacher_preview', 'eval']);
+
+/** Every `TurnEvent['type']` this switch renders; `assertNever`'s `never` parameter fails to
+ * compile if a tenth variant is ever added to the contracts union without a case here (matching
+ * `apps/web/src/subscriptions/start.ts`'s own exhaustiveness guard, task 9.3b). */
+function assertNever(e: never, io: Pick<CliIo, 'stdout'>): void {
+  io.stdout(`\n[error: unknown event ${JSON.stringify(e)}]\n`);
+}
+
 /** Renders one `TurnEvent` to stdout. Exported for its own direct test. */
 export function renderEvent(e: TurnEvent, io: Pick<CliIo, 'stdout'>): void {
   switch (e.type) {
@@ -118,6 +132,8 @@ export function renderEvent(e: TurnEvent, io: Pick<CliIo, 'stdout'>): void {
     case 'done':
       io.stdout('\n');
       break;
+    default:
+      assertNever(e, io);
   }
 }
 
@@ -158,16 +174,18 @@ export async function runChatCommand(
     io.stderr(`edmate chat: unknown agent '${agentId}' (this demo has only '${CHAT_IDS.agent}')\n`);
     return 1;
   }
-  if (values.package !== 'free' && values.package !== 'paid') {
+  const packageFlag = PACKAGE_FLAG_SCHEMA.safeParse(values.package);
+  if (!packageFlag.success) {
     io.stderr(`edmate chat: --package must be 'free' or 'paid'\n\n${CHAT_USAGE}`);
     return 1;
   }
-  if (values.source !== 'teacher_preview' && values.source !== 'eval') {
+  const sourceFlag = SOURCE_FLAG_SCHEMA.safeParse(values.source);
+  if (!sourceFlag.success) {
     io.stderr(`edmate chat: --source must be 'teacher_preview' or 'eval'\n\n${CHAT_USAGE}`);
     return 1;
   }
-  const packageId: ChatPackageId = values.package;
-  const source = values.source;
+  const packageId: ChatPackageId = packageFlag.data;
+  const source = sourceFlag.data;
 
   let setup: ChatSetup;
   try {
@@ -176,6 +194,9 @@ export async function runChatCommand(
       market: 'global',
       packageId,
       source,
+      // Never a raw `console.error` in this command (task 3.9a follow-up): the loud
+      // unmetered-usage line goes through `io.stderr`, same as every other error line here.
+      log: (text) => io.stderr(`${text}\n`),
       ...(values.student === undefined ? {} : { evalStudentId: values.student }),
       ...(deps.gateway === undefined ? {} : { gateway: deps.gateway }),
       ...(deps.contentDir === undefined ? {} : { contentDir: deps.contentDir }),
@@ -199,26 +220,56 @@ export async function runChatCommand(
 
   let mode: ChatMode = { mode: 'normal' };
   const rl = createInterface({ input: stdin, terminal: false });
-  for await (const line of rl) {
-    const trimmed = line.trim();
-    if (trimmed === '') {
-      io.stdout('> ');
-      continue;
-    }
-    if (trimmed === 'exit') break;
+  // Ctrl+C mid-turn (3.9a follow-up): cancels the in-flight `runTurn` (if any) via its own
+  // `cancelSource`, then closes `rl` so the REPL loop ends and falls through to "bye" below,
+  // the same clean exit as "exit" or stdin closing. `currentCancel` is only set while a turn is
+  // running, so a SIGINT between turns just closes `rl`. `interrupted` is checked at the top of
+  // every iteration too: `rl.close()` stops *future* reads, but a line already sitting in
+  // readline's internal buffer (e.g. piped stdin that arrived all at once) can still be handed to
+  // an in-flight `for await` iteration, so the flag is this loop's own belt-and-suspenders check
+  // that no further turn is sent once Ctrl+C has been pressed.
+  let currentCancel: ReturnType<typeof cancelSource> | undefined;
+  let interrupted = false;
+  const onSigint = () => {
+    interrupted = true;
+    currentCancel?.cancel();
+    rl.close();
+  };
+  process.on('SIGINT', onSigint);
+  try {
+    for await (const line of rl) {
+      if (interrupted) break;
+      const trimmed = line.trim();
+      if (trimmed === '') {
+        io.stdout('> ');
+        continue;
+      }
+      if (trimmed === 'exit') break;
 
-    const next = chatTurnInput(mode, trimmed, setup);
-    mode = next.state;
-    if (next.notice !== undefined) io.stdout(`[${next.notice}]\n`);
-    const input = next.input;
-    if (input === undefined) {
-      io.stdout('> ');
-      continue;
+      const next = chatTurnInput(mode, trimmed, setup);
+      mode = next.state;
+      if (next.notice !== undefined) io.stdout(`[${next.notice}]\n`);
+      const input = next.input;
+      if (input === undefined) {
+        io.stdout('> ');
+        continue;
+      }
+      currentCancel = cancelSource();
+      const run = runTurn(input, {
+        deps: setup.deps,
+        steps: defaultSteps,
+        cancel: currentCancel.token,
+      });
+      for await (const event of run.events) renderEvent(event, io);
+      await run.finished;
+      currentCancel = undefined;
+      // 3.9g (typescript-review LOW): a turn cancelled by SIGINT goes straight to "bye" below,
+      // with no "> " prompt for a turn that was never really finished.
+      if (interrupted) break;
+      io.stdout('\n> ');
     }
-    const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
-    for await (const event of run.events) renderEvent(event, io);
-    await run.finished;
-    io.stdout('\n> ');
+  } finally {
+    process.off('SIGINT', onSigint);
   }
   rl.close();
   io.stdout('\nbye\n');

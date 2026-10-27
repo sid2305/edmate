@@ -10,6 +10,213 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · B-59 privacy rights for export, delete and retention · decided by human · risk: high
+- Decided: all five recommendations. (1) Retention periods are placeholders in the worker only, and the jobs stay in dry-run (report, don't delete) until counsel sets the numbers. (2) Account delete anonymises the user, their consents and message text; safety alerts, payments and the audit log stay. (3) A delete is held while a safety alert is open or a payment is disputed. (4) A parent asking on a minor's behalf is a separate task after the pilot. (5) One account-wide export across all teachers, on top of the per-teacher export.
+- Why: the lead's recommendation; it unblocks 13.4b.
+
+### 26 Oct 2026 · B-50 threats to hurt others raise a staff alert · decided by human · risk: high
+- Decided: threats to hurt others and weapons-to-school messages raise a critical misuse alert in the staff inbox, as well as the calm refusal. Board task 7.2m builds it.
+- Why: missing a real threat is the worse failure, and it fits the existing alert kinds.
+
+### 26 Oct 2026 · B-52 consent before uploading a class recording · decided by human · risk: high
+- Decided: a required checkbox ("Everyone heard in this recording agreed to it being used to teach, or I removed their parts") plus the hint to upload a transcript with students' names removed. 11.4 already ships this.
+- Why: cheap, and it puts the duty on the teacher in plain words while keeping recordings usable for the pilot.
+
+### 26 Oct 2026 · B-54 who pays for a 13-17 learner, and unused days on a takedown · decided by human · risk: high
+- Decided: at checkout the payer confirms they are 18+ or the learner's parent or guardian. When a takedown pauses a plan, the unused days are credited on resume, and refunded if the agent is not restored within 30 days.
+- Why: payment providers need an adult buyer; parent accounts are much more work. Feeds 10.3 and 10.8.
+
+### 26 Oct 2026 · B-58 teacher subject edits are audited · decided by human · risk: high
+- Decided: each subject edit writes an audit row (old and new subject only), and staff see the last 10 changes. 9.3m is unblocked.
+- Why: staff can spot a teacher who switches subjects to get past a rejection; no new personal data and no migration.
+
+### 26 Oct 2026 · B-55 number of parallel builders · decided by human · risk: medium
+- Decided: keep three builders at once (no shared packages), and drop to two once the week's usage passes about 70%.
+- Why: three builders merged more with no file clashes, but on 23 Oct they used up the weekly allowance.
+
+### 26 Oct 2026 · B-53 US payment provider · decided by human · risk: low
+- Decided: decide later, when M10 starts. 10.1 Phase C stays blocked.
+- Why: payments come last.
+
+### 26 Oct 2026 · B-51 e2e is a required check · decided by human · risk: medium
+- Decided: the human added `e2e` as a required status check on main.
+- Why: e2e was passing but not enforced.
+
+### 25 Oct 2026 · 3.9e worker test extraction · decided by builder · risk: low
+- Decided: extracted the worker's guard-warmup logging branch into a small pure helper
+  (`logGuardWarmupFailures` in `apps/worker/src/log.ts`, same file as `describeError`/`jsonLog`)
+  and unit-tested the helper directly, instead of writing a full-mock test that imports
+  `apps/worker/src/index.ts` (which has no tests today and opens real Redis/DB/S3/BullMQ
+  connections at module scope).
+- Why: the plan allows "a small unit test of the branch" when no existing worker test covers the
+  call; mocking every dependency `index.ts` touches (ioredis, bullmq, `@edmate/db`, `@aws-sdk/client-s3`,
+  and a dozen local modules) just to exercise a two-line branch is out of proportion, and the
+  codebase already treats `index.ts` as untestable-by-design (`apps/worker/vitest.config.ts`
+  excludes it from coverage with the same reasoning).
+
+---
+
+### 25 Oct 2026 · 3.9e budget overrun · decided by lead · risk: low
+- Decided: accept 138 tool calls against a plan budget of 35.
+- Why: the builder found and fixed a real test-isolation problem (mocking distressKeywords.js also broke the other two matchers through rulePhrases.ts) and re-ran flaky full gates under machine load; the diff is in scope and three reviewers approved.
+
+---
+
+### 25 Oct 2026 · 3.9e worker helper parameter type · decided by lead · risk: low
+- Decided: wontfix the typescript-reviewer LOW that apps/worker/src/log.ts `logGuardWarmupFailures` takes `readonly string[]` instead of `readonly WarmedMatcher[]`.
+- Why: its only caller passes the harness's typed result, and the helper logs names only; not worth a board task.
+
+---
+
+### 25 Oct 2026 · 3.9e merge · decided by lead · risk: high
+- Decided: merge 3.9e; code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+- Why: packages/harness/src/guardrails/warmup.ts is a risky path (reviewers: code-reviewer); the change only reports which matcher threw during warm-up, stays pure and logs no student text.
+
+---
+
+### 25 Oct 2026 · 3.9g budget · decided by lead · risk: low
+- Decided: accept 26 tool calls against a plan budget of 20.
+- Why: a small overrun on setup and the gate runs; the diff is 13 lines in apps/cli and both reviewers approved with no findings.
+
+---
+
+### 25 Oct 2026 · 3.9g merge · decided by lead · risk: low
+- Decided: merge 3.9g; code-reviewer and typescript-reviewer approved with no findings.
+- Why: apps/cli only, no risky path; the gate passed.
+
+---
+
+### 25 Oct 2026 · 3.9a SIGINT closes readline via its own cancelSource plus an interrupted flag · decided by builder · risk: low
+
+- Decided: on `SIGINT`, cancel the in-flight turn's own `cancelSource()` token, close the
+  `readline.Interface`, and additionally set an `interrupted` boolean checked at the top of every
+  loop iteration.
+- Why: `rl.close()` alone stops future `for await` reads but does not retroactively drop a line
+  already sitting in readline's internal buffer when stdin data arrives all at once (e.g. piped
+  input in tests) — a second scripted line could still reach an in-flight iteration and send one
+  more turn after Ctrl+C. The flag is cheap, local to this function, and makes "no further turn is
+  sent after SIGINT" deterministic without depending on readline's internal buffering behaviour.
+
+---
+
+### 25 Oct 2026 · 3.9a logUnmetered extracted as its own exported function · decided by builder · risk: low
+
+- Decided: moved the unmetered-usage log line into an exported `logUnmetered(u, log?)` function in
+  `deps.ts` rather than inlining the string template directly in the `recordUnmetered` sink.
+- Why: lets `deps.test.ts` assert the exact line and the "never console.error" property directly,
+  with no real model call and no need to drive a full `recordUnmetered` call through
+  `buildChatDeps`'s gateway wiring.
+
+---
+
+### 25 Oct 2026 · 3.9a prettier non-idempotency on two pre-existing test blocks (deviation) · decided by builder · risk: low
+
+- Decided: rewrote two `it(...)` call sites this task's tests sit next to (not introduced by this
+  task) — `chat.test.ts`'s "streams a free-package reply..." test and `deps.test.ts`'s "runs one
+  teacher_preview turn..." test — moving their two-line leading comment from between the test name
+  and the callback into the callback's body, so prettier's own `--write` output is a stable fixed
+  point (verified: `--write` followed immediately by `--check` passes with no further changes).
+- Why: the project's installed prettier version non-idempotently reformats a `//` comment pair sitting
+  between an `it(...)`'s string-literal name and its arrow-function callback — confirmed on the
+  original, unmodified `HEAD` version of both files (pre-dates this task entirely, found only
+  because this task's gate runs `prettier --check` on these exact files). Rewriting the comment's
+  position was the smallest change that both keeps the comment's meaning and satisfies the gate;
+  no test behaviour changed (confirmed: same 157/157 tests pass, same coverage numbers before and
+  after).
+
+---
+
+### 25 Oct 2026 · 3.9a budget overrun · decided by lead · risk: low
+- Decided: accept 155 tool calls against a plan budget of 40.
+- Why: a `git checkout --` mistake wiped the uncommitted work and the builder rebuilt it; the final diff is in scope (apps/cli only) and both reviewers approved with no findings above LOW.
+
+---
+
+### 25 Oct 2026 · 3.9a deferred items · decided by lead · risk: low
+- Decided: the db retrieval index switch and the same-topic re-test move to board task 3.9f; the two TypeScript-review LOWs (apps/cli/src/commands/chat.test.ts listener count, apps/cli/src/commands/chat.ts stray prompt) move to 3.9g; the saved-help-state item was already done by 5.8a.
+- Why: the db index work needs packages/db, which another task held; the LOWs are deferred per the fix-only-blockers policy.
+
+---
+
+### 25 Oct 2026 · 3.9a merge · decided by lead · risk: low
+- Decided: merge 3.9a; code-reviewer and typescript-reviewer approved.
+- Why: no risky path is touched, tests use the scripted gateway only, and the gate passed.
+
+---
+
+### 25 Oct 2026 · 11.4h composite FK over trigger · decided by builder · risk: low
+- Decided: used a composite FK (`documents(teacher_id, live_class_id)` -> `live_classes(teacher_id,
+  id)`) rather than a trigger, per the plan's own recommendation.
+- Why: the repo has zero `CREATE TRIGGER`/`CREATE FUNCTION` in any migration; a composite FK is a
+  direct extension of the existing `NOT VALID` -> `VALIDATE` pattern and reuses the exact
+  precedent of migration 0009's `sessions_package_version_fk` referencing a plain unique index
+  (`package_versions_package_id_version_key`), not a named `UNIQUE` constraint.
+
+---
+
+### 25 Oct 2026 · 11.4h cross-teacher test rewritten to insert-is-refused · decided by builder · risk: low
+- Decided: replaced the old "insert then check the join excludes it" test with "the raw insert
+  is refused", asserting `rejects.toThrow(/foreign key/)` (same style as
+  `document-live-class-migration.int.test.ts:101-103`).
+- Why: once the FK exists, the insert itself throws, so the scenario the old test guarded
+  (a cross-teacher row existing but being excluded from the join) can no longer be constructed;
+  no row is ever created, so there is nothing left to check against teacher B's list.
+
+---
+
+### 25 Oct 2026 · 11.4h column-list ON DELETE SET NULL · decided by builder · risk: low
+- Decided: the migration's composite FK uses the Postgres 15+ column-list form, `ON DELETE SET
+  NULL ("live_class_id")`, instead of a plain `ON DELETE SET NULL`. `documents.teacherId`'s
+  schema-level `.onDelete('set null')` call stays as schema-only bookkeeping so `db:generate`
+  remains a no-op; the deployed clause lives only in the hand-edited migration SQL.
+- Why: a plain (non-column-list) `SET NULL` on a composite FK nulls every referencing column,
+  including `teacher_id` — which is `NOT NULL` on `documents` — so deleting a live class would
+  have failed with a not-null violation instead of unlinking the recording. This surfaced as a
+  real test failure (`document-live-class-migration.int.test.ts`'s "refuses a link to a missing
+  class, and unlinks (keeps) recordings when a class is deleted") when first run against the
+  plan's literal `ON DELETE set null` text, and is why the plan's SQL snippet needed this one
+  change. drizzle-orm's `foreignKey().onDelete()` type (`UpdateDeleteAction`) can't express a
+  column list, so this is unavoidably a hand-edit, same category as the existing `NOT VALID`
+  hand-edits in this file.
+
+---
+
+### 25 Oct 2026 · 11.4h schema.test.ts touched, not named in the plan · decided by builder · risk: low
+- Decided: added a `REVIEWED_CONSTRAINT_DROPS` allowlist and a new test in
+  `packages/db/test/schema.test.ts`, which the plan's "Files to modify" list didn't name.
+- Why: `schema.test.ts`'s "migrations are create-only" test flags any `DROP CONSTRAINT` as
+  destructive SQL by default (same `DESTRUCTIVE_SQL` regex `merge_gate.py` uses); the plan's own
+  migration SQL (dropping the old single-column FK) fails that check unless it is reviewed and
+  allowlisted by name, the same way `REVIEWED_INDEX_DROPS` already allowlists reviewed
+  `DROP INDEX` statements in other migrations. Without this, "db typecheck, lint and test green"
+  (the plan's acceptance) is unreachable, so this was a necessary, same-package, in-scope-by-
+  necessity addition rather than an open question.
+
+Also clears chunks for the documents it deletes in the cap test (not spelled out in the plan's
+exact SQL), since `chunks.document_id` -> `documents.id` has no `ON DELETE` action and
+`doc_rec_search` (deleted by the cap-test cleanup) has rows in `chunks` from an earlier test in
+the same block.
+
+---
+
+### 25 Oct 2026 · 11.4h budget overrun · decided by lead · risk: low
+- Decided: accept 88 tool calls against a plan budget of 40.
+- Why: the migration, snapshot, journal, post-migrate step and allowlist changes needed full db gate runs; the diff is in scope and both reviewers approved.
+
+---
+
+### 25 Oct 2026 · 11.4h pre-existing cross-teacher rows · decided by lead · risk: low
+- Decided: no data-fix step before `VALIDATE CONSTRAINT` in packages/db/migrations/0033_document_live_class_teacher.sql; a deployed database with a document linked to another teacher's live class would fail the post-migrate validate step.
+- Why: the documents.live_class_id link is new in M11 and no deployed database holds real data before the pilot; database-reviewer and code-reviewer both rated it acceptable pre-pilot.
+
+---
+
+### 25 Oct 2026 · 11.4h merge · decided by lead · risk: high
+- Decided: merge 11.4h; database-reviewer and code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings.
+- Why: packages/db/migrations/0033_document_live_class_teacher.sql drops the single-column documents.live_class_id foreign key and replaces it with a composite (teacher_id, live_class_id) key added NOT VALID and validated after migration; no rows are deleted, and database-reviewer checked the lock order, column order and the PG 16 support for ON DELETE SET NULL with a column list.
+
+---
+
 ### 25 Oct 2026 · 3.9c warm-up scope is preGuard's matchers only · decided by builder · risk: low
 - Decided: `warmPreGuardPatterns()` warms only `distressKeywordMatch`, `matchModeration` and
   `matchJailbreak` — not mathjs (used by `generate`'s tool-call code, step 8, never preGuard) and
