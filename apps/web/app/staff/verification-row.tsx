@@ -81,7 +81,7 @@ export function VerificationRow({
           ) : (
             <ul>
               {item.subjectHistory.map((change, i) => (
-                <li key={i}>
+                <li key={`${change.ts}|${change.from}|${change.to}|${i}`}>
                   {t('subjectHistoryLine', {
                     from: change.from,
                     to: change.to,
