@@ -224,6 +224,82 @@ $ python3 .githooks/secret-scan.py --all
 ```
 No output (clean).
 
+## Fix round 2 (CI timeout)
+
+### What changed
+
+`packages/harness/src/pedagogy/modelRequest.test.ts` only (test file; no source change):
+
+- `'expectUnderCeiling still fails on a deliberately backtracking regex (self-test)'` no longer
+  uses a fixed `k = 25`. PR #371's CI node job failed this test at 28,801 ms: CI's slower runner
+  pushed `k = 25`'s run time (2.9 s on the dev Mac) past the test's 20 s timeout -- a fixed size
+  can never fit both a fast dev machine and a slower CI runner.
+- The self-test now grows the hostile input step by step: starting at `k = 16`, it times each real
+  `/^(\s*)*$/.test(' '.repeat(k) + 'x!')` run with `Date.now()` and increases `k` by 1 until the
+  first run whose time exceeds the 2,000 ms ceiling, then asserts `expectUnderCeiling` throws on
+  that exact run. Because backtracking time roughly doubles per step, the run that trips the
+  ceiling is at most about 2x over it, and the sum of every run tried is at most about 4x the
+  ceiling (~8 s) on any machine -- fast or slow -- instead of a single hard-coded size.
+  `MAX_K = 40` caps the search: if the cap is hit without any run exceeding the ceiling, the test
+  throws a clear message (not a bare assertion failure) naming the cap and the last measured time,
+  so a regex engine that stopped backtracking on this pattern fails loudly instead of spinning.
+- The test's own per-test timeout was raised from `20_000` to `30_000` ms, kept only as a generous
+  backstop (the loop itself bounds real time to roughly 4x the ceiling, well under 30 s).
+- `expectUnderCeiling`, the ceiling, the real-input test and no source file were touched.
+
+### Evidence
+
+A standalone probe of the same grow-by-one loop (3 trials, dev Mac):
+```
+trial 0: k=28 lastRun=3745ms totalSum=7874ms
+trial 1: k=27 lastRun=2245ms totalSum=4374ms
+trial 2: k=27 lastRun=2222ms totalSum=4465ms
+```
+`k` reached 27-28 each time (not the old fixed 25), with the total time spent searching staying
+under 8 s -- comfortably inside the 30 s per-test timeout on this machine, and bounded to roughly
+the same multiple of the ceiling on a slower CI runner by the doubling argument above.
+
+`modelRequest.test.ts` (88 tests) run 3 times alone:
+```
+=== run 1 === Test Files  1 passed (1)   Tests  88 passed (88)   Duration  8.71s
+=== run 2 === Test Files  1 passed (1)   Tests  88 passed (88)   Duration  8.37s
+=== run 3 === Test Files  1 passed (1)   Tests  88 passed (88)   Duration  8.24s
+```
+Then 2 more times while `corepack pnpm --filter @edmate/harness test` (full 127-file suite) ran in
+the background:
+```
+=== under-load run 1 === Test Files  1 passed (1)   Tests  88 passed (88)   Duration  16.30s
+=== under-load run 2 === Test Files  1 passed (1)   Tests  88 passed (88)   Duration  15.82s
+```
+The background full-suite run finished clean: `Test Files  127 passed (127)`, `Tests  5676 passed
+(5676)`.
+
+### Gate
+
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/harness
+```
+4 tasks successful (typecheck, lint, test x2 via dependency graph); `@edmate/harness:test` passes
+all 127 files.
+
+```
+$ corepack pnpm exec prettier --check packages/harness/src/pedagogy/modelRequest.test.ts docs/tasks/0.20f/handoff.md
+```
+All matched files use Prettier code style.
+
+```
+$ python3 .githooks/secret-scan.py --all
+```
+No output (clean).
+
+### Decisions
+
+None (no new decision: the fix stays inside the plan's explicit guidance -- grow `k`, cap it,
+keep a generous backstop timeout -- without changing `expectUnderCeiling`, the ceiling, the
+real-input test, or any source file).
+
+Fix round 2 tool calls used: 14
+
 ## Budget
 
 Tool calls used (round 1): 29

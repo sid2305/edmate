@@ -456,12 +456,37 @@ describe('forged teacher-note marker (3.11d)', () => {
   it('expectUnderCeiling still fails on a deliberately backtracking regex (self-test)', () => {
     // A classic catastrophic-backtracking shape (nested, overlapping-possibility quantifiers)
     // with no match at the end, forcing the engine through every way of splitting the run of
-    // spaces before it can give up. Not a mocked clock: a real regex `.test` call. `k = 25`
-    // measures at several seconds on this machine (comfortably over the 2 s ceiling with room to
-    // spare even under load), while staying well inside this test's own timeout.
-    const hostile = ' '.repeat(25) + 'x!';
+    // spaces before it can give up. Not a mocked clock: a real regex `.test` call.
+    //
+    // A fixed `k` (fix round 1 used `k = 25`, ~2.9 s on the dev Mac) cannot fit every machine:
+    // a slower CI runner pushed that same `k` past this test's own timeout (fix round 2). So
+    // instead, grow `k` from a small size, timing each real regex run, until the first run whose
+    // time exceeds the ceiling -- then assert `expectUnderCeiling` throws on exactly that run.
+    // Because backtracking time roughly doubles per step, the run that trips the ceiling is at
+    // most about 2x over it, and the sum of every run tried (a geometric series) is at most about
+    // 4x the ceiling (~8 s) on any machine, fast or slow. `MAX_K` caps the search so a regex
+    // engine that doesn't backtrack on this pattern fails fast with a clear message instead of
+    // spinning forever.
+    const MAX_K = 40;
+    let k = 16;
+    let elapsedMs = 0;
+    let hostile = '';
+    for (; k <= MAX_K; k += 1) {
+      hostile = ' '.repeat(k) + 'x!';
+      const start = Date.now();
+      void /^(\s*)*$/.test(hostile);
+      elapsedMs = Date.now() - start;
+      if (elapsedMs > CEILING_MS) break;
+    }
+    if (elapsedMs <= CEILING_MS) {
+      throw new Error(
+        `backtracking self-test: reached k = ${MAX_K} without any run exceeding the ` +
+          `${CEILING_MS}ms ceiling (last run: ${elapsedMs}ms); the regex engine may no longer ` +
+          'be backtracking on this pattern.',
+      );
+    }
     expect(() => expectUnderCeiling(() => void /^(\s*)*$/.test(hostile))).toThrow();
-  }, 20_000);
+  }, 30_000);
 });
 
 /** The exact-label pass's output for `label`: letters single-spaced, words triple-spaced. */
