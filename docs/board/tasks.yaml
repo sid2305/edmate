@@ -6730,9 +6730,9 @@ tasks:
   deps:
   - 12.2e
   risk: high
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.2f-report-followups
+  model: plan:sonnet build:sonnet
 - id: 12.2g
   milestone: M12
   title: '12.2e review follow-ups in apps/web/app/staff/reports: a stale poll must not bring back a dismissed report or lifted takedown (generation ref); a 400 on an action says "already actioned or no
