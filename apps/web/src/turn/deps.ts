@@ -107,20 +107,30 @@ export interface TurnProcess {
   log: ServerLog;
 }
 
-/** One turn's `PipelineDeps` for the signed-in student and the agent's teacher. */
-export function turnDepsFor(p: TurnProcess, scope: StudentScope): PipelineDeps {
+/**
+ * One turn's `PipelineDeps` for the signed-in student and the agent's teacher. `sessionId` (task
+ * 6.3d) is threaded through to `profileStoreFor` so its `applyMistakes` can resolve the style
+ * card's `mistakeTags` allow-list; optional only because some callers (studio test-chat, which
+ * overrides `profiles` right after) have no session to pass.
+ */
+export function turnDepsFor(p: TurnProcess, scope: StudentScope, sessionId?: string): PipelineDeps {
   const ports = queuedTurnPorts(
     p.queues,
     scope,
     transcriptStoreFor(p.repos, scope),
-    profileStoreFor(p.repos, scope),
+    profileStoreFor(p.repos, scope, sessionId),
   );
   return {
     clock: p.clock,
     ids: p.ids,
     // Metered here, into the turn's queued usage meter, so the meter step doesn't count twice.
     gatewayFor: (spec) => ({
-      gateway: meterRouter(createRouter(spec.policy, p.factories), ports.usage, spec.billing, p.prices),
+      gateway: meterRouter(
+        createRouter(spec.policy, p.factories),
+        ports.usage,
+        spec.billing,
+        p.prices,
+      ),
       metered: true,
     }),
     priceUsage: (u) => computeCostMicroUsd(p.prices, u.model, u.inputTokens, u.outputTokens),
