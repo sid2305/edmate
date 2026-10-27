@@ -3266,6 +3266,17 @@ tasks:
         deferred: 0
         wontfix: 2
     human_questions: 0
+- id: 0.20d
+  milestone: M13
+  title: 'packages/harness/src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" still flakes in CI after 0.20c: 72.7 vs the 64 bound on PR #325 (26 Oct 2026; 12.4e only adds a db
+    index). Make the check measure growth in a way that load cannot skew (for example the median of several runs, or counting steps instead of timing), without loosening it so far that quadratic code passes.'
+  accept: The test fails on a deliberately quadratic version and passes five full CI node runs in a row.
+  deps:
+  - 0.20c
+  risk: low
+  status: running
+  branch: m13/0.20d-linear-time-flake
+  model: plan:lead build:sonnet
 - id: 5.8e
   milestone: M13
   title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
@@ -7087,9 +7098,29 @@ tasks:
   deps:
   - 7.2m
   risk: low
-  status: running
+  status: done
   branch: m13/7.2n-misuse-codes
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 5
+    tokens_in: 22
+    tokens_out: 360
+    cache_read_tokens: 210892
+    wall_time_seconds: 40
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 9.1c
   milestone: M13
   title: '9.1a review LOW: /teacher scores exactly the 95 Lighthouse accessibility threshold in apps/web/test/lighthouse-a11y.test.ts; find what costs the points and fix it so a one-point drift does not
@@ -7245,9 +7276,29 @@ tasks:
   deps:
   - 12.4a
   risk: low
-  status: running
+  status: done
   branch: m13/12.4e-agents-index
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 344
+    tokens_in: 1228
+    tokens_out: 88292
+    cache_read_tokens: 49124106
+    wall_time_seconds: 83623
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.5e
   milestone: M13
   title: 'Alert worker follow-up: alert.raise logs a store.record failure before awaiting notify, so a joint DB and notifier outage still logs safety_alert.store_failed (12.5b review)'
@@ -8099,7 +8150,9 @@ tasks:
   deps:
   - 8.7m
   risk: low
-  status: todo
+  status: running
+  branch: m13/8.7p-redact-span-surrogate
+  model: plan:sonnet build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -8992,9 +9045,31 @@ tasks:
   deps:
   - 3.9a
   risk: low
-  status: running
+  status: done
   branch: m13/3.9f-cli-db-retrieval
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 1045
+    tokens_in: 3696
+    tokens_out: 262209
+    cache_read_tokens: 132028970
+    wall_time_seconds: 84015
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 3.9g
   milestone: M13
   title: '3.9a review LOWs: apps/cli/src/commands/chat.test.ts SIGINT test asserts process.listenerCount(''SIGINT'') is back to its baseline after the run; apps/cli/src/commands/chat.ts does not print a

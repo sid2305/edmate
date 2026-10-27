@@ -10,6 +10,100 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 12.4e plain additive index, no CONCURRENTLY · decided by builder · risk: low
+- Decided: used a plain `CREATE INDEX` inside the migration's own transaction (the `0024`/`0033`
+  pattern), not `CREATE INDEX CONCURRENTLY` + `POST_MIGRATE_STEPS` (the `0032` pattern).
+- Why: `agents` is bounded by how many agents a teacher builds — smaller again than `documents`
+  or `live_classes`, which the plan already judged small enough for a plain statement. It does
+  not grow per-turn or per-session like `chunks`, `sessions` or `turn_traces`, so holding the
+  table lock for one `CREATE INDEX` during a migration batch is not the real risk `0032` guards
+  against.
+
+---
+
+### 26 Oct 2026 · 12.4e migration filename vs. journal tag · decided by builder · risk: low
+- Decided: `db:generate` emitted `migrations/0034_silky_mikhail_rasputin.sql` (drizzle-kit's
+  random slug); renamed the file to `migrations/0034_agents_created_at_id_index.sql` and updated
+  the matching `tag` in `migrations/meta/_journal.json` to match, rather than leaving the random
+  slug or hand-editing the SQL content.
+- Why: every existing migration's journal `tag` matches its filename (checked `0033`); `migrate.ts`
+  resolves migrations through drizzle's own `migrate()` against the journal, not a raw directory
+  listing, so a consistent tag/filename pair is the safe rename — no SQL content changed, so this
+  stays inside the "no unrelated diff from `db:generate`" rule.
+
+---
+
+### 26 Oct 2026 · 12.4e budget overrun · decided by lead · risk: low
+- Decided: Accept 50 tool calls against a budget of 20. The work is complete, and database-reviewer approved it with no findings.
+- Why: A turbo gate run went to the background past its timeout, and a duplicate run collided on coverage directories. Briefs already say to run tests in the foreground with a 600000 ms timeout.
+
+---
+
+### 26 Oct 2026 · 3.9f unused chunkDocument import · decided by builder · risk: low
+- Decided: removed the `chunkDocument` import from `dbRetrieval.ts` instead of wiring it in.
+- Why: `indexDocument({ writer, scope, documentId, source: { kind: 'parsed', document, headings:
+  true } })` already chunks internally (same call shape `recall.int.test.ts` uses); importing
+  `chunkDocument` separately was dead code and failed `tsc`'s `noUnusedLocals`. No behaviour
+  change — `seedChatChunks` was already correct without it.
+
+---
+
+### 26 Oct 2026 · 3.9f chat.ts close-on-error path · decided by builder · risk: low
+- Decided: no change needed to the pre-existing `catch (e)` around `buildChatDeps` (line ~205 in
+  `chat.ts`).
+- Why: per the plan's instruction to confirm rather than assume — `setup` is only assigned after
+  `buildChatDeps` returns successfully, and `setup.close` only exists on a `ChatSetup` once
+  `buildDbRetrieval` itself returned successfully (it opens the pool and returns the handle
+  together, never partially). A thrown error inside `buildChatDeps`/`buildDbRetrieval` therefore
+  never reaches a point where a pool handle exists but is unreachable from the catch; the
+  catch path cannot leak a pool. Confirmed by reading `chat.ts`'s catch block and
+  `buildDbRetrieval`'s body: no deviation, no fix needed.
+
+---
+
+### 26 Oct 2026 · 3.9f budget overrun · decided by lead · risk: low
+- Decided: Accept 250 tool calls across three agents against a budget of 48 (about 5x). The work is complete and reviewed.
+- Why: The first builder stalled at 163 calls before running the gate; the lead committed its WIP, and a fresh builder finished it in 61. The pool-leak fix round took 26. Next time, a builder still running at 2x budget is stopped and its WIP handed to a fresh one sooner.
+
+---
+
+### 26 Oct 2026 · 3.9f review LOWs · decided by lead · risk: low
+- Decided: Two review LOWs are wontfix: apps/cli/eslint.config.js turns no-restricted-imports off for test/** (a faithful copy of apps/worker's config), and pnpm-lock.yaml churn beyond apps/cli's new deps (a pnpm dedup side effect; the frozen install passes).
+- Why: Both match existing repo conventions and change no behaviour.
+
+---
+
+### 26 Oct 2026 · 7.2n critical escalation timing: no change · decided by lead · risk: medium
+- Decided: `packages/queue/src/alertSink.ts` keeps one delay (`ALERT_ESCALATION_MS`, 15 minutes)
+  for every level.
+- Why: self-harm distress alerts (level `alert`) are at least as urgent as a threat to others, so
+  a shorter delay only for `critical` would rank them the wrong way round, and the 15-minute
+  on-call check was set in 4.3. A per-level delay is a safety-policy change for the human.
+
+---
+
+### 26 Oct 2026 · 7.2n MISUSE_CODES export · decided by builder · risk: high
+- Decided: exported `MISUSE_CODES` from `packages/harness/src/guardrails/moderationIn.ts` (also
+  re-exported from `packages/harness/src/guardrails/index.ts`), touching the risky
+  `packages/harness/src/guardrails/**` path.
+- Why: this is an export-only change (no behaviour change) so one eval file can import the one
+  list instead of keeping a second copy in sync by hand; the existing harness and evals tests are
+  the check, and they pass unchanged.
+
+---
+
+### 26 Oct 2026 · 7.2n budget and review LOW · decided by lead · risk: low
+- Decided: Accept 40 tool calls against a budget of 20. The review LOW (Object.freeze on the exported MISUSE_CODES) is deferred to 7.2l, the guardrails follow-up task.
+- Why: Most of the overrun was the turbo test run across harness's dependents. Mutating the array needs a deliberate cast, so freezing it is hardening, not a fix.
+
+---
+
+### 26 Oct 2026 · 7.2n merge · decided by lead · risk: high
+- Decided: Merge 7.2n, which touches packages/harness/src/guardrails/moderationIn.ts and guardrails/index.ts. code-reviewer approved it.
+- Why: It exports an existing list with no change to the guard's behaviour. The evals test now uses the same list, and the alertSink change is a comment.
+
+---
+
 ### 26 Oct 2026 · 8.7n NULL-course semantics · decided by plan · risk: low
 - Decided: a teacher with no course row reads as "not changed" (`false`) in
   `changedSinceLastPublish`, via `coalesce(..., false)` on the outline-comparison clause.
