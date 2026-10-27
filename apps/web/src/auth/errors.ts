@@ -14,10 +14,19 @@ export function errorBody(code: ErrorCode, message: string): ErrorBody {
   return { code, message, retryable: RETRYABLE.has(code) };
 }
 
-/** The API's error body, `{ error: { code, message, retryable } }`, never cached. */
-export function apiError(code: ErrorCode, message: string, status: number): Response {
+/**
+ * The API's error body, `{ error: { code, message, retryable } }`, never cached. `headers`
+ * (9.4e item 8) adds response headers such as `Retry-After`, without ever dropping
+ * `cache-control`.
+ */
+export function apiError(
+  code: ErrorCode,
+  message: string,
+  status: number,
+  headers?: Readonly<Record<string, string>>,
+): Response {
   return Response.json(
     { error: errorBody(code, message) },
-    { status, headers: { 'cache-control': 'no-store' } },
+    { status, headers: { ...headers, 'cache-control': 'no-store' } },
   );
 }

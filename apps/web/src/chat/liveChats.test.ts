@@ -16,6 +16,13 @@ import {
   type UnavailableChat,
 } from './liveChats';
 
+// 9.4e item 7: `LiveChat.status` is the real `Entitlement['status']` enum (the db repository
+// already returns it typed that way), not a bare `string` -- a status that isn't one of the
+// enum's values must fail typecheck once it is.
+// @ts-expect-error -- not a value of Entitlement['status']
+const _invalidStatus: LiveChat['status'] = 'not_a_real_status';
+void _invalidStatus;
+
 const STUDENT: Principal = { userId: 'stu_1', role: 'student' };
 
 const OWNERS: Record<string, string> = { agt_a: 'tch_a', agt_b: 'tch_b', agt_c: 'tch_c' };
@@ -40,7 +47,7 @@ function deps(
   };
 }
 
-const row = (agentId: string, status: string): LiveChat => ({
+const row = (agentId: string, status: LiveChat['status']): LiveChat => ({
   agentId,
   teacherId: OWNERS[agentId] ?? 'tch_x',
   status,
@@ -58,12 +65,14 @@ describe('chatAgentCandidates', () => {
     expect(chatAgentCandidates({})).toEqual(['demo-agent']);
     expect(chatAgentCandidates({ NODE_ENV: 'development' })).toEqual(['demo-agent']);
     expect(chatAgentCandidates({ NODE_ENV: 'production' })).toEqual([]);
-    expect(chatAgentCandidates({ NODE_ENV: 'production', EDMATE_CHAT_AGENTS: 'agt_a' })).toEqual(['agt_a']);
+    expect(chatAgentCandidates({ NODE_ENV: 'production', EDMATE_CHAT_AGENTS: 'agt_a' })).toEqual([
+      'agt_a',
+    ]);
   });
 });
 
 describe('classifyHomeLinks', () => {
-  it.each(['trial', 'active', 'past_due'])('%s is a chat link', (status) => {
+  it.each<LiveChat['status']>(['trial', 'active', 'past_due'])('%s is a chat link', (status) => {
     expect(classifyHomeLinks([row('agt_a', status)])).toEqual({ chats: ['agt_a'], paused: [] });
   });
 
@@ -240,10 +249,7 @@ describe('homeLinks', () => {
     });
 
     it('a different student only sees their own unavailable rows', async () => {
-      const d = deps(
-        {},
-        { stu_1: [{ agentId: 'agt_s', teacherId: 'tch_s' }], stu_2: [] },
-      );
+      const d = deps({}, { stu_1: [{ agentId: 'agt_s', teacherId: 'tch_s' }], stu_2: [] });
       const links = await homeLinks(() => d, { userId: 'stu_2', role: 'student' }, [], {
         error: vi.fn(),
       });

@@ -75,7 +75,7 @@ export {
   TEACHER_QUESTION_TIMEOUT_MS,
   GROUNDING_ASKS_PER_SESSION,
 } from './spec.js';
-export { DecideResultSchema } from './results.js';
+export { DecideResultSchema, RouteFallbackSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
 export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
 export { ATTACHMENT_REFUSED_REPLY } from './steps/scrub.js';
