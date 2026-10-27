@@ -89,14 +89,49 @@ function defaultProfile(scope: StudentScope): LearnerProfile {
  * where a concurrent `rebuildMastery` could read the newly-committed event before the fold had run,
  * double-counting it between the rebuild's full replay and the incremental fold. See
  * `appendAndFold`'s doc comment (`learner.ts`) for the lock order that makes this safe.
+ *
+ * Task 6.3d (6.3c Phase B): `applyMistakes`/`recordProposedMistakes` (ADR-0017) are the frozen
+ * optional `ProfileStore` methods; `commit.ts` calls them through an optional chain, so every
+ * existing call site that never invokes them keeps compiling. The style card's `mistakeTags` (the
+ * allow-list `learnerProfiles.applyMistakes` checks `known` against) is not available at
+ * composition-root time -- only `sessionId` is (the web route's `postTurn` handler already has it
+ * when it builds deps) -- so `profileStoreFor` takes it as an optional third constructor
+ * parameter and resolves the chain lazily, only when `known` is non-empty: `sessions.get` ->
+ * `agentVersions.get` -> `styleCards.get` -> `mistakeTags`. A missing `sessionId`, or any break in
+ * that chain (session not found, agent version missing, style card missing), is a wiring mistake,
+ * not a user-facing error: it throws `RepositoryError('integrity', ...)` rather than silently
+ * defaulting the allow-list to `[]` (false scope rejections) or "allow everything" (defeats the
+ * allow-list) -- same 9.4d convention `entitlementStoreFor` already uses for a composition root
+ * that omits something an adapter needs. The session is resolved whatever its status (not
+ * required to be open), so a tag write racing session end still lands (lead decision, 6.3d).
+ *
+ * `recordProposedMistakes` stays a documented no-op (scope check only) until 6.3a lands the real
+ * persistence of proposed tags for teacher review.
  */
-export function profileStoreFor(repos: Repositories, scope: StudentScope): ProfileStore {
+export function profileStoreFor(
+  repos: Repositories,
+  scope: StudentScope,
+  sessionId?: string,
+): ProfileStore {
   const bound = studentScope(scope, 'profileStoreFor');
   const checkPair = (studentId: string, teacherId: string, method: string) => {
     if (studentId !== bound.studentId || teacherId !== bound.teacherId) {
       throw new RepositoryError('scope', method);
     }
   };
+  async function resolveMistakeTagAllowList(method: string): Promise<readonly string[]> {
+    if (sessionId === undefined) throw new RepositoryError('integrity', method);
+    const session = await repos.sessions.get(bound, sessionId);
+    if (session === null) throw new RepositoryError('integrity', method);
+    const agent = await repos.agentVersions.get(
+      { teacherId: bound.teacherId },
+      { agentId: session.agentId, version: session.agentVersion },
+    );
+    if (agent === null) throw new RepositoryError('integrity', method);
+    const styleCard = await repos.styleCards.get({ teacherId: bound.teacherId }, agent.styleCardId);
+    if (styleCard === null) throw new RepositoryError('integrity', method);
+    return styleCard.mistakeTags;
+  }
   return {
     async get(studentId, teacherId) {
       checkPair(studentId, teacherId, 'profileStoreFor.get');
@@ -115,6 +150,17 @@ export function profileStoreFor(repos: Repositories, scope: StudentScope): Profi
       }
       const profile = await repos.learnerProfiles.get(bound);
       return profile ?? defaultProfile(bound);
+    },
+    async applyMistakes(mistakeScope, known) {
+      const method = 'profileStoreFor.applyMistakes';
+      checkPair(mistakeScope.studentId, mistakeScope.teacherId, method);
+      if (known.length === 0) return;
+      const allowedTags = await resolveMistakeTagAllowList(method);
+      await repos.learnerProfiles.applyMistakes(bound, known, allowedTags);
+    },
+    async recordProposedMistakes(mistakeScope) {
+      const method = 'profileStoreFor.recordProposedMistakes';
+      checkPair(mistakeScope.studentId, mistakeScope.teacherId, method);
     },
   };
 }

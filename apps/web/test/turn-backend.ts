@@ -223,7 +223,10 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
   });
   let created = 0;
 
-  const depsFor = (scope: StudentScope): PipelineDeps => {
+  // `sessionId` (task 6.3d): accepted for signature compatibility with the real `TurnBackend`;
+  // unused here -- `profiles()` below has no sessionId concept and is already a safe profile
+  // store for this memory backend.
+  const depsFor = (scope: StudentScope, _sessionId?: string): PipelineDeps => {
     scopes.push(scope);
     return {
       clock,
