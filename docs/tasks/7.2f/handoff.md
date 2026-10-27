@@ -52,9 +52,11 @@ only forms Phase H did not use.
 
 What changed:
 - Added 50 new case files under `evals/suites/locked/*.yaml`, all `package: free`, `reviewed_by:
-  lead`, English only, US-framed (Hindi/Hinglish kept only where Phase H's own precedent already
-  used it, per the English-only-pilot safety-net rule). No student turn or trick sequence is
-  repeated anywhere in the suite (checked by dedup over all 200 cases' full turn sequences — 0
+  lead`. Seven of the 50 were written in Hindi/Hinglish on the mistaken belief that Phase H had
+  set a precedent for that in locked cases; it had not (Phase H added no Hindi files), and the
+  plan's "Rules for every case" require English only, US-framed, for locked cases. Fix round 1
+  rewrote those seven in English (see `## Fix round 1` below). No student turn or trick sequence
+  is repeated anywhere in the suite (checked by dedup over all 200 cases' full turn sequences — 0
   duplicates).
 - Per the Phase H code-reviewer's LOW-severity finding (payment/role claims are saturated),
   replaced that bucket with 8 genuinely new manipulation kinds: claiming to be Edmate support,
@@ -149,6 +151,41 @@ Phase I:
   scoped to that one file; re-ran `--check` on all 3 — "All matched files use Prettier code
   style!"; re-ran the full test gate again after the reformat to confirm nothing broke — still
   1553/1553.
+- `python3 .githooks/secret-scan.py --all` — clean, exit 0.
+
+## Fix round 1
+
+Finding: [HIGH] (code-reviewer) seven Phase I cases were written in Hindi/Hinglish, against
+`docs/tasks/7.2f/plan.md` "Rules for every case" (English only, US-framed; no Hindi or Hinglish
+in locked cases): `locked-dicts-drift-keymembership-hi-latin`,
+`locked-dicts-exam-tomorrow-urgency-hi-latin`, `locked-dicts-haiku-deva`,
+`locked-dicts-matchingexercise-hi-latin`, `locked-dicts-practice-crossword-deva`,
+`locked-dicts-revision-elevatorpitch-hi-latin`, `locked-lists-hypothetical-framing-deva`. The
+Phase I "What changed" text wrongly cited Phase H as a precedent for this; Phase H added no Hindi
+files, so there was no precedent.
+
+Change: Rewrote each of the seven as an English, US-framed case, keeping the same trick and the
+same locked spans/pins, and renamed the file and `id` to the matching `-en` suffix (`git mv`):
+`locked-dicts-drift-keymembership-en`, `locked-dicts-exam-tomorrow-urgency-en`,
+`locked-dicts-haiku-en`, `locked-dicts-matchingexercise-en`, `locked-dicts-practice-crossword-en`,
+`locked-dicts-revision-elevatorpitch-en`, `locked-lists-hypothetical-framing-en`. Checked the
+existing English locked cases first (`grep`) so none of the seven rewritten student turns repeats
+another case's turn, and that each `must_not_contain` phrase still never repeats the student's own
+words. The suite stays at 200 cases; the `hi-latin`/`deva` file count drops from 34 to 27, matching
+`origin/main`'s 27 (Phase H and Phase I together add none, as the gate requires). Updated the
+matching seven entries in `packages/evals/src/lockedFixtures.test.ts` (keys renamed to the `-en`
+ids; the `SPANS` pins, which were already keyed by case id and unchanged in content, needed no
+other edit). Corrected the Phase I "What changed" text above to drop the false Phase H precedent
+claim and record this fix instead.
+
+Fix round builder count: 1.
+
+### Gate (fix round 1)
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` — green: 6/6 tasks
+  successful, 31 test files passed, 1553 tests passed, 0 failed.
+- `ls evals/suites/locked | grep -cE "hi-latin|deva"` — 27, equal to `origin/main`'s 27.
+- `corepack pnpm exec prettier --check packages/evals/src/lockedFixtures.test.ts` — "All matched
+  files use Prettier code style!"
 - `python3 .githooks/secret-scan.py --all` — clean, exit 0.
 
 ## Budget

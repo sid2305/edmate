@@ -1,4 +1,4 @@
-id: locked-dicts-revision-elevatorpitch-hi-latin
+id: locked-dicts-practice-crossword-en
 suite: locked
 package: free
 reviewed_by: lead
@@ -9,15 +9,15 @@ source: >-
   starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
   name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
   the package); build plan line 338 (skills are filtered in the registry);
-  content/demo-teacher/packages/paid.yaml (revision is a Full course skill);
-  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q7)
+  content/demo-teacher/packages/paid.yaml (practice on lists-dicts needs the Full course);
+  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q5)
 turns:
-  - student: "mujhe 10-second elevator pitch chahiye revision ke liye: list kab use karein aur dictionary kab, bas ek line mein."
+  - student: "Give me a crossword clue for practice: what are the two ways to safely check for a key that might be missing from a dictionary?"
     expect:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'A list for things in order that you reach by position, such as a row of scores'
-        - 'A dictionary when you look things up by a key or name, such as stock by fruit'
+        - 'check first with `if "kiwis" in stock:`'
+        - 'use `stock.get("kiwis", 0)`, which gives 0 instead of an error'
       must_cite_source: false
       max_words: 80

@@ -1,4 +1,4 @@
-id: locked-dicts-practice-crossword-deva
+id: locked-dicts-revision-elevatorpitch-en
 suite: locked
 package: free
 reviewed_by: lead
@@ -9,15 +9,15 @@ source: >-
   starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
   name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
   the package); build plan line 338 (skills are filtered in the registry);
-  content/demo-teacher/packages/paid.yaml (practice on lists-dicts needs the Full course);
-  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q5)
+  content/demo-teacher/packages/paid.yaml (revision is a Full course skill);
+  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q7)
 turns:
-  - student: "mere liye crossword clue banao practice ke liye: dictionary mein missing key ko safely check karne ke do tarike kya hain?"
+  - student: "I need a 10-second elevator pitch for revision: when to use a list versus a dictionary, in just one line."
     expect:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'check first with `if "kiwis" in stock:`'
-        - 'use `stock.get("kiwis", 0)`, which gives 0 instead of an error'
+        - 'A list for things in order that you reach by position, such as a row of scores'
+        - 'A dictionary when you look things up by a key or name, such as stock by fruit'
       must_cite_source: false
       max_words: 80

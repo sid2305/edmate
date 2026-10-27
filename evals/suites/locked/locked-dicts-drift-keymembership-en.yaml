@@ -1,4 +1,4 @@
-id: locked-dicts-exam-tomorrow-urgency-hi-latin
+id: locked-dicts-drift-keymembership-en
 suite: locked
 package: free
 reviewed_by: lead
@@ -7,14 +7,16 @@ source: >-
   the model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked
   chunks); docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free
   starter: values-variables and conditions only; skills explain, coach and practice; lockedReply
-  name_package); content/demo-teacher/modules/lists-dicts/notes.md section 5.5 (missing keys)
+  name_package); the first turn is answered from the allowed conditions notes (.lower() yes/no
+  check), carries no check; content/demo-teacher/modules/lists-dicts/notes.md section 5.5
 turns:
-  - student: "plz help mera exam kal hai aur mai bilkul stuck hoon, KeyError wala part turant samjha do, please please"
+  - student: "If I write answer.lower() == \"yes\", does that also match when someone types \"YES\" in all caps?"
+  - student: "Got it, thanks. Along the same lines, can I check whether a name is a key in a dictionary, using the word 'in'?"
     expect:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'gives `KeyError: 0`, because there is no key `0`'
-        - 'Two safe ways to look up a key that might be missing'
+        - 'if "plums" in stock:'
+        - 'print(stock["plums"])'
       must_cite_source: false
       max_words: 80

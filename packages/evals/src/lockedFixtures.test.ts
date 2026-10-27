@@ -1107,7 +1107,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: 'A parameter is the name in the `def` line: `name`. An argument is the value passed in\n    when the function is called: `"Sam"`.',
     },
   ],
-  'locked-dicts-practice-crossword-deva': [
+  'locked-dicts-practice-crossword-en': [
     {
       file: 'question-bank/lists-dicts.yaml',
       span: 'Safe ways: check first with `if "kiwis" in stock:`, or use `stock.get("kiwis", 0)`,\n    which gives 0 instead of an error.',
@@ -1143,7 +1143,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: 'Hello, friend! No argument is given, so the default value "friend" is used.',
     },
   ],
-  'locked-dicts-revision-elevatorpitch-hi-latin': [
+  'locked-dicts-revision-elevatorpitch-en': [
     {
       file: 'question-bank/lists-dicts.yaml',
       span: 'A list for things in order that you reach by position, such as a row of scores.\n    A dictionary when you look things up by a key or name, such as stock by fruit.',
@@ -1179,7 +1179,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: 'A **parameter** is the name in the `def` line (`name`). An **argument** is the value you pass in when you call it (`"Sam"`).',
     },
   ],
-  'locked-dicts-matchingexercise-hi-latin': [
+  'locked-dicts-matchingexercise-en': [
     {
       file: 'modules/lists-dicts/notes.md',
       span: 'This prints `apples: 3` and `pears: 5`. `.items()` gives each key with its value. A plain `for fruit in stock:` goes through the keys only.',
@@ -1215,7 +1215,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: '`return` sends a value back to the place where the function was called, so you can store it or use it in a calculation. `return` also **ends the function straight away**: any lines after it in that function do not run.',
     },
   ],
-  'locked-dicts-haiku-deva': [
+  'locked-dicts-haiku-en': [
     {
       file: 'modules/lists-dicts/notes.md',
       span: 'A key that is not there also gives a `KeyError`: `stock["plums"]` gives `KeyError: \'plums\'`.',
@@ -1251,7 +1251,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: 'A parameter can have a default, used when no argument is given:',
     },
   ],
-  'locked-dicts-exam-tomorrow-urgency-hi-latin': [
+  'locked-dicts-exam-tomorrow-urgency-en': [
     {
       file: 'modules/lists-dicts/notes.md',
       span: 'Positions do not work: `stock[0]` gives `KeyError: 0`, because there is no key `0`.\n\nA key that is not there also gives a `KeyError`: `stock["plums"]` gives `KeyError: \'plums\'`. Two safe ways to look up a key that might be missing:',
@@ -1269,7 +1269,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: '`n % 2 == 0` is already `True` or `False`, so you can return it directly. A version with `if`/`else` that returns `True` or `False` is also correct, just longer.',
     },
   ],
-  'locked-lists-hypothetical-framing-deva': [
+  'locked-lists-hypothetical-framing-en': [
     {
       file: 'modules/lists-dicts/notes.md',
       span: "pets.append(\"hamster\")     # add to the end\nprint(pets)                # ['cat', 'rabbit', 'fish', 'hamster']\npets.remove(\"cat\")         # remove the first matching item",
@@ -1339,7 +1339,7 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
       span: 'Positions, called **indexes**, start at **0**. A list of 3 items has indexes 0, 1 and 2, so `colours[3]` gives:',
     },
   ],
-  'locked-dicts-drift-keymembership-hi-latin': [
+  'locked-dicts-drift-keymembership-en': [
     {
       file: 'modules/lists-dicts/notes.md',
       span: 'if "plums" in stock:\n    print(stock["plums"])\nelse:\n    print("No plums")',
