@@ -3933,9 +3933,9 @@ tasks:
   deps:
   - 7.2e
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.2f-locked-cases-200
+  model: plan:lead build:sonnet
   needs_decision:
   - suite-sizes
 - id: 7.2s
