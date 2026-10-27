@@ -10966,9 +10966,31 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: review
+  status: done
   branch: m13/8.2q-upload-hardening
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1188
+    tokens_in: 4022
+    tokens_out: 352626
+    cache_read_tokens: 157780497
+    wall_time_seconds: 8021
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.2r
   milestone: M13
   title: 'Documents list index and 0017 validate-at-scale hygiene (deferred from 8.2a): composite index (teacher_id, created_at desc, id desc) for documents.listForTeacher, and a new migration that re-adds
