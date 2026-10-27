@@ -47,6 +47,8 @@ export interface StudioBackend {
   log: ServerLog;
   /** Task 8.2f: a per-teacher cap on adding web links (ADR-0014 egress policy, review follow-up). */
   linkRateLimit: LinkRateLimiter;
+  /** Task 8.2q: a per-teacher cap on creating a new upload row, same shape as `linkRateLimit`. */
+  createRateLimit: LinkRateLimiter;
 }
 
 /** Thrown by the backend factory when it can't serve (no Redis); `reason` is safe to log. */
@@ -147,6 +149,7 @@ const MSG = {
   failed: 'Something went wrong. Try again.',
   linkReplace: "A link can't be replaced. Delete it and add the link again.",
   linkRateLimited: 'Too many links added. Wait a while, then try again.',
+  createRateLimited: 'Too many uploads started. Wait a while, then try again.',
 } as const;
 
 /**
@@ -175,7 +178,8 @@ export const LINK_REFUSAL_MESSAGE: Record<WebLinkRefusal, string> = {
 const validation = (message: string = MSG.validation) => apiError('validation', message, 400);
 const notFound = () => apiError('not_found', MSG.notFound, 404);
 const tooLarge = (message: string) => apiError('input_too_large', message, 413);
-const rateLimited = () => apiError('rate_limited', MSG.linkRateLimited, 429);
+const rateLimited = (message: string = MSG.linkRateLimited) =>
+  apiError('rate_limited', message, 429);
 const ok = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -238,13 +242,25 @@ async function docId(ctx: RoleContext): Promise<string | null> {
   return parsed.success ? parsed.data.id : null;
 }
 
-/** Best effort: a stored file left behind is logged, never fails the request. */
+/** Task 8.2q: a transient S3 error gets a couple of retries before anything is logged. */
+const DROP_OBJECT_ATTEMPTS = 3;
+
+/**
+ * Best effort: a stored file left behind is logged, never fails the request. A failed delete is
+ * retried up to `DROP_OBJECT_ATTEMPTS` times (no backoff -- a bucket error is usually not timing
+ * related at this volume) before it is logged and given up on.
+ */
 async function dropObject(b: StudioBackend, key: string | null | undefined): Promise<void> {
   if (!key) return;
-  try {
-    await b.storage.deleteObject(key);
-  } catch (error) {
-    b.log.error('studio.object_delete_failed', { error: errorName(error) });
+  for (let attempt = 1; attempt <= DROP_OBJECT_ATTEMPTS; attempt += 1) {
+    try {
+      await b.storage.deleteObject(key);
+      return;
+    } catch (error) {
+      if (attempt === DROP_OBJECT_ATTEMPTS) {
+        b.log.error('studio.object_delete_failed', { error: errorName(error) });
+      }
+    }
   }
 }
 
@@ -274,6 +290,16 @@ const create: Work = async (b, scope, req) => {
   // Task 11.4 Phase B: only a transcript-kind type (caption, audio or video) may carry
   // `liveClassId`. Checked before anything is signed or written.
   if (body.liveClassId !== undefined && !isRecordingType(type)) return validation(MSG.type);
+  // Task 8.2q: the teacher's own create quota, same placement as addLink's linkRateLimit.take --
+  // before any write, so a limited teacher gets nothing written.
+  let allowed: boolean;
+  try {
+    allowed = await b.createRateLimit.take(scope.teacherId);
+  } catch (error) {
+    b.log.error('studio.create_rate_limit_unavailable', { error: errorName(error) });
+    return apiError('provider_error', MSG.unavailable, 503);
+  }
+  if (!allowed) return rateLimited(MSG.createRateLimited);
   const id = b.newDocumentId();
   const key = newStorageKey(scope.teacherId, id, type);
   // Unlike `replace` (whose ownership check is a plain read, so it can sign before writing),

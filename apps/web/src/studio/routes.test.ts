@@ -149,6 +149,7 @@ function memoryBackend() {
     newDocumentId: () => `doc_${++n}`,
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
     linkRateLimit: fakeLinkRateLimiter(),
+    createRateLimit: fakeLinkRateLimiter(),
   };
   return { backend, rows, linked, objects, enqueued, createCalls, replaceCalls, deleted, logs };
 }
@@ -363,6 +364,40 @@ describe('POST /api/studio/documents (create)', () => {
     expect(read.status).toBe(413);
     expect((await json(read)).error?.code).toBe('input_too_large');
     expect(s.rows.size).toBe(0);
+  });
+
+  it('is rate-limited per teacher: the 21st create in the window is 429, nothing written (task 8.2q)', async () => {
+    const s = setup();
+    for (let i = 0; i < 20; i += 1) {
+      const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+      expect(res.status).toBe(201);
+    }
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    expect(res.status).toBe(429);
+    expect((await json(res)).error?.code).toBe('rate_limited');
+    expect(s.rows.size).toBe(20);
+    expect(s.backend.storage.createUploadUrl).toHaveBeenCalledTimes(20);
+  });
+
+  it("doesn't share a rate-limit bucket between teachers or with addLink's (task 8.2q)", async () => {
+    const s = setup();
+    for (let i = 0; i < 20; i += 1) {
+      await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    }
+    const res = await s.h.create(req('POST', '/x', { ...NEW_PDF, moduleId: 'm_ben' }), ctx(BEN));
+    expect(res.status).toBe(201);
+  });
+
+  it('a create rate-limit store error fails closed: 503, nothing written (task 8.2q)', async () => {
+    const s = setup();
+    s.backend.createRateLimit = failingLinkRateLimiter(new RangeError('redis unreachable'));
+    const res = await s.h.create(req('POST', '/x', NEW_PDF), ctx(ASHA));
+    expect(res.status).toBe(503);
+    expect((await json(res)).error?.code).toBe('provider_error');
+    expect(s.rows.size).toBe(0);
+    expect(s.logs).toEqual([
+      { event: 'studio.create_rate_limit_unavailable', fields: { error: 'RangeError' } },
+    ]);
   });
 });
 
@@ -938,12 +973,26 @@ describe('DELETE /api/studio/documents/:id', () => {
     expect(s.deleted).toEqual([]);
   });
 
-  it('a failed file delete is logged by name and still 204 (the row is gone)', async () => {
+  it('a delete failing twice then succeeding is retried silently (task 8.2q)', async () => {
     const s = setup();
-    const { documentId } = await uploaded(s);
-    vi.mocked(s.backend.storage.deleteObject).mockRejectedValueOnce(new TypeError('bucket x'));
+    const { documentId, row } = await uploaded(s);
+    vi.mocked(s.backend.storage.deleteObject)
+      .mockRejectedValueOnce(new TypeError('bucket x'))
+      .mockRejectedValueOnce(new TypeError('bucket x'));
     const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: documentId }));
     expect(res.status).toBe(204);
+    expect(s.logs).toEqual([]);
+    expect(s.backend.storage.deleteObject).toHaveBeenCalledTimes(3);
+    expect(s.deleted).toEqual([row.storageKey]);
+  });
+
+  it('a delete failing on every attempt is retried then logged exactly once, still 204 (task 8.2q)', async () => {
+    const s = setup();
+    const { documentId } = await uploaded(s);
+    vi.mocked(s.backend.storage.deleteObject).mockRejectedValue(new TypeError('bucket x'));
+    const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(204);
+    expect(s.backend.storage.deleteObject).toHaveBeenCalledTimes(3);
     expect(s.logs).toEqual([
       { event: 'studio.object_delete_failed', fields: { error: 'TypeError' } },
     ]);
