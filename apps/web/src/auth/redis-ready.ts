@@ -22,21 +22,23 @@ export class RedisNotReadyError extends Error {
   }
 }
 
-// One in-flight "ready" promise per Redis instance (task 1.4d): N concurrent sign-in requests
+// One in-flight "ready" entry per Redis instance (task 1.4d): N concurrent sign-in requests
 // during an outage previously registered N `once('ready', …)` listeners (a MaxListeners warning
-// past 10); now every concurrent caller awaits the same shared promise, and only its first
-// caller registers a listener.
+// past 10); now every concurrent caller shares one entry, and only its first caller registers a
+// listener.
 //
-// 1.4e: that shared promise ignored every caller but the first's own `timeoutMs`. So the shared
-// promise itself now has no timeout of its own and only resolves (it never rejects, which also
-// means there is no risk of an un-awaited rejection on it turning into an unhandled rejection).
-// Each caller races it against its own timer, which rejects with RedisNotReadyError after that
-// caller's own `timeoutMs`. The `ready` listener is removed, and the entry is dropped, once the
-// last still-waiting caller has either resolved or timed out.
+// 1.4e fix round 1: a caller used to subscribe to a shared promise that never rejected, so a
+// caller's own timeout only decremented a counter and left its `.then` reaction attached forever.
+// During a long outage with sign-ins arriving faster than `timeoutMs`, `waiters` never reached 0,
+// so the entry (and every reaction ever attached to it) lived for the whole outage: unbounded
+// memory growth. Now each caller registers its own settle callback in a `Set` on the entry. The
+// single `ready` listener calls every callback in the set, then drops the entry. A caller's
+// timeout removes only its own callback from the set; once the set is empty, the `ready` listener
+// is removed and the entry is dropped — same as when `ready` fires. Memory is bounded by callers
+// currently waiting, not by every caller since the outage began.
 interface PendingReady {
-  readonly promise: Promise<void>;
+  readonly waiters: Set<() => void>;
   readonly dropListener: () => void;
-  waiters: number;
 }
 
 const pending = new WeakMap<ReadySource, PendingReady>();
@@ -44,19 +46,16 @@ const pending = new WeakMap<ReadySource, PendingReady>();
 function sharedReady(redis: ReadySource): PendingReady {
   const existing = pending.get(redis);
   if (existing) return existing;
-  let resolveShared: () => void;
-  const promise = new Promise<void>((resolve) => {
-    resolveShared = resolve;
-  });
+  const waiters = new Set<() => void>();
   const onReady = () => {
     pending.delete(redis);
-    resolveShared();
+    for (const settle of waiters) settle();
+    waiters.clear();
   };
   redis.once('ready', onReady);
   const entry: PendingReady = {
-    promise,
+    waiters,
     dropListener: () => redis.removeListener('ready', onReady),
-    waiters: 0,
   };
   pending.set(redis, entry);
   return entry;
@@ -66,21 +65,30 @@ function sharedReady(redis: ReadySource): PendingReady {
 export function whenReady(redis: ReadySource, timeoutMs: number): Promise<void> {
   if (redis.status === 'ready') return Promise.resolve();
   const entry = sharedReady(redis);
-  entry.waiters += 1;
   return new Promise<void>((resolve, reject) => {
+    const settle = () => {
+      clearTimeout(timer);
+      entry.waiters.delete(settle);
+      resolve();
+    };
     const timer = setTimeout(() => {
-      entry.waiters -= 1;
-      if (entry.waiters === 0) {
+      entry.waiters.delete(settle);
+      if (entry.waiters.size === 0) {
         entry.dropListener();
         pending.delete(redis);
       }
       reject(new RedisNotReadyError());
     }, timeoutMs);
-    void entry.promise.then(() => {
-      clearTimeout(timer);
-      resolve();
-    });
+    entry.waiters.add(settle);
   });
+}
+
+/**
+ * Test-only seam: the number of callers currently waiting on `redis`'s shared ready entry, or 0
+ * if there is none. Not part of the public API used by sign-in callers.
+ */
+export function pendingWaiterCount(redis: ReadySource): number {
+  return pending.get(redis)?.waiters.size ?? 0;
 }
 
 /** Wraps both counters so every take first waits for `redis` to be ready. */
