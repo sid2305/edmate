@@ -593,10 +593,31 @@ tasks:
   accept: a user who signed up by link can then sign in with Google on the same verified address; an unverified Google email never links; auth tests pass
   deps:
   - '1.4'
-  status: running
+  status: done
   risk: risky
   branch: m13/1.4c-google-link
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 676
+    tokens_in: 2366
+    tokens_out: 208207
+    cache_read_tokens: 92736218
+    wall_time_seconds: 5601
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: '1.5'
   milestone: M1
   title: 'Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions'
@@ -8337,7 +8358,7 @@ tasks:
   deps:
   - 11.4b
   risk: high
-  status: todo
+  status: planning
   branch: null
 - id: 8.2n
   milestone: M13
