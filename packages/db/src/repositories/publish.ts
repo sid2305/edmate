@@ -64,7 +64,8 @@ export type GateGroupName = (typeof GATE_GROUP_NAMES)[number];
 /** Mirrors of `@edmate/evals` GATE_DEADLINE_MS and FULL_SCOPE_GATE_DEADLINE_MS. */
 export const GATE_DEADLINE_MS = 15 * 60_000;
 export const FULL_SCOPE_GATE_DEADLINE_MS = 2 * 60 * 60_000;
-/** An open run with no progress for its deadline plus this long is stale (plan, decision 9). */
+/** An open run not marked running again for its deadline plus this long is stale (since
+ * markRunning, not since the last result; plan, decision 9). */
 export const STALE_RUN_GRACE_MS = 15 * 60_000;
 /** Most results one `recordResults` call takes. */
 export const GATE_RESULTS_MAX = 1000;
@@ -347,13 +348,14 @@ const RunShape = z.object({
   passRate: z.number().nullable(),
   summary: SummarySchema.nullable(),
   scorecard: ScorecardSchema.nullable(),
+  createdAt: z.date(),
 });
 
 function toRun(row: RunSelect, method: string): GateRunRow {
   const r = stored(RunShape, row, method);
   return {
     ...r,
-    createdAt: (row.createdAt as Date).toISOString(),
+    createdAt: r.createdAt.toISOString(),
     finishedAt: iso(row.finishedAt),
     publishedAt: iso(row.publishedAt),
   };

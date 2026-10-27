@@ -413,7 +413,7 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       expect(stale?.finishedAt).not.toBeNull();
     });
 
-    it('a partial-scope run goes stale after 15 min + 15 min of no progress', async () => {
+    it('a partial-scope run goes stale after 15 min + 15 min since markRunning', async () => {
       const t = await makeTeacher();
       await publish(t);
       await raw.query(
