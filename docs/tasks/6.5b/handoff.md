@@ -49,6 +49,14 @@ second run was needed.
 
 ## Decisions
 
+### 27 Oct 2026 · 6.5b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 44 tool calls against the plan's budget of 35 (1.26x).
+- Why: one phase, three approving reviews with no findings, and the extra calls went on prettier passes and on running the web gate; no scope was added.
+
+### 27 Oct 2026 · 6.5b review and risk level · decided by lead · risk: low
+- Decided: merge with code-reviewer, typescript-reviewer and security-reviewer, all APPROVE with no findings; no `risk: high` entry, since no changed path matches `risk-paths.txt`.
+- Why: the page's scope resolution is an access check, so security-reviewer ran anyway; it confirmed the page and the route now refuse the same cases with no database read before the guard.
+
 ### 27 Oct 2026 · 6.5b closes the three 6.5 review LOWs · decided by builder · risk: low
 - Decided: the memory page now resolves its scope through the same `studentTurnScope` helper the
   route uses, instead of a second hand-built scope object; a new test exercises the real wired
@@ -78,4 +86,4 @@ second run was needed.
   the plan's exit conditions).
 
 ## Budget
-Tool calls used: 28
+Tool calls used: 44 (harness count; the builder reported 28)
