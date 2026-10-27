@@ -3,9 +3,10 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 only when finalAnswers is
-  after_attempt and an attempt is logged; the solution is followed by a check);
-  content/prompt-packs/frame@1.2.0.md lines 75-87; content/demo-teacher/packages/paid.yaml;
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder: rung 4 only when
+  finalAnswers is after_attempt and an attempt is logged; the solution is followed by a
+  check); content/prompt-packs/frame@1.2.0.md lines 75-87;
+  content/demo-teacher/packages/paid.yaml;
   content/demo-teacher/question-bank/functions.yaml#fn-q1
 turns:
   - skill: coach

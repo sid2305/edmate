@@ -3,9 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 375 and lines 380-384 (Ask the teacher, item 1);
-  content/prompt-packs/ask_teacher@1.0.0.md; content/demo-teacher/course.yaml (no module covers
-  pausing a program)
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1);
+  content/prompt-packs/ask_teacher@1.0.0.md; content/demo-teacher/course.yaml (no module
+  covers pausing a program)
 turns:
   - student: how do I make my program wait 2 seconds before it prints the next line? like a dramatic pause lol
     expect:

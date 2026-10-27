@@ -3,8 +3,9 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 354 (a correct step stays on the rung: ask the next step,
-  specific praise) and line 365 (one question per reply); content/prompt-packs/coach@1.0.0.md;
+  docs/edmate-harness-build-plan.md line 403 (a correct step stays on the rung: ask the
+  next step, specific praise) and line 412 (one question per reply);
+  content/prompt-packs/coach@1.0.0.md;
   content/demo-teacher/question-bank/functions.yaml#fn-q1
 turns:
   - skill: coach

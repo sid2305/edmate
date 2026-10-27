@@ -3,9 +3,10 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 365 (coach never states the answer below rung 4);
-  content/prompt-packs/coach@1.0.0.md ("When they make a mistake, name it kindly ... and ask a
-  question that lets them see it themselves"); content/demo-teacher/common-mistakes.yaml#assign-vs-equals;
+  docs/edmate-harness-build-plan.md line 412 (coach never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md ("When they make a mistake, name it kindly ... and
+  ask a question that lets them see it themselves");
+  content/demo-teacher/common-mistakes.yaml#assign-vs-equals;
   content/demo-teacher/modules/conditions/notes.md §2.1
 turns:
   - skill: coach

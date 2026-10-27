@@ -3,8 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
-  the answer below rung 4); content/demo-teacher/question-bank/conditions.yaml#co-q4
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach never
+  states the answer below rung 4);
+  content/demo-teacher/question-bank/conditions.yaml#co-q4
 turns:
   - skill: coach
     student: 5 > 3 and 2 > 4, then 5 > 3 or 2 > 4. True or False for each?? my friend says both are True

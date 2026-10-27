@@ -3,9 +3,10 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-355 (help ladder: answer-seeking climbs one rung;
-  finalAnswers never caps it at 3) and line 365 (coach never states the answer below rung 4);
-  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/question-bank/values-variables.yaml#vv-q1
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder: answer-seeking climbs one
+  rung; finalAnswers never caps it at 3) and line 412 (coach never states the answer below
+  rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/values-variables.yaml#vv-q1
 turns:
   - skill: coach
     student: what does print(7 // 2) show and why is it diff from print(7 / 2)?? just tell me pls quiz is tmrw 😩
