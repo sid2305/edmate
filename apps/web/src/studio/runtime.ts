@@ -36,6 +36,8 @@ export interface StudioHooks {
   queue(redisUrl: string, log: ServerLog): JobQueue;
   /** Task 8.2f: the per-teacher web-link rate limit, on its own Redis connection. */
   linkRateLimit(redisUrl: string, log: ServerLog): LinkRateLimiter;
+  /** Task 8.2q: the per-teacher create rate limit, on its own Redis connection. */
+  createRateLimit(redisUrl: string, log: ServerLog): LinkRateLimiter;
   log: ServerLog;
 }
 
@@ -70,6 +72,7 @@ async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
       : hooks.s3({ ...config, endpoint: config.publicEndpoint });
   const queue = hooks.queue(redisUrl, hooks.log);
   const linkRateLimit = hooks.linkRateLimit(redisUrl, hooks.log);
+  const createRateLimit = hooks.createRateLimit(redisUrl, hooks.log);
   const factories = await anthropicFactories(env).catch(() => {
     throw new StudioUnavailableError('provider_key');
   });
@@ -85,6 +88,7 @@ async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
     newDocumentId: () => `doc_${randomUUID()}`,
     log: hooks.log,
     linkRateLimit,
+    createRateLimit,
   };
 }
 
@@ -93,10 +97,7 @@ async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
  * two concurrent cold requests share one build; a failed build is not cached, so the next
  * request retries.
  */
-export function createStudioRuntime(
-  env: () => Env,
-  hooks: StudioHooks,
-): () => Promise<Backend> {
+export function createStudioRuntime(env: () => Env, hooks: StudioHooks): () => Promise<Backend> {
   let backend: Promise<Backend> | undefined;
   return () => {
     backend ??= build(env(), hooks).catch((error: unknown) => {
@@ -137,6 +138,15 @@ export const realHooks: StudioHooks = {
       }),
     );
     return redisLinkRateLimiter(connection);
+  },
+  createRateLimit: (redisUrl, log) => {
+    const connection = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+    connection.on('error', (error: unknown) =>
+      log.error('studio.create_rate_limit_redis_error', {
+        error: error instanceof Error ? error.name : 'unknown',
+      }),
+    );
+    return redisLinkRateLimiter(connection, { prefix: 'edmate:studio:createrate' });
   },
   log: consoleLog('[studio]'),
 };

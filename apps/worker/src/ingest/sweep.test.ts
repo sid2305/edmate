@@ -114,6 +114,32 @@ describe('ingestSweepJob', () => {
     );
   });
 
+  // Task 8.2q: ingestSweepRepo.staleProcessing now also returns stale `uploading` rows (a
+  // create whose cleanup delete also failed, 8.2q item 4); no code change in this file was
+  // expected -- failIfStorageKey's own from-state list already accepts `uploading`
+  // (`STATUS_FROM.failed`, packages/db/src/repositories/chunks.ts) -- this test just confirms
+  // the job loop treats a stale uploading row exactly like a stale processing one.
+  it('a stale uploading row (not just processing) is marked failed by one run (task 8.2q)', async () => {
+    const lines: LogLine[] = [];
+    const failIfStorageKey = vi.fn(() => Promise.resolve({ updated: true }));
+    const row = ROW({ id: 'doc_stale_uploading' }); // the row's own prior status doesn't reach
+    // this file; staleProcessing already filtered to processing+uploading before returning it.
+    const summary = await ingestSweepJob(
+      deps({
+        staleProcessing: () => Promise.resolve([row]),
+        documents: { failIfStorageKey },
+        log: (l) => lines.push(l),
+      }),
+    )();
+    expect(summary).toEqual({ marked: 1, skipped: 0, cutoff: expect.any(String), pages: 1 });
+    expect(failIfStorageKey).toHaveBeenCalledWith(
+      { teacherId: 'tch_1' },
+      'doc_stale_uploading',
+      'uploads/tch_1/f1.pdf',
+      INGEST_SWEEP_FAILURE_REASON,
+    );
+  });
+
   it('a row whose own ingest job is still active or waiting is skipped, not failed (8.2i fix round 1)', async () => {
     const lines: LogLine[] = [];
     const rows = [ROW({ id: 'doc_active' }), ROW({ id: 'doc_waiting' })];

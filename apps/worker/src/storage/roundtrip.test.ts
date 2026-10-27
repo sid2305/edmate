@@ -147,6 +147,7 @@ describe('storageConfigFromEnv in production', () => {
   const PROD = {
     NODE_ENV: 'production',
     S3_ENDPOINT: 'https://s3.example.test',
+    S3_REGION: 'ap-south-1',
     S3_ACCESS_KEY_ID: 'synthetic-id',
     S3_SECRET_ACCESS_KEY: 'synthetic-secret',
     S3_BUCKET: 'synthetic-bucket',
@@ -155,11 +156,18 @@ describe('storageConfigFromEnv in production', () => {
   it('reads a complete https config', () => {
     expect(storageConfigFromEnv(PROD)).toMatchObject({
       endpoint: 'https://s3.example.test',
+      region: 'ap-south-1',
       bucket: 'synthetic-bucket',
     });
   });
 
-  it.each(['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'] as const)(
+  it.each([
+    'S3_ENDPOINT',
+    'S3_REGION',
+    'S3_ACCESS_KEY_ID',
+    'S3_SECRET_ACCESS_KEY',
+    'S3_BUCKET',
+  ] as const)(
     'never falls back to the dev placeholders when %s is missing or blank, and the error names only the setting',
     (name) => {
       const missing = { ...PROD, [name]: undefined };
@@ -171,25 +179,29 @@ describe('storageConfigFromEnv in production', () => {
     },
   );
 
-  it.each(['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'] as const)(
-    'refuses %s set to its own dev-default placeholder value',
-    (name) => {
-      const DEV = {
-        S3_ENDPOINT: 'http://localhost:9000',
-        S3_ACCESS_KEY_ID: 'edmate-dev',
-        S3_SECRET_ACCESS_KEY: 'edmate-dev-storage',
-        S3_BUCKET: 'edmate-dev',
-      };
-      let caught: unknown;
-      try {
-        storageConfigFromEnv({ ...PROD, [name]: DEV[name] });
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(StorageConfigError);
-      expect(caught).toMatchObject({ code: `${name}_placeholder` });
-    },
-  );
+  it.each([
+    'S3_ENDPOINT',
+    'S3_REGION',
+    'S3_ACCESS_KEY_ID',
+    'S3_SECRET_ACCESS_KEY',
+    'S3_BUCKET',
+  ] as const)('refuses %s set to its own dev-default placeholder value', (name) => {
+    const DEV = {
+      S3_ENDPOINT: 'http://localhost:9000',
+      S3_REGION: 'us-east-1',
+      S3_ACCESS_KEY_ID: 'edmate-dev',
+      S3_SECRET_ACCESS_KEY: 'edmate-dev-storage',
+      S3_BUCKET: 'edmate-dev',
+    };
+    let caught: unknown;
+    try {
+      storageConfigFromEnv({ ...PROD, [name]: DEV[name] });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(StorageConfigError);
+    expect(caught).toMatchObject({ code: `${name}_placeholder` });
+  });
 
   it('refuses a plain-http endpoint, and the error never quotes it', () => {
     let caught: unknown;

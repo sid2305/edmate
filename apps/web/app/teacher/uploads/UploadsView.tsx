@@ -245,6 +245,7 @@ export function UploadsView({ modules, putFile = realPutFile }: UploadsViewProps
         ...(linkTitle.trim() ? { sourceTitle: linkTitle.trim() } : {}),
         rightsDeclared: true,
       });
+      if (!mounted.current) return;
       if (!result.ok) {
         setLinkBannerError(result.message ?? t(`errors.${errorKey(result)}`));
         return;
@@ -253,9 +254,10 @@ export function UploadsView({ modules, putFile = realPutFile }: UploadsViewProps
       setLinkTitle('');
       await refresh();
     } catch {
+      if (!mounted.current) return;
       setLinkBannerError(t('errors.provider_error'));
     } finally {
-      setLinkBusy(false);
+      if (mounted.current) setLinkBusy(false);
     }
   };
 
