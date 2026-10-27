@@ -5909,7 +5909,9 @@ tasks:
   - 12.1a
   - 9.6f
   risk: high
-  status: todo
+  status: running
+  branch: m13/12.1c-staff-queue-followups
+  model: plan:sonnet build:sonnet
 - id: 8.7k
   milestone: M8
   title: '8.7 lead answer Q10: the studio shows a "changed since last publish" note on /teacher/publish (and the studio home) when the style card, outline, packages or uploads changed after the latest published
@@ -8363,9 +8365,31 @@ tasks:
   deps:
   - 13.4d
   risk: high
-  status: running
+  status: done
   branch: m13/13.4f-export-dedupe
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 305
+    tokens_in: 1082
+    tokens_out: 91024
+    cache_read_tokens: 41012081
+    wall_time_seconds: 3485
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 13.4g
   milestone: M13
   title: '13.4f review follow-ups: apps/web/src/export/accountExport.ts dedupe keeps the first row on an exact periodEnd tie (strict >), and listAllForStudent orders only by agent id, so an ended row can
