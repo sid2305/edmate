@@ -33,6 +33,10 @@ session length as 30 days. No doc changes were needed beyond the two files above
   (docs/tasks/13.3b/plan.md's "Open question" section). `apps/web/src/auth/config.ts` is under
   `apps/web/src/auth/**`, a risk-paths.txt identity group, so this is `risk: high`.
 
+### 27 Oct 2026 · 13.3c approve merge of 7-day sign-in sessions · decided by lead · risk: high
+- Decided: merge the change to `apps/web/src/auth/config.ts` (SESSION_MAX_AGE_S is now 7 days; the daily SESSION_UPDATE_AGE_S renewal is kept). security-reviewer and typescript-reviewer ran and found nothing.
+- Why: this is the human's B-60 answer; both values feed the one Auth.js database-session setting, and nothing else in the sign-in path assumed 30 days. A session in daily use keeps renewing, which is what "renewed on use" asks for.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — all 10 tasks passed.
 - `corepack pnpm exec prettier --check apps/web/src/auth/config.ts apps/web/src/auth/config.test.ts` — "All matched files use Prettier code style!"
