@@ -59,6 +59,14 @@ the finding (with the trace evidence summarized) was added above `createOrRename
 
 ## Decisions
 
+### 27 Oct 2026 · 0.20k unused fresh-teacher helper removed · decided by lead · risk: low
+- Decided: remove `createFreshTeacher()` from fixtures.ts (apps/web/e2e/fixtures.ts) in fix round 1 instead of shipping it unused, and accept the fixer's prettier re-wrap of four existing calls in the same file.
+- Why: code-reviewer and typescript-reviewer both flagged it as dead code no committed test exercises; CI starts from an empty database, so the starting-empty path is already covered. The re-wrap is formatting only.
+
+### 27 Oct 2026 · 0.20k merge and budget, 151 tool calls against 45 · decided by lead · risk: low
+- Decided: merge at 151 harness-counted tool calls (build 124, fix round 1 27) against the plan's 45.
+- Why: the accept line needed ten full walkthrough runs plus tracing the hang to its cause, each run costing several calls; the fix itself is small and reviewed.
+
 ### 27 Oct 2026 · 0.20k fresh-teacher helper for the "empty" proof · decided by builder · risk: low
 - Decided: added `createFreshTeacher()` to `apps/web/e2e/fixtures.ts`, and proved the "starting
   empty" acceptance leg with a temporary, uncommitted spec file that used it, rather than
@@ -104,4 +112,4 @@ Fix round builder count: 10
 
 ## Budget
 
-Tool calls used: ~58
+Tool calls used: 151 (harness count: build 124, fix round 1 27; the builders counted ~58 and 10)
