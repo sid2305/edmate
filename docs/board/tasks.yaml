@@ -3928,9 +3928,8 @@ tasks:
     human_questions: 0
 - id: 7.2f
   milestone: M13
-  title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full
-    sizes now'
-  accept: counts per the Evals table, reviewer recorded per case.
+  title: '7.2 Phases H and I (split by the lead, 27 Oct 2026): grow the locked suite from 100 to 200 cases (+50 per phase) before the pilot gate; plan docs/tasks/7.2f/plan.md'
+  accept: locked suite at 200 cases with SUITE_FLOORS.locked 200, reviewer recorded per case.
   deps:
   - 7.2e
   risk: risky
@@ -3939,6 +3938,36 @@ tasks:
   model: null
   needs_decision:
   - suite-sizes
+- id: 7.2s
+  milestone: M13
+  title: '7.2 Phases J and K (split from 7.2f by the lead, 27 Oct 2026): grow the pedagogy suite from 60 to 150 cases before the pilot gate; shared plan docs/tasks/7.2/plan.md'
+  accept: pedagogy suite at 150 cases with its floor raised, reviewer recorded per case.
+  deps:
+  - 7.2f
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 7.2t
+  milestone: M13
+  title: '7.2 Phases L and M (split from 7.2f by the lead, 27 Oct 2026): grow the leak suite from 80 to 150 cases before the pilot gate; shared plan docs/tasks/7.2/plan.md'
+  accept: leak suite at 150 cases with its floor raised, reviewer recorded per case.
+  deps:
+  - 7.2f
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 7.2u
+  milestone: M13
+  title: '7.2 Phases N, O and P (split from 7.2f by the lead, 27 Oct 2026): safety 250 to 300, persona 60 to 100 and advice 60 to 100 before the pilot gate; shared plan docs/tasks/7.2/plan.md'
+  accept: safety 300, persona 100 and advice 100 with floors raised, reviewer recorded per case.
+  deps:
+  - 7.2f
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 7.4c
   milestone: M7
   title: 'Per-scope gate deadline (7.2 plan risk): GATE_DEADLINE_MS is 15 minutes for every scope, but a live first-publish or prompt-pack gate takes about 45-80 minutes and fails closed; give each change
