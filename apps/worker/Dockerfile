@@ -31,6 +31,11 @@ COPY --from=build --chown=node:node /out/dist ./dist
 COPY --from=build --chown=node:node /repo/content/locales ./content/locales
 COPY --from=build --chown=node:node /repo/content/prompt-packs ./content/prompt-packs
 COPY --from=build --chown=node:node /repo/content/skills ./content/skills
+# ADR-0016: ffmpeg splits MP4/WebM/M4A recordings for Whisper's upload limit; it runs as a
+# separate process, never linked into the app. Pinned via the base image tag above, not a
+# per-package digest (apk has none) -- check `ffmpeg -version`'s licence banner (ADR-0016 Q3)
+# before relying on this in a deployed image.
+RUN apk add --no-cache ffmpeg
 COPY --from=build --chown=node:node /repo/evals/suites ./evals/suites
 USER node
 CMD ["node", "dist/index.js"]
