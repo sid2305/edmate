@@ -67,6 +67,14 @@ re-included verbatim here to save space). The final full-package run is in `## G
 
 ## Decisions
 
+### 27 Oct 2026 · 12.3d repeat-infringer flag approval · decided by lead · risk: high
+- Decided: approve the new staff-only GET route under apps/web/app/api/staff/repeat-infringers/** and the page under apps/web/app/staff/repeat-infringers/** (risk groups apps/web/app/api/staff/** and apps/web/app/staff/**) for merge. security-reviewer approved with no findings: staff-only through withRole and ROUTE_POLICY, no new write path, the same data the verification queue already shows, bounded lists. code-reviewer approved with three LOWs, deferred to 12.3g.
+- Why: it carries out the human's B-63 answer with no table, column or contracts change; "suspend" is the existing reject path (B-46), so current students keep access unless staff tick the existing safety-concern box.
+
+### 27 Oct 2026 · 12.3d review LOWs deferred · decided by lead · risk: low
+- Decided: the three code-reviewer LOWs (the `by` typing in handlers.ts, an exact 365-day boundary test, reading listActiveForStaff twice) go to board task 12.3g.
+- Why: none changes behaviour today; the MVP rule fixes only CRITICAL and HIGH before merge.
+
 ### 27 Oct 2026 · 12.3d repeat-infringer flag design · decided by builder · risk: high
 
 - Decided: threshold (3) and window (365 days) are plain code constants, not a table/config row;
@@ -102,4 +110,4 @@ re-included verbatim here to save space). The final full-package run is in `## G
 
 ## Budget
 
-Tool calls used: ~128
+Tool calls used: 101 (harness count: build 101; plan 41 and reviews 43 not included)
