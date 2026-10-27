@@ -88,6 +88,12 @@ export const HelpStateSchema = z.strictObject({
    * producer, parallel to `practiceModuleId`. Optional, so a blob saved before 6.4a still parses.
    */
   practiceTopicId: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
+  /**
+   * The active practice item's candidate mistake tag (6.3c): read by the runner's mistake-tagging
+   * producer on a wrong answer, parallel to `practiceTopicId`. Optional, so a blob saved before
+   * 6.3c still parses.
+   */
+  practiceMistakeTag: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
   /** Practice item ids already served this session, oldest first (the tool's exclude list). */
   practiceServed: z
     .array(z.string().min(1).max(PRACTICE_ID_MAX))
@@ -146,11 +152,19 @@ export function holdsPracticeKey(h: Readonly<HelpState>): boolean {
  */
 export function practiceFields(
   h: Readonly<HelpState>,
-): Pick<HelpState, 'practiceItemId' | 'practiceModuleId' | 'practiceTopicId' | 'practiceServed'> {
+): Pick<
+  HelpState,
+  | 'practiceItemId'
+  | 'practiceModuleId'
+  | 'practiceTopicId'
+  | 'practiceMistakeTag'
+  | 'practiceServed'
+> {
   return {
     ...(h.practiceItemId === undefined ? {} : { practiceItemId: h.practiceItemId }),
     ...(h.practiceModuleId === undefined ? {} : { practiceModuleId: h.practiceModuleId }),
     ...(h.practiceTopicId === undefined ? {} : { practiceTopicId: h.practiceTopicId }),
+    ...(h.practiceMistakeTag === undefined ? {} : { practiceMistakeTag: h.practiceMistakeTag }),
     ...(h.practiceServed === undefined ? {} : { practiceServed: [...h.practiceServed] }),
   };
 }

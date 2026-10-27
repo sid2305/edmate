@@ -9,6 +9,9 @@
 //    the step finishes the rest, then fails with GroundingEscalationLost (error name only).
 // 4. The session's next help state (when decide produced one), via SessionStateStore only.
 // 5. Learner-profile evidence (when the turn produced any — task 3.17), via `profiles.applyEvidence`.
+// 5b. Mistake tags (task 6.3c): known tags via `profiles.applyMistakes` (optional port methods,
+//     a safe no-op for an implementer that hasn't landed them yet), proposed tags also via
+//     `profiles.recordProposedMistakes`.
 // 6. The TeacherQuestion for an `ask_teacher` turn, as a fallback, when the live (3.7) attempt
 //    left `teacherQuestionId` unset (its own open timed out or failed) — never a second question
 //    when it is already set (`teacherQuestion.ts`'s shared, idempotent open).
@@ -65,6 +68,16 @@ export const commit: Steps['commit'] = async (env, record) => {
   }
   if (record.evidence !== undefined && record.evidence.length > 0) {
     await profiles.applyEvidence(record.evidence);
+  }
+  const known = record.mistakesKnown ?? [];
+  const proposed = record.mistakesProposed ?? [];
+  if (known.length > 0 || proposed.length > 0) {
+    const scope = {
+      studentId: record.entitled.entitlement.studentId,
+      teacherId: record.entitled.entitlement.teacherId,
+    };
+    await profiles.applyMistakes?.(scope, known, proposed);
+    if (proposed.length > 0) await profiles.recordProposedMistakes?.(scope, proposed);
   }
   if (asks && record.decision?.move === 'ask_teacher') {
     await openTeacherQuestion(teacherQuestions, record.entitled.entitlement, text);

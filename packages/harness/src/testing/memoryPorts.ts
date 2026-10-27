@@ -269,6 +269,17 @@ export function memoryCorrectionStore(opts: {
 export interface MemoryProfileStore extends ProfileStore {
   /** Every `applyEvidence` call's events, flattened, in order. */
   readonly applied: EvidenceEvent[];
+  /** Every `applyMistakes` call's args, in order (6.3c). */
+  readonly appliedMistakes: {
+    scope: { studentId: string; teacherId: string };
+    known: LearnerProfile['mistakes'];
+    proposed: LearnerProfile['mistakes'];
+  }[];
+  /** Every `recordProposedMistakes` call's args, in order (6.3c). */
+  readonly proposedMistakes: {
+    scope: { studentId: string; teacherId: string };
+    proposed: LearnerProfile['mistakes'];
+  }[];
 }
 
 /**
@@ -279,6 +290,8 @@ export interface MemoryProfileStore extends ProfileStore {
  */
 export function memoryProfileStore(opts: { fail?: boolean } = {}): MemoryProfileStore {
   const applied: EvidenceEvent[] = [];
+  const appliedMistakes: MemoryProfileStore['appliedMistakes'] = [];
+  const proposedMistakes: MemoryProfileStore['proposedMistakes'] = [];
   const profiles = new Map<string, LearnerProfile>();
   const key = (studentId: string, teacherId: string) => `${studentId}\u0000${teacherId}`;
   const of = (studentId: string, teacherId: string): LearnerProfile =>
@@ -291,6 +304,8 @@ export function memoryProfileStore(opts: { fail?: boolean } = {}): MemoryProfile
     };
   return {
     applied,
+    appliedMistakes,
+    proposedMistakes,
     get(studentId, teacherId) {
       return Promise.resolve(of(studentId, teacherId));
     },
@@ -299,6 +314,16 @@ export function memoryProfileStore(opts: { fail?: boolean } = {}): MemoryProfile
       applied.push(...events);
       const [first] = events;
       return Promise.resolve(of(first?.studentId ?? '', first?.teacherId ?? ''));
+    },
+    applyMistakes(scope, known, proposed) {
+      if (opts.fail === true) return Promise.reject(new Error('profile store down'));
+      appliedMistakes.push({ scope, known, proposed });
+      return Promise.resolve();
+    },
+    recordProposedMistakes(scope, proposed) {
+      if (opts.fail === true) return Promise.reject(new Error('profile store down'));
+      proposedMistakes.push({ scope, proposed });
+      return Promise.resolve();
     },
   };
 }
