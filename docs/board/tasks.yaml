@@ -5108,7 +5108,9 @@ tasks:
   deps:
   - 13.regate
   risk: medium
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/13.regatea-eval-runs-index
 - id: 8.9d
   milestone: M13
   title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes; 8.9c review
