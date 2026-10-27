@@ -101,6 +101,14 @@ export interface IdentityStore {
   getMarket(id: string): Promise<string | null>;
   getUserByEmail(email: string): Promise<IdentityUser | null>;
   getUserByAccount(provider: string, providerAccountId: string): Promise<IdentityUser | null>;
+  /**
+   * Whether this user already has any account linked for this provider (1.4c): the app-level
+   * pre-check the `signIn` callback uses before approving a by-email link to an existing user, so
+   * the unique `(user_id, provider)` constraint (README rule 7) is never the first line of
+   * defence. A bad `userId`/`provider` is `invalid`; an unknown user reads as `false` (no linked
+   * account), same stance as a lookup rather than a write.
+   */
+  hasLinkedAccount(userId: string, provider: string): Promise<boolean>;
   /** The only profile field sign-in may change. An unknown user is `not_found`. */
   markEmailVerified(userId: string, at: Date): Promise<IdentityUser>;
   /** Links a provider account. No OAuth tokens are taken or stored. */
@@ -375,6 +383,18 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
         .where(and(eq(authAccounts.provider, p), eq(authAccounts.providerAccountId, a)))
         .limit(1);
       return row ?? null;
+    },
+
+    async hasLinkedAccount(userId: unknown, provider: unknown): Promise<boolean> {
+      const method = 'identity.hasLinkedAccount';
+      const id = parseArg(IdSchema, userId, method);
+      const p = parseArg(Provider, provider, method);
+      const rows = await db
+        .select({ one: sql`1` })
+        .from(authAccounts)
+        .where(and(eq(authAccounts.userId, id), eq(authAccounts.provider, p)))
+        .limit(1);
+      return rows.length > 0;
     },
 
     async markEmailVerified(userId: unknown, at: unknown): Promise<IdentityUser> {

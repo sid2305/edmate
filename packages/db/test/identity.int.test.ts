@@ -149,6 +149,25 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       expect(await kindOf(() => identity.getUserByAccount('', 'x'))).toBe('invalid');
       expect(await kindOf(() => identity.getUserByAccount('google', ''))).toBe('invalid');
     });
+
+    it('hasLinkedAccount: false before linking, true after, false for a different provider; bad input is invalid', async () => {
+      const u = await identity.createStudent({
+        email: email('hla'),
+        emailVerifiedAt: null,
+        name: 'H',
+      });
+      expect(await identity.hasLinkedAccount(u.id, 'google')).toBe(false);
+      await identity.linkAccount({
+        userId: u.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: `sub-hla-${u.id}`,
+      });
+      expect(await identity.hasLinkedAccount(u.id, 'google')).toBe(true);
+      expect(await identity.hasLinkedAccount(u.id, 'github')).toBe(false);
+      expect(await kindOf(() => identity.hasLinkedAccount('bad id!', 'google'))).toBe('invalid');
+      expect(await kindOf(() => identity.hasLinkedAccount(u.id, ''))).toBe('invalid');
+    });
   });
 
   describe('accounts', () => {
