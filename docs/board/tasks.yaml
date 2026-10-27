@@ -10648,6 +10648,6 @@ tasks:
   deps:
   - 8.2i
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2p-sweep-index
+  model: plan:lead build:sonnet review:sonnet
