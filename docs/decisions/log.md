@@ -10,6 +10,52 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.3b prettier reformatted the whole of `profile-store.int.test.ts` · decided by builder · risk: low
+- Decided: ran `prettier --write` on the file (as the gate requires `prettier --check` to pass)
+  rather than hand-formatting only the new test bodies; this rewrote every existing `it(...)`
+  call in the file from an explicit multi-line `it(\n'desc',\nasync () => {...},\n15_000,\n)`
+  shape to prettier 3.9.10's own single-line-where-it-fits shape — a large diff, but no behaviour
+  change (confirmed: all pre-existing tests in the file still pass, 23/23). The file already
+  failed `prettier --check` before this task touched it (pre-existing drift, not introduced
+  here); fixing only my own additions by hand would have left the file still failing the check.
+- Why: the gate names `prettier --check` on changed files as a required command; the only way to
+  make it pass on this file, given its pre-existing drift, is a full-file `--write`.
+risk: low
+
+---
+
+### 27 Oct 2026 · 6.3b caps and re-check implemented as planned · decided by builder · risk: low
+- Decided: shipped `MAX_MISTAKES_PATCH_LENGTH = 50`, `MAX_MISTAKES_ENTRIES = 200`, required
+  `allowedTags`, and reject-whole-write (`'limit'`, no truncation) exactly as the plan's Q1/Q2/Q3
+  and the lead's answers specified — no deviation.
+- Why: the lead's answers in the plan closed all three open questions before the build started.
+risk: low
+
+---
+
+### 27 Oct 2026 · 6.3b `applyMistakes`'s signature and logic change in `learner.ts` (risky path) · decided by builder · risk: high
+- Decided: shipped the new `allowedTags` parameter, the patch-length cap and the stored-array
+  cap in `packages/db/src/repositories/learner.ts` (and its `index.ts` export), a
+  `packages/db/src/repositories/**` risky path (security-reviewer group).
+- Why: the merge gate's rule requires `risk: high` for any change to this path regardless of the
+  change's actual size; reviewers for this PR: security-reviewer, code-reviewer,
+  typescript-reviewer, database-reviewer (per the plan).
+risk: high
+
+---
+
+### 27 Oct 2026 · 6.3b `applyMistakes` takes a required `allowedTags` and enforces the caps · decided by lead · risk: high
+- Decided: approve the `learner.ts` change (a risky path): `applyMistakes(scope, patch, allowedTags)` rejects an off-list tag (`scope`), a patch over `MAX_MISTAKES_PATCH_LENGTH` (50, `invalid`) and a stored list over `MAX_MISTAKES_ENTRIES` (200, `limit`, whole write rolled back). `allowedTags` is a list the caller supplies and trusts; it is not looked up for the teacher.
+- Why: security, database, code and typescript reviewers all approved; the scope check on (teacher, student) is unchanged, so a wrong list can only reject or accept tags inside the caller's own row. No production caller exists yet. The first real caller must pass the teacher's style-card `mistakeTags` (noted for 6.3a).
+
+---
+
+### 27 Oct 2026 · 6.3b budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (69 harness tool calls against a plan budget of 45; the builder reported 32).
+- Why: the plan was delivered in full; most of the extra calls went to the full db gate and the prettier reformat of a non-compliant test file.
+
+---
+
 ### 27 Oct 2026 · 8.2p budget overrun · decided by lead · risk: low
 - Decided: accept the overrun (86 harness tool calls against a plan budget of 30; the builder reported 34).
 - Why: the index, the comment-only 0040 migration, its POST_MIGRATE_STEPS entry, the hand-made snapshot and journal, and the EXPLAIN test all landed as planned; the full db gate and its dependent CLI flake check account for most of the extra calls, and both reviewers approved with no findings.

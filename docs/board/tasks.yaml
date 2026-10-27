@@ -3031,9 +3031,31 @@ tasks:
   deps:
   - '6.3'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.3b-mistakes-caps
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 309
+    tokens_in: 1128
+    tokens_out: 73967
+    cache_read_tokens: 32225838
+    wall_time_seconds: 1451
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 6.4a
   milestone: M13
   title: 'Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end'
