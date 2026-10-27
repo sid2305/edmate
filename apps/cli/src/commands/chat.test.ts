@@ -388,7 +388,12 @@ describe('edmate chat: a scripted role-play session (5.8a)', () => {
         '/roleplay job-interview@1.0.0',
         '/roleplay job-interview',
         'A variable names a value.',
-        '/pause need help',
+        // A bare `/pause` (ADR-0013 §1, B-37 q8): a `/pause` with extra text now meets the
+        // coverage gate and gets the ordinary redirect instead of steering the role-play, so it
+        // would drop the skill block this test checks for on every role-play turn; that edge is
+        // covered at the policy level (policy.test.ts, "a /pause with extra text ... gets the
+        // ordinary ... redirect (B-37 q8, steersRolePlay fix)").
+        '/pause',
         'stop',
         '/leave',
         'What is a variable?',

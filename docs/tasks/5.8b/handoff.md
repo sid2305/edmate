@@ -211,3 +211,57 @@ Phase B tool calls used: 26
 ### Budget
 
 Fix round tool calls used: 21
+
+## Fix round 2
+
+PR #361's CI `node` job failed in `apps/cli`'s `chat.test.ts`, a dependent package the builder's
+gate (`--filter=@edmate/harness` and `--filter=@edmate/content`) never ran:
+
+    FAIL apps/cli src/commands/chat.test.ts > edmate chat: a scripted role-play session (5.8a)
+      > sends every role-play line with the mock_interview skill until /leave
+    AssertionError: expected '[[SAFETY]] You are an AI tutor built …' to contain
+      'Skill: mock interview'
+
+**Cause.** This is the deliberate coverage-gate rule 5.8b itself shipped (ADR-0013 §1, "Rule
+order (final; B-37 answered 27 Oct 2026, task 5.8b)"): "A `/pause` that carries text after the
+command does not steer (B-37 q8, the `steersRolePlay` fix): that turn gets the ordinary
+off_topic/meta redirect instead" and, further down, "Only two role-play cases still meet the
+coverage gate: a turn whose stored phase is `ended` ... and a `/pause` that carries extra text
+(steered past the control, so it meets the gate like any ordinary turn)." The pre-existing CLI
+test (written in 5.8a, before this B-37 answer) sent `/pause need help` as one of the four
+role-play turns it asserts all carry the `mock_interview` skill block. Under the new rule, a
+`/pause` with extra text now meets the coverage gate; with no retrieved material in this scripted
+scenario the gate locks/redirects that turn, so its system prompt correctly has no skill block —
+the CLI test's input, not the harness code, was stale against the new spec. This exact
+`/pause`-with-extra-text-under-an-active-role-play case already has dedicated coverage at the
+policy level (`packages/harness/src/pedagogy/policy.test.ts`, `"a /pause with extra text ... gets
+the ordinary ... redirect (B-37 q8, steersRolePlay fix)"` and the bare-`/pause`-still-steers case
+right after it), so the CLI-level scripted-session test did not need to carry this edge too.
+
+**What changed.** `apps/cli/src/commands/chat.test.ts`: changed the role-play session's fourth
+typed line from `'/pause need help'` to a bare `'/pause'` (no text after the command), with a
+comment pointing at ADR-0013 §1 and the policy-level test that already covers the
+extra-text case. No harness or content code changed.
+
+Red (before the fix, on origin/m13/5.8b-roleplay-gate-followups):
+`vitest run src/commands/chat.test.ts` → `AssertionError: expected ... to contain 'Skill: mock
+interview'` (see failure above), 29 passed / 1 failed.
+
+Green (after the fix): `vitest run src/commands/chat.test.ts` → 30 passed, 0 failed.
+
+### Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` → 4/4 green (cached,
+  unaffected by this round's change).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/content` → 5/5 green, run alone to
+  avoid the known timing-probe flake under load (`safeRegex.test.ts`); confirmed flaky-not-broken
+  by also seeing it fail once and then pass standalone when run together with `@edmate/web`.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/cli` → 10/10 green, 162 passed / 1
+  skipped, including `test/chatDbRetrieval.int.test.ts` (no flake this run; no re-run needed).
+- `corepack pnpm exec prettier --check apps/cli/src/commands/chat.test.ts` → all matched files use
+  Prettier code style, clean.
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+
+### Budget
+
+Fix round 2 tool calls used: 17
