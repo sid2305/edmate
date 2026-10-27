@@ -2,7 +2,7 @@
 // text finds them even when embedding fails; embedding failure is reported to an optional callback
 // (a fixed code, never text) and the call still resolves. A storage failure rejects with a fixed
 // IngestError that keeps nothing of the cause (it may quote teacher material).
-import type { ModelGateway, TranscribeInput, Transcriber } from '@edmate/contracts';
+import type { ModelGateway, TranscribeInput, Transcriber, Transcript } from '@edmate/contracts';
 import { assertNotAnswerBank } from '../answerBank.js';
 import { chunkDocument } from '../chunk/chunker.js';
 import { parseDocument, type DocumentInput } from '../document.js';
@@ -28,7 +28,7 @@ export interface IndexDocumentDeps {
   readonly embedder?: Pick<ModelGateway, 'embed'>;
   readonly onEmbedFailed?: (code: EmbedFailure) => void;
   /** Required only for a `VideoSource`; absent otherwise. */
-  readonly transcriber?: Transcriber;
+  readonly transcriber?: Pick<Transcriber, 'transcribe'>;
 }
 
 /** A document already parsed (e.g. a web link), and whether it is located by heading path. */
@@ -77,14 +77,11 @@ function storeFailed(): IngestError {
  * is discarded, same as `storeFailed()`, so nothing of the (possibly sensitive) failure reaches a
  * log line or a thrown error's message/stack/cause.
  */
-async function parseVideo(
-  deps: IndexDocumentDeps,
-  source: VideoSource,
-): Promise<ParsedDocument> {
+async function parseVideo(deps: IndexDocumentDeps, source: VideoSource): Promise<ParsedDocument> {
   if (deps.transcriber === undefined) {
     throw new IngestError('validation', false, 'no transcriber configured');
   }
-  let transcript;
+  let transcript: Transcript;
   try {
     transcript = await deps.transcriber.transcribe(source.recording);
   } catch {
