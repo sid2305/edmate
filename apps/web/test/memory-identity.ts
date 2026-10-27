@@ -5,7 +5,13 @@
 // tested on Postgres in packages/db/test/identity.int.test.ts.
 // Types only at the top: some tests mock '@edmate/db' with this fake, so the age rule is loaded
 // lazily, when a method runs, to avoid a cycle through the mock.
-import type { AgePolicy, GrantRoleInput, IdentityStore, IdentityUser } from '@edmate/db';
+import type {
+  AgePolicy,
+  ConsentRow,
+  GrantRoleInput,
+  IdentityStore,
+  IdentityUser,
+} from '@edmate/db';
 
 /** The real store's fixed placeholder name (loaded lazily, like `ageRule`/`repoError` above, to
  * avoid a cycle through a test's `@edmate/db` mock). */
@@ -32,6 +38,8 @@ export interface MemoryConsent {
   version: string;
   grantedBy: 'self' | 'parent';
   withdrawnAt: Date | null;
+  /** 13.4d: defaults to the store's clock when pushed. */
+  ts?: Date;
 }
 
 export interface MemoryIdentity extends IdentityStore {
@@ -226,6 +234,7 @@ export function memoryIdentity(
         version: noticeVersion,
         grantedBy: 'self',
         withdrawnAt: null,
+        ts: now(),
       });
       return { status };
     },
@@ -258,6 +267,20 @@ export function memoryIdentity(
       for (const [k, id] of accounts) if (id === userId) accounts.delete(k);
       for (const [t, s] of sessions) if (s.userId === userId) sessions.delete(t);
       if (email) links.delete(email);
+    },
+    // Task 13.4d (account export): every consent row for this user, ts-ascending, ISO strings.
+    async listConsentsForStudent(userId): Promise<ConsentRow[]> {
+      return consents
+        .filter((c) => c.userId === userId)
+        .map((c) => ({ ...c, ts: c.ts ?? now() }))
+        .sort((a, b) => a.ts.getTime() - b.ts.getTime())
+        .map((c) => ({
+          kind: c.kind,
+          version: c.version,
+          grantedBy: c.grantedBy,
+          ts: c.ts.toISOString(),
+          withdrawnAt: c.withdrawnAt ? c.withdrawnAt.toISOString() : null,
+        }));
     },
   };
   return self;

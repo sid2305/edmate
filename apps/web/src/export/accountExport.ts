@@ -1,24 +1,27 @@
 // Task 13.4b (13.4 Phase C): one account-wide export across every teacher the signed-in student
 // has subscribed to, beside the per-agent export (9.6b, `GET /api/me/export/:agentId`). Aggregates
-// `buildExport()` for each live pair (`subscriptions.listLiveForStudent`, which is already scoped
-// to the caller's own studentId -- never a client-given id) plus the student's own identity
-// fields. Never includes consents: no read method for them exists yet, and
-// `packages/db/src/identity/store.ts` is out of bounds for this task (another builder is in that
-// file) -- see the handoff's `## Decisions`. Like `buildExport`, this never reads `help_state`,
-// turn traces, usage/cost, safety events, audit rows or payments: those stay out by never being
-// read here at all, not by filtering a bigger read after the fact.
-import type { IdentityUser } from '@edmate/db';
+// `buildExport()` for each pair, now every subscription the student has ever had, live or ended
+// (`subscriptions.listAllForStudent`, 13.4d; already scoped to the caller's own studentId -- never
+// a client-given id) plus the student's own identity fields and consent history
+// (`identity.listConsentsForStudent`, 13.4d) -- this closes the gap 13.4b's handoff named (no
+// consents, live-only subscriptions). It still never includes a teacher's private material
+// (documents, style card, eval cases) or any staff takedown notes; only each subscription's own
+// fields (teacher display name via the pair, package, status, dates). Like `buildExport`, this
+// never reads `help_state`, turn traces, usage/cost, safety events, audit rows or payments: those
+// stay out by never being read here at all, not by filtering a bigger read after the fact.
+import type { ConsentRow, IdentityUser } from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { serverDatabase } from '../auth';
 import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import { buildExport, type ExportBackend, type ExportJson } from './buildExport';
 
-/** One of the student's live subscription pairs (`subscriptions.listLiveForStudent`). */
+/** One of the student's subscription pairs, live or ended (`subscriptions.listAllForStudent`). */
 export interface SubscriptionPair {
   agentId: string;
   teacherId: string;
   status: string;
+  periodEnd: string;
 }
 
 /** The account-level fields this export shows: the student's own identity, minus internal ids. */
@@ -31,10 +34,12 @@ export interface AccountFields {
 export interface AccountExportBackend extends ExportBackend {
   subscriptionPairs: {
     /** Call only with the signed-in principal's own id (never a client-given one). */
-    listLiveForStudent(studentId: string): Promise<SubscriptionPair[]>;
+    listAllForStudent(studentId: string): Promise<SubscriptionPair[]>;
   };
   identity: {
     getUser(userId: string): Promise<IdentityUser | null>;
+    /** Call only with the signed-in principal's own id (never a client-given one). */
+    listConsentsForStudent(studentId: string): Promise<ConsentRow[]>;
   };
 }
 
@@ -46,6 +51,7 @@ export interface AccountExportJson {
   /** Named sections that hit a read cap and so may be missing rows; never silently complete. */
   truncated: string[];
   account: AccountFields | null;
+  consents: ConsentRow[];
   teachers: Array<{ teacherId: string; agentId: string; status: string; export: ExportJson }>;
 }
 
@@ -64,9 +70,10 @@ export async function buildAccountExport(
   studentId: string,
   now: string,
 ): Promise<AccountExportJson> {
-  const [pairs, user] = await Promise.all([
-    backend.subscriptionPairs.listLiveForStudent(studentId),
+  const [pairs, user, consents] = await Promise.all([
+    backend.subscriptionPairs.listAllForStudent(studentId),
     backend.identity.getUser(studentId),
+    backend.identity.listConsentsForStudent(studentId),
   ]);
 
   const truncated: string[] = [];
@@ -96,6 +103,7 @@ export async function buildAccountExport(
     complete: truncated.length === 0,
     truncated,
     account: accountFields(user),
+    consents,
     teachers,
   };
 }
@@ -155,8 +163,11 @@ export const accountExportHandler = createAccountExportHandler({
   },
   outline: { getOutline: (scope) => serverDatabase().repos.outline.getOutline(scope) },
   subscriptionPairs: {
-    listLiveForStudent: (studentId) =>
-      serverDatabase().repos.subscriptions.listLiveForStudent(studentId),
+    listAllForStudent: (studentId) =>
+      serverDatabase().repos.subscriptions.listAllForStudent(studentId),
   },
-  identity: { getUser: (userId) => serverDatabase().identity.getUser(userId) },
+  identity: {
+    getUser: (userId) => serverDatabase().identity.getUser(userId),
+    listConsentsForStudent: (userId) => serverDatabase().identity.listConsentsForStudent(userId),
+  },
 });
