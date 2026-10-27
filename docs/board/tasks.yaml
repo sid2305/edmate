@@ -11205,9 +11205,9 @@ tasks:
   deps:
   - 6.3d
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/6.3e-proposed-param
+  model: plan:lead build:sonnet
 - id: 6.4d
   milestone: M13
   title: '6.4c review LOW: packages/harness/src/pipeline/runner.ts records an evidenceSkip guard with bad_topic_id when a stored practiceTopicId fails the id shape, but no test covers it; add that case
