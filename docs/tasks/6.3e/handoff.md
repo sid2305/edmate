@@ -25,7 +25,11 @@ key on `users_pkey`), caught by running the full file with coverage. Renamed to
 `stu_mistakes_adapter_proposedignored` and reconfirmed red-then-green with the corrected id.
 
 ## Decisions
-None.
+
+### 27 Oct 2026 · 6.3e applyMistakes proposed param · decided by lead · risk: high
+- Decided: approve the change to ports.ts (packages/db/src/repositories/ports.ts) for merge: the third `applyMistakes` parameter is named `_proposed` and ignored, with an int test. security-reviewer and code-reviewer approved; the MEDIUM test-coverage finding is deferred to 6.3a Phase A.
+- Why: no behaviour change; the repositories path is a risk group, so the lead records the approval.
+- Budget: 64 tool calls against a 25-call plan (2.6x); the builder hit unrelated flaky tests under machine load and re-ran them alone. Future one-line repo changes plan about 40.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db` (20 tasks: db + dependents
