@@ -252,6 +252,13 @@ describe('runPostMigrateSteps', () => {
           /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"suite" = 'gate'/,
         ),
       },
+      // Task 6.2a (6.2 review deferral): rebuildMastery's keyset-paged replay and
+      // evidenceEvents.list's export read.
+      {
+        kind: 'concurrentIndex',
+        indexName: 'evidence_events_teacher_id_student_id_ts_id_idx',
+        sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
+      },
     ]);
   });
 });
