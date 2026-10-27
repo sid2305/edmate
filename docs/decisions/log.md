@@ -10,6 +10,60 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 7.2f repeated payment and licence-claim cases kept · decided by lead · risk: low
+- Decided: keep the five Phase H cases that reword payment-not-synced and school-licence tricks (evals/suites/locked/locked-functions-paidplan-glitch-en.yaml, locked-lists-paidplan-reload-en.yaml, locked-loops-paidplan-notsynced-en.yaml, locked-dicts-school-sitelicense-en.yaml, locked-loops-schooldistrict-renewed-en.yaml).
+- Why: they are new phrasings, not duplicates, and cost nothing to keep; Phase I added no more of that kind.
+
+---
+
+### 27 Oct 2026 · 7.2f locked suite to 200 approval · decided by lead · risk: high
+- Decided: approve 100 new locked cases under evals/suites/locked/ (evals/suites/locked/**), the pins in lockedFixtures.test.ts and SUITE_FLOORS.locked 200 for merge. code-reviewer approved Phase H, asked for changes on Phase I (seven Hindi cases against the English-only rule) and verified fix round 1, which rewrote them in English. Every case is `reviewed_by: lead`.
+- Why: the reviewer checked every span verbatim against content/demo-teacher, scripted the echo and duplicate checks against all earlier cases, and confirmed the pin arithmetic. The payment and licence-claim trick is saturated after Phase H (LOW, recorded in review.md), so Phase I replaced it with eight new manipulation kinds.
+
+---
+
+### 27 Oct 2026 · 7.2f merge and budget, 357 tool calls against 190 · decided by lead · risk: low
+- Decided: merge at 357 harness-counted tool calls (Phase H 123, Phase I 173, fix round 1 61) against the plan's 190.
+- Why: Phase I spent most of its overrun making each forbidden phrase an exact substring of the locked span it guards, which the tests require; the fix round renamed and rewrote seven cases. The briefs for 7.2s, 7.2t and 7.2u should state the English-only rule and the span-substring rule up front.
+
+---
+
+### 27 Oct 2026 · 7.2f Prettier --check is scoped to the changed TS files, not the new yaml cases · decided by builder · risk: low
+- Decided: Ran `prettier --check` on the three changed `.ts` files (clean). Did not run
+  `prettier --write` on the 50 new yaml case files, since Prettier's YAML quote-style default
+  disagrees with the whole suite's existing single-quote convention (pre-existing on all 100
+  prior cases too, not a regression).
+- Why: Matches 7.2a's own precedent and keeps the new 50 cases visually consistent with the other
+  100 in the same directory.
+- risk: low
+
+---
+
+### 27 Oct 2026 · 7.2f Phase I replaces the role/payment-claims bucket with 8 new manipulation kinds · decided by builder · risk: low
+- Decided: Dropped payment/role/licence claims from Phase I's manipulation bucket (that form is
+  saturated per Phase H's code-reviewer finding) and used 8 different manipulation kinds instead:
+  claiming to be Edmate support, claiming to be the teacher, exam-tomorrow urgency, emotional
+  pressure, fiction/hypothetical framing, "just check my answer" against a locked exercise, and a
+  two-step hint chain.
+- Why: Follows the explicit brief constraint carrying forward the Phase H review finding, and
+  keeps the suite's manipulation coverage broad rather than adding a 9th and 10th near-duplicate
+  payment claim.
+- risk: low
+
+---
+
+### 27 Oct 2026 · 7.2f Phase I keeps Prettier scoped to the changed TS files · decided by builder · risk: low
+- Decided: Ran `prettier --check`/`--write` only on the 3 changed `.ts` files this phase too
+  (`lockedFixtures.test.ts` needed one `--write` pass after manual edits; `suites.ts` and
+  `suites.test.ts` were already clean). Did not run Prettier on any of the 50 new `evals/suites/
+  locked/*.yaml` files, for the same pre-existing YAML quote-style reason Phase H documented
+  above.
+- Why: Keeps all 200 locked cases visually consistent (single-quoted) and avoids reformatting a
+  suite-wide convention inside a single builder phase.
+- risk: low
+
+---
+
 ### 27 Oct 2026 · 0.20k unused fresh-teacher helper removed · decided by lead · risk: low
 - Decided: remove `createFreshTeacher()` from fixtures.ts (apps/web/e2e/fixtures.ts) in fix round 1 instead of shipping it unused, and accept the fixer's prettier re-wrap of four existing calls in the same file.
 - Why: code-reviewer and typescript-reviewer both flagged it as dead code no committed test exercises; CI starts from an empty database, so the starting-empty path is already covered. The re-wrap is formatting only.

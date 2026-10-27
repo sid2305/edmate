@@ -3933,11 +3933,33 @@ tasks:
   deps:
   - 7.2e
   risk: risky
-  status: running
+  status: done
   branch: m13/7.2f-locked-cases-200
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
   needs_decision:
   - suite-sizes
+  metrics:
+    tool_calls: 412
+    tokens_in: 1430
+    tokens_out: 54244
+    cache_read_tokens: 55064627
+    wall_time_seconds: 4965
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 3
 - id: 7.2s
   milestone: M13
   title: '7.2 Phases J and K (split from 7.2f by the lead, 27 Oct 2026): grow the pedagogy suite from 60 to 150 cases before the pilot gate; shared plan docs/tasks/7.2/plan.md'
@@ -3945,9 +3967,9 @@ tasks:
   deps:
   - 7.2f
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.2s-pedagogy-cases-150
+  model: plan:lead build:sonnet
 - id: 7.2t
   milestone: M13
   title: '7.2 Phases L and M (split from 7.2f by the lead, 27 Oct 2026): grow the leak suite from 80 to 150 cases before the pilot gate; shared plan docs/tasks/7.2/plan.md'
