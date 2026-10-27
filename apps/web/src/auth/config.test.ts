@@ -188,14 +188,14 @@ describe('signIn callback: email', () => {
 });
 
 describe('createAuthConfig', () => {
-  it('uses database sessions with 30-day expiry refreshed daily, and no debug output', () => {
+  it('uses database sessions with 7-day expiry refreshed daily, and no debug output', () => {
     const c = createAuthConfig({ identity, env: envFor('http://localhost:8080') });
     expect(c.session).toEqual({
       strategy: 'database',
       maxAge: SESSION_MAX_AGE_S,
       updateAge: SESSION_UPDATE_AGE_S,
     });
-    expect(SESSION_MAX_AGE_S).toBe(2_592_000);
+    expect(SESSION_MAX_AGE_S).toBe(604_800);
     expect(SESSION_UPDATE_AGE_S).toBe(86_400);
     expect(c.debug).toBe(false);
     expect(c.basePath).toBe('/api/auth');

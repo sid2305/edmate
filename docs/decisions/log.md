@@ -10,6 +10,174 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2r drop-and-reinstate of documents_failure_reason_only_when_failed · decided by builder · risk: high
+- Decided: migration `0041_documents_list_index_failure_reason_validate.sql` contains
+  `ALTER TABLE "documents" DROP CONSTRAINT "documents_failure_reason_only_when_failed";` followed
+  immediately by `ALTER TABLE "documents" ADD CONSTRAINT
+  "documents_failure_reason_only_when_failed" CHECK (...) NOT VALID;` — the merge gate's
+  migration-content scan flags any `DROP CONSTRAINT`/`ALTER TABLE ... DROP` as "drops or deletes
+  data", so this PR is risky via `MIGRATION_REVIEWERS = ("database-reviewer",)`.
+- Why: this only re-adds the exact same CHECK expression, immediately, as `NOT VALID` — the same
+  rule is enforced before and after (confirmed by the new
+  `documents-failure-reason-validate-migration.int.test.ts`: existing rows on both sides of the
+  constraint survive unchanged, the constraint is `convalidated = true` after `migrateDatabase`,
+  and a row that violates it still fails to insert). No row is ever uncovered by the constraint
+  for longer than the two statements take, and no data is read, written or lost — this is
+  hygiene to match this repo's `NOT VALID` → `VALIDATE` convention (migrate.ts's
+  `POST_MIGRATE_STEPS` comment), not a behaviour change. `database-reviewer` should confirm this
+  reading before merge.
+
+---
+
+### 27 Oct 2026 · 8.2r sweep index widened for 8.2q · decided by lead · risk: high
+- Decided: within the same migration 0041, `packages/db/src/schema/content.ts` and
+  `packages/db/src/migrate.ts` replace `documents_processing_updated_at_id_idx` with
+  `documents_sweep_updated_at_id_idx` ON `documents (updated_at, id) WHERE status IN
+  ('processing', 'uploading')`, built CONCURRENTLY, with the old index then dropped
+  CONCURRENTLY/`IF EXISTS` once the new one exists.
+- Why: task 8.2q's review widens `ingestSweep.staleProcessing` to also sweep `uploading` rows;
+  the original partial index (`status = 'processing'` only) could not serve that query shape. The
+  new predicate is a superset of the old one, so it covers both the pre- and post-8.2q query
+  shapes regardless of merge order, and the old index is only dropped after the replacement is
+  built, so the sweep job is never left without a usable index. Confirmed by the new
+  `documents-sweep-index.int.test.ts` (EXPLAIN shows Index Scan, no Sort, for both query shapes)
+  and by `ingest-sweep.int.test.ts`'s own EXPLAIN assertion (updated to the new index name).
+
+---
+
+### 27 Oct 2026 · 8.2r approve merge of migration 0041 · decided by lead · risk: high
+- Decided: merge migration 0041 (the documents list index, the failure_reason CHECK dropped and re-added NOT VALID then validated, and the sweep index replaced) with its changes to `packages/db/src/migrate.ts` and `packages/db/src/schema/content.ts`. database-reviewer, code-reviewer and typescript-reviewer ran; none raised a CRITICAL or HIGH finding.
+- Why: the CHECK swap happens inside the migration's one transaction, so the constraint is never off; the new sweep index is built CONCURRENTLY before the old one is dropped; and the new predicate covers both the current sweep query and 8.2q's widened one, so merge order with 8.2q is safe. The database MEDIUM (nulls order in content.ts) goes to 8.2s.
+
+---
+
+### 27 Oct 2026 · 8.2r budget overrun accepted · decided by lead · risk: low
+- Decided: accept 198 harness-counted tool calls against 60 (45 planned plus 15 for the sweep-index addition), about 3.3x.
+- Why: the lead added the sweep index mid-build, and the Postgres EXPLAIN tests needed several rounds to force index plans on small fixtures. The builder reported about 63 calls, so self-counts are unreliable here. Later migration tasks with EXPLAIN tests should plan about 120 calls, or split the EXPLAIN tests into their own phase.
+
+---
+
+### 27 Oct 2026 · 8.2r journal timestamp left as it is · decided by lead · risk: low
+- Decided: wontfix the database LOW in _journal.json (packages/db/migrations/meta/): entry 41's `when` is earlier than entries 39 and 40.
+- Why: drizzle applies migrations by idx, not by `when`, and rewriting a committed journal entry adds risk for no gain.
+
+---
+
+### 27 Oct 2026 · 6.4c evidenceSkip reason codes · decided by builder · risk: low
+- Decided: Use guard name `evidenceSkip` with `action: 'no_topic'` (no stored `practiceTopicId`)
+  or `action: 'bad_topic_id'` (stored but fails the `id()` shape), carried through
+  `TraceBuilder.addGuards` (name/ok/action only, already shipped, no contracts change).
+- Why: the plan asked for one of the two reason codes without naming the guard's `name` field or
+  distinguishing the two failure branches; `addGuards` is the one existing observability path that
+  needs no `packages/contracts` change (`TurnTraceSchema.guards` already types `name`/`action` as
+  plain strings), and splitting the two causes into distinct action codes matches the plan's own
+  wording ("no_topic / bad_topic_id").
+
+---
+
+### 27 Oct 2026 · 6.4c end route `'limit'` response shape · decided by builder · risk: low
+- Decided: Map `RepositoryError('limit')` to `apiError('limit_reached', MSG.limit, 409)`, the same
+  code/status `apps/web/src/studio/packages.ts`'s `packageLimit()` already uses for the identical
+  `RepositoryErrorKind`, but without that route's extra `reason` body field (session-ending has no
+  equivalent caller-facing reason to name).
+- Why: the plan said "find the existing mapping... and follow it"; `packages.ts` is the one
+  existing caller that already maps this exact repository error kind to a response, and session
+  end has no end-user-controllable packages cap this error would plausibly carry (no production
+  caller of `end`/`get`/`attachSummary`/`studentTurnScope` returns `'limit'` today — the case only
+  closes the switch's exhaustiveness for a future caller).
+
+---
+
+### 27 Oct 2026 · 6.4c budget overrun accepted · decided by lead · risk: low
+- Decided: accept 107 harness-counted tool calls against a 55-call budget (1.95x); the lead also corrected the handoff's summary-test word count (80 words, not 310).
+- Why: the work stayed inside the plan's file list across two packages and the web route, and both reviewers approved with one LOW, which goes to 6.4d. Small multi-package LOW sweeps run long; future plans for them get about 90 calls.
+
+---
+
+### 27 Oct 2026 · 13.3c sign-in session length · decided by builder · risk: high
+- Decided: `apps/web/src/auth/config.ts`'s `SESSION_MAX_AGE_S` is `7 * 24 * 60 * 60` (604,800
+  seconds), replacing the prior 30-day value.
+- Why: the human answered B-60 on 27 Oct 2026 (docs/decisions/log.md): "Sign-in sessions last 7
+  days, renewed on use." This closes the open question left by 13.3b
+  (docs/tasks/13.3b/plan.md's "Open question" section). `apps/web/src/auth/config.ts` is under
+  `apps/web/src/auth/**`, a risk-paths.txt identity group, so this is `risk: high`.
+
+---
+
+### 27 Oct 2026 · 13.3c approve merge of 7-day sign-in sessions · decided by lead · risk: high
+- Decided: merge the change to `apps/web/src/auth/config.ts` (SESSION_MAX_AGE_S is now 7 days; the daily SESSION_UPDATE_AGE_S renewal is kept). security-reviewer and typescript-reviewer ran and found nothing.
+- Why: this is the human's B-60 answer; both values feed the one Auth.js database-session setting, and nothing else in the sign-in path assumed 30 days. A session in daily use keeps renewing, which is what "renewed on use" asks for.
+
+---
+
+### 27 Oct 2026 · 0.20g confirmed webServer-before-globalSetup ordering from source · decided by builder · risk: low
+- Decided: Built the fix on the plan's assumption (webServer starts before globalSetup) after
+  confirming it directly in the installed Playwright runner source (see Summary); no change to the
+  plan's approach was needed.
+- Why: The plan asked the builder to verify this before relying on it; recorded here as the
+  concrete evidence rather than a guess.
+
+---
+
+### 27 Oct 2026 · 0.20g deterministic full-flow/teacher-packages failures found but not fixed · decided by builder · risk: low
+- Decided: Left `full-flow.spec.ts` and `teacher-packages-walkthrough.spec.ts` untouched; reporting
+  their deterministic (not intermittent) failures to the lead as a separate follow-up rather than
+  investigating or fixing them here.
+- Why: Both files are out of bounds for this task's narrow one-file fix, the failures are
+  unrelated in shape (deterministic, inside a step that already has its own cold-start timeout
+  wrapper) to the cold-route-compile flake this task targets, and the budget (~40 tool calls) does
+  not cover a second investigation.
+
+---
+
+### 27 Oct 2026 · US payment provider: Paddle as merchant of record (B-53, task 10.1) · decided by you · risk: high
+Decided: Paddle is the US merchant of record, so it handles sales tax. Before its adapter is built, the human describes Edmate to Paddle in writing (subscriptions to AI tutoring software; teachers paid by Edmate as content suppliers; live classes an included feature) and gets their OK. If Paddle refuses, Stripe Billing plus Stripe Tax, with Edmate filing US sales tax itself. Payouts to teachers stay manual in the pilot.
+Why: Signed, timestamped webhooks, a separate sandbox, clear proration and native pause/resume fit 10.2 and 10.3; the providers can refuse marketplaces, so the written OK comes first.
+Alternatives: Lemon Squeezy (b); Stripe Billing plus Stripe Tax from the start (c).
+Reversible: Yes, the Payments port keeps the adapter swappable.
+
+### 27 Oct 2026 · Sign-in sessions last 7 days, renewed on use (B-60, task 13.3b) · decided by you · risk: high
+Decided: A database sign-in session lasts 7 days and is renewed while the person keeps using Edmate, before the pilot opens to more people. Today's 30-day value stays until 13.3b lands.
+Why: A lost or shared device stops working within a week; active users rarely notice the renewal.
+Alternatives: keep 30 days (a); 14 days renewed on use (c).
+Reversible: Yes, one value in apps/web/src/auth/config.ts.
+
+
+### 27 Oct 2026 · 6.4b add a `sessions.attachSummary` case to `repositories.int.test.ts` · decided by builder · risk: low
+- Decided: added the required `CASES['sessions.attachSummary']` entry (and a third seeded,
+  already-ended, summary-less session per pair, `endable3`) to
+  `packages/db/test/repositories.int.test.ts`, even though this file was not in the plan's "Files
+  to create/modify" list.
+- Why: `CASES` is typed `Record<RepositoryMethod, IsolationCase>` and a runtime check also
+  compares `createRepositories(db)`'s own methods against `CASES` — adding `attachSummary` to
+  `Repositories['sessions']` (needed per the plan's own design) makes `packages/db` itself fail to
+  `tsc`/fail the runtime check without this addition. This isn't a design choice or a scope
+  widening; it's the minimum edit the plan's own chosen design requires to keep `packages/db`
+  compiling and its own isolation test accurate. Kept the shape identical to the adjacent
+  `sessions.end` case (same owner-marker/no-leak assertions, same mismatches pattern) and used a
+  freshly seeded session rather than reusing `endable`/`endable2` so it never races with those
+  cases' own state.
+
+---
+
+### 27 Oct 2026 · 6.4b approve merge · decided by lead · risk: high
+- Decided: 6.4b merges. It changes `packages/db/src/repositories/sessions.ts` (new `attachSummary`, scoped to the pair and conditional on an ended session with no summary) and the end route now claims the session before summarizing, so two concurrent end requests run the summarizer once. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; typescript-reviewer's HIGH (a history read failure after the claim returned an error for an ended session) was fixed in fix round 1 and re-verified.
+- Why: it closes 6.4a's security MEDIUM (unmetered duplicate summaries) using the existing atomic `end()` claim, without changing `end()`.
+
+---
+
+### 27 Oct 2026 · 6.4b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 129 tool calls (build 85, fix round 44, by the harness count) against the plan's 90.
+- Why: the overrun is the fix round for a real HIGH; the build itself came in under budget.
+
+---
+
+### 27 Oct 2026 · 6.4b three review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix for packages/db/src/repositories/sessions.ts (attachSummary reads the memory-reset watermark at attach time, which is the wanted behaviour), route.ts (the `endedAt` early return is only a fast path before the atomic claim) and route.test.ts (the in-memory concurrency test proves route ordering; cross-instance atomicity is `end()`'s conditional UPDATE, covered by the packages/db int tests), all under apps/web/app/api/sessions/[id]/end/.
+- Why: none is a defect; each reviewer marked it informational.
+
+---
+
 ### 27 Oct 2026 · 6.3c `ProfileStore` port extension (ADR-0017) · decided by builder · risk: high
 - Decided: extend `ProfileStore` (`packages/contracts/src/ports.ts`) with two new optional methods,
   `applyMistakes?` and `recordProposedMistakes?`, under ADR-0017 (status Proposed; architect,

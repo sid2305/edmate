@@ -109,6 +109,26 @@ describe('runner: graded-check EvidenceEvent (6.4a)', () => {
   });
 });
 
+// 6.4c: when evidenceFor skips a graded practice turn for no usable topic, the skip is recorded
+// through the trace's existing guard path (name/ok/action only -- never student text or the item).
+describe('runner: evidenceFor records its skip reason (6.4c)', () => {
+  it('a graded generated-item turn (no stored topic) records a no_topic skip', async () => {
+    const help = heldHelp();
+    delete (help as { practiceTopicId?: string }).practiceTopicId;
+    const { result } = await turnWith({ attempt: 'correct', help });
+    expect(result.trace?.guards).toContainEqual({
+      name: 'evidenceSkip',
+      ok: false,
+      action: 'no_topic',
+    });
+  });
+
+  it('a graded bank-item turn with a topic records no skip', async () => {
+    const { result } = await turnWith({ attempt: 'correct' });
+    expect(result.trace?.guards.some((g) => g.name === 'evidenceSkip')).toBe(false);
+  });
+});
+
 // Fix round 1: a generated (non-bank) practice item has no real topic row (its own `topicId` is
 // always `<moduleId>:practice`, a harness-internal label `EvidenceEventSchema.topicId`'s `id()`
 // shape rejects — a `:` is not in `^[A-Za-z0-9_-]+$`). Driven through the real `practice.next_item`

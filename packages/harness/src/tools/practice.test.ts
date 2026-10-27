@@ -2,6 +2,7 @@
 import { turnContextFull } from '@edmate/contracts/fixtures';
 import type { TurnContext } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
+import { buildTopicMap } from '../memory/topicMap.js';
 import { toolSpec } from '../pipeline/tools.js';
 import { demoPracticeBank } from './demoPracticeBank.js';
 import { NoPracticeItemError, practiceNextItemTool } from './practice.js';
@@ -9,7 +10,9 @@ import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.j
 import {
   generatedAnswerKeyFor,
   generateItem,
+  SERVABLE_KINDS,
   type PracticeBank,
+  type PracticeItem,
   type PracticeScope,
 } from './practiceItems.js';
 import type { DemoPracticeRecord } from './demoPracticeBank.js';
@@ -692,5 +695,69 @@ describe('practiceNextItemTool: a held label key and a new listing (5.6b)', () =
     const bank = demoPracticeBank([rec('fx:says', 'The answer is B. Which is closest to 40 + 2?')]);
     const t = practiceNextItemTool(bank, { heldKeys: ['B'] });
     expect(idOf(await t.tool.run({ level: 1 }, ctx))).not.toBe('fx:says');
+  });
+});
+
+// 6.4c: `topicMap` passed through to `pickItem`, so a future DB-backed bank item whose topic was
+// deleted (or sits under another module) is skipped instead of failing commit. No caller passes
+// one today (no DB-backed bank exists yet); without a map, behaviour is unchanged.
+describe('practiceNextItemTool: topicMap option (6.4c)', () => {
+  const MOD = turnContextFull.entitlement.allowedModuleIds[0] as string;
+  const item: PracticeItem = {
+    id: 'bank:topicMapped:1',
+    teacherId: turnContextFull.entitlement.teacherId,
+    topicId: 'algebra',
+    moduleId: MOD,
+    level: 1,
+    kind: 'numeric',
+    prompt: 'What is 2 + 2?',
+  };
+  const fixedBank = (): PracticeBank => ({
+    pick(scope, level, exclude) {
+      const allowed = new Set(scope.allowedModuleIds);
+      return allowed.has(item.moduleId) &&
+        item.level === level &&
+        SERVABLE_KINDS.has(item.kind) &&
+        !exclude.includes(item.id)
+        ? item
+        : undefined;
+    },
+    answerKeyFor: (itemId, scope) =>
+      itemId === item.id && scope.allowedModuleIds.includes(item.moduleId) ? ['4'] : undefined,
+    itemFor: (itemId, scope) =>
+      itemId === item.id && scope.allowedModuleIds.includes(item.moduleId) ? item : undefined,
+  });
+
+  it('serves the bank item when a topicMap is given and its topic exists under its module', async () => {
+    const topicMapResult = buildTopicMap({
+      courseId: 'course-1',
+      teacherId: turnContextFull.entitlement.teacherId,
+      modules: [{ moduleId: MOD, title: 'Algebra', order: 0 }],
+      topics: [{ topicId: 'algebra', moduleId: MOD, title: 'Algebra', order: 0 }],
+    });
+    if (!topicMapResult.ok) throw new Error('test fixture topic map failed to build');
+    const t = practiceNextItemTool(fixedBank(), { topicMap: topicMapResult.value });
+    const out = await t.tool.run({ level: 1 }, turnContextFull);
+    expect((out as { id: string }).id).toBe(item.id);
+  });
+
+  it('skips the bank item when its topic is missing from a given topicMap; the generator steps in', async () => {
+    const topicMapResult = buildTopicMap({
+      courseId: 'course-1',
+      teacherId: turnContextFull.entitlement.teacherId,
+      modules: [{ moduleId: MOD, title: 'Algebra', order: 0 }],
+      topics: [],
+    });
+    if (!topicMapResult.ok) throw new Error('test fixture topic map failed to build');
+    const t = practiceNextItemTool(fixedBank(), { topicMap: topicMapResult.value });
+    const out = await t.tool.run({ level: 1 }, turnContextFull);
+    expect((out as { id: string }).id).not.toBe(item.id);
+    expect((out as { id: string }).id).toMatch(/^gen:/);
+  });
+
+  it('is unchanged when no topicMap option is given', async () => {
+    const t = practiceNextItemTool(fixedBank());
+    const out = await t.tool.run({ level: 1 }, turnContextFull);
+    expect((out as { id: string }).id).toBe(item.id);
   });
 });

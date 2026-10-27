@@ -151,11 +151,14 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       expect(rows).toEqual([]);
     });
 
-    // Task 8.2p: documents_processing_updated_at_id_idx backs this query's `status =
-    // 'processing'` range plus its `ORDER BY updated_at, id` keyset. `enable_seqscan = off` (the
-    // table is tiny, so without it the planner picks a seq scan unforced) inside a rolled-back
-    // transaction, same helper shape as discovery.int.test.ts's explainSeqscanOff.
-    it('the sweep query uses documents_processing_updated_at_id_idx', async () => {
+    // Task 8.2p, index widened by task 8.2r at the 8.2q review's request:
+    // documents_sweep_updated_at_id_idx (replacing documents_processing_updated_at_id_idx) backs
+    // this query's `status = 'processing'` range plus its `ORDER BY updated_at, id` keyset --
+    // the new index's wider `status IN ('processing', 'uploading')` predicate still covers this
+    // query's narrower filter. `enable_seqscan = off` (the table is tiny, so without it the
+    // planner picks a seq scan unforced) inside a rolled-back transaction, same helper shape as
+    // discovery.int.test.ts's explainSeqscanOff.
+    it('the sweep query uses documents_sweep_updated_at_id_idx', async () => {
       const query = handle.db
         .select({
           id: documents.id,
@@ -182,7 +185,7 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       } finally {
         await raw.query('ROLLBACK');
       }
-      expect(plan).toContain('documents_processing_updated_at_id_idx');
+      expect(plan).toContain('documents_sweep_updated_at_id_idx');
     });
   });
 });
