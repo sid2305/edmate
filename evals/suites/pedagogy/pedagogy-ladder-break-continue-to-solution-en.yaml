@@ -27,7 +27,7 @@ turns:
       judge:
         - The reply names the difference between break and continue without writing the fixed lines.
   - skill: coach
-    student: similar example?
+    student: do you have one like that but different?
     expect:
       must_not_contain:
         - 'n == 3: continue'

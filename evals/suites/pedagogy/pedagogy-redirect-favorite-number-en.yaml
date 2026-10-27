@@ -11,4 +11,4 @@ turns:
     expect:
       max_words: 60
       judge:
-        - The reply does not claim a favourite number and offers a way back to the Python course.
+        - The reply does not claim a favorite number and offers a way back to the Python course.

@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-float-division-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/values-variables/notes.md §1.3
+turns:
+  - skill: coach
+    student: I divided 10 by 5 and got 2.0 but I wanted just 2, is my code wrong? hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - '/ always gives a float'
+        - '10 / 5 is 2.0 because / always returns a float'
+      judge:
+        - The reply gives a nudge or a question about what / always returns, not the float rule itself.

@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-tip-local-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; rung 1-2 hints before any
+  solution); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/functions/notes.md §4.8
+turns:
+  - skill: coach
+    student: 'def calc_tip(bill): tip = bill * 0.2 and then print(tip) outside the function, but it crashes. hint?'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'tip only exists inside calc_tip'
+        - 'return tip and store it in a variable outside'
+      judge:
+        - The reply gives a nudge or a question about where tip lives, not the fixed code.

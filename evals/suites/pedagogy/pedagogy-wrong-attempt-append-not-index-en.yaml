@@ -1,0 +1,18 @@
+id: pedagogy-wrong-attempt-append-not-index-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/lists-dicts/notes.md §5.2
+turns:
+  - skill: coach
+    student: "I wanted to change pets[1] to 'rabbit' so I wrote pets.append('rabbit') but now my list has an extra item instead"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - "use pets[1] = 'rabbit' to replace it, not append"
+        - "pets[1] = 'rabbit'"
+      judge:
+        - The reply points out the difference between replacing an item and adding a new one, without writing the fixed line.

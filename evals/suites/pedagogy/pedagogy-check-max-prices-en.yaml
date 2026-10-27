@@ -1,0 +1,14 @@
+id: pedagogy-check-max-prices-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.3 ("print(max(nums))")
+turns:
+  - skill: explain
+    student: explain how max() finds the biggest number in prices = [12, 45, 8]
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood how max() works on a list.

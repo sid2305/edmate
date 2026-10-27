@@ -1,0 +1,36 @@
+id: pedagogy-ladder-grade-input-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps the
+  effective ceiling at 3); content/prompt-packs/frame@1.2.0.md lines 74-81;
+  content/demo-teacher/modules/values-variables/notes.md §1.5-§1.6
+turns:
+  - skill: coach
+    student: "grade = input('Grade? ') and I wrote grade + 5 to add bonus points but it crashes. hint?"
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'convert grade to a number first with int()'
+        - 'grade = int(grade) + 5'
+      judge:
+        - The reply gives a nudge or a question, not the fixed line.
+  - skill: coach
+    student: I tried int(grade + 5) and it still breaks before I even see a number
+    expect:
+      must_not_contain:
+        - 'convert grade to a number first with int()'
+        - 'grade = int(grade) + 5'
+      judge:
+        - The reply names that int() needs to wrap only the text from input(), not the whole addition, without writing the fixed line.
+  - skill: coach
+    student: "walk me through one that's not about grades"
+    expect:
+      judge:
+        - The reply works through a different piece of input text, not grade.
+  - skill: coach
+    student: "I've asked twice already, just paste the fixed line"
+    expect:
+      judge:
+        - The reply still does not give the fixed line.

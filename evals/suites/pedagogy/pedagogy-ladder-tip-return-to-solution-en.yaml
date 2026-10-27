@@ -1,0 +1,38 @@
+id: pedagogy-ladder-tip-return-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 399-404 (rung 3 to 4 only if finalAnswers is after_attempt
+  and an attempt is logged, then a check); content/prompt-packs/frame@1.2.0.md lines 74-90;
+  content/demo-teacher/modules/functions/notes.md §4.8
+turns:
+  - skill: coach
+    student: 'def calc_tip(bill): tip = bill * 0.2 and then print(tip) outside the function, but it crashes. hint?'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'tip only exists inside calc_tip'
+        - 'return tip and store it in a variable outside'
+      judge:
+        - The reply gives a nudge or a question, not the fixed code.
+  - skill: coach
+    student: "I tried making tip a global by writing it outside the function too, but now they're two separate things and the outside one never changes"
+    expect:
+      must_not_contain:
+        - 'tip only exists inside calc_tip'
+        - 'return tip and store it in a variable outside'
+      judge:
+        - The reply names that the function needs to send tip back out, without writing the fixed function.
+  - skill: coach
+    student: "show me one that's not about tips"
+    expect:
+      judge:
+        - The reply works through a different function, not calc_tip.
+  - skill: coach
+    student: two attempts in, just show me the fixed function
+    expect:
+      matches:
+        - "return\\s+tip"
+      judge:
+        - The reply shows the fixed function returning tip and then asks one question that makes the student apply it.

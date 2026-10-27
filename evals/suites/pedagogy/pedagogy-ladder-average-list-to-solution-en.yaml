@@ -27,7 +27,7 @@ turns:
       judge:
         - The reply names that the average should print after the loop ends, not inside it, without writing the fixed line.
   - skill: coach
-    student: show me a similar example
+    student: got another one?
     expect:
       must_not_contain:
         - sum(scores) / len(scores)

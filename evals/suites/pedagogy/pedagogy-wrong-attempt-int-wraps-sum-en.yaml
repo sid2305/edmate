@@ -1,0 +1,18 @@
+id: pedagogy-wrong-attempt-int-wraps-sum-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: never states the answer below rung 4);
+  content/prompt-packs/coach@1.0.0.md (name the mistake, ask a question);
+  content/demo-teacher/modules/values-variables/notes.md §1.5-§1.6
+turns:
+  - skill: coach
+    student: I wrote grade = int(grade + 5) to fix my crash but now it still breaks before it even gets that far
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'int() needs to wrap just the input, not the whole addition'
+        - 'grade = int(grade) + 5'
+      judge:
+        - The reply points out that int() should only wrap the text that came from input(), without writing the fixed line.

@@ -1,0 +1,15 @@
+id: pedagogy-one-question-good-name-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560
+  (pedagogy suite: one question at a time); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.2 ("Good names say what is inside")
+turns:
+  - skill: coach
+    student: "coach me through picking a good variable name for someone's exam pass mark instead of just x, one step at a time"
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

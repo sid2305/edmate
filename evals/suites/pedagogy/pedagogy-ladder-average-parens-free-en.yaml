@@ -27,7 +27,7 @@ turns:
       judge:
         - The reply names the rule that / runs before + unless brackets say otherwise, without rewriting the line.
   - skill: coach
-    student: show me a similar example
+    student: can you do a different one?
     expect:
       must_not_contain:
         - use (82 + 90) / 2

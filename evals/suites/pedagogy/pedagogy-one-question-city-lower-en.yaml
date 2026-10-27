@@ -1,0 +1,14 @@
+id: pedagogy-one-question-city-lower-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
+  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/modules/conditions/notes.md §2.5
+turns:
+  - skill: coach
+    student: "coach me through making city = input('City? ') match 'nyc' even if someone types NYC or Nyc, one step"
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

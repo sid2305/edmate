@@ -17,7 +17,7 @@ turns:
       judge:
         - The reply gives a nudge or a question, not the fixed line.
   - skill: coach
-    student: I wrote score = int(input('Score? ')) but typed abc and now I get ValueError. hint 2?
+    student: I tried wrapping the input in int() but typed letters and got ValueError. hint 2?
     expect:
       must_not_contain:
         - int() can't convert text that isn't a number

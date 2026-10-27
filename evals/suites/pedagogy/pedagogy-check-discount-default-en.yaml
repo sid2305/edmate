@@ -1,0 +1,14 @@
+id: pedagogy-check-discount-default-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 411 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/functions/notes.md §4.6 (default parameter values)
+turns:
+  - skill: explain
+    student: 'explain default parameter values using discount(amount, rate=0.1)'
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood what happens when rate isn't given.

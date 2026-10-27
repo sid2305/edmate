@@ -1,0 +1,14 @@
+id: pedagogy-one-question-book-room-default-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
+  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/modules/functions/notes.md §4.6
+turns:
+  - skill: coach
+    student: 'coach me through book_room(nights=1) called as book_room() then book_room(3), what nights becomes each time, one step'
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.

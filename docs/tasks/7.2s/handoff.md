@@ -1,8 +1,8 @@
 # Handoff: 7.2s
 
-Status: PARTIAL (Phase J only; Phase K — pedagogy 105 to 150 — is still to do)
+Status: DONE
 Branch: m13/7.2s-pedagogy-cases-150
-Plan: docs/tasks/7.2s/plan.md (Phase J)
+Plan: docs/tasks/7.2s/plan.md (Phases J and K)
 
 ## Summary
 
@@ -104,6 +104,58 @@ After both fixes, `suites.test.ts` is 36/36 green and the full gate (below) is g
 
 Mix: 9 / 6 / 6 / 6 / 6 / 4 / 3 / 5, as the plan lists.
 
+## Summary (Phase K)
+
+- Fixed code-reviewer's 3 Phase J findings first, in their existing files:
+  - `pedagogy-ladder-typecheck-string-free-en.yaml` turn 2 no longer quotes turn 1's banned
+    line with single quotes; it now describes the attempt ("I tried wrapping the input in
+    int() but typed letters and got ValueError") instead of quoting the exact code.
+  - `pedagogy-ladder-average-list-to-solution-en.yaml` ("got another one?") and
+    `pedagogy-ladder-average-parens-free-en.yaml` ("can you do a different one?") no longer
+    share the student turn "show me a similar example";
+    `pedagogy-ladder-break-continue-to-solution-en.yaml` ("do you have one like that but
+    different?") no longer repeats `pedagogy-ladder-dict-items-to-solution-en.yaml`'s
+    "similar example?".
+  - `pedagogy-redirect-favorite-number-en.yaml`'s judge line now says "favorite" (US spelling),
+    matching the student text and file name.
+- 45 new cases in `evals/suites/pedagogy/` (105 to 150). All English, US-framed,
+  `package: free` or `package: paid`, `reviewed_by: lead`. Mix matches the plan exactly: hints
+  before answers (9: 4 free/5 paid), one question at a time (6: 3/3), sources cited (6: 3/3),
+  wrong attempt to a targeted hint (6: 3/3), the hint/worked-example/solution ladder over 3-4
+  turns (6: 3 free "never the answer"/3 paid "solution then check"), checking understanding
+  (4: 2/2), ask_teacher (3: 1/2), off-topic redirect (5: 2/3) = 45.
+- Every new case is grounded in teacher material Phase C and Phase J had not yet used:
+  `values-variables/notes.md` (`/` always returns a float even when exact, digit-start and
+  keyword naming rules, `len()` counting characters not quotes, `int()`/`str()` conversion for
+  arithmetic and concatenation, descriptive naming), `conditions/notes.md` (`.lower()` on a
+  second scenario, a chained-comparison pass band), `loops/notes.md` (the `evens`-counting
+  accumulator, `break`/`continue` on a third scenario), `functions/notes.md` (local variable
+  scope on a second function, default parameter values on a second scenario, a three-parameter
+  `volume(l, w, h)`), and `lists-dicts/notes.md` (`sum()`/`min()`/`max()`, `.get()` with a
+  default, replacing a list item by index vs. `.append()`). The 3 ask_teacher cases
+  (`.split()`, f-string `:.2f}` formatting, `zip()`) are things the notes come close to but do
+  not cover, matching the existing ask_teacher cases' pattern.
+- Before writing, grepped every existing student turn in `evals/suites/pedagogy/*.yaml` (105
+  lines) and cross-checked each new turn against that list and against every other new turn in
+  this phase; no literal or near-paraphrase repeat. Each trick/topic reused across buckets (e.g.
+  `.get()` in hint-first, cite and wrong-attempt; the `evens` accumulator in hint-first, cite
+  and ladder) stops at 3 instances suite-wide, never a 4th, and the pre-existing "order of
+  operations / needs brackets" trick (already at 3 instances from Phase C/J) was avoided
+  entirely rather than pushed to a 4th.
+- `packages/evals/src/suites.ts`: `SUITE_FLOORS.pedagogy` 105 to 150.
+- `packages/evals/src/suites.test.ts`: the synthetic pin test's expected pedagogy count is now
+  150.
+- No fixture pin exists for pedagogy (same as Phases C and J); nothing recorded, no model
+  called.
+
+### Red then green (Phase K)
+
+The floor was raised first this time (`SUITE_FLOORS.pedagogy` and the pin test to 150) while
+only 105 cases existed, confirming a red run (`pedagogy: 105 cases, below its floor of 150`) in
+`corepack pnpm --filter @edmate/evals exec vitest run src/suites.test.ts`. The 45 new case files
+were then added and the same command went green (36/36) on the first run — no self-made
+YAML/schema bugs this phase.
+
 ## Decisions
 
 ### 27 Oct 2026 · 7.2s built cases first, raised the floor second · decided by builder · risk: low
@@ -143,6 +195,40 @@ Mix: 9 / 6 / 6 / 6 / 6 / 4 / 3 / 5, as the plan lists.
 - Why: both would have failed `suites.test.ts` outright; fixing them before handoff keeps the
   gate green and avoids a wasted review cycle.
 
+### 27 Oct 2026 · 7.2s Phase J review findings fixed in Phase K · decided by builder · risk: low
+
+- Decided: fixed code-reviewer's 2 MEDIUM and 1 LOW Phase J findings in their original files
+  (listed under Summary (Phase K) above) rather than opening a separate fix-round task.
+- Why: the brief asked for these fixed as part of Phase K; the files are 4 of the existing 105
+  cases, not new ones, so fixing them in place (rather than copying content into a new file)
+  keeps one id per file and avoids a duplicate-turn problem of our own making.
+
+### 27 Oct 2026 · 7.2s raised the floor first this phase · decided by builder · risk: low
+
+- Decided: unlike Phase J, raised `SUITE_FLOORS.pedagogy` (and the pin test) to 150 before
+  writing any of the 45 new files, confirming a genuine red run off a stale count, then added
+  cases until green.
+- Why: the brief for this phase asked for floor-first red/green directly, and doing it this way
+  removes the "built then raised" ordering note Phase J had to add as a decision.
+
+### 27 Oct 2026 · 7.2s fresh-concept cap of 3 per trick, suite-wide · decided by builder · risk: low
+
+- Decided: before writing, grepped every student turn across all 105 existing cases, catalogued
+  which concepts/tricks had already reached 3 occurrences suite-wide (e.g. order of
+  operations/needs brackets), and designed each of the 45 new cases around a concept not yet at
+  that cap, stopping once a reused concept (e.g. `.get()` with a default, the `evens` counting
+  accumulator) hit 3 rather than pushing to a 4th.
+- Why: the plan's anti-duplication intent is about forms and tricks repeating too often, not
+  only literal turn text; a self-imposed cap keeps the suite's coverage broad without the plan
+  stating an explicit number.
+
+### 27 Oct 2026 · 7.2s kept Phase J's current build-plan line citations · decided by builder · risk: low
+
+- Decided: Phase K's new cases cite the same build-plan line ranges Phase J introduced (395-405
+  help ladder, 409-417 skills table, 427-436 ask the teacher) rather than re-deriving line
+  numbers, since the build plan has not moved since Phase J.
+- Why: consistent, verified-accurate citations across J and K; no new staleness risk to flag.
+
 ## Gate
 
 - `corepack pnpm --filter @edmate/evals exec vitest run src/suites.test.ts` (standalone,
@@ -155,8 +241,19 @@ Mix: 9 / 6 / 6 / 6 / 6 / 4 / 3 / 5, as the plan lists.
   and `suites.test.ts` was re-run clean (36/36) after the prettier rewrite.
 - `python3 .githooks/secret-scan.py --all`: exit 0, no findings.
 
+### Gate (Phase K)
+
+- `corepack pnpm --filter @edmate/evals exec vitest run src/suites.test.ts`: red first
+  (`pedagogy: 105 cases, below its floor of 150`) with the floor already raised to 150 and only
+  105 case files present, then green (36/36) once the 4 Phase J fixes and all 45 new files were
+  in place — first attempt, no further fixes needed.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals`: 6/6 tasks green,
+  1553/1553 tests green. No unrelated failures.
+- `corepack pnpm exec prettier --check evals/suites/pedagogy` then `--write`: 26 of the 45 new
+  files needed reformatting (list-style `must_not_contain`/`judge` blocks); clean on the
+  re-check, and `suites.test.ts` re-run clean (36/36) after the rewrite.
+- `python3 .githooks/secret-scan.py --all`: exit 0, no findings.
+
 ## Budget
 
-Tool calls used: ~100 (estimate; includes the pre-compaction portion of this session that wrote
-and checked the 45 case files, plus ~21 tool calls in this continuation to fix the two bugs
-above, run the full gate, and write this handoff).
+Tool calls used: ~195 (Phase J ~100, Phase K ~95).
