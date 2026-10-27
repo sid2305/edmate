@@ -1,3 +1,4 @@
+import { debuglog } from 'node:util';
 import {
   EvidenceEventSchema,
   LearnerProfileSchema,
@@ -17,6 +18,8 @@ import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js'
 
 /** Largest page `evidenceEvents.list` returns; a bigger `limit` is `invalid`. */
 export const EVIDENCE_LIST_MAX = 10_000;
+
+const debug = debuglog('edmate:db');
 
 const sameScope = (x: { studentId: string; teacherId: string }, scope: StudentScope) =>
   x.studentId === scope.studentId && x.teacherId === scope.teacherId;
@@ -558,6 +561,16 @@ export function evidenceEventsRepo(db: Db) {
           if (!locked) throw new RepositoryError('scope', method);
 
           const survivors = dropBeforeReset(list, locked.memoryResetAt);
+          if (survivors.length < list.length) {
+            debug(
+              '%s: reset watermark dropped %d of %d event(s) for %s/%s',
+              method,
+              list.length - survivors.length,
+              list.length,
+              sc.teacherId,
+              sc.studentId,
+            );
+          }
           if (survivors.length === 0) return [];
 
           const rows = await tx
@@ -661,6 +674,16 @@ export function evidenceEventsRepo(db: Db) {
           if (!locked) throw new RepositoryError('scope', method);
 
           const survivors = dropBeforeReset(list, locked.memoryResetAt);
+          if (survivors.length < list.length) {
+            debug(
+              '%s: reset watermark dropped %d of %d event(s) for %s/%s',
+              method,
+              list.length - survivors.length,
+              list.length,
+              sc.teacherId,
+              sc.studentId,
+            );
+          }
           if (survivors.length === 0) return [];
 
           const rows = await tx
