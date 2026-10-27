@@ -10527,9 +10527,31 @@ tasks:
   deps:
   - 12.2f
   risk: risky
-  status: running
+  status: done
   branch: m13/12.2h-report-signal
-  model: plan:lead build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 704
+    tokens_in: 2480
+    tokens_out: 170669
+    cache_read_tokens: 87716121
+    wall_time_seconds: 6495
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        LOW: 3
+        INFO: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 2
+    human_questions: 0
 - id: 5.8f
   milestone: M13
   title: '5.8b review LOW (typescript-reviewer): packages/harness/src/pedagogy/skills.ts SkillInput has two independent optional fields, rolePlayStep and rolePlayStepPersonaId, so a caller that sets one
