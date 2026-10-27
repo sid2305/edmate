@@ -4,9 +4,11 @@
 // across every teacher, oldest first, capped at `limit`, and never a null-storage-key row.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
+import { and, asc, eq, isNotNull, lt } from 'drizzle-orm';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import { ingestSweepRepo, type IngestSweepRepo } from '../src/index.js';
+import { documents } from '../src/schema/content.js';
 import { MOD, RA, RB, seedRetrievalWorld } from './retrieval-seed.js';
 import {
   createDatabase,
@@ -116,6 +118,40 @@ describe.skipIf(!up)(`ingest sweep on Postgres 16${up ? '' : ` (${SKIP_REASON})`
       await seedDoc(RA, MOD.allowed, 'processing', 'uploads/a/far.pdf', OLD);
       const rows = await sweep.staleProcessing(new Date('2020-01-01T00:00:00Z'));
       expect(rows).toEqual([]);
+    });
+
+    // Task 8.2p: documents_processing_updated_at_id_idx backs this query's `status =
+    // 'processing'` range plus its `ORDER BY updated_at, id` keyset. `enable_seqscan = off` (the
+    // table is tiny, so without it the planner picks a seq scan unforced) inside a rolled-back
+    // transaction, same helper shape as discovery.int.test.ts's explainSeqscanOff.
+    it('the sweep query uses documents_processing_updated_at_id_idx', async () => {
+      const query = handle.db
+        .select({
+          id: documents.id,
+          teacherId: documents.teacherId,
+          storageKey: documents.storageKey,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.status, 'processing'),
+            lt(documents.updatedAt, CUTOFF),
+            isNotNull(documents.storageKey),
+          ),
+        )
+        .orderBy(asc(documents.updatedAt), asc(documents.id))
+        .limit(1000);
+      const { sql: text, params } = query.toSQL();
+      await raw.query('BEGIN');
+      let plan: string;
+      try {
+        await raw.query('SET LOCAL enable_seqscan = off');
+        const { rows } = await raw.query(`EXPLAIN (FORMAT JSON) ${text}`, params);
+        plan = JSON.stringify(rows[0]['QUERY PLAN']);
+      } finally {
+        await raw.query('ROLLBACK');
+      }
+      expect(plan).toContain('documents_processing_updated_at_id_idx');
     });
   });
 });

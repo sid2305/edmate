@@ -105,6 +105,12 @@ export const documents = pgTable(
     index('documents_live_class_id_idx')
       .on(t.liveClassId)
       .where(sql`${t.liveClassId} is not null`),
+    // Task 8.2p: ingestSweep.staleProcessing's `status = 'processing' AND updated_at < $cutoff`
+    // range plus its `ORDER BY updated_at, id` keyset, in one partial index. Schema-only (see
+    // migrate.ts's POST_MIGRATE_STEPS), the same pattern as documents_live_class_id_idx above.
+    index('documents_processing_updated_at_id_idx')
+      .on(t.updatedAt, t.id)
+      .where(sql`${t.status} = 'processing'`),
     check(
       'documents_failure_reason_only_when_failed',
       sql`${t.failureReason} is null or ${t.status} = 'failed'`,
