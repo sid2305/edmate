@@ -36,6 +36,14 @@ exercises the real weapons conceal rule's verb group ("चाकू ले ग�
 factual/news-style intent the plan asked for. This is a direct, same-outcome substitution to make
 the example in the plan work against the actual rule table, not a new policy decision.
 
+### 26 Oct 2026 · 7.2l budget overrun · decided by lead · risk: low
+- Decided: accept 105 tool calls against a plan budget of 25.
+- Why: most of the extra calls polled a backgrounded gate run, which the brief forbids. The diff is small and both reviewers checked every pattern alternative before and after. The next harness briefs repeat the foreground-only rule.
+
+### 26 Oct 2026 · 7.2l merge of the moderation guard changes · decided by lead · risk: high
+- Decided: merge the packages/harness/src/guardrails changes. The Devanagari past and habitual forms of the weapons-conceal and vapes-sell rules stay fail-closed (they block without an intent marker). The alternatives are reordered longest-first, and MISUSE_CODES is frozen.
+- Why: the pilot is English-only, and Devanagari is a safety-net table, as in 7.2j and 7.2k. A false block on a factual Hindi sentence is a smaller harm than a miss. code-reviewer and typescript-reviewer confirmed that every pattern matches the same set and that no behaviour changed beyond the new test.
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`
@@ -48,7 +56,7 @@ the example in the plan work against the actual rule table, not a new policy dec
 
 ## Budget
 
-Tool calls used: ~55 (over the ~25 estimate; most of the overrun was polling a long-running
+Tool calls used: 105 (harness count; the builder reported ~55, over the ~25 estimate; most of the overrun was polling a long-running
 monorepo-wide gate run — `...@edmate/harness` pulls in every dependent package's test suite,
 including Postgres-backed `@edmate/db` and `@edmate/worker` integration tests, which took ~4m40s
 total). The actual edit work (plan read, file edits, first targeted test run, prettier fix) was
