@@ -38,6 +38,10 @@ No live index change and no new migration file, as the plan specifies.
 ## Decisions
 None.
 
+### 27 Oct 2026 · 8.2s budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 49 tool calls (harness count) against a plan budget of 20.
+- Why: The drift check ran drizzle-kit twice and had to clean up the generated files in between, which the lead's estimate missed. Future snapshot fixes should plan about 40.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` → `Tasks: 8 successful, 8
   total` (exit code 0; ran ~3m38s under machine load, no failures).
