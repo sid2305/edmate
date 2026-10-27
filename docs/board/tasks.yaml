@@ -8174,9 +8174,31 @@ tasks:
   deps:
   - 8.7m
   risk: low
-  status: running
+  status: done
   branch: m13/8.7p-redact-span-surrogate
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 267
+    tokens_in: 936
+    tokens_out: 91290
+    cache_read_tokens: 33155012
+    wall_time_seconds: 2040
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
@@ -8185,7 +8207,7 @@ tasks:
   deps:
   - 8.7p
   risk: high
-  status: todo
+  status: planning
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
