@@ -61,6 +61,14 @@ No new migration (item 4 is wontfix). No contract shape changes.
   merge, even for a comment-reword + defensive-validation change with no behaviour change on
   reachable inputs.
 
+### 26 Oct 2026 · 8.7i budget overrun · decided by lead · risk: low
+- Decided: accept 51 tool calls against a plan budget of 40.
+- Why: the builder also ran the dependents gate (--filter=...@edmate/db) against the shared dev database. The diff is small and both reviewers approved it with no findings.
+
+### 26 Oct 2026 · 8.7i merge of publish.ts and the repositories README · decided by lead · risk: high
+- Decided: merge the packages/db/src/repositories/publish.ts change (RunShape validates createdAt; comment rewording) and the README note.
+- Why: security-reviewer and code-reviewer approved with no findings. No query, scope filter or migration changed.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` → 8/8 tasks successful.
   `publish.ts` coverage: 100% stmts, 98.82% branch (line 484, pre-existing, unchanged), 100%
@@ -72,4 +80,4 @@ No new migration (item 4 is wontfix). No contract shape changes.
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 26
+Tool calls used: 51 (harness count; the builder reported 26)
