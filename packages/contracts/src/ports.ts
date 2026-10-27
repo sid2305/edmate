@@ -96,6 +96,27 @@ export interface Transcriber {
 export interface ProfileStore {
   get(studentId: string, teacherId: string): Promise<LearnerProfile>;
   applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile>;
+  /**
+   * Merges known mistake tags (every tag already a member of the style card's `mistakeTags`,
+   * classified by `classifyMistakeTags` -- task 6.3c, ADR-0017) into the profile at `scope`.
+   * Optional: added after every structural `ProfileStore` implementer, so Phase A
+   * (contracts + harness) ships without breaking them; `commit.ts` calls it through an optional
+   * chain, a safe no-op for an implementer that hasn't landed it yet.
+   */
+  applyMistakes?(
+    scope: { studentId: string; teacherId: string },
+    known: LearnerProfile['mistakes'],
+    proposed: LearnerProfile['mistakes'],
+  ): Promise<void>;
+  /**
+   * Records mistake tags seen but not on the style card's list, for a teacher to review and
+   * approve (task 6.3c, ADR-0017; 6.3a lands the real persistence). Optional, same reason as
+   * `applyMistakes`.
+   */
+  recordProposedMistakes?(
+    scope: { studentId: string; teacherId: string },
+    proposed: LearnerProfile['mistakes'],
+  ): Promise<void>;
 }
 
 export interface TranscriptStore {

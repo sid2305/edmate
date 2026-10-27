@@ -78,6 +78,12 @@ export interface PracticeItem {
   readonly prompt: string;
   /** Shown to the model/student regardless of kind (MCQ options, for instance). */
   readonly options?: readonly string[];
+  /**
+   * A content-author-set candidate mistake tag (6.3c), like `topicId`: never a classifier
+   * output. `classifyMistakeTags` splits it into `known`/`proposed` against the style card's
+   * `mistakeTags` once the item is graded wrong.
+   */
+  readonly mistakeTag?: string;
 }
 
 /** An item plus its server-only answer key, returned together only on the server side. */

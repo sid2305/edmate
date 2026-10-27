@@ -10,6 +10,109 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.4b add a `sessions.attachSummary` case to `repositories.int.test.ts` · decided by builder · risk: low
+- Decided: added the required `CASES['sessions.attachSummary']` entry (and a third seeded,
+  already-ended, summary-less session per pair, `endable3`) to
+  `packages/db/test/repositories.int.test.ts`, even though this file was not in the plan's "Files
+  to create/modify" list.
+- Why: `CASES` is typed `Record<RepositoryMethod, IsolationCase>` and a runtime check also
+  compares `createRepositories(db)`'s own methods against `CASES` — adding `attachSummary` to
+  `Repositories['sessions']` (needed per the plan's own design) makes `packages/db` itself fail to
+  `tsc`/fail the runtime check without this addition. This isn't a design choice or a scope
+  widening; it's the minimum edit the plan's own chosen design requires to keep `packages/db`
+  compiling and its own isolation test accurate. Kept the shape identical to the adjacent
+  `sessions.end` case (same owner-marker/no-leak assertions, same mismatches pattern) and used a
+  freshly seeded session rather than reusing `endable`/`endable2` so it never races with those
+  cases' own state.
+
+---
+
+### 27 Oct 2026 · 6.4b approve merge · decided by lead · risk: high
+- Decided: 6.4b merges. It changes `packages/db/src/repositories/sessions.ts` (new `attachSummary`, scoped to the pair and conditional on an ended session with no summary) and the end route now claims the session before summarizing, so two concurrent end requests run the summarizer once. security-reviewer, database-reviewer, code-reviewer and typescript-reviewer approved; typescript-reviewer's HIGH (a history read failure after the claim returned an error for an ended session) was fixed in fix round 1 and re-verified.
+- Why: it closes 6.4a's security MEDIUM (unmetered duplicate summaries) using the existing atomic `end()` claim, without changing `end()`.
+
+---
+
+### 27 Oct 2026 · 6.4b budget overrun accepted · decided by lead · risk: low
+- Decided: accept 129 tool calls (build 85, fix round 44, by the harness count) against the plan's 90.
+- Why: the overrun is the fix round for a real HIGH; the build itself came in under budget.
+
+---
+
+### 27 Oct 2026 · 6.4b three review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix for packages/db/src/repositories/sessions.ts (attachSummary reads the memory-reset watermark at attach time, which is the wanted behaviour), route.ts (the `endedAt` early return is only a fast path before the atomic claim) and route.test.ts (the in-memory concurrency test proves route ordering; cross-instance atomicity is `end()`'s conditional UPDATE, covered by the packages/db int tests), all under apps/web/app/api/sessions/[id]/end/.
+- Why: none is a defect; each reviewer marked it informational.
+
+---
+
+### 27 Oct 2026 · 6.3c `ProfileStore` port extension (ADR-0017) · decided by builder · risk: high
+- Decided: extend `ProfileStore` (`packages/contracts/src/ports.ts`) with two new optional methods,
+  `applyMistakes?` and `recordProposedMistakes?`, under ADR-0017 (status Proposed; architect,
+  security-reviewer, typescript-reviewer still to review).
+- Why: closes the gap 6.3a's plan documented (`classifyMistakeTags` and
+  `learnerProfilesRepo.applyMistakes` both shipped with no caller); optional so Phase A ships and
+  gates green without breaking every existing structural `ProfileStore` implementer in the same PR
+  (lead answer Q1, the plan's recommendation).
+
+---
+
+### 27 Oct 2026 · 6.3c `packages/harness/src/pedagogy/helpState.ts` touch · decided by builder · risk: high
+- Decided: add `HelpState.practiceMistakeTag?: string`, a sibling of the existing
+  `practiceTopicId`, under the MVP-first pedagogy carve-out (code-reviewer only, pre-pilot-gate).
+- Why: logged `risk: high` per the pedagogy group's general rule, as the plan's "Risky paths" table
+  states, even though only code-reviewer is required to sign off before the pilot gate.
+
+---
+
+### 27 Oct 2026 · 6.3c build plan / spec-types.ts sync · decided by builder · risk: low
+- Decided: update `docs/edmate-harness-build-plan.md`'s Core contracts block (`ProfileStore` line)
+  to match `packages/contracts/test/spec-types.ts`'s updated copy, even though the plan's file list
+  didn't name this file.
+- Why: `packages/contracts/test/spec-drift.test.ts` asserts `spec-types.ts` equals the build plan's
+  Core contracts block byte-for-byte (whitespace normalised); leaving the build plan unchanged
+  turns the gate red. ADR-0015 records the same rule ("the Core contracts block and spec-types.ts
+  change together").
+
+---
+
+### 27 Oct 2026 · 6.3c approve ADR-0017 and the helpState touch · decided by lead · risk: high
+- Decided: ADR-0017 (two optional `ProfileStore` methods, `applyMistakes` and `recordProposedMistakes`) is Accepted, and the `practiceMistakeTag` field in `packages/harness/src/pedagogy/helpState.ts` is approved. Architect, security-reviewer, typescript-reviewer and code-reviewer all approved Phase A with no CRITICAL, HIGH or MEDIUM findings.
+- Why: the tag comes only from the teacher's practice item, is length-bounded like `practiceTopicId`, is scoped from the turn's own entitlement, and an adapter without the methods is a tested no-op, so the change is additive and safe to ship before the db adapter.
+
+---
+
+### 27 Oct 2026 · 6.3c merge Phase A alone; Phase B becomes 6.3d · decided by lead · risk: low
+- Decided: 6.3c merges with Phase A (contracts, ADR, harness). Phase B (the `profileStoreFor` db adapter plus the app adapters in apps/worker, apps/web and apps/cli) moves to new board task 6.3d, which carries the rest of 6.3c's acceptance: a wrong practice answer records the tags on the learner profile.
+- Why: Phase A is reviewed and complete on its own (the new port methods are optional, so nothing breaks before an adapter exists), and merging it now unblocks 6.4c, which edits the same runner.ts and practice.ts, instead of holding both behind the db work.
+
+---
+
+### 27 Oct 2026 · 6.3c Phase A budget overrun accepted · decided by lead · risk: low
+- Decided: accept 130 tool calls (harness count; the handoff's self-count is 78) against the plan's 85 for Phase A.
+- Why: the overrun came from syncing the build plan's Core contracts block (spec-drift test) and running the contracts dependents gate; the work is complete and reviewed clean.
+
+---
+
+### 27 Oct 2026 · 11.4d ffmpeg chunker (ADR-0016) · decided by builder · risk: high
+- Decided: `apps/worker`'s Docker image gains a new system binary (`ffmpeg`), a tech-stack change under rule 2. The ADR (`docs/adr/0016-ffmpeg-chunker.md`) is written and set to Status "Proposed", naming architect, security-reviewer and typescript-reviewer as the required reviewers.
+- Why: the gap closed here (MP4/WebM/M4A recordings can't be split for Whisper's upload limit the way WAV/MP3 already are) needs a general audio decoder, which is out of scope for a hand-written parser; ffmpeg is the established tool and the plan's Lead answers (27 Oct 2026) already confirms this ADR's scope (Q1-Q5). This decision itself is not final until the architect, security-reviewer and typescript-reviewer review `review.md` and the lead approves — this entry records the builder's side (rule 2's requirement that an ADR exists before the code it governs ships), not that approval.
+
+No other decision the plan didn't already make was needed in Phase A.
+
+---
+
+### 27 Oct 2026 · 11.4d approve ADR-0016 and merge · decided by lead · risk: high
+- Decided: ADR-0016 (ffmpeg in the worker image, protocol whitelist `file`, forced demuxer from a fixed mime table, SIGTERM then SIGKILL on timeout) is Accepted and 11.4d merges. Fix round 1 closed the security CRITICAL, the architect HIGH and MEDIUM and the typescript HIGH; security-reviewer, architect and typescript-reviewer each re-verified and approved.
+- Why: the chunker is what lets MP4, WebM and M4A recordings of any length be transcribed, and the fix round shuts the one real attack path (ffmpeg following HLS or concat references inside an upload). The remaining MEDIUM/LOW items are hardening, not blockers, and go to board task 11.4j.
+
+---
+
+### 27 Oct 2026 · 11.4d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 224 tool calls against the plan's 100 (Phase A 91, Phase B 44, fix round 89, by the harness count; the handoff's self-counts are lower).
+- Why: the fix round had to prove the ffmpeg rejection against real ffmpeg and a real SIGTERM-ignoring child, which is where the overrun came from; the result is the security property the task needed. Future briefs that ask for real-process tests should budget for them.
+
+---
+
 ### 27 Oct 2026 · 8.2a unmount test asserts no extra fetch call, not just no console warning · decided by builder · risk: low
 - Decided: the Phase B unmount test's primary assertion is that no extra `fetch` call fires after
   unmount (checked by comparing the call count before and after the late response resolves), with

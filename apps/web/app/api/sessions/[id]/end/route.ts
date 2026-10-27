@@ -22,6 +22,12 @@
 // still ends, with `summary: undefined` (stored as SQL NULL, `sessionsRepo.end`'s existing
 // contract). Ending an already-ended session is a no-op success: it never re-summarises or
 // overwrites the stored summary (also `sessionsRepo.end`'s existing guarantee, 6.4/3.16).
+//
+// Task 6.4b (session-end summary cost race, 6.4a security MEDIUM): `end(scope, id, undefined)` is
+// now called first, as the claim, before the history/gateway/summarise work -- only the claim's
+// winner (`{ ended: true }`) summarises and, if it produced a summary, calls the new
+// `attachSummary` to attach it. The other concurrent caller sees `{ ended: false }` and returns
+// ok() immediately, running the summariser zero times. See docs/tasks/6.4b/plan.md.
 import { TurnInputSchema, type Message, type ModelGateway } from '@edmate/contracts';
 import { RepositoryError, type Repositories } from '@edmate/db';
 import { createRouter, DEFAULT_MODEL_POLICY, type ProviderAdapterFactories } from '@edmate/gateway';
@@ -101,26 +107,51 @@ export function createSessionEndHandlers(backend: SessionEndBackend): { end: Han
         // Already ended (a race, or a retried call): a no-op success, never re-summarised and
         // never overwriting the stored summary (lead answer; sessionsRepo.end's own guarantee).
         if (session.endedAt !== null) return ok();
-        const history: readonly Pick<Message, 'role' | 'text'>[] = await repos.messages.history(
-          scope,
-          path.data.id,
-          SUMMARY_HISTORY_LIMIT,
-        );
-        // The gateway is built lazily, inside this one-method shim: an empty transcript (no
-        // messages yet) must never build or call it (`summarizeSession` itself short-circuits on
-        // an empty history, but only if the gateway is never awaited ahead of that check).
-        const lazyGateway: Pick<ModelGateway, 'generateObject'> = {
-          generateObject: async (req, schema) =>
-            (await backend.gateway()).generateObject(req, schema),
-        };
+        // Task 6.4b: claim the session *before* summarising (the atomic, cross-instance-safe
+        // race-resolution point is `end()`'s own `WHERE ... AND ended_at IS NULL`, unchanged).
+        // Exactly one of two concurrent callers gets `{ ended: true }`; the other gets `{ ended:
+        // false }` immediately, with no row written -- it returns ok() before ever summarising
+        // (the actual fix for the session-end summary cost race, 6.4a security MEDIUM).
+        const claim = await repos.sessions.end(scope, path.data.id, undefined);
+        if (!claim.ended) return ok();
+        // Task 6.4b fix round 1 (typescript-reviewer HIGH): once the claim above has succeeded,
+        // the session is already ended in the database -- no failure in any step below (the
+        // history read, the summariser, the attach) may turn that into anything but ok(). Each
+        // step keeps its own try/catch and its own distinct, error-name-only log event.
         let summary: string | undefined;
         try {
-          summary = await summarizeSession(lazyGateway, history);
+          const history: readonly Pick<Message, 'role' | 'text'>[] = await repos.messages.history(
+            scope,
+            path.data.id,
+            SUMMARY_HISTORY_LIMIT,
+          );
+          // The gateway is built lazily, inside this one-method shim: an empty transcript (no
+          // messages yet) must never build or call it (`summarizeSession` itself short-circuits
+          // on an empty history, but only if the gateway is never awaited ahead of that check).
+          const lazyGateway: Pick<ModelGateway, 'generateObject'> = {
+            generateObject: async (req, schema) =>
+              (await backend.gateway()).generateObject(req, schema),
+          };
+          try {
+            summary = await summarizeSession(lazyGateway, history);
+          } catch (error) {
+            // sessionSummary.ts's own rule (6.4): a model failure never blocks ending the session.
+            log.error('sessions.end.summarize_failed', { error: errorName(error) });
+          }
         } catch (error) {
-          // sessionSummary.ts's own rule (6.4): a model failure never blocks ending the session.
-          log.error('sessions.end.summarize_failed', { error: errorName(error) });
+          // The claim already succeeded -- a history-read failure must never fail the response.
+          log.error('sessions.end.history_failed', { error: errorName(error) });
         }
-        await repos.sessions.end(scope, path.data.id, summary);
+        if (summary !== undefined) {
+          try {
+            await repos.sessions.attachSummary(scope, path.data.id, summary);
+          } catch (error) {
+            // The session is already ended at this point (the claim above succeeded): an
+            // attachSummary failure (e.g. the word-limit RepositoryError) must never turn a
+            // successful end into a failed response -- log the name only, swallow, still ok().
+            log.error('sessions.end.attach_failed', { error: errorName(error) });
+          }
+        }
         return ok();
       } catch (error) {
         if (error instanceof RepositoryError) {

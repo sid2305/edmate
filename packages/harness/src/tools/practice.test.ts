@@ -310,6 +310,23 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     expect(serializedContains(out, '1/2')).toBe(false);
   });
 
+  it('issuedItem: a bank item with a content-author mistakeTag carries it through (6.3c)', async () => {
+    const bank = demoPracticeBank();
+    const tagged: PracticeBank = {
+      ...bank,
+      itemFor: (itemId, scope) => {
+        const item = bank.itemFor(itemId, scope);
+        return item === undefined ? undefined : { ...item, mistakeTag: 'sign_error' };
+      },
+    };
+    const t = practiceNextItemTool(tagged);
+    const fr = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_FRACTIONS] },
+    });
+    const out = await t.tool.run({ level: 2 }, fr);
+    expect(t.issuedItem(out, fr)).toMatchObject({ mistakeTag: 'sign_error' });
+  });
+
   it('issuedItem: the module is the one allowed module the id resolves in', () => {
     const t = practiceNextItemTool(demoPracticeBank());
     const out = { id: 'demo:fractions:1:a', kind: 'numeric', level: 1, prompt: 'p' };

@@ -66,6 +66,8 @@ export interface IssuedItem {
   moduleId: string;
   /** The item's topic (6.4a): drives the graded-check EvidenceEvent the runner builds on commit. */
   topicId?: string;
+  /** The item's candidate mistake tag (6.3c): drives `mistakesFor`'s classification on a wrong answer. */
+  mistakeTag?: string;
   answerKey: readonly string[];
   /**
    * The text the item shows (its prompt and options). The answer-key check on the tool output and
