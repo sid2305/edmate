@@ -3098,9 +3098,32 @@ tasks:
   deps:
   - '6.5'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.5a-memory-reset-watermark
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 259
+    tokens_in: 922
+    tokens_out: 49346
+    cache_read_tokens: 25811316
+    wall_time_seconds: 1164
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 2
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 7.3a
   milestone: M13
   title: 'Per-agent suite generator: Hindi (Devanagari), romanised Hindi and Hinglish variants of the locked templates, as a safety net after the English-only pilot.'

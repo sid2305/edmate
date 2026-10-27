@@ -10,6 +10,83 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.5a sessions.end reads the watermark FOR UPDATE · decided by lead · risk: high
+- Decided: fix in this PR the security-reviewer HIGH (database-reviewer MEDIUM) that `sessions.end` read `memory_reset_at` without a lock; it now reads it `FOR UPDATE` in the sessions-then-profile order `reset` uses, and the comment explains that `end`'s own session-row UPDATE already serialises it against `reset`.
+- Why: a pre-reset summary surviving a reset is exactly what this task exists to prevent; the change is one clause, and security- and database-reviewer re-reviewed every interleaving.
+
+---
+
+### 27 Oct 2026 · 6.5a repositories.int.test.ts touch accepted · decided by lead · risk: low
+- Decided: accept the builder's two timestamp changes in packages/db/test/repositories.int.test.ts despite the lead answer to leave that file alone (database-reviewer raised it as a sequencing HIGH); 13.regate merged first and the fix round's merge of main was clean.
+- Why: the grid's own `learnerProfiles.reset` case stamps the watermark, so the old fixed-past timestamps were correctly dropped; the change was forced, minimal and caused no conflict.
+
+---
+
+### 27 Oct 2026 · 6.5a review follow-ups go to 6.5c · decided by lead · risk: low
+- Decided: defer to board task 6.5c the silent-failure-hunter MEDIUM (apps/worker/src/commit/processors.ts reports a watermark-dropped event as `already_written`, and its comment is now incomplete) and the LOWs asking for a debug log when packages/db/src/repositories/learner.ts `dropBeforeReset` drops events or `sessions.end` skips a stale summary.
+- Why: 6.5c already moves that worker handler onto `appendAndFold`; the drop is the planned behaviour and only its observability is missing.
+
+---
+
+### 27 Oct 2026 · 6.5a budget overrun · decided by lead · risk: low
+- Decided: accept 109 tool calls (build 69, fix round 40, harness counts) against a plan budget of 60 (1.8x).
+- Why: the extra cost was the forced test-file fix and the HIGH fix round; all five reviewers approved after the fix.
+
+---
+
+### 27 Oct 2026 · 6.5a memory-reset watermark closes the stale-job race deferred from 6.5 · decided by builder · risk: high
+- Decided: add `memory_reset_at` (nullable timestamptz) to `learner_profiles`, stamped by
+  `learnerProfiles.reset`. `evidenceEvents.append` now locks the profile row first (matching
+  `appendAndFold`, closing the 6.5 review's MEDIUM); both `append` and `appendAndFold` silently drop
+  any event dated strictly before the watermark, before it is ever inserted or folded.
+  `sessions.end` never writes `last_summary` for a session that started strictly before the
+  watermark, though it still ends the session row. Lead-decided Q1–Q4 (see plan): still close the
+  session row (Q1); strict `<` (Q2); leave the worker's evidence handler alone, deferred to board
+  task 6.5c (Q3); `append` throws `scope` on a vanished row, same shape as its sibling locked
+  methods (Q4).
+- Why: a job queued before a reset (an evidence event, or a session's end-of-session summary) that
+  lands after the reset must not resurrect memory the student explicitly cleared. Filtering by the
+  event's/session's own timestamp works regardless of how late the stale job arrives, and needs no
+  app-layer coordination.
+- risk: high (new locking and filtering behavior in `packages/db/src/repositories/**`, a risky
+  path; security-reviewer required).
+
+---
+
+### 27 Oct 2026 · 6.5a the worker's evidence-job handler is not moved onto appendAndFold here · decided by builder · risk: low
+- Decided: `apps/worker/src/commit/processors.ts`'s `JOB.evidence` handler keeps its existing
+  append-then-get-then-applyMastery shape; only the stale-after-reset case this task's acceptance
+  covers is closed (a filtered-to-empty `append` makes it skip the fold entirely). The handler's
+  own non-atomic two-transaction fold (present since task 3.17, the same class of race 6.2 fixed
+  elsewhere) is left as a deferred finding — the lead's plan answer already names board task 6.5c
+  for it.
+- Why: `apps/worker/**` is out of this task's files; fixing it is a bigger, separable change.
+- risk: low (documented gap, not a new regression).
+
+---
+
+### 27 Oct 2026 · 6.5a repositories.int.test.ts needed a forced, minimal fix · decided by builder · risk: low
+- Decided: bumped two hardcoded timestamp bases (`2026-10-17`/`2026-10-18`, in the
+  `evidenceEvents.append`/`appendAndFold` grid cases' `attempt` functions only) to a far-future
+  date (`2030-01-01`/`2030-01-02`). No other line in `repositories.int.test.ts` changed.
+- Why: that file's own `learnerProfiles.reset` grid case runs earlier in the same test file (same
+  throwaway database) and legitimately stamps every seeded pair's `memory_reset_at` to real "now"
+  during the test run; the two append-family cases' subsequent real writes then used fixed
+  **past** 2026-10-17/18 dates, which the new watermark filter correctly dropped — a genuine
+  conflict the plan's "memory_reset_at is NULL for every seeded row in that fixture" assumption did
+  not anticipate (the CASES object's own insertion order puts `reset` before both `append` cases).
+  Confirmed via an isolated single-test run (`vitest run … -t "evidenceEvents.append: student
+  scope"`, passed alone) versus the full-file run (failed) before concluding this was ordering, not
+  a logic bug in the new filter.
+- risk: low (test-only timestamp change, no behavior change; the two timestamps were already
+  arbitrary placeholders used only for per-attempt uniqueness, not for any watermark assertion).
+
+Deferred (not fixed here, per plan): the worker's non-atomic evidence fold (board task 6.5c, per
+lead); a locked/hardened (vs. plain-read) watermark check inside `sessions.end` for true
+concurrent hardening; exposing `memory_reset_at` on the student-facing memory page (no ask for it).
+
+---
+
 ### 27 Oct 2026 · 13.regate budget overrun · decided by lead · risk: low
 - Decided: accept 296 tool calls (Phases A 96, B 92, B2 48, fix round 60, harness counts) against a plan budget of 115 (2.6x); no rework.
 - Why: Phase B stopped PARTIAL only because 9.2g was not yet on main, so B2 repeated setup; the fix round added three int tests for a real HIGH. The plan's budget did not cover a cross-package task with a worker wiring phase. Future cross-package plans budget each phase separately.
