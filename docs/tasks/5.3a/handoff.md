@@ -171,3 +171,100 @@ Result: clean, no output.
 ### Budget
 
 Phase B tool calls used: 15
+
+## Fix round
+
+### Summary
+
+Review finding (HIGH from `database-reviewer`/`typescript-reviewer`, MEDIUM from
+`rag-pipeline-reviewer`/`security-reviewer`/`code-reviewer`): `vectorRows`' inner query ordered by
+`distance` alone with `LIMIT PER_SIGNAL`, then the outer query added the `(distance, id)`
+tie-break only over those already-truncated rows. When more than `PER_SIGNAL` chunks tie exactly
+on distance across the cut-off (the scripted test/demo embedder gives identical vectors to texts
+with the same keyword set, `retrieval-seed.ts`'s `scriptedVector`), which of the tied rows the
+inner `LIMIT` kept depended on scan order, not on id — the comment's claim that "ties still break
+deterministically" was wrong about *which* rows got selected (only their final order was
+deterministic).
+
+Fix, in `packages/db/src/repositories/retrieval.ts`:
+- Added `export const VECTOR_OVERFETCH = PER_SIGNAL * 2` (also exported `PER_SIGNAL`, needed by
+  the new test).
+- `vectorRows`' inner query now orders by `distance` alone still (keeping the HNSW benefit — no
+  `id` added to that `ORDER BY`), but with `LIMIT VECTOR_OVERFETCH` instead of `LIMIT PER_SIGNAL`.
+  The outer query keeps `ORDER BY distance, id` and now carries the real cut-off,
+  `LIMIT PER_SIGNAL`. A tie group up to `VECTOR_OVERFETCH` rows wide is now fully visible to the
+  outer tie-break, so the selected `PER_SIGNAL` rows are the lowest-id rows within it.
+- Rewrote the comment to state the guarantee precisely: the output is always in `(distance, id)`
+  order; the selected rows are the lowest-id rows among any tied group, *unless* that group is
+  wider than `VECTOR_OVERFETCH`, in which case the inner query may already have dropped some
+  lower-id tied rows before the outer tie-break can see them. Also notes HNSW search is
+  approximate regardless, so this only ever matters for exact distance ties.
+
+Test, in `packages/db/test/retrieval.int.test.ts` (`describe('search', ...)`): a new teacher
+(`tch_vectie`), module and document, isolated from every other test in the file (search scopes by
+module ownership under `teacherId`, so this cannot change what any other test's query sees).
+Seeded `PER_SIGNAL + 10` = 30 chunks with an identical embedding (so they tie exactly on distance
+to the query vector), plus 5 "far" decoys on an orthogonal axis (clearly farther, interspersed
+with lower ids via `ord`, so the test also shows id alone never wins over a real distance
+difference). Calls `repos.retrieval.search` directly (not through the `RetrievalIndex` port, which
+only re-embeds the text query and doesn't accept an explicit vector) with a stop-words-only query
+(`'the and of'`) so `queryTerms` is empty and the search is vector-only — `byText = []`, so the
+fused order is exactly the vector signal's order (RRF is strictly decreasing in rank, so there is
+no cross-signal tie to break). Asserts the returned ids equal the 30 tied ids' first 20 (lowest
+id), and that none of the 5 far decoys appear.
+
+Red-to-green: ran the new test with only the inner `LIMIT` reverted to `PER_SIGNAL` (simulating the
+pre-fix code, leaving the comment and the exported constants as-is) against the real dev
+Postgres used by these tests. **It still passed** — this dev Postgres has no HNSW-forcing settings
+on this connection (unlike `retrieval-hnsw.int.test.ts`'s dedicated pool with
+`enable_seqscan=off`), so the planner takes a sequential scan for this small table, and a seq scan
+happens to return rows in a stable physical/insertion order that correlates with ascending id
+here. So this is evidence the fix is correct, not a red-to-green demonstration — the same honest
+caveat the plan asked for if this happened, matching the fix brief's explicit allowance. The
+finding itself is about a correctness guarantee against the *planner's* freedom under an
+unspecified inner order (documented in the original comment's wrong claim and confirmed by the
+reviewers), not about reproducing a scan order on this machine's default planner settings; the fix
+closes that gap regardless of whether this particular dev instance's default plan exposes it.
+
+Touched only `packages/db/src/repositories/retrieval.ts`, `packages/db/test/retrieval.int.test.ts`,
+and this handoff, per the fix brief.
+
+### Gate
+
+```
+export TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate
+corepack pnpm turbo run typecheck lint test --filter=...@edmate/db
+```
+Result: `Tasks: 20 successful, 20 total`. `@edmate/db:test` shows `test/retrieval.int.test.ts (32
+tests)` with 0 skipped (confirms the int tests ran against the real Postgres, not skipped) and the
+whole `@edmate/db` suite `83 passed (83)` / `1781 passed | 4 skipped (1785)`; coverage for
+`retrieval.ts` 100% lines/statements/functions, 97.77% branches (unchanged by this fix round's new
+test — `PER_SIGNAL`/`VECTOR_OVERFETCH` were already exercised).
+
+```
+corepack pnpm exec prettier --check packages/db/src/repositories/retrieval.ts \
+  packages/db/test/retrieval.int.test.ts
+```
+Result: clean.
+
+```
+python3 .githooks/secret-scan.py --all
+```
+Result: clean, no output.
+
+### Decisions
+
+### 26 Oct 2026 · 5.3a vector tie-break over-fetch · decided by builder · risk: high
+- Decided: fixed the inner/outer vector query split in `vectorRows` so the inner query
+  over-fetches `VECTOR_OVERFETCH = PER_SIGNAL * 2` rows (ordered by distance alone, keeping the
+  HNSW plan benefit) instead of `PER_SIGNAL`, and the outer query applies the real `(distance,
+  id)` order and the `PER_SIGNAL` cut-off; exported `PER_SIGNAL` and `VECTOR_OVERFETCH` from
+  `retrieval.ts` for the new regression test. `2x` is a round, conservative slack chosen because no
+  caller passes more than a handful of exact ties in practice (the scripted test/demo embedder is
+  the only source of exact ties today) — not measured against a specific production tie-group
+  size, since none exists yet.
+- Why: `retrieval.ts` is a risk-paths.txt file (the retrieval query group), so any change here is
+  `risk: high` per the build plan regardless of the change's size; this one changes which rows a
+  tied vector search returns.
+
+Fix round tool calls used: 28
