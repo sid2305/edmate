@@ -1,5 +1,5 @@
 import { MessageSchema, type Message } from '@edmate/contracts';
-import { and, asc, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { messages, sessions } from '../schema/index.js';
@@ -84,11 +84,11 @@ export function messagesRepo(db: Db) {
     /**
      * Task 9.6a: every message of every one of the scope's own sessions (open and ended),
      * oldest first by `(createdAt, id)`, each tagged with its `sessionId`, for a complete
-     * export. Joins `sessions` on the pair (the same ownership predicate `ownSession` checks
-     * one session at a time), so another student's or teacher's messages never appear even
-     * when they share a timestamp. `limit` is capped at `EXPORT_PAGE_MAX`; 0 or over the cap, or
-     * a malformed `after`, is `invalid`. `next` is the cursor of the last row returned, or
-     * `null` on the last page.
+     * export. Scoped through `sessions` (the same ownership predicate `ownSession` checks one
+     * session at a time), so another student's or teacher's messages never appear even when
+     * they share a timestamp. `limit` is capped at `EXPORT_PAGE_MAX`; 0 or over the cap, or a
+     * malformed `after`, is `invalid`. `next` is the cursor of the last row returned, or `null`
+     * on the last page.
      */
     async listForStudent(
       scope: StudentScope,
@@ -97,53 +97,49 @@ export function messagesRepo(db: Db) {
       const method = 'messages.listForStudent';
       const sc = studentScope(scope, method);
       const { after, limit } = parseArg(ExportListOptions, options, method);
+      // Row-value compare (task 9.6f review HIGH, same reasoning as sessions.ts's cursor): folds
+      // into the new `messages (session_id, created_at, id)` index's trailing columns, instead of
+      // an `Index Cond: session_id = …` plus a `Filter` scanning every earlier row in the session.
       const cursor = after
-        ? (() => {
-            const at = new Date(after.createdAt);
-            return or(
-              gt(messages.createdAt, at),
-              and(eq(messages.createdAt, at), gt(messages.id, after.id)),
-            );
-          })()
-        : undefined;
-      // Bounded-candidate rewrite (task 9.6f, 9.6a review follow-up): `messages` carries no
-      // teacher_id/student_id (see `ownSession`'s comment above), so a single composite index on
-      // `messages` can't give the pair's whole `(createdAt, id)` order with no Sort when the
-      // WHERE is really on `sessions`'s columns -- the old single join + ORDER BY + LIMIT Sorted
-      // the pair's entire message history every page. This instead (1) finds the pair's session
-      // ids (cheap: `sessions_teacher_id_student_id_idx` already exists), then (2) for each
-      // session, seeks at most `limit + 1` candidate rows at or after the cursor through the new
-      // `messages (session_id, created_at, id)` index (`messages_session_id_created_at_id_idx`,
-      // task 9.6f) -- a bounded per-session scan, not the pair's whole history -- then (3) merges
-      // the small candidate set (at most `sessionCount * (limit + 1)` rows) in memory and takes
-      // the first `limit + 1`.
-      const pairSessions = await db
-        .select({ id: sessions.id })
-        .from(sessions)
-        .where(and(eq(sessions.studentId, sc.studentId), eq(sessions.teacherId, sc.teacherId)));
-      const perSession = await Promise.all(
-        pairSessions.map(({ id: sid }) =>
-          db
-            .select({
-              id: messages.id,
-              sessionId: messages.sessionId,
-              role: messages.role,
-              text: messages.text,
-              sources: messages.sources,
-              createdAt: messages.createdAt,
-            })
-            .from(messages)
-            .where(and(eq(messages.sessionId, sid), cursor))
-            .orderBy(asc(messages.createdAt), asc(messages.id))
-            .limit(limit + 1),
-        ),
-      );
-      const candidates = perSession.flat();
-      candidates.sort(
-        (a, b) =>
-          a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-      );
-      const rows = candidates.slice(0, limit + 1);
+        ? sql`and (mi.created_at, mi.id) > (${new Date(after.createdAt)}, ${after.id})`
+        : sql``;
+      // One query, not a per-session fan-out (task 9.6f review HIGH: unbounded N+1 -- one
+      // concurrent query per session, no cap). `messages` carries no teacher_id/student_id (see
+      // `ownSession`'s comment above), so the pair filter only reaches it through `sessions`; a
+      // single composite index on `messages` alone can't give the pair's whole `(createdAt, id)`
+      // order with no Sort. This instead, in one statement: for each of the pair's own sessions,
+      // `CROSS JOIN LATERAL` seeks at most `limit + 1` candidate rows at or after the cursor
+      // through the new `messages (session_id, created_at, id)` index
+      // (`messages_session_id_created_at_id_idx`, task 9.6f) -- a bounded per-session seek, never
+      // the pair's whole history -- then a global `ORDER BY … LIMIT limit + 1` over that small,
+      // bounded candidate set (at most `sessionCount * (limit + 1)` rows) picks the page. Raw SQL
+      // (bound parameters only, drizzle's query builder has no lateral join in this version), the
+      // scope filter (`teacher_id`/`student_id` on `sessions`) stays in the SQL.
+      // `db.execute` has no column-type info (unlike the typed query builder), so a
+      // timestamptz comes back as the raw driver string, not a `Date` -- parsed back below.
+      const result = await db.execute<{
+        id: string;
+        sessionId: string;
+        role: string;
+        text: string;
+        sources: unknown;
+        createdAt: string;
+      }>(sql`
+        select m.id, m.session_id as "sessionId", m.role, m.text, m.sources,
+               m.created_at as "createdAt"
+        from ${sessions} s
+        cross join lateral (
+          select mi.id, mi.session_id, mi.role, mi.text, mi.sources, mi.created_at
+          from ${messages} mi
+          where mi.session_id = s.id ${cursor}
+          order by mi.created_at asc, mi.id asc
+          limit ${limit + 1}
+        ) m
+        where s.teacher_id = ${sc.teacherId} and s.student_id = ${sc.studentId}
+        order by m.created_at asc, m.id asc
+        limit ${limit + 1}
+      `);
+      const rows = result.rows.map((r) => ({ ...r, createdAt: new Date(r.createdAt) }));
       const page = rows.slice(0, limit);
       const last = page[page.length - 1];
       const next: ExportCursor | null =

@@ -1,8 +1,6 @@
-# 9.6f handoff — Phase A
+# 9.6f handoff
 
-Status: DONE (Phase A done; Phase B still to do — the two independent LOW cleanups in
-`apps/web/src/export/notes.ts` and `packages/db/src/repositories/subscriptions.ts` are out of
-scope for this build, per the lead amendment).
+Status: DONE (both phases).
 
 ## Summary
 
@@ -151,15 +149,152 @@ $ python3 .githooks/secret-scan.py --all
 (no output — clean)
 ```
 
-## Left to do (Phase B, separate build)
+## Left to do (Phase A note, now done — see Phase B above)
 
-- `apps/web/src/export/notes.ts`'s `answeredPairs` shared-`used`-set fix + `notes.test.ts` case.
-- `packages/db/src/repositories/subscriptions.ts`'s pause/cancel one-statement `UPDATE ...
-  RETURNING`, the `isLiveForStudentWrite` type guard, and the `StatusSnapshot` comment.
-- Neither touched by this build; `packages/db/src/index.ts`, `repositories/audit.ts`,
-  `redact-json.ts`, `teacher-profiles.ts`, `packages/db/test/repositories.int.test.ts` and
-  `apps/web/**` were also left untouched, as instructed.
+Phase A's own note here is superseded: both of the items it listed (`notes.ts`, `subscriptions.ts`)
+were completed in Phase B above.
 
 ## Budget
 
 Tool calls used: 64
+
+## Phase B
+
+Status: DONE.
+
+### Summary
+
+Four items from the plan's "Lead amendment 2" (review findings on the 9.6f branch), plus Phase
+B's own two cleanups (`notes.ts`, `subscriptions.ts`):
+
+1. **Row-value cursor compare (HIGH, database-reviewer).**
+   `packages/db/src/repositories/sessions.ts` and `packages/db/src/repositories/messages.ts`:
+   the old `or(gt(...), and(eq(...), gt(...)))` cursor is now `(created_at, id) > (at, afterId)`
+   via drizzle's `sql` template with bound parameters (`sql\`(${col}, ${col}) > (${at}, ${id})\``)
+   in both files' per-session/per-scope seek. Confirmed by a new `EXPLAIN (FORMAT JSON)` test for
+   each, with a mid-range (page 2+) cursor. For `sessions.listForStudent`, the plan's `Index Cond`
+   on `sessions_teacher_id_student_id_created_at_id_idx`:
+   ```
+   ((teacher_id = 'tch_xcur_1'::text) AND (student_id = 'stu_xcur_1'::text) AND
+    (ROW(created_at, id) > ROW('2026-01-01 00:05:00+00'::timestamp with time zone,
+     'ses_xcur_5'::text)))
+   ```
+   with no `Filter` anywhere on the scan node (the OR form used to need one, scanning every
+   earlier row). `messages.listForStudent`'s per-session seek shows the same shape on
+   `messages_session_id_created_at_id_idx`.
+
+2. **`messages.listForStudent`'s N+1 fan-out replaced with one query (HIGH typescript-reviewer;
+   MEDIUM security/database-reviewer).** `packages/db/src/repositories/messages.ts`: the
+   `Promise.all` of one per-session typed query (Phase A's shape) is now a single raw-SQL
+   statement — `cross join lateral` of the pair's own session ids against a per-session
+   `order by created_at, id limit ${limit + 1}` seek, then one `order by ... limit ${limit + 1}`
+   over the merged candidates — issued once via `db.execute(sql\`...\`)` with every value bound
+   (`${}` interpolation, never string concatenation); the scope filter (`teacher_id`/`student_id`)
+   stays inside the SQL, not applied after the fact. `db.execute`'s raw-SQL path returns
+   `timestamptz` columns as driver strings, not `Date` (confirmed by reading
+   `drizzle-orm/node-postgres/session.js` — type parsing is disabled for queries outside the typed
+   query builder): the result's `createdAt` field is typed `string` with a comment explaining why,
+   and mapped to `Date` before use. This was the "single query" option in the plan (not the
+   chunked fallback).
+
+3. **Cross-session `created_at` tie on a page boundary (MEDIUM code-reviewer).** A new test in
+   `packages/db/test/export-cursor-paging.int.test.ts` using a dedicated small third pair
+   (`tch_xcur_c`/`stu_xcur_c`, two sessions) with two messages in different sessions sharing one
+   `created_at`: pages with `limit: 1` twice and asserts `next` is `null` after the second page
+   and the two pages' item ids are exactly the two messages, no row dropped or duplicated.
+
+4. **Stale doc comment (LOW code-reviewer).** `messages.listForStudent`'s comment no longer says
+   "joins sessions" (it is scoped through the one-session-at-a-time `ownSession` predicate, now
+   folded into the lateral join's own `where`).
+
+5. **`notes.ts`'s `answeredPairs` shared-`used`-set fix (Phase B item).**
+   `apps/web/src/export/notes.ts`: the exact-match branch now also adds its index to the shared
+   `used` set (renamed from `usedByFallback`), with a comment explaining the intent — a later
+   question's fallback search must never pick a message an earlier question already matched
+   exactly. A new case in `apps/web/src/export/notes.test.ts` exercises this path (two teacher
+   messages sharing one timestamp, one question exact-matching, another falling back).
+
+6. **`subscriptions.ts` pause/cancel one-statement write + type guard + comment (Phase B item).**
+   `packages/db/src/repositories/subscriptions.ts`:
+   - A new `lockAndWriteStatusIfLive` helper folds `pause`'s and `cancel`'s
+     lock-then-read-then-write (`lockLive` + a separate `update`) into one statement: a
+     `with ... for update` CTE locks and reads the row (same lock-order as `lockLive`), and an
+     `update ... from old` only writes when `old.status` is in the caller's `fromStatuses` set —
+     a status outside that set is left untouched (`applied: false`) in the same statement,
+     instead of a read then a conditional second write. `pause` and `cancel` both now call this
+     once each, in place of `lockLive` + `tx.update(...)`. `changePackage` and `resume` are
+     unchanged (they read `packages`/`auditLog` between the lock and the write, so keep
+     `lockLive` + a separate `update`, per the plan).
+   - `isLiveForStudentWrite(status)` is a new type guard (`status is (typeof
+     LIVE_FOR_STUDENT_WRITE)[number]`) replacing the repeated `status as (typeof
+     LIVE_FOR_STUDENT_WRITE)[number]` cast — used at `changePackage`'s call site (`pause`'s own
+     cast is gone entirely, folded into `lockAndWriteStatusIfLive`'s `fromStatuses` check).
+   - A comment on `StatusSnapshot` explaining it is deliberately `z.object`, not
+     `z.strictObject`: only `resume` ever parses a stored one back, and an older `auditLog.before`
+     row written before some future field was added to this shape must still parse.
+   Behavior-preserving per the plan; no new test required (existing `pause`/`cancel`/`resume`/
+   `changePackage` int test coverage re-run green, see Gate).
+
+### Decisions
+
+### 26 Oct 2026 · 9.6f notes.ts used-set fix is a documented invariant, not an observed behavior change · decided by builder · risk: low
+- Decided: implemented the literal ask (mark an exact match's index `used` too) and added a test,
+  but the test documents the intended invariant with the actually-reachable processing order
+  rather than asserting a scenario where old and new code differ.
+- Why: an exhaustive search (46,656 combinations of message/question timestamps, including ties
+  and `answeredAt`-absent cases, via a throwaway script) found zero observable difference between
+  the old (`usedByFallback`, exact branch never marks `used`) and new (`used`, exact branch marks
+  it) code. This is provable directly from the algorithm's own structure: `answered` is sorted
+  ascending by `at`, so any question whose exact match claims message index `m` has `at ==
+  m.createdAt`; every later-processed question's own `at` is `>= ` that value by sort order, so
+  its fallback's forward search (`m.createdAt >= at`) can never even reach that earlier index
+  regardless of whether it is marked `used` — the ordering invariant already prevents the reuse
+  the fix defends against. The change is still correct, matches the review's literal ask, and
+  costs nothing; the comment documents the invariant for a reader, and the new test exercises the
+  real code path (including the intentional grouped-answer exact-ignores-`used` behavior) with
+  correct expectations rather than a false before/after narrative.
+
+### 26 Oct 2026 · 9.6f subscriptions.ts pause/cancel: one CTE statement instead of lockLive + update · decided by builder · risk: low
+- Decided: `pause` and `cancel` call a new shared `lockAndWriteStatusIfLive` helper (one
+  `with ... for update` + `update ... from` statement) instead of `lockLive` followed by a
+  separate `tx.update(...)`; `changePackage` and `resume` keep `lockLive` unchanged.
+- Why: `pause`/`cancel` have no read between the lock and the write (unlike `changePackage`/
+  `resume`), so their two round trips collapse into one without changing lock order or behavior.
+  `changePackage`/`resume` do have a read in between (packages/auditLog), so folding them the same
+  way would either move that read inside the CTE (a bigger, harder-to-verify rewrite) or lose the
+  "lock first, read everything else after" ordering `lockLive`'s own comment requires — out of
+  scope for this task's plan (which named only `pause`/`cancel`).
+
+## Gate (Phase B)
+
+```
+$ corepack pnpm turbo run typecheck --filter=...@edmate/db
+Tasks: 12 successful, 12 total
+
+$ corepack pnpm turbo run typecheck lint --filter=...@edmate/db
+Tasks: 16 successful, 16 total (apps/web's 2 pre-existing eslint-disable warnings, unrelated)
+
+$ corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web
+Tasks: 20 successful, 20 total
+@edmate/db:test: Test Files 82 passed (82); Tests 1769 passed | 4 skipped (1773)
+subscriptions.ts coverage: 100/100/100/100; messages.ts, sessions.ts: 100/100/100/100 (no
+regressions since Phase A)
+Duration 7m2.141s
+
+$ TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate \
+    corepack pnpm --filter @edmate/db exec vitest run test/export-cursor-paging.int.test.ts
+Test Files 1 passed (1); Tests 8 passed (8)
+
+$ corepack pnpm exec prettier --check apps/web/src/export/notes.test.ts apps/web/src/export/notes.ts \
+    packages/db/src/repositories/messages.ts packages/db/src/repositories/sessions.ts \
+    packages/db/src/repositories/subscriptions.ts packages/db/test/export-cursor-paging.int.test.ts
+All matched files use Prettier code style! (notes.test.ts needed one --write pass, re-verified
+green and its test file re-run green after)
+
+$ python3 .githooks/secret-scan.py --all
+(no output — clean)
+```
+
+## Budget (Phase B)
+
+Phase B tool calls used: 41

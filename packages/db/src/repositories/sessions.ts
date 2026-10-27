@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { countWords, LIMITS } from '@edmate/contracts';
-import { and, asc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -388,14 +388,12 @@ export function sessionsRepo(db: Db) {
       const method = 'sessions.listForStudent';
       const sc = studentScope(scope, method);
       const { after, limit } = parseArg(ExportListOptions, options, method);
+      // Row-value compare (task 9.6f review HIGH), not `or(gt(...), and(eq(...), gt(...)))`: the
+      // OR form makes Postgres plan `Index Cond: teacher_id = … AND student_id = …` plus a
+      // `Filter` over every earlier row for the OR, instead of folding `(created_at, id)` into the
+      // index's own trailing columns. `(created_at, id) > (at, afterId)` seeks directly.
       const cursor = after
-        ? (() => {
-            const at = new Date(after.createdAt);
-            return or(
-              gt(sessions.createdAt, at),
-              and(eq(sessions.createdAt, at), gt(sessions.id, after.id)),
-            );
-          })()
+        ? sql`(${sessions.createdAt}, ${sessions.id}) > (${new Date(after.createdAt)}, ${after.id})`
         : undefined;
       const rows = await db
         .select({

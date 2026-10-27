@@ -116,6 +116,18 @@ const NOT_LIVE = ['paused', 'ended'] as const;
 /** The statuses `changePackage` and `pause` act on; `paused` and `ended` are `invalid`. */
 const LIVE_FOR_STUDENT_WRITE = ['trial', 'active', 'past_due'] as const;
 
+/**
+ * Task 9.6f review MEDIUM: a type guard replacing the repeated `status as
+ * (typeof LIVE_FOR_STUDENT_WRITE)[number]` cast at `changePackage` and `pause` -- `Array.includes`
+ * alone can't narrow `status`'s wider `Entitlement['status']` type, so both call sites used to
+ * assert past that instead of checking it.
+ */
+function isLiveForStudentWrite(
+  status: Entitlement['status'],
+): status is (typeof LIVE_FOR_STUDENT_WRITE)[number] {
+  return (LIVE_FOR_STUDENT_WRITE as readonly string[]).includes(status);
+}
+
 /** `subscriptions.changePackage`'s input (task 9.6 Phase C; no payment, so no proration). */
 export interface ChangePackageInput {
   subscriptionId: string;
@@ -141,7 +153,13 @@ export const STUDENT_RESUME_ACTION = 'subscription.resume_student';
 /** The audit action `cancel` writes. */
 export const STUDENT_CANCEL_ACTION = 'subscription.cancel_student';
 
-/** The shape every `changePackage`/`pause`/`resume`/`cancel` audit row's `before`/`after` is. */
+/**
+ * The shape every `changePackage`/`pause`/`resume`/`cancel` audit row's `before`/`after` is.
+ * Task 9.6f review: deliberately `z.object`, not `z.strictObject` -- only `resume` ever parses a
+ * stored one back (an older `auditLog.before` row written before some future field was added to
+ * this shape must still parse, not fail closed as `integrity`); every writer here always writes
+ * exactly these two fields, so being lenient on read costs nothing today and keeps the door open.
+ */
 const StatusSnapshot = z.object({
   status: z.enum(['trial', 'active', 'past_due', 'paused', 'ended']),
   packageVersionId: IdSchema,
@@ -265,6 +283,82 @@ async function lockLive(
     .for('update', { of: subscriptions });
   if (!row) throw new RepositoryError('not_found', method);
   return { ...row, periodEnd: iso(row.periodEnd), studentId, teacherId };
+}
+
+/**
+ * Task 9.6f review HIGH: `pause` and `cancel` both used to lock the row (`lockLive`), check its
+ * status, then write a second `UPDATE` -- two round trips for a write that has no read in between
+ * (unlike `changePackage`/`resume`, which read `packages`/`auditLog` between the lock and the
+ * write, and so keep `lockLive` + a separate `update` below). This folds `pause`/`cancel` into one
+ * statement: a `with ... for update` CTE locks and reads the row exactly as `lockLive` did, and
+ * the `update ... from old` only writes when `old.status` is one of `fromStatuses` -- so a status
+ * outside that set is left untouched (`applied: false`) in the very same statement that would
+ * have written it, instead of a read then a conditional second write. Still one lock, on
+ * `subscriptions` only, first -- the same order `lockLive`'s own comment above requires.
+ */
+async function lockAndWriteStatusIfLive(
+  tx: Tx,
+  studentId: string,
+  teacherId: string,
+  subscriptionId: string,
+  fromStatuses: readonly Entitlement['status'][],
+  toStatus: Entitlement['status'],
+): Promise<
+  | ({ id: string; studentId: string; teacherId: string } & LiveSubscription & {
+        previousStatus: Entitlement['status'];
+      })
+  | 'not_found'
+  | 'invalid'
+> {
+  const result = await tx.execute<{
+    id: string;
+    previousStatus: Entitlement['status'];
+    packageVersionId: string;
+    periodEnd: string;
+    applied: boolean;
+  }>(sql`
+    with old as (
+      select id, status, package_version_id, period_end
+      from ${subscriptions}
+      where ${and(
+        eq(subscriptions.id, subscriptionId),
+        eq(subscriptions.studentId, studentId),
+        eq(subscriptions.teacherId, teacherId),
+      )}
+      for update
+    ),
+    upd as (
+      update ${subscriptions} as s
+      set status = ${toStatus}::subscription_status
+      from old
+      where s.id = old.id
+        and old.status = any(array[${sql.join(
+          fromStatuses.map((s) => sql`${s}::subscription_status`),
+          sql`, `,
+        )}])
+      returning s.id
+    )
+    select
+      old.id as id,
+      old.status as "previousStatus",
+      old.package_version_id as "packageVersionId",
+      old.period_end as "periodEnd",
+      (upd.id is not null) as applied
+    from old
+    left join upd on upd.id = old.id
+  `);
+  const [row] = result.rows;
+  if (!row) return 'not_found';
+  if (!row.applied) return 'invalid';
+  return {
+    id: row.id,
+    studentId,
+    teacherId,
+    packageVersionId: row.packageVersionId,
+    status: toStatus,
+    periodEnd: iso(new Date(row.periodEnd)),
+    previousStatus: row.previousStatus,
+  };
 }
 
 /** Writes the one audit row every plan-change method leaves behind (status + package version). */
@@ -667,9 +761,7 @@ export function subscriptionsRepo(db: Db) {
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
           const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
-          if (
-            !LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])
-          ) {
+          if (!isLiveForStudentWrite(live.status)) {
             throw new RepositoryError('invalid', method);
           }
           if (live.packageVersionId === i.packageVersionId) {
@@ -733,29 +825,29 @@ export function subscriptionsRepo(db: Db) {
 
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
-          const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
-          if (
-            !LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])
-          ) {
-            throw new RepositoryError('invalid', method);
-          }
-          await tx
-            .update(subscriptions)
-            .set({ status: 'paused' })
-            .where(eq(subscriptions.id, live.id));
+          const result = await lockAndWriteStatusIfLive(
+            tx,
+            studentId,
+            teacherId,
+            i.subscriptionId,
+            LIVE_FOR_STUDENT_WRITE,
+            'paused',
+          );
+          if (result === 'not_found') throw new RepositoryError('not_found', method);
+          if (result === 'invalid') throw new RepositoryError('invalid', method);
           await writeChangeAudit(
             tx,
             method,
             STUDENT_PAUSE_ACTION,
-            live,
-            { status: live.status, packageVersionId: live.packageVersionId },
-            { status: 'paused', packageVersionId: live.packageVersionId },
+            result,
+            { status: result.previousStatus, packageVersionId: result.packageVersionId },
+            { status: 'paused', packageVersionId: result.packageVersionId },
           );
           return {
-            id: live.id,
-            packageVersionId: live.packageVersionId,
+            id: result.id,
+            packageVersionId: result.packageVersionId,
             status: 'paused',
-            periodEnd: live.periodEnd,
+            periodEnd: result.periodEnd,
           };
         }),
       );
@@ -865,25 +957,29 @@ export function subscriptionsRepo(db: Db) {
 
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
-          const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
-          if (live.status === 'ended') throw new RepositoryError('invalid', method);
-          await tx
-            .update(subscriptions)
-            .set({ status: 'ended' })
-            .where(eq(subscriptions.id, live.id));
+          const result = await lockAndWriteStatusIfLive(
+            tx,
+            studentId,
+            teacherId,
+            i.subscriptionId,
+            [...LIVE_FOR_STUDENT_WRITE, 'paused'],
+            'ended',
+          );
+          if (result === 'not_found') throw new RepositoryError('not_found', method);
+          if (result === 'invalid') throw new RepositoryError('invalid', method);
           await writeChangeAudit(
             tx,
             method,
             STUDENT_CANCEL_ACTION,
-            live,
-            { status: live.status, packageVersionId: live.packageVersionId },
-            { status: 'ended', packageVersionId: live.packageVersionId },
+            result,
+            { status: result.previousStatus, packageVersionId: result.packageVersionId },
+            { status: 'ended', packageVersionId: result.packageVersionId },
           );
           return {
-            id: live.id,
-            packageVersionId: live.packageVersionId,
+            id: result.id,
+            packageVersionId: result.packageVersionId,
             status: 'ended',
-            periodEnd: live.periodEnd,
+            periodEnd: result.periodEnd,
           };
         }),
       );

@@ -28,6 +28,13 @@ function moduleStateCount(topics: Progress['modules'][number]['topics']) {
  * 9.6b decision below is superseded by this one). A question whose exact timestamp has no
  * teacher-role message (should not happen given the schema, kept for a malformed row) falls back
  * to the nearest not-yet-used message at or after it.
+ *
+ * Task 9.6f review LOW: `used` is shared by both branches, not just the fallback one. An exact
+ * match marks its index used too (though exact matching itself ignores `used`, by design, so a
+ * grouped answer's several questions can all still exactly match the one shared message), so a
+ * *later* question's fallback search can never pick a message some earlier question already
+ * matched exactly -- two teacher messages that happen to share a timestamp are two distinct
+ * messages, and an exact match on the first must not make the second's fallback reuse it again.
  */
 function answeredPairs(
   questions: ExportJson['teacherQuestions'],
@@ -40,18 +47,19 @@ function answeredPairs(
   const answered = [...questions]
     .filter((q) => q.status === 'answered')
     .sort((a, b) => (a.answeredAt ?? a.createdAt).localeCompare(b.answeredAt ?? b.createdAt));
-  const usedByFallback = new Set<number>();
+  const used = new Set<number>();
   const pairs: Array<{ question: string; answer: string }> = [];
   for (const q of answered) {
     const at = q.answeredAt ?? q.createdAt;
     const exactIdx = teacherMessages.findIndex((m) => m.createdAt === at);
     if (exactIdx !== -1) {
+      used.add(exactIdx);
       pairs.push({ question: q.text, answer: teacherMessages[exactIdx]!.text });
       continue;
     }
-    const idx = teacherMessages.findIndex((m, i) => !usedByFallback.has(i) && m.createdAt >= at);
+    const idx = teacherMessages.findIndex((m, i) => !used.has(i) && m.createdAt >= at);
     if (idx === -1) continue;
-    usedByFallback.add(idx);
+    used.add(idx);
     pairs.push({ question: q.text, answer: teacherMessages[idx]!.text });
   }
   return pairs;

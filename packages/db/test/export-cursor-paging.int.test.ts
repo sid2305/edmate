@@ -43,6 +43,15 @@ const STUDENT_B = 'stu_xcur_b';
 const SCOPE_B = { studentId: STUDENT_B, teacherId: TEACHER_B };
 const SESSION_B = 'ses_xcur_b1';
 
+// A third, dedicated small pair: for the cross-session created_at tie on a page boundary (item 3,
+// lead amendment 2) -- its own two sessions, created in that test itself (not beforeAll), so the
+// big pair's seed above never needs touching.
+const TEACHER_C = 'tch_xcur_c';
+const STUDENT_C = 'stu_xcur_c';
+const SCOPE_C = { studentId: STUDENT_C, teacherId: TEACHER_C };
+const SESSION_C1 = 'ses_xcur_c1';
+const SESSION_C2 = 'ses_xcur_c2';
+
 describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
   beforeAll(async () => {
     await createDatabase(dbName);
@@ -180,6 +189,88 @@ describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REAS
     expect(Math.max(...plannedRows, 0)).toBeLessThan(MESSAGE_COUNT);
   });
 
+  it('sessions.listForStudent: a mid-range (page 2+) cursor seeks on the index, no OR Filter', async () => {
+    // Task 9.6f review HIGH: the old `or(gt(...), and(eq(...), gt(...)))` cursor makes Postgres
+    // plan `Index Cond: teacher_id = … AND student_id = …` plus a `Filter` holding the OR, scanning
+    // every earlier row in the pair. The row-value compare folds the cursor into the index too.
+    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
+      `explain (format json)
+           select id, agent_id, agent_version, package_id, package_version, summary, created_at, ended_at
+           from sessions
+           where teacher_id = $1 and student_id = $2 and (created_at, id) > ($3, $4)
+           order by created_at asc, id asc limit 3`,
+      [TEACHER, STUDENT, '2026-01-01T00:05:00.000Z', 'ses_xcur_5'],
+    );
+    const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
+    const plan = JSON.stringify(top);
+    expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx');
+    expect(plan).toMatch(/Index( Only)? Scan/);
+    const scan = findIndexScan(top);
+    expect(scan?.['Index Cond']).toMatch(/created_at/);
+    expect(scan?.Filter).toBeUndefined();
+  });
+
+  it('messages.listForStudent: a mid-range (page 2+) per-session cursor seeks on the index, no OR Filter', async () => {
+    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
+      `explain (format json)
+           select id, session_id, role, text, sources, created_at
+           from messages
+           where session_id = $1 and (created_at, id) > ($2, $3)
+           order by created_at asc, id asc limit 3`,
+      ['ses_xcur_1', '2026-02-01T00:02:00.000Z', 'msg_xcur_120'],
+    );
+    const top = rows[0]?.['QUERY PLAN']?.[0]?.Plan;
+    const plan = JSON.stringify(top);
+    expect(plan).toContain('messages_session_id_created_at_id_idx');
+    expect(plan).toMatch(/Index( Only)? Scan/);
+    const scan = findIndexScan(top);
+    expect(scan?.['Index Cond']).toMatch(/created_at/);
+    expect(scan?.Filter).toBeUndefined();
+  });
+
+  it(
+    'messages.listForStudent: a created_at tie across two different sessions on a page boundary ' +
+      'drops or duplicates no row',
+    async () => {
+      // A third, dedicated small pair (own sessions, own messages): two sessions, one message
+      // each, sharing a created_at exactly -- the merge across sessions in
+      // messagesRepo.listForStudent must place exactly one of them on each side of a page cut at
+      // limit = 1, with no row lost or doubled across the two pages.
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values
+             ($1, 'Export Cursor Teacher C', 'en-US', 'US', 'teacher'),
+             ($2, 'Export Cursor Student C', 'en-US', 'US', 'student')`,
+        [TEACHER_C, STUDENT_C],
+      );
+      await raw.query(
+        `insert into agents (id, teacher_id, status, created_at, updated_at) values
+             ($1, $2, 'draft', now(), now())`,
+        ['agt_xcur_c', TEACHER_C],
+      );
+      await raw.query(
+        `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, created_at, ended_at) values
+             ($1, $3, $4, 'agt_xcur_c', 1, '2026-06-01T00:00:00Z', '2026-06-01T00:00:00Z'),
+             ($2, $3, $4, 'agt_xcur_c', 1, '2026-06-01T00:01:00Z', '2026-06-01T00:01:00Z')`,
+        [SESSION_C1, SESSION_C2, STUDENT_C, TEACHER_C],
+      );
+      await raw.query(
+        `insert into messages (id, session_id, role, text, created_at) values
+             ('msg_xcur_c_a', $1, 'student', 'boundary a', '2026-06-01T00:02:00Z'),
+             ('msg_xcur_c_b', $2, 'student', 'boundary b', '2026-06-01T00:02:00Z')`,
+        [SESSION_C1, SESSION_C2],
+      );
+      const page1 = await repos.messages.listForStudent(SCOPE_C, { limit: 1 });
+      expect(page1.next).not.toBeNull();
+      const page2 = await repos.messages.listForStudent(SCOPE_C, {
+        after: page1.next!,
+        limit: 1,
+      });
+      expect(page2.next).toBeNull();
+      const ids = [...page1.items, ...page2.items].map((m) => m.id);
+      expect(new Set(ids)).toEqual(new Set(['msg_xcur_c_a', 'msg_xcur_c_b']));
+    },
+  );
+
   it(
     'messages.listForStudent pages every message of every own session, oldest first, stable ' +
       'across a created_at tie, matching one big unpaginated read page-by-page',
@@ -254,7 +345,10 @@ describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REAS
 
 /** The shape `explain (format json)`'s nested `Plan` objects share. */
 interface PlanNode {
+  'Node Type'?: string;
   'Plan Rows'?: number;
+  'Index Cond'?: string;
+  Filter?: string;
   Plans?: PlanNode[];
 }
 
@@ -263,4 +357,15 @@ function collectPlannedRows(node: PlanNode | undefined): number[] {
   if (!node) return [];
   const own = typeof node['Plan Rows'] === 'number' ? [node['Plan Rows']] : [];
   return [...own, ...(node.Plans ?? []).flatMap(collectPlannedRows)];
+}
+
+/** The first Index (Only) Scan node anywhere in the plan tree, for its `Index Cond`/`Filter`. */
+function findIndexScan(node: PlanNode | undefined): PlanNode | undefined {
+  if (!node) return undefined;
+  if (node['Node Type']?.includes('Index') && node['Node Type']?.includes('Scan')) return node;
+  for (const child of node.Plans ?? []) {
+    const found = findIndexScan(child);
+    if (found) return found;
+  }
+  return undefined;
 }
