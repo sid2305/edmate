@@ -11,6 +11,7 @@ export {
 export {
   type AgeAnswer,
   ANONYMISED_NAME,
+  type ConsentRow,
   createIdentityStore,
   OPERATOR,
   ROLES,

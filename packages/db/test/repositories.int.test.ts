@@ -2085,6 +2085,41 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 13.4d (account export): the student's own subscriptions across every teacher, every
+  // status, every agent status -- the mirror of `listLiveForStudent` with no exclusions at all.
+  'subscriptions.listAllForStudent': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      for (const st of ['1', '2'] as const) {
+        const got = await r.subscriptions.listAllForStudent(studentId(st));
+        expect(got, `stu_${st}'s own list`).toEqual(
+          TEACHERS.map((t) => ({
+            agentId: ids.agent(t),
+            teacherId: teacherId(t),
+            status: 'active',
+            periodEnd: expect.any(String),
+          })),
+        );
+        n += 1;
+      }
+      const rand = prng(1304);
+      for (let i = 0; i < 20; i += 1) {
+        expect(await r.subscriptions.listAllForStudent(randomId(rand))).toEqual([]);
+        n += 1;
+      }
+      for (const bad of ['', 'has space', 'x'.repeat(129), undefined, 42]) {
+        await expectFailsClosed(
+          () => r.subscriptions.listAllForStudent(bad as never),
+          ['scope'],
+          `listAllForStudent(${String(bad).slice(0, 10)})`,
+        );
+        n += 1;
+      }
+      return n;
+    },
+  },
   // Task 13.5 (cost dashboard): a system read across every teacher and package, like
   // `usageLedger.teacherIdsWithUsageSince`. Exact counts and the ended-exclusion are checked
   // against raw SQL in cost-alarm.int.test.ts's own describe block.
@@ -6596,6 +6631,55 @@ describe.skipIf(!up)(
       ]);
       expect(await repos.subscriptions.listLiveForStudent(OTHER)).toEqual([
         { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
+      ]);
+
+      // Task 13.4d: listAllForStudent carries all six rows, including the ended one and the
+      // suspended/draft-agent ones, with no exclusions at all.
+      expect(await repos.subscriptions.listAllForStudent(S)).toEqual([
+        {
+          agentId: 'agt_94a1',
+          teacherId: 'tch_94a1',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a2',
+          teacherId: 'tch_94a2',
+          status: 'paused',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a3',
+          teacherId: 'tch_94a3',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a4',
+          teacherId: 'tch_94a4',
+          status: 'trial',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a5',
+          teacherId: 'tch_94a5',
+          status: 'ended',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+        {
+          agentId: 'agt_94a6',
+          teacherId: 'tch_94a6',
+          status: 'past_due',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
+      ]);
+      expect(await repos.subscriptions.listAllForStudent(OTHER)).toEqual([
+        {
+          agentId: 'agt_94a1',
+          teacherId: 'tch_94a1',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00.000Z',
+        },
       ]);
     });
   },

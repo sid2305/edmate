@@ -1,6 +1,7 @@
-// Task 13.4b: `buildAccountExport` aggregates every live subscription pair for the signed-in
-// student plus their own identity fields. No real database (rule 4): a fake backend.
-import type { StudentScope } from '@edmate/db';
+// Task 13.4b/13.4d: `buildAccountExport` aggregates every subscription pair the student has ever
+// had (live or ended, task 13.4d) plus the student's own identity fields and consent history
+// (13.4d). No real database (rule 4): a fake backend.
+import type { ConsentRow, StudentScope } from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -12,13 +13,40 @@ import {
 
 const STUDENT = 'std_amy';
 const PAIRS: SubscriptionPair[] = [
-  { agentId: 'agt_1', teacherId: 'tch_asha', status: 'active' },
-  { agentId: 'agt_2', teacherId: 'tch_bea', status: 'trial' },
+  {
+    agentId: 'agt_1',
+    teacherId: 'tch_asha',
+    status: 'active',
+    periodEnd: '2026-12-01T00:00:00.000Z',
+  },
+  {
+    agentId: 'agt_2',
+    teacherId: 'tch_bea',
+    status: 'trial',
+    periodEnd: '2026-12-01T00:00:00.000Z',
+  },
+];
+const CONSENTS: ConsentRow[] = [
+  {
+    kind: 'privacy_notice',
+    version: 'v1',
+    grantedBy: 'self',
+    ts: '2026-01-01T00:00:00.000Z',
+    withdrawnAt: null,
+  },
+  {
+    kind: 'parental',
+    version: 'v1',
+    grantedBy: 'parent',
+    ts: '2026-02-01T00:00:00.000Z',
+    withdrawnAt: '2026-03-01T00:00:00.000Z',
+  },
 ];
 
 function fakeBackend(
   options: {
     pairs?: SubscriptionPair[];
+    consents?: ConsentRow[];
     truncateFor?: string;
     name?: string;
     email?: string | null;
@@ -26,6 +54,7 @@ function fakeBackend(
   } = {},
 ): AccountExportBackend {
   const pairs = options.pairs ?? PAIRS;
+  const consents = options.consents ?? CONSENTS;
   return {
     agents: { owner: async () => null },
     sessions: { listForStudent: async () => ({ items: [], next: null }) },
@@ -41,7 +70,7 @@ function fakeBackend(
     subscriptions: { findLive: async () => null },
     packageVersions: { getById: async () => null },
     outline: { getOutline: async () => null },
-    subscriptionPairs: { listLiveForStudent: async () => pairs },
+    subscriptionPairs: { listAllForStudent: async () => pairs },
     identity: {
       getUser: async () =>
         options.user === null
@@ -53,12 +82,13 @@ function fakeBackend(
               emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
               name: options.name ?? 'Amy',
             },
+      listConsentsForStudent: async () => consents,
     },
   };
 }
 
 describe('buildAccountExport', () => {
-  it("includes one teacher entry per live pair, with that pair's export", async () => {
+  it("includes one teacher entry per pair, with that pair's export", async () => {
     const backend = fakeBackend();
     const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
     expect(
@@ -71,6 +101,22 @@ describe('buildAccountExport', () => {
       expect(t.export.format).toBe('edmate-export');
       expect(t.export.agentId).toBe(t.agentId);
     }
+  });
+
+  it('a pair whose status is ended still produces a teachers entry', async () => {
+    const ended: SubscriptionPair[] = [
+      {
+        agentId: 'agt_3',
+        teacherId: 'tch_cat',
+        status: 'ended',
+        periodEnd: '2026-06-01T00:00:00.000Z',
+      },
+    ];
+    const backend = fakeBackend({ pairs: ended });
+    const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
+    expect(json.teachers).toEqual([
+      expect.objectContaining({ teacherId: 'tch_cat', agentId: 'agt_3', status: 'ended' }),
+    ]);
   });
 
   it("carries the student's own account fields, minus internal ids", async () => {
@@ -88,6 +134,18 @@ describe('buildAccountExport', () => {
     const backend = fakeBackend({ user: null });
     const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
     expect(json.account).toBeNull();
+  });
+
+  it("json.consents carries the backend's consent rows unchanged", async () => {
+    const backend = fakeBackend();
+    const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
+    expect(json.consents).toEqual(CONSENTS);
+  });
+
+  it('no consents is an empty list', async () => {
+    const backend = fakeBackend({ consents: [] });
+    const json = await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
+    expect(json.consents).toEqual([]);
   });
 
   it('no pairs is an empty teachers list and complete:true', async () => {
@@ -112,13 +170,13 @@ describe('buildAccountExport', () => {
     expect(text).not.toMatch(/help_state|helpState|mustNotReveal|answerKey/);
   });
 
-  it('calls listLiveForStudent and getUser with the given studentId only', async () => {
+  it('calls listAllForStudent, getUser and listConsentsForStudent with the given studentId only', async () => {
     const calls: string[] = [];
     const backend: AccountExportBackend = {
       ...fakeBackend({ pairs: [] }),
       subscriptionPairs: {
-        listLiveForStudent: async (id: string) => {
-          calls.push(`listLiveForStudent:${id}`);
+        listAllForStudent: async (id: string) => {
+          calls.push(`listAllForStudent:${id}`);
           return [];
         },
       },
@@ -127,10 +185,20 @@ describe('buildAccountExport', () => {
           calls.push(`getUser:${id}`);
           return null;
         },
+        listConsentsForStudent: async (id: string) => {
+          calls.push(`listConsentsForStudent:${id}`);
+          return [];
+        },
       },
     };
     await buildAccountExport(backend, STUDENT, '2026-10-26T00:00:00.000Z');
-    expect(calls.sort()).toEqual([`getUser:${STUDENT}`, `listLiveForStudent:${STUDENT}`]);
+    expect(calls.sort()).toEqual(
+      [
+        `getUser:${STUDENT}`,
+        `listAllForStudent:${STUDENT}`,
+        `listConsentsForStudent:${STUDENT}`,
+      ].sort(),
+    );
   });
 });
 
@@ -160,7 +228,7 @@ describe('createAccountExportHandler', () => {
     const backend: AccountExportBackend = {
       ...fakeBackend({ pairs: [] }),
       subscriptionPairs: {
-        listLiveForStudent: async (id: string) => {
+        listAllForStudent: async (id: string) => {
           seen.push(id);
           return [];
         },
@@ -176,7 +244,7 @@ describe('createAccountExportHandler', () => {
     const backend: AccountExportBackend = {
       ...fakeBackend(),
       subscriptionPairs: {
-        listLiveForStudent: async () => {
+        listAllForStudent: async () => {
           throw new Error('pg says something');
         },
       },
