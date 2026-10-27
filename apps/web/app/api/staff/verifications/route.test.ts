@@ -91,6 +91,7 @@ function memory() {
           id: p.id,
           teacherId: p.teacherId,
           slug: p.slug,
+          displayName: p.displayName ?? p.slug,
           subject: p.subject,
           verificationStatus: p.verificationStatus,
           name: `Name ${p.teacherId}`,
@@ -117,6 +118,7 @@ function memory() {
           id: p.id,
           teacherId: p.teacherId,
           slug: p.slug,
+          displayName: p.displayName ?? p.slug,
           subject: p.subject,
           verificationStatus: p.verificationStatus,
           name: `Name ${p.teacherId}`,
@@ -260,6 +262,7 @@ describe('GET: the pending queue', () => {
         {
           teacherId: 'tch_a',
           slug: 'asha-math',
+          displayName: 'Asha',
           subject: 'Math',
           name: 'Name tch_a',
           email: 'tch_a@example.test',
@@ -270,6 +273,7 @@ describe('GET: the pending queue', () => {
         {
           teacherId: 'tch_b',
           slug: 'ben-physics',
+          displayName: 'Asha',
           subject: 'Math',
           name: 'Name tch_b',
           email: 'tch_b@example.test',
@@ -280,6 +284,7 @@ describe('GET: the pending queue', () => {
         {
           teacherId: 'tch_c',
           slug: 'chen-chem',
+          displayName: 'Asha',
           subject: 'Math',
           name: 'Name tch_c',
           email: null,
@@ -430,6 +435,7 @@ describe('GET lookup: find one teacher by slug, any status', () => {
       teacher: {
         teacherId: 'tch_a',
         slug: 'asha-math',
+        displayName: 'Asha',
         subject: 'Math',
         name: 'Name tch_a',
         email: 'tch_a@example.test',
