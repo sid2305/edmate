@@ -67,6 +67,18 @@ here they turned out necessary, not optional, once the cursor itself carries ful
 
 ## Decisions
 
+### 27 Oct 2026 · 6.2a merge of db/repositories/learner.ts · decided by lead · risk: high
+- Decided: merge the keyset-paged `rebuildMastery` in `packages/db/src/repositories/learner.ts` (a risky path) with migration 0039's concurrent index.
+- Why: security-reviewer, code-reviewer, database-reviewer and typescript-reviewer all approved with no findings above LOW; every page stays scoped to teacher and student under the same row lock, and the index is built with `CREATE INDEX CONCURRENTLY` like 0036 and 0038.
+
+### 27 Oct 2026 · 6.2a budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (134 harness tool calls against a budget of 50; the builder reported 95).
+- Why: the extra calls went to a real cursor-precision bug the new multi-page test caught, the hand-made migration snapshot and re-runs of the shared-Postgres flake; the diff stayed on scope.
+
+### 27 Oct 2026 · 6.2a same-ts tie-break test not added · decided by lead · risk: low
+- Decided: wontfix the LOW gap that `packages/db/test/profile-store.int.test.ts` never puts two rows with the same `ts` across a page boundary.
+- Why: the `(ts, id)` row comparison handles ties by inspection, and evidence rows are stamped per event; a test can be added if same-`ts` rows show up in practice.
+
 ### 27 Oct 2026 · 6.2a hand-crafted migration snapshot (0039_snapshot.json, _journal.json) · decided by builder · risk: low
 - Decided: added `packages/db/migrations/meta/0039_snapshot.json` and a new `_journal.json` entry,
   mirroring the new index into the prior snapshot by hand (same mechanism 13.regatea used for
@@ -117,4 +129,4 @@ here they turned out necessary, not optional, once the cursor itself carries ful
 
 ## Budget
 
-Tool calls used: 95
+Tool calls used: 134 (harness count; the builder reported 95)
