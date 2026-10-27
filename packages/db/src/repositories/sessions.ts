@@ -298,6 +298,22 @@ export function sessionsRepo(db: Db) {
      * `LIMITS.lastSummaryMaxWords` words is `invalid`, checked before any SQL — defense in depth,
      * since `summarizeSession`'s own schema should already guarantee this. A missing session, or
      * another student's or teacher's, is `not_found` and nothing is written.
+     *
+     * Task 6.5a: when this call is the one that ends the session, and the pair has a
+     * `memory_reset_at` watermark, and the session's own `created_at` is strictly before it, the
+     * session started before the student's last reset — its summary is stale evidence of memory
+     * the student explicitly cleared, so the `learner_profiles` upsert is skipped entirely
+     * (`last_summary` is left untouched). The session row still ends (`{ ended: true }`): ending a
+     * session is independent of whether its summary is trusted (same precedent 6.5's `reset`
+     * itself relies on). No profile row yet, or a `NULL` watermark, behaves exactly as before.
+     * This read is locked `FOR UPDATE`, same lock order as `reset` (sessions row, then the
+     * `learner_profiles` row) so the two can never deadlock (40P01). It is belt-and-braces: the
+     * session row's own `UPDATE ... WHERE ... endedAt IS NULL` above already serialises this call
+     * against `reset`'s own `UPDATE` of every open session for the pair — whichever of the two
+     * transactions reaches that row first holds it until commit, and if `reset` wins, this call's
+     * own update then matches no open row and `closed.length !== 1`, so the watermark read below
+     * never runs at all. The `FOR UPDATE` on `learner_profiles` just makes that ordering explicit
+     * at the second row too, rather than relying only on the first.
      */
     async end(
       scope: StudentScope,
@@ -314,23 +330,41 @@ export function sessionsRepo(db: Db) {
         const closed = await tx
           .update(sessions)
           .set({ endedAt: sql`now()`, summary: summary ?? null })
-          .where(and(ownSession(id, sc), isNull(sessions.endedAt)));
-        if (written(closed) === 1) {
+          .where(and(ownSession(id, sc), isNull(sessions.endedAt)))
+          .returning({ createdAt: sessions.createdAt });
+        if (closed.length === 1) {
           if (summary !== undefined) {
-            await tx
-              .insert(learnerProfiles)
-              .values({
-                studentId: sc.studentId,
-                teacherId: sc.teacherId,
-                lang: 'en',
-                mastery: {},
-                mistakes: [],
-                lastSummary: summary,
-              })
-              .onConflictDoUpdate({
-                target: [learnerProfiles.teacherId, learnerProfiles.studentId],
-                set: { lastSummary: summary, updatedAt: sql`now()` },
-              });
+            const [profile] = await tx
+              .select({ memoryResetAt: learnerProfiles.memoryResetAt })
+              .from(learnerProfiles)
+              .where(
+                and(
+                  eq(learnerProfiles.teacherId, sc.teacherId),
+                  eq(learnerProfiles.studentId, sc.studentId),
+                ),
+              )
+              .limit(1)
+              .for('update');
+            const stale =
+              profile?.memoryResetAt != null &&
+              closed[0] !== undefined &&
+              closed[0].createdAt.getTime() < profile.memoryResetAt.getTime();
+            if (!stale) {
+              await tx
+                .insert(learnerProfiles)
+                .values({
+                  studentId: sc.studentId,
+                  teacherId: sc.teacherId,
+                  lang: 'en',
+                  mastery: {},
+                  mistakes: [],
+                  lastSummary: summary,
+                })
+                .onConflictDoUpdate({
+                  target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+                  set: { lastSummary: summary, updatedAt: sql`now()` },
+                });
+            }
           }
           return { ended: true };
         }

@@ -275,6 +275,13 @@ export const learnerProfiles = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     lastSummary: text('last_summary'),
+    /**
+     * Task 6.5a: stamped by `learnerProfiles.reset`. Evidence/session activity timestamped
+     * strictly before this is dropped by `evidenceEvents.append`/`appendAndFold` and skipped by
+     * `sessions.end`'s summary write, so a job queued before a reset cannot re-seed memory.
+     * Nullable, no default — same shape as `sessions.endedAt`.
+     */
+    memoryResetAt: tstz('memory_reset_at'),
     ...timestamps(),
   },
   (t) => [
