@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 1.4g auth test clock pin approval · decided by lead · risk: high
+- Decided: merge 1.4g, a test-only change in apps/web/src/auth/index.test.ts (security risk group): the linkBindingCookie test pins Date.now so its two calls stamp the same second, plus a prettier reformat of the file so the gate's prettier check passes. No source file under apps/web/src/auth changed.
+- Why: the test failed PR #398's CI (a branch with no web changes) when a second boundary fell between the two calls; security-reviewer approved with no findings and confirmed every assertion is kept and the spy is restored in a finally block.
+- Alternatives: fake timers (rejected in the plan: the test awaits a dynamic import); pass an explicit now through the index.ts wrapper (a source change for a test problem).
+- Reversible: yes, revert the test change.
+
+---
+
 ### 27 Oct 2026 · 7.2s merge and budget, 269 tool calls against 190 · decided by lead · risk: low
 - Decided: merge at 269 harness-counted tool calls (Phase J 142, Phase K 85, fix round 1 42) against the plan's 190; the fix round ran 42 against a 30 cap.
 - Why: Phase J overran by checking every case against the bank answers one file at a time; the Phase K brief asked for batched writes and came in under its 95. The fix round's scripted whole-suite duplicate check is what the review needed. The 7.2t briefs carry the batching rule and the single-turn duplicate check from the start.
