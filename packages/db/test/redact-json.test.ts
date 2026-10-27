@@ -458,6 +458,32 @@ describe('redactPersonalData', () => {
     }
   });
 
+  // 8.7p fix round (security-reviewer HIGH): the clip loop in `redactString` scanned every exempt
+  // span in the whole string for every `PHONE_CANDIDATE` match, because spans are grouped by kind
+  // (UUID, PREFIXED_ID, HEX_DIGEST) rather than sorted by position. A string with many spans and
+  // many phone-shaped matches costs matches x spans, which is quadratic. `storable()` (audit.ts)
+  // redacts before its 10k cap, so a crafted payload of this shape can burn CPU with no size limit.
+  it('redacts a long string with many interleaved exempt spans and phone-shaped runs in under 5000ms', () => {
+    const uuid = '12345678-1234-4234-8234-123456789012';
+    const hexId = `rp_${'a'.repeat(40)}`;
+    const digest = 'b'.repeat(40);
+    const unit = `${uuid} 555-010-0199 ${hexId} ${digest} `;
+    const input = unit.repeat(20_000);
+    const start = performance.now();
+    const out = redactPersonalData(input) as string;
+    const ms = performance.now() - start;
+    // Loose, CI-safe bound (same style as the 8.7o email timing tests): the quadratic pre-fix code
+    // took ~20.8s on this input (measured on one machine; see the handoff), so 5000ms still catches
+    // a regression back to quadratic behaviour while absorbing v8 coverage instrumentation
+    // overhead and CI noise on this much larger (~3.5M character) input.
+    expect(ms).toBeLessThan(5000);
+    expect(out).toContain(uuid);
+    expect(out).toContain(hexId);
+    expect(out).toContain(digest);
+    expect(out).toContain(REDACTED);
+    expect(out).not.toMatch(/5550100199|555-010-0199/);
+  });
+
   it('keeps a __proto__ key as data, without touching the prototype', () => {
     const input = JSON.parse('{"__proto__":{"email":"e","polluted":true},"ok":1}') as unknown;
     const out = redactPersonalData(input) as Record<string, unknown>;

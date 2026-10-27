@@ -194,6 +194,31 @@ function matchSpans(re: RegExp, s: string): Array<[number, number]> {
 }
 
 /**
+ * The given spans (from any mix of UUID/PREFIXED_ID/HEX_DIGEST, not already sorted or merged),
+ * sorted by start and with overlapping or touching spans merged into one (merging only widens a
+ * span to cover text that was already exempt under one of the merged spans, so the merged result
+ * exempts exactly the same text, never more). Used so the clip loop below can walk the spans with
+ * a single forward pointer instead of rescanning all of them per match (8.7p fix round).
+ */
+function mergeSortedSpans(spans: Array<[number, number]>): Array<[number, number]> {
+  const sorted = [...spans].sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [s0, s1] of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && s0 <= last[1]) {
+      // `Math.max`, not a conditional assignment: UUID/PREFIXED_ID/HEX_DIGEST's character classes
+      // are subsets of each other wherever they can overlap, so in practice the later span here is
+      // always fully contained (never wider) -- but `Math.max` keeps the merge correct in general
+      // without an `if` branch that real input could never take the other side of (coverage).
+      last[1] = Math.max(last[1], s1);
+    } else {
+      merged.push([s0, s1]);
+    }
+  }
+  return merged;
+}
+
+/**
  * The string with every email-like and phone-like part replaced by REDACTED. UUID-shaped runs
  * (whole value or embedded), prefixed id tokens and bare hex digests are never treated as phone
  * numbers, even when a digit run inside them is 7 or more digits long.
@@ -208,39 +233,52 @@ function matchSpans(re: RegExp, s: string): Array<[number, number]> {
  * genuinely-phone-shaped remainder is. If clipping leaves `start >= end`, the match was entirely
  * inside exempt spans (the pre-8.7p "fully covered" case: the 8.7h UUID-shaped-digits case and
  * the no-separator glued cases below) and the text is left untouched, same as before.
+ *
+ * The clip is linear overall, not quadratic in the number of spans (8.7p fix round,
+ * security-reviewer HIGH): `spans` is sorted by start and overlapping/touching spans are merged
+ * into one (`mergeSortedSpans`), so after merging the spans are disjoint with a gap between any
+ * two. `PHONE_CANDIDATE.exec` yields matches left to right with strictly increasing `start` and
+ * `end`, so a span that contains the current match's `start` (or `end - 1`) can only be found at
+ * or after where the previous match's lookup stopped: `startSpanIdx`/`endSpanIdx` each walk the
+ * sorted span array forward exactly once for the whole string (never backward, never reset per
+ * match), so the two lookups together cost O(spans.length) across the entire scan, not per match.
+ * Because the spans are disjoint, at most one span can contain `start` and at most one can contain
+ * `end - 1`, so each lookup needs at most one clip (no inner repeat loop, unlike the pre-fix code).
  */
 function redactString(s: string): string {
   const afterEmail = redactEmails(s);
-  const spans = [
+  const spans = mergeSortedSpans([
     ...matchSpans(UUID, afterEmail),
     ...matchSpans(PREFIXED_ID, afterEmail),
     ...matchSpans(HEX_DIGEST, afterEmail),
-  ];
+  ]);
   let out = '';
   let pos = 0;
   PHONE_CANDIDATE.lastIndex = 0;
+  let startSpanIdx = 0;
+  let endSpanIdx = 0;
   for (;;) {
     const match = PHONE_CANDIDATE.exec(afterEmail);
     if (match === null) break;
     let start = match.index;
     let end = start + match[0].length;
-    // Clip inward past any exempt span the raw match overlaps. Bounded by the small number of
-    // exempt spans near this one match (not by string length): stays linear, same complexity
-    // class as the old `spans.some(...)` per match.
-    let moved = true;
-    while (moved && start < end) {
-      moved = false;
-      for (const [s0, s1] of spans) {
-        if (start >= s0 && start < s1) {
-          start = s1;
-          moved = true;
-        }
-        if (end - 1 >= s0 && end - 1 < s1) {
-          end = s0;
-          moved = true;
-        }
-      }
+
+    while (startSpanIdx < spans.length && (spans[startSpanIdx] as [number, number])[1] <= start) {
+      startSpanIdx += 1;
     }
+    const startSpan = spans[startSpanIdx];
+    if (startSpan && startSpan[0] <= start && start < startSpan[1]) {
+      start = startSpan[1];
+    }
+
+    while (endSpanIdx < spans.length && (spans[endSpanIdx] as [number, number])[1] <= end - 1) {
+      endSpanIdx += 1;
+    }
+    const endSpan = spans[endSpanIdx];
+    if (endSpan && endSpan[0] <= end - 1 && end - 1 < endSpan[1]) {
+      end = endSpan[0];
+    }
+
     if (start < end) {
       const clipped = afterEmail.slice(start, end);
       const digits = clipped.replace(/\D/g, '').length;
