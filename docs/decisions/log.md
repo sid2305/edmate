@@ -10,6 +10,31 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 13.4g budget overrun (29 vs 20) · decided by lead · risk: low
+- Decided: accept 29 tool calls against the 20 budget (1.45x).
+- Why: a background-task wait and a commit retry; the change itself stayed inside the plan's three files, and all three reviewers approved with no findings.
+
+---
+
+### 26 Oct 2026 · 13.4g tie-break final key · decided by builder · risk: low
+- Decided: when `periodEnd` and the ended/non-ended split both tie, break the remaining tie by
+  the smaller `status` string (not, say, insertion order or `agentId`).
+- Why: the plan specifies this exact order ("the smaller `${status}` string wins"); using a plain
+  string field keeps the comparator pure and independent of array position, matching the acceptance
+  criterion that the result doesn't depend on `listAllForStudent`'s row order.
+
+---
+
+### 26 Oct 2026 · 13.4g identity doc-comment on parseConsentRow · decided by builder · risk: high
+- Decided: added a doc-comment-only error-contract note to `packages/db/src/identity/store.ts`
+  (risky path per `.claude/skills/merge-gate/risk-paths.txt`); no runtime behaviour changed.
+- Why: the plan calls for documenting (not changing) `parseConsentRow`'s throw behaviour so future
+  callers outside the guarded store methods know to scrub the error themselves; flagged `risk: high`
+  because `packages/db/src/identity/**` is a risky path requiring `security-reviewer`,
+  `code-reviewer` and `typescript-reviewer` review even for comment-only edits.
+
+---
+
 ### 26 Oct 2026 · 9.6f follow-up task renamed 9.6g → 9.6j · decided by lead · risk: low
 - Decided: the M13 board task holding 9.6f's deferred EXPLAIN MEDIUM and LOW is now 9.6j, its plan is docs/tasks/9.6j/plan.md, and docs/tasks/9.6f/review.md cites `deferred 9.6j`. The 9.6f decision above that says "9.6g" means this task.
 - Why: 9.6g was already the id of a done M9 task (m9/9.6g-export-fixes), whose task folder the new plan had landed in.

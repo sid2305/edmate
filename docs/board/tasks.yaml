@@ -8398,9 +8398,29 @@ tasks:
   accept: on an exact periodEnd tie the export keeps the non-ended subscription, shown by a test; parseConsentRow's error contract is documented or wrapped.
   deps:
   - 13.4f
-  status: running
+  status: done
   branch: m13/13.4g-export-tie-break
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 289
+    tokens_in: 1016
+    tokens_out: 50365
+    cache_read_tokens: 36662913
+    wall_time_seconds: 1847
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.7q
   milestone: M13
   title: 'From the 8.7p security review: packages/db/src/repositories/audit.ts storable() runs redactPersonalData on the caller-supplied before/after value before the AUDIT_JSON_MAX_LENGTH (10k) cap is
