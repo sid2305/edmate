@@ -58,6 +58,10 @@ Status: DONE
 - Decided: merge. packages/db/src/repositories/audit.ts (a risk path) now rejects an oversized plain value with RepositoryError invalid before redactPersonalData runs. security-reviewer and code-reviewer approved it.
 - Why: this is strictly tighter. The post-redaction check is unchanged, the error message carries no payload, and the spy test proves redaction never runs on oversized input.
 
+### 26 Oct 2026 · 8.7q review LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix both LOWs: the length-tied third test in packages/db/test/audit.test.ts, and the gate filter recorded in docs/tasks/8.7q/handoff.md.
+- Why: the test fails loudly if either constant changes. The gate filter needs no change because audit.ts exports no new type and CI runs every package.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` -- 8/8 tasks successful
   (typecheck, lint, test x2 build deps, etc.), coverage thresholds met.
