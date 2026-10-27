@@ -42,6 +42,14 @@ Fixed the 1.7b review MEDIUM/LOWs in `apps/web/test/build-smoke.test.ts`, `turbo
 
 ## Decisions
 
+### 26 Oct 2026 · 1.7d budget overrun (149 vs 40) · decided by lead · risk: low
+- Decided: accept 149 tool calls against the 40 budget.
+- Why: the gate includes a full production build plus build-smoke, which the builder ran several times while making the cleanup reliable; the change stayed inside the plan's files and all three reviewers approved (one MEDIUM deferred). Future build-smoke tasks get a budget of about 80.
+
+### 26 Oct 2026 · 1.7d review MEDIUM deferred to 1.7i, two LOWs wontfix · decided by lead · risk: low
+- Decided: the code-reviewer MEDIUM (apps/web/test/build-smoke.test.ts assigns eraseStudent only after createSession succeeds, so a createSession failure leaks the student row) goes to board task 1.7i. Wontfix: apps/web/src/auth/age.ts does not strip bidi-override characters (out of scope: the strip prevents log-line splitting, not visual spoofing); apps/web/test/build-smoke.test.ts's nested try/finally in afterAll can let a later cleanup error replace an earlier one (accepted so the restore steps always run).
+- Why: fix only CRITICAL/HIGH before merge; the LOWs are informational, by the reviewers' own account.
+
 ### 26 Oct 2026 · 1.7d cleanup erases the student through recordAgeAnswer, not a new delete method · decided by builder · risk: low
 - Decided: `IdentityStore` has no direct "delete this student" method (by design — `anonymise`
   only clears fields, it never deletes the row). The build-smoke test's `afterAll` now erases the
@@ -104,4 +112,4 @@ run; not investigated further here.
 
 ## Budget
 
-Tool calls used: 67
+Tool calls used: 149 (harness count; the builder reported 67)
