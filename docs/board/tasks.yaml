@@ -9341,9 +9341,10 @@ tasks:
   accept: each new audit rule is shown failing on a fixture; scopedRetrieval refuses wrong-typed fields; migrate.int has no clock-skew flake; db and harness tests pass
   deps:
   - '5.4'
-  status: planning
+  status: running
   risk: risky
-  model: plan:sonnet
+  model: plan:sonnet build:sonnet
+  branch: m13/5.4a-access-filter-followups
 - id: 5.5a
   milestone: M13
   title: 'Calculator follow-ups (5.5 review MEDIUM/LOW): refuse implicit multiplication across spaces and after ")" (1 e 2, 2 pi, sqrt(4)pi, (1)(2)); add them to the rejection table and fuzz attacks; fix
