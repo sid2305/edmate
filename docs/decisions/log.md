@@ -10,6 +10,10 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · board: duplicate 13.4e id renamed to 13.4f · decided by lead · risk: low
+- Decided: the board entry for the 13.4d review MEDIUMs (account export dedupe and cap; zod-parse grantedBy) is now 13.4f. 13.4e stays the 13.4b payment-dispute hold, which this log already names. docs/tasks/13.4d/review.md now cites `deferred 13.4f`.
+- Why: board.py resolves an id to its first match, so the second 13.4e could never be set done. The 13.4e this log already names keeps its id.
+
 ### 26 Oct 2026 · 9.2e budget overrun · decided by lead · risk: low
 - Decided: accept 128 tool calls (harness count across both phases and the fix round) against the plan's 80.
 - Why: builders run about 2x their self-reports, and Phase 2 hit int-test contention on the shared dev database. Each phase stayed under the 150-call ceiling.
