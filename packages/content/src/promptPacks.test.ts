@@ -309,11 +309,16 @@ describe('isSignedSet / newestSignedSet (5.8a)', () => {
 
   it('ranks by semver precedence, not string order (1.10.0 above 1.9.0)', () => {
     expect(
-      newestSignedSet(lib(set('1.10.0', 'sid'), set('1.9.0', 'sid'), set('1.2.0', 'sid')))
-        ?.version,
+      newestSignedSet(lib(set('1.10.0', 'sid'), set('1.9.0', 'sid'), set('1.2.0', 'sid')))?.version,
     ).toBe('1.10.0');
     expect(newestSignedSet(lib(set('2.0.0', 'sid'), set('2.0.0-rc.1', 'sid')))?.version).toBe(
       '2.0.0',
+    );
+  });
+
+  it('never lets a signed prerelease outrank a lower signed release, across majors', () => {
+    expect(newestSignedSet(lib(set('1.3.0', 'sid'), set('2.0.0-rc.1', 'sid')))?.version).toBe(
+      '1.3.0',
     );
   });
 

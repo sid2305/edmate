@@ -12,6 +12,12 @@ function compareIdentifier(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Whether an already-valid version string carries a prerelease identifier (semver 2.0.0 §9). */
+export function isPrerelease(v: string): boolean {
+  const core = v.split('+')[0] as string;
+  return core.includes('-');
+}
+
 /**
  * Semver precedence of two already-valid version strings: numeric major.minor.patch, a release
  * above its prereleases, and build metadata ignored.

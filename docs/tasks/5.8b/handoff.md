@@ -1,6 +1,6 @@
 # Handoff: 5.8b
 
-Status: DONE (Phase A)
+Status: DONE
 
 ## Phase A
 
@@ -86,3 +86,68 @@ unexercised) until the mismatch-throw and `pauseHasExtraText` tests were added. 
 ## Budget
 
 Phase A tool calls used: 61
+
+## Phase B
+
+Fixed the two prerelease-precedence bugs and added the typed `PersonaTemplateError` in
+`packages/content`, test first.
+
+Changed files:
+- `packages/content/src/semver.ts` — new exported `isPrerelease(v)`: whether an already-valid
+  version carries a prerelease identifier (build metadata stripped first, same split as
+  `compareSemver`). Shared by both selectors below.
+- `packages/content/src/promptPacks.ts` — `newestSignedSet` now also skips a signed set whose
+  version `isPrerelease`, so a `2.0.0-rc.1` can never outrank a signed `1.3.0` from an older major
+  (previously `compareSemver` ranked by major.minor.patch first, so a prerelease from a newer
+  major still won). Doc comment updated.
+- `packages/content/src/personaTemplates.ts` — same `isPrerelease` skip added to
+  `selectPersonaLibrary`'s `best` loop (right after the existing `isSigned` check), so a prerelease
+  template version never becomes the chosen one even when signed and numerically higher by major.
+  Added `PersonaTemplateError` (mirrors harness's `PromptPackError`: `name` field, `issues` on the
+  instance, a message that lists every issue) and used it in `readPersonaLibrary` in place of the
+  bare `throw new Error(...)` — this is the only throw in the file; `readPersonaTemplateDir` itself
+  never throws (it returns `{ templates, issues }`), so there was no second "directory-read throw"
+  to convert (see Decisions).
+- `packages/content/src/promptPacks.test.ts` — new case: a signed `2.0.0-rc.1` does not outrank a
+  signed `1.3.0`.
+- `packages/content/src/personaTemplates.test.ts` — new cases: same prerelease-does-not-outrank
+  case for `selectPersonaLibrary`; `readPersonaLibrary` throws `PersonaTemplateError` (not a bare
+  `Error`), `instanceof` and message checked.
+
+Red-then-green evidence: added the two prerelease-skip assertions and the `PersonaTemplateError`
+instanceof test first; ran `corepack pnpm --filter @edmate/content exec vitest run
+src/promptPacks.test.ts src/personaTemplates.test.ts`, which failed (`2.0.0-rc.1` won both
+selectors; the throw was a bare `Error`, not an instance of the not-yet-existing class). Added the
+`isPrerelease` skip to both `best`/ranking loops and the `PersonaTemplateError` class, re-ran: all
+80 tests in both files green.
+
+### Decisions
+
+### 27 Oct 2026 · 5.8b PersonaTemplateError: one throw, not two · decided by builder · risk: low
+- Decided: converted the single `throw new Error(...)` in `readPersonaLibrary` to
+  `PersonaTemplateError`, and did not add a second conversion in `readPersonaTemplateDir` or
+  anywhere else.
+- Why: the plan's file note says "use it ... in place of the bare `throw new Error(...)` at line
+  197 (and the directory-read throw above it)", but `readPersonaTemplateDir` has no throw — a
+  missing/non-directory input already returns `{ templates: [], issues: [...] }`, matching
+  `promptPacks.ts`'s precedent of never throwing from the directory-read step. `readPersonaLibrary`
+  has exactly one throw, which is now `PersonaTemplateError`. Read as a plan reference to the
+  single throw at that line, not a second site; flagging here since the file only has one.
+
+## Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/content` (content and its
+  dependents: cli, db, evals, web, worker) → 20/26 tasks ran (6 cached up to date), all green
+  except `@edmate/cli#test`: `test/chatDbRetrieval.int.test.ts` hit `FATAL 57P01 terminating
+  connection due to administrator command` against the shared dev Postgres — an environment flake
+  from another builder's concurrent `packages/db`/`apps/cli` work on the same shared dev database,
+  not caused by this task (Phase B touches only `packages/content`, which `apps/cli` depends on for
+  types only, not for DB access). `@edmate/content`'s own gate: typecheck/lint/test all green, 25
+  test files, 546 tests, coverage 99.4%/95.88%/100%/99.88% (stmts/branch/funcs/lines).
+- `corepack pnpm exec prettier --check` on the 5 changed files → one file needed `--write`
+  (test-file formatting only, no logic change); re-checked clean.
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+
+### Budget
+
+Phase B tool calls used: 26
