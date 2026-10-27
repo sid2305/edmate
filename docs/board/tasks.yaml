@@ -3043,9 +3043,30 @@ tasks:
   deps:
   - 6.3c
   risk: risky
-  status: review
+  status: done
   branch: m13/6.3d-mistake-db-adapter
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 732
+    tokens_in: 2570
+    tokens_out: 172681
+    cache_read_tokens: 99646905
+    wall_time_seconds: 6358
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 2
+    human_questions: 0
 - id: 6.2a
   milestone: M13
   title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s

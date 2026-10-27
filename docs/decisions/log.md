@@ -10,6 +10,55 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.3d sessionId as profileStoreFor's third optional constructor parameter · decided by builder · risk: low
+- Decided: `profileStoreFor(repos, scope, sessionId?)` resolves the style card's `mistakeTags`
+  allow-list lazily (only when `known.length > 0`) by threading the session id from the
+  composition root, following the plan's design section 2/5 and Lead answer 1 unchanged.
+- Why: the style card is not available at composition-root time; `sessionId` is the cheapest value
+  that is, and the plan/lead answer already settled the design and the `integrity` error kind — no
+  new judgment call, just confirming the plan was followed as written.
+
+---
+
+### 27 Oct 2026 · 6.3d packages/db/src/repositories/ports.ts is a risky path · decided by builder · risk: high
+- Decided: this PR touches `packages/db/src/repositories/ports.ts`
+  (`packages/db/src/repositories/**`, risky path per `.claude/skills/merge-gate/risk-paths.txt`).
+  `review.md` must name **security-reviewer** and **database-reviewer** as required reviewers for
+  this group before merge.
+- Why: non-negotiable #6 and the plan's own "Risky paths touched" section — a repository adapter
+  change needs a security pass (scope/allow-list correctness) alongside the usual database review.
+
+---
+
+### 27 Oct 2026 · 6.3d recordProposedMistakes made async · decided by builder · risk: low
+- Decided: `profileStoreFor.recordProposedMistakes` is declared `async` (not a plain function
+  returning `Promise.resolve()`), so its scope-check throw becomes a rejected promise rather than
+  a synchronous throw.
+- Why: the port is called as `profiles.recordProposedMistakes?.(scope, proposed)` and tested via
+  `await kind(store.recordProposedMistakes!(...))`, which expects a promise it can `.then()`/catch
+  on; a synchronous throw from a non-async function broke that at the first scope-violation test
+  case (caught during red-then-green testing, not spec'd either way by the plan).
+
+---
+
+### 27 Oct 2026 · 6.3d approve merge of the profile store mistake-tag adapter · decided by lead · risk: high
+- Decided: merge the change to `packages/db/src/repositories/ports.ts` (profileStoreFor's applyMistakes allow-list and recordProposedMistakes). security-reviewer, database-reviewer, typescript-reviewer and code-reviewer ran; none raised a CRITICAL, HIGH or MEDIUM finding.
+- Why: the scope check runs before any read, every lookup in the session → agent version → style card chain is scoped to the bound pair, and a broken chain fails with `integrity` rather than a silent default.
+
+---
+
+### 27 Oct 2026 · 6.3d database LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix both database-reviewer LOWs in ports.ts (packages/db/src/repositories/): the repeated session → agent version → style card lookup per mistake-bearing turn, and resolving the session regardless of endedAt.
+- Why: the first is forced by the frozen ProfileStore.applyMistakes signature (ADR-0017) and costs three indexed reads only on turns that carry known tags; the second is the behaviour the plan chose and the handoff already records. The two typescript-reviewer LOWs go to 6.3e.
+
+---
+
+### 27 Oct 2026 · 6.3d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 83 harness-counted tool calls against a 65-call budget (1.28x).
+- Why: the extra calls went on the web composition-root threading and the int-test fixtures the plan asked for; the result needed no fix round.
+
+---
+
 ### 27 Oct 2026 · 11.4j size-watch poll cadence · decided by builder · risk: low
 - Decided: used a plain `setInterval` with an in-flight guard (skip a tick if the previous async readdir/stat pass hasn't finished) rather than a recursive `setTimeout` chain.
 - Why: the plan didn't specify the exact scheduling primitive, only the check's semantics (sum sizes, abort over the limit, ignore vanished files, clear on settle); a guarded `setInterval` is the simplest implementation meeting all of those and was not called out as disallowed.
