@@ -48,6 +48,7 @@ export class StorageConfigError extends Error {
 /** Settings production must name itself: the dev placeholders are never used there. */
 const REQUIRED_IN_PRODUCTION = [
   'S3_ENDPOINT',
+  'S3_REGION',
   'S3_ACCESS_KEY_ID',
   'S3_SECRET_ACCESS_KEY',
   'S3_BUCKET',

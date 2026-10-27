@@ -10966,9 +10966,31 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: review
+  status: done
   branch: m13/8.2q-upload-hardening
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1188
+    tokens_in: 4022
+    tokens_out: 352626
+    cache_read_tokens: 157780497
+    wall_time_seconds: 8021
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.2r
   milestone: M13
   title: 'Documents list index and 0017 validate-at-scale hygiene (deferred from 8.2a): composite index (teacher_id, created_at desc, id desc) for documents.listForTeacher, and a new migration that re-adds
@@ -11228,9 +11250,29 @@ tasks:
   deps:
   - 8.2r
   risk: low
-  status: running
+  status: done
   branch: m13/8.2s-list-index-nulls
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 201
+    tokens_in: 758
+    tokens_out: 17091
+    cache_read_tokens: 33353945
+    wall_time_seconds: 2249
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 11.4k
   milestone: M13
   title: '11.4j review LOWs (comments only) in apps/worker/src/ingest/ffmpegChunker.ts: say in the outputWatchMs doc comment that the in-run cap is approximate (a fast writer can pass maxOutputBytes before
@@ -11241,4 +11283,15 @@ tasks:
   risk: low
   status: running
   branch: m13/11.4k-chunker-comments
+  model: plan:lead build:sonnet
+- id: 0.20i
+  milestone: M13
+  title: 'harness timing flake: modelRequest.test.ts "expectUnderCeiling still fails on a deliberately backtracking regex (self-test)" finds the first k whose regex run passes the 2 s ceiling, then re-runs
+    that same k inside expectUnderCeiling, which can land just under the ceiling (failed CI on PRs 385 and 387, 27 Oct 2026); assert on k + 1 (about twice as slow) so the check has margin'
+  accept: the self-test asserts on a run with clear margin over the ceiling; it stays inside its 30 s timeout; @edmate/harness typecheck, lint and test green.
+  deps:
+  - 0.20f
+  risk: low
+  status: running
+  branch: m13/0.20i-backtrack-selftest
   model: plan:lead build:sonnet

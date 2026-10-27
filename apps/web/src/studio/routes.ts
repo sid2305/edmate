@@ -38,7 +38,14 @@ export interface ServerLog {
 export interface StudioBackend {
   documents: Pick<
     Repositories['documents'],
-    'get' | 'listForTeacher' | 'create' | 'updateStatus' | 'delete' | 'startReplace'
+    | 'get'
+    | 'listForTeacher'
+    | 'create'
+    | 'updateStatus'
+    | 'markProcessingIfStorageKey'
+    | 'failIfStorageKey'
+    | 'delete'
+    | 'startReplace'
   >;
   storage: StudioStorage;
   /** `enqueueIngest` on the ingest queue, keyed by the storage key being processed. */
@@ -47,6 +54,8 @@ export interface StudioBackend {
   log: ServerLog;
   /** Task 8.2f: a per-teacher cap on adding web links (ADR-0014 egress policy, review follow-up). */
   linkRateLimit: LinkRateLimiter;
+  /** Task 8.2q: a per-teacher cap on creating a new upload row, same shape as `linkRateLimit`. */
+  createRateLimit: LinkRateLimiter;
 }
 
 /** Thrown by the backend factory when it can't serve (no Redis); `reason` is safe to log. */
@@ -147,6 +156,9 @@ const MSG = {
   failed: 'Something went wrong. Try again.',
   linkReplace: "A link can't be replaced. Delete it and add the link again.",
   linkRateLimited: 'Too many links added. Wait a while, then try again.',
+  createRateLimited: 'Too many uploads started. Wait a while, then try again.',
+  // Task 8.2q: `complete` lost the race -- a `replace` landed between its read and this write.
+  replacedDuringUpload: 'The file was replaced before the upload finished.',
 } as const;
 
 /**
@@ -175,7 +187,8 @@ export const LINK_REFUSAL_MESSAGE: Record<WebLinkRefusal, string> = {
 const validation = (message: string = MSG.validation) => apiError('validation', message, 400);
 const notFound = () => apiError('not_found', MSG.notFound, 404);
 const tooLarge = (message: string) => apiError('input_too_large', message, 413);
-const rateLimited = () => apiError('rate_limited', MSG.linkRateLimited, 429);
+const rateLimited = (message: string = MSG.linkRateLimited) =>
+  apiError('rate_limited', message, 429);
 const ok = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -238,13 +251,25 @@ async function docId(ctx: RoleContext): Promise<string | null> {
   return parsed.success ? parsed.data.id : null;
 }
 
-/** Best effort: a stored file left behind is logged, never fails the request. */
+/** Task 8.2q: a transient S3 error gets a couple of retries before anything is logged. */
+const DROP_OBJECT_ATTEMPTS = 3;
+
+/**
+ * Best effort: a stored file left behind is logged, never fails the request. A failed delete is
+ * retried up to `DROP_OBJECT_ATTEMPTS` times (no backoff -- a bucket error is usually not timing
+ * related at this volume) before it is logged and given up on.
+ */
 async function dropObject(b: StudioBackend, key: string | null | undefined): Promise<void> {
   if (!key) return;
-  try {
-    await b.storage.deleteObject(key);
-  } catch (error) {
-    b.log.error('studio.object_delete_failed', { error: errorName(error) });
+  for (let attempt = 1; attempt <= DROP_OBJECT_ATTEMPTS; attempt += 1) {
+    try {
+      await b.storage.deleteObject(key);
+      return;
+    } catch (error) {
+      if (attempt === DROP_OBJECT_ATTEMPTS) {
+        b.log.error('studio.object_delete_failed', { error: errorName(error) });
+      }
+    }
   }
 }
 
@@ -274,6 +299,16 @@ const create: Work = async (b, scope, req) => {
   // Task 11.4 Phase B: only a transcript-kind type (caption, audio or video) may carry
   // `liveClassId`. Checked before anything is signed or written.
   if (body.liveClassId !== undefined && !isRecordingType(type)) return validation(MSG.type);
+  // Task 8.2q: the teacher's own create quota, same placement as addLink's linkRateLimit.take --
+  // before any write, so a limited teacher gets nothing written.
+  let allowed: boolean;
+  try {
+    allowed = await b.createRateLimit.take(scope.teacherId);
+  } catch (error) {
+    b.log.error('studio.create_rate_limit_unavailable', { error: errorName(error) });
+    return apiError('provider_error', MSG.unavailable, 503);
+  }
+  if (!allowed) return rateLimited(MSG.createRateLimited);
   const id = b.newDocumentId();
   const key = newStorageKey(scope.teacherId, id, type);
   // Unlike `replace` (whose ownership check is a plain read, so it can sign before writing),
@@ -323,18 +358,26 @@ const complete: Work = async (b, scope, _req, ctx) => {
   const stored = await b.storage.head(key);
   if (!stored) return apiError('validation', MSG.notUploaded, 409);
   const size = stored.contentLength;
+  // Task 8.2q fix round 1: every write `complete` makes after this `head()` read is compared on
+  // `key`, not a plain `updateStatus`/`markFailed` -- a `replace` landing at any point from here
+  // on would otherwise silently fail or process the *new* document under the stale request's
+  // identity. `updated: false` means a replace (or a delete) won the race; nothing here is the
+  // old row's to mark anymore, so this request answers 409 and touches nothing else.
   if (size === undefined || size < 1 || size > type.maxBytes) {
-    await markFailed(b, scope, id, 'input_too_large');
+    const failed = await b.documents.failIfStorageKey(scope, id, key, 'input_too_large');
+    if (!failed.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
     await dropObject(b, key);
     return tooLarge(MSG.tooLarge);
   }
   if (stored.contentType !== type.contentType) {
-    await markFailed(b, scope, id, 'unsupported_type');
+    const failed = await b.documents.failIfStorageKey(scope, id, key, 'unsupported_type');
+    if (!failed.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
     await dropObject(b, key);
     return validation(MSG.type);
   }
   // `processing` first: the worker's own `ready` write is refused from `uploading`.
-  await b.documents.updateStatus(scope, id, 'processing');
+  const marked = await b.documents.markProcessingIfStorageKey(scope, id, key);
+  if (!marked.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
   // Task 8.2n: the needs-transcription rule lives on the upload type, not here.
   try {
     await b.enqueue(
@@ -348,7 +391,8 @@ const complete: Work = async (b, scope, _req, ctx) => {
     );
   } catch (error) {
     b.log.error('studio.enqueue_failed', { error: errorName(error) });
-    await markFailed(b, scope, id, 'enqueue_failed');
+    const failed = await b.documents.failIfStorageKey(scope, id, key, 'enqueue_failed');
+    if (!failed.updated) return apiError('validation', MSG.replacedDuringUpload, 409);
     return apiError('provider_error', MSG.unavailable, 503);
   }
   return ok({ documentId: id, status: 'processing' }, 202);

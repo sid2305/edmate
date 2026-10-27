@@ -118,14 +118,15 @@ export const documents = pgTable(
       .on(t.updatedAt, t.id)
       .where(sql`${t.status} in ('processing', 'uploading')`),
     // Task 8.2r: backs listForTeacher's `WHERE teacher_id = $1 ORDER BY created_at DESC, id DESC
-    // LIMIT 500` (chunks.ts). Full (non-partial) index -- all three columns are NOT NULL, so no
-    // `.where()` and no `.nullsFirst()`/`.nullsLast()` annotation (Postgres's default NULLS
-    // ordering never applies). Schema-only (see migrate.ts's POST_MIGRATE_STEPS), same pattern as
-    // documents_sweep_updated_at_id_idx above.
+    // LIMIT 500` (chunks.ts). Full (non-partial) index -- all three columns are NOT NULL, so the
+    // NULLS ordering never actually applies at runtime, but `.nullsFirst()` on the descending
+    // columns matches the hand-written `DESC` SQL in migrate.ts's POST_MIGRATE_STEPS (Postgres
+    // defaults DESC to NULLS FIRST), as operations.ts does for the same reason (task 8.2s), so the
+    // schema and snapshot agree with the live index.
     index('documents_teacher_id_created_at_id_idx').on(
       t.teacherId,
-      t.createdAt.desc(),
-      t.id.desc(),
+      t.createdAt.desc().nullsFirst(),
+      t.id.desc().nullsFirst(),
     ),
     check(
       'documents_failure_reason_only_when_failed',

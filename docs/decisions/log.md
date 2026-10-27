@@ -10,6 +10,86 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2s budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 49 tool calls (harness count) against a plan budget of 20.
+- Why: The drift check ran drizzle-kit twice and had to clean up the generated files in between, which the lead's estimate missed. Future snapshot fixes should plan about 40.
+
+---
+
+### 27 Oct 2026 · 8.2q markProcessingIfStorageKey and the widened sweep filter · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/chunks.ts` gains a `markProcessingIfStorageKey`
+  compare-and-set read-then-write (same shape and risk as 8.2i's `failIfStorageKey`, no new access
+  path); `ingestSweepRepo.staleProcessing` widens its status filter to also catch stale `uploading`
+  rows (a cross-teacher scheduled read, same scope as before, no new column or write path).
+  Reviewed by security-reviewer and database-reviewer because both files are under the risky
+  `packages/db/src/repositories/**` glob.
+- Why: the plan names this decision verbatim (its draft text, used here unchanged) as required by
+  the merge-gate rule for any `packages/db/src/repositories/**` touch.
+
+---
+
+### 27 Oct 2026 · 8.2q dropObject retries 3 times total, no backoff · decided by builder · risk: low
+- Decided: `DROP_OBJECT_ATTEMPTS = 3` (one try plus two retries), tried back-to-back with no delay
+  between attempts.
+- Why: the plan asked for "2-3 attempts... no backoff config needed at this volume" without
+  picking a number; 3 total matches the plan's own upper bound and keeps the retry test
+  synchronous (no fake timers needed).
+
+---
+
+### 27 Oct 2026 · 8.2q create's 429 uses its own message, not addLink's · decided by builder · risk: low
+- Decided: added `MSG.createRateLimited` ("Too many uploads started...") instead of reusing
+  `MSG.linkRateLimited` ("Too many links added...") for `create`'s 429.
+- Why: the plan names a new log event (`studio.create_rate_limit_unavailable`) for the 503 branch
+  but doesn't say whether the 429 message should differ from `addLink`'s; reusing the link-specific
+  wording for a file/media upload would be confusing to a teacher, and the fixed-message pattern in
+  this file (`REPLACE_REFUSAL_MESSAGE`, `LINK_REFUSAL_MESSAGE`) already treats each action's wording
+  as its own constant.
+
+---
+
+### 27 Oct 2026 · 8.2q onAddLink's finally is guarded too, not just the line the plan named · decided by builder · risk: low
+- Decided: the plan says to add the guard "after its `await addLink(...)`"; this also guards the
+  `finally` block's `setLinkBusy(false)` (`if (mounted.current) setLinkBusy(false)`), since that's
+  a `finally` and runs even when the guard right after the `await` returns early.
+- Why: `onAddLink` is the only handler in this file with a `finally`-set busy flag; without this
+  second guard, a return inside the guard above still lets the unmount-time `setLinkBusy(false)`
+  run and the React warning the test checks for would still fire.
+
+---
+
+### 27 Oct 2026 · 8.2q fix round 1: addLink's own `markFailed` call left unchanged · decided by builder · risk: low
+- Decided: fixed only `complete`'s three `markFailed` call sites (lines 361, 366, 390) to use
+  `failIfStorageKey`; left `addLink`'s `enqueue_failed` `markFailed` call (line 436) as plain
+  `updateStatus`, even though the security-reviewer finding's line list named it alongside the
+  other three.
+- Why: `replace` refuses a link-keyed row outright (`MSG.linkReplace`), so a document `addLink`
+  creates can never be the target of the replace-during-complete race this fix closes -- there is
+  no second request that could change its `storageKey` out from under `addLink`'s own write. The
+  finding and the fix brief both describe the race as specific to `complete` ("complete must not
+  fail a document that was replaced while it ran"); the 436 reference in the raw finding's line
+  list appears to be a copy artifact from grepping every `markFailed` call site, not a second bug.
+
+---
+
+### 27 Oct 2026 · 8.2q approved for merge · decided by lead · risk: high
+- Decided: Merge 8.2q. It changes risky paths chunks.ts and ingestSweep.ts (packages/db/src/repositories/): a key-compared processing write (markProcessingIfStorageKey) and a sweep that also picks up stuck `uploading` rows. security-reviewer, database-reviewer, typescript-reviewer and code-reviewer ran; both HIGHs are fixed and re-verified (the index one through 8.2r on main).
+- Why: The required reviewers for packages/db/src/repositories/** ran, and the re-verifications found no new issue on the branch merged with current main.
+
+---
+
+### 27 Oct 2026 · 8.2q sweep limit left at 1000 · decided by lead · risk: low
+- Decided: Keep INGEST_SWEEP_LIMIT at 1000 in ingestSweep.ts (packages/db/src/repositories/); no follow-up task.
+- Why: The sweep runs again on every tick and orders by updated_at, so a backlog past 1000 drains over a few runs. Stuck uploads are rare, and pilot volume is far below that limit.
+
+---
+
+### 27 Oct 2026 · 8.2q budget overrun accepted · decided by lead · risk: low
+- Decided: Accept 287 tool calls (harness count over three runs: Phases B, C and E 110; Phases A and D 114; fix round 1 63) against a plan budget of 150.
+- Why: The task spanned apps/web, apps/worker and packages/db across five phases plus a race fix. Future multi-package hardening tasks of this size should be split into separate board tasks of about 100 calls each.
+
+---
+
 ### 27 Oct 2026 · 6.3d sessionId as profileStoreFor's third optional constructor parameter · decided by builder · risk: low
 - Decided: `profileStoreFor(repos, scope, sessionId?)` resolves the style card's `mistakeTags`
   allow-list lazily (only when `known.length > 0`) by threading the session id from the
