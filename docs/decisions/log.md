@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 0.20d dry-run call count instead of hard-coded sample count · decided by builder · risk: low
+- Decided: The load-burst self-test finds "the last three timed calls" by first running
+  `expectLinear` once with a counting `run` (clock faked to a constant so no real bound logic
+  misfires) to get the total call count, rather than hard-coding "12 calls" in the test.
+- Why: The plan leaves "how the fake finds 'the last three'" to the builder but asks that the
+  same test code fail on today's sampling and pass on the new one; deriving the count from a dry
+  run (rather than hard-coding a number that depends on the five-pair/three-pair split) keeps the
+  test correct if the pair count ever changes, and it's the exact mechanism the plan suggested
+  (a first pass that records call count, then a second pass with the burst).
+
+---
+
+### 26 Oct 2026 · 0.20d budget · decided by lead · risk: low
+- Decided: Accept 30 tool calls (harness count) against the plan's 20. That is the plan's stop line, and the work finished green.
+- Why: The plan asked for a load-burst self-test that fails on the old sampling and passes on the new. Proving that took extra test runs.
+
+---
+
+### 26 Oct 2026 · 0.20d merge · decided by lead · risk: high
+- Decided: Merge 0.20d. It touches packages/harness/src/pedagogy/**, a risky path, but it changes only modelRequest.test.ts: how the linear-time check samples its timings (5 interleaved small/large pairs) and a new fake-clock self-test. modelRequest.ts, prompt-pack parsing and the composer are unchanged, so nothing that reaches the model changes. code-reviewer and typescript-reviewer approved it with no findings. The bounds (16x, ratio < 64, 10 s cap, 0.5 ms floor) are unchanged.
+- Why: The test kept flaking in CI (PR #325) because a load burst could land on all the large runs. With interleaving, a burst has to cover most of one size's five samples to change its minimum.
+
+---
+
 ### 26 Oct 2026 · 12.4e plain additive index, no CONCURRENTLY · decided by builder · risk: low
 - Decided: used a plain `CREATE INDEX` inside the migration's own transaction (the `0024`/`0033`
   pattern), not `CREATE INDEX CONCURRENTLY` + `POST_MIGRATE_STEPS` (the `0032` pattern).
