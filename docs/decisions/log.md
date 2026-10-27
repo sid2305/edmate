@@ -10,6 +10,59 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2r drop-and-reinstate of documents_failure_reason_only_when_failed · decided by builder · risk: high
+- Decided: migration `0041_documents_list_index_failure_reason_validate.sql` contains
+  `ALTER TABLE "documents" DROP CONSTRAINT "documents_failure_reason_only_when_failed";` followed
+  immediately by `ALTER TABLE "documents" ADD CONSTRAINT
+  "documents_failure_reason_only_when_failed" CHECK (...) NOT VALID;` — the merge gate's
+  migration-content scan flags any `DROP CONSTRAINT`/`ALTER TABLE ... DROP` as "drops or deletes
+  data", so this PR is risky via `MIGRATION_REVIEWERS = ("database-reviewer",)`.
+- Why: this only re-adds the exact same CHECK expression, immediately, as `NOT VALID` — the same
+  rule is enforced before and after (confirmed by the new
+  `documents-failure-reason-validate-migration.int.test.ts`: existing rows on both sides of the
+  constraint survive unchanged, the constraint is `convalidated = true` after `migrateDatabase`,
+  and a row that violates it still fails to insert). No row is ever uncovered by the constraint
+  for longer than the two statements take, and no data is read, written or lost — this is
+  hygiene to match this repo's `NOT VALID` → `VALIDATE` convention (migrate.ts's
+  `POST_MIGRATE_STEPS` comment), not a behaviour change. `database-reviewer` should confirm this
+  reading before merge.
+
+---
+
+### 27 Oct 2026 · 8.2r sweep index widened for 8.2q · decided by lead · risk: high
+- Decided: within the same migration 0041, `packages/db/src/schema/content.ts` and
+  `packages/db/src/migrate.ts` replace `documents_processing_updated_at_id_idx` with
+  `documents_sweep_updated_at_id_idx` ON `documents (updated_at, id) WHERE status IN
+  ('processing', 'uploading')`, built CONCURRENTLY, with the old index then dropped
+  CONCURRENTLY/`IF EXISTS` once the new one exists.
+- Why: task 8.2q's review widens `ingestSweep.staleProcessing` to also sweep `uploading` rows;
+  the original partial index (`status = 'processing'` only) could not serve that query shape. The
+  new predicate is a superset of the old one, so it covers both the pre- and post-8.2q query
+  shapes regardless of merge order, and the old index is only dropped after the replacement is
+  built, so the sweep job is never left without a usable index. Confirmed by the new
+  `documents-sweep-index.int.test.ts` (EXPLAIN shows Index Scan, no Sort, for both query shapes)
+  and by `ingest-sweep.int.test.ts`'s own EXPLAIN assertion (updated to the new index name).
+
+---
+
+### 27 Oct 2026 · 8.2r approve merge of migration 0041 · decided by lead · risk: high
+- Decided: merge migration 0041 (the documents list index, the failure_reason CHECK dropped and re-added NOT VALID then validated, and the sweep index replaced) with its changes to `packages/db/src/migrate.ts` and `packages/db/src/schema/content.ts`. database-reviewer, code-reviewer and typescript-reviewer ran; none raised a CRITICAL or HIGH finding.
+- Why: the CHECK swap happens inside the migration's one transaction, so the constraint is never off; the new sweep index is built CONCURRENTLY before the old one is dropped; and the new predicate covers both the current sweep query and 8.2q's widened one, so merge order with 8.2q is safe. The database MEDIUM (nulls order in content.ts) goes to 8.2s.
+
+---
+
+### 27 Oct 2026 · 8.2r budget overrun accepted · decided by lead · risk: low
+- Decided: accept 198 harness-counted tool calls against 60 (45 planned plus 15 for the sweep-index addition), about 3.3x.
+- Why: the lead added the sweep index mid-build, and the Postgres EXPLAIN tests needed several rounds to force index plans on small fixtures. The builder reported about 63 calls, so self-counts are unreliable here. Later migration tasks with EXPLAIN tests should plan about 120 calls, or split the EXPLAIN tests into their own phase.
+
+---
+
+### 27 Oct 2026 · 8.2r journal timestamp left as it is · decided by lead · risk: low
+- Decided: wontfix the database LOW in _journal.json (packages/db/migrations/meta/): entry 41's `when` is earlier than entries 39 and 40.
+- Why: drizzle applies migrations by idx, not by `when`, and rewriting a committed journal entry adds risk for no gain.
+
+---
+
 ### 27 Oct 2026 · 6.4c evidenceSkip reason codes · decided by builder · risk: low
 - Decided: Use guard name `evidenceSkip` with `action: 'no_topic'` (no stored `practiceTopicId`)
   or `action: 'bad_topic_id'` (stored but fails the `id()` shape), carried through

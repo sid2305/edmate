@@ -10956,9 +10956,31 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: review
+  status: done
   branch: m13/8.2r-documents-index
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 986
+    tokens_in: 3310
+    tokens_out: 287877
+    cache_read_tokens: 122186464
+    wall_time_seconds: 6160
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 11.4i
   milestone: M13
   title: 'After 11.4d: lift apps/web''s 24 MB cap (MAX_UNSPLIT_MEDIA_BYTES) for audio/mp4, video/mp4 and video/webm now that the worker chunks them with ffmpeg; re-check the 15-minute searchable budget
