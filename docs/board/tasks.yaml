@@ -593,10 +593,31 @@ tasks:
   accept: a user who signed up by link can then sign in with Google on the same verified address; an unverified Google email never links; auth tests pass
   deps:
   - '1.4'
-  status: running
+  status: done
   risk: risky
   branch: m13/1.4c-google-link
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 676
+    tokens_in: 2366
+    tokens_out: 208207
+    cache_read_tokens: 92736218
+    wall_time_seconds: 5601
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 3
+    human_questions: 0
 - id: '1.5'
   milestone: M1
   title: 'Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions'
@@ -3079,9 +3100,32 @@ tasks:
   deps:
   - '6.4'
   risk: risky
-  status: running
+  status: done
   branch: m13/6.4a-session-end
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 932
+    tokens_in: 3342
+    tokens_out: 223341
+    cache_read_tokens: 109960138
+    wall_time_seconds: 484970
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 1
+    findings:
+      total: 7
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 4
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 5.8c
   milestone: M5
   title: 'Sign the prompt packs per B-36 and B-38 (human answers, 21 Oct 2026): reviewed_by: sid2305 on feedback@1.1.0, frame@1.1.0, set@1.2.0, frame@1.2.0 and set@1.3.0 (B-37 defaults, all a, are already
@@ -8337,8 +8381,9 @@ tasks:
   deps:
   - 11.4b
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/11.4d-ffmpeg-chunker
+  model: plan:sonnet
 - id: 8.2n
   milestone: M13
   title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words;
@@ -10784,6 +10829,61 @@ tasks:
   deps:
   - 8.2a
   risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 11.4i
+  milestone: M13
+  title: 'After 11.4d: lift apps/web''s 24 MB cap (MAX_UNSPLIT_MEDIA_BYTES) for audio/mp4, video/mp4 and video/webm now that the worker chunks them with ffmpeg; re-check the 15-minute searchable budget
+    for a long video; a human builds the worker image once and records whether its ffmpeg is a GPL or LGPL build (swap to the ADR''s LGPL-only fallback if needed)'
+  accept: a teacher can upload an MP4, WebM or M4A over 24 MB and it becomes searchable; the ffmpeg build's licence is recorded in the handoff; web tests green.
+  deps:
+  - 11.4d
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 6.4b
+  milestone: M13
+  title: 'Session-end summary cost race (6.4a security MEDIUM): concurrent POSTs to apps/web/app/api/sessions/[id]/end can each run an unmetered summarize before one write lands; add a per-session in-flight
+    lock or claim (or a rate limit) so only one summarize runs per session'
+  accept: two concurrent end requests for one session run the summarizer once; the second answers without a model call; web tests green.
+  deps:
+  - 6.4a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.4c
+  milestone: M13
+  title: '6.4a review LOWs: telemetry when evidenceFor skips a turn with no topic (packages/harness/src/pipeline/runner.ts); a test for a SessionSummarySchema failure in the end route (route.test.ts); a
+    ''limit'' case (or default) in the end route''s RepositoryError switch; and before a DB-backed practice bank lands, pass topicMap into pickItem (packages/harness/src/tools/practice.ts) or have commit.ts
+    catch a scope-mismatch RepositoryError from applyEvidence'
+  accept: each item is fixed or has a test; harness and web tests green.
+  deps:
+  - 6.4a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 1.4f
+  milestone: M13
+  title: '1.4e Part 2 (split by the lead): run the magic-link sandbox script against a local stack rebuilt on current code and record the result; waits on B-61 (who rebuilds the stack)'
+  accept: the sandbox magic-link script run on current code is recorded in docs/tasks/1.4f/handoff.md, or a lead decision records "skip until deploy".
+  deps:
+  - 1.4e
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 0.20g
+  milestone: M13
+  title: 'e2e flake: apps/web e2e/chat.spec.ts:43 "normal: a message gets a streamed, then final, reply" times out waiting for "Hello there!" (5 s) on the first chat test of the run; failed on PR #369 and
+    PR #372, passed on re-run. Likely the first streamed turn after a cold start (route compile or warm-up); find the cause and fix it or give the first turn a warm-up, without raising timeouts across the
+    suite'
+  accept: chat.spec.ts passes 10 runs in a row in CI-like conditions (or locally with the e2e command CI uses); the cause is written in the handoff.
+  deps: []
+  risk: low
   status: todo
   branch: null
   model: null

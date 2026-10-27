@@ -83,6 +83,11 @@ export const HelpStateSchema = z.strictObject({
   practiceItemId: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
   /** The active practice item's module: the tool's second module tier (5.6). */
   practiceModuleId: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
+  /**
+   * The active practice item's topic (6.4a): read by the runner's graded-check evidence
+   * producer, parallel to `practiceModuleId`. Optional, so a blob saved before 6.4a still parses.
+   */
+  practiceTopicId: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
   /** Practice item ids already served this session, oldest first (the tool's exclude list). */
   practiceServed: z
     .array(z.string().min(1).max(PRACTICE_ID_MAX))
@@ -141,10 +146,11 @@ export function holdsPracticeKey(h: Readonly<HelpState>): boolean {
  */
 export function practiceFields(
   h: Readonly<HelpState>,
-): Pick<HelpState, 'practiceItemId' | 'practiceModuleId' | 'practiceServed'> {
+): Pick<HelpState, 'practiceItemId' | 'practiceModuleId' | 'practiceTopicId' | 'practiceServed'> {
   return {
     ...(h.practiceItemId === undefined ? {} : { practiceItemId: h.practiceItemId }),
     ...(h.practiceModuleId === undefined ? {} : { practiceModuleId: h.practiceModuleId }),
+    ...(h.practiceTopicId === undefined ? {} : { practiceTopicId: h.practiceTopicId }),
     ...(h.practiceServed === undefined ? {} : { practiceServed: [...h.practiceServed] }),
   };
 }

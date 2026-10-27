@@ -226,7 +226,7 @@ describe('createAuthConfig', () => {
     expect(c.cookies?.sessionToken?.options).not.toHaveProperty('domain');
   });
 
-  it('configures Google only, with no dangerous email linking and state + nonce + PKCE', () => {
+  it('configures Google only, with dangerous email linking gated by signIn and state + nonce + PKCE', () => {
     const c = createAuthConfig({ identity, env: envFor('http://localhost:8080') });
     expect(c.providers).toHaveLength(1);
     const google = c.providers[0] as unknown as {
@@ -236,7 +236,7 @@ describe('createAuthConfig', () => {
     expect(google.id).toBe('google');
     expect(google.options).toMatchObject({
       clientId: 'test-client.apps.example',
-      allowDangerousEmailAccountLinking: false,
+      allowDangerousEmailAccountLinking: true,
       checks: ['pkce', 'state', 'nonce'],
     });
     // The profile keeps no photo and nothing else Google sends.
@@ -365,6 +365,101 @@ describe('createAuthConfig', () => {
           profile: { email: 'a@example.test', email_verified: true } as Profile,
         }),
       ).toBe(true);
+    });
+
+    it('1.4c: an existing owner whose email is not verified refuses the link, without checking hasLinkedAccount', async () => {
+      const owner = { id: 'owner-2', emailVerifiedAt: null };
+      const hasLinkedAccount = vi.fn(async () => false);
+      const fake: Partial<IdentityStore> = {
+        getUserByAccount: vi.fn(async () => null),
+        getUserByEmail: vi.fn(async () => owner as never),
+        hasLinkedAccount,
+        getSessionAndUser: vi.fn(async () => null),
+      };
+      const unverifiedOwner = createAuthConfig({
+        identity: fake as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await unverifiedOwner.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g-new' } as Account,
+          profile: { email: 'a@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(false);
+      expect(hasLinkedAccount).not.toHaveBeenCalled();
+    });
+
+    it('1.4c: an existing, verified owner who already has a different linked Google account refuses the link', async () => {
+      const owner = { id: 'owner-3', emailVerifiedAt: new Date() };
+      const hasLinkedAccount = vi.fn(async () => true);
+      const fake: Partial<IdentityStore> = {
+        getUserByAccount: vi.fn(async () => null),
+        getUserByEmail: vi.fn(async () => owner as never),
+        hasLinkedAccount,
+        getSessionAndUser: vi.fn(async () => null),
+      };
+      const alreadyLinked = createAuthConfig({
+        identity: fake as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await alreadyLinked.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g-new' } as Account,
+          profile: { email: 'a@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(false);
+      expect(hasLinkedAccount).toHaveBeenCalledWith('owner-3', 'google');
+    });
+
+    it('1.4c: a verified owner with no other linked Google account links (hasLinkedAccount only runs when unlinked)', async () => {
+      const owner = { id: 'owner-4', emailVerifiedAt: new Date() };
+      const hasLinkedAccount = vi.fn(async () => false);
+      const fake: Partial<IdentityStore> = {
+        getUserByAccount: vi.fn(async () => null),
+        getUserByEmail: vi.fn(async () => owner as never),
+        hasLinkedAccount,
+        learnerStatus: vi.fn(async () => 'clear' as never),
+        getSessionAndUser: vi.fn(async () => null),
+      };
+      const linkable = createAuthConfig({
+        identity: fake as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await linkable.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g-new' } as Account,
+          profile: { email: 'a@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(true);
+      expect(hasLinkedAccount).toHaveBeenCalledWith('owner-4', 'google');
+    });
+
+    it('1.4c: an age-blocked owner matched by email is refused before linkAccount runs', async () => {
+      const id = memoryIdentity();
+      const owner = await id.createStudent({
+        email: 'blocked@example.test',
+        emailVerifiedAt: new Date(),
+        name: 'Blocked',
+      });
+      id.ageBlocked.add(owner.id);
+      const ageBlockedConfig = createAuthConfig({
+        identity: id as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await ageBlockedConfig.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g-blocked' } as Account,
+          profile: { email: 'blocked@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(false);
     });
   });
 
