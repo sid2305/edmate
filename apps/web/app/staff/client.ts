@@ -9,6 +9,13 @@ import { responseError } from '../../src/chat/sse';
 const ENDPOINT = '/api/staff/verifications';
 const LOOKUP_ENDPOINT = '/api/staff/verifications/lookup';
 
+/**
+ * setVerification's own reason cap (packages/db `VerificationInput`). Task 12.1c: the one place
+ * this cap is declared; `handlers.ts` and `verification-row.tsx` both re-export/import it from
+ * here instead of keeping their own copy.
+ */
+export const MAX_REASON_CHARS = 500;
+
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 /** Task 9.3h: one of this teacher's active takedowns, as the console shows it. */

@@ -5,10 +5,7 @@
 // always sends `false`.
 import { useFormatter, useTranslations } from 'next-intl';
 import { useState } from 'react';
-import type { Decision, QueueItem } from './client';
-
-/** setVerification's own reason cap (packages/db). */
-const MAX_REASON_CHARS = 500;
+import { MAX_REASON_CHARS, type Decision, type QueueItem } from './client';
 
 export interface VerificationRowProps {
   item: QueueItem;
