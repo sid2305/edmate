@@ -33,4 +33,13 @@ describe('apiError', () => {
       error: { code: 'rate_limited', message: 'slow down', retryable: true },
     });
   });
+
+  it('overrides a caller-supplied Cache-Control with no-store, regardless of case (9.4f item 4)', async () => {
+    const res = apiError('rate_limited', 'slow down', 429, {
+      'Cache-Control': 'public, max-age=3600',
+      'Retry-After': '60',
+    });
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('Retry-After')).toBe('60');
+  });
 });
