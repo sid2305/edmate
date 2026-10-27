@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 5.2a real-transcriber timing check split to 5.2b · decided by lead · risk: low
+- Decided: the third 5.2 review LOW (a real-transcriber timing check against the 15-minute budget) is not part of 5.2a; it is board task 5.2b, run by a human.
+- Why: it needs a real model call, which tests may not make; the two type LOWs are done here.
+
+---
+
 ### 26 Oct 2026 · 13.4f merge touches packages/db/src/identity/store.ts · decided by lead · risk: high
 - Decided: merge 13.4f. It changes `packages/db/src/identity/store.ts` (a risky path): `listConsentsForStudent` now parses `grantedBy` with a zod enum through an exported pure `parseConsentRow` instead of casting it. security-reviewer, code-reviewer and typescript-reviewer approved.
 - Why: a bad stored value now fails loud instead of being trusted; the only caller stays inside the guarded store methods, which scrub the error, and zod's enum message does not echo the bad value.

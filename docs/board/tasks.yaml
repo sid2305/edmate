@@ -9235,9 +9235,29 @@ tasks:
   accept: the listed changes are in and the ingest tests pass
   deps:
   - '5.2'
-  status: running
+  status: done
   branch: m13/5.2a-video-type-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 146
+    tokens_in: 526
+    tokens_out: 31715
+    cache_read_tokens: 15685756
+    wall_time_seconds: 1599
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.2b
   milestone: M13
   title: 'Real-transcriber timing check for video ingestion (third 5.2 review LOW, split from 5.2a): packages/db/test/video-ingest.int.test.ts times a scripted transcriber, so it cannot show a real transcription
