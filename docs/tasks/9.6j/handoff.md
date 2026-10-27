@@ -55,6 +55,35 @@ code was touched.
 - `python3 .githooks/secret-scan.py --all` → clean (no output).
 - `corepack pnpm --filter @edmate/db exec vitest run test/export-cursor-paging.int.test.ts` → `Test Files 1 passed (1)`, `Tests 8 passed (8)`.
 
+## Fix round
+
+Findings fixed (database-reviewer MEDIUM, typescript-reviewer + code-reviewer MEDIUM):
+
+1. The outer-scan assertion in "messages.listForStudent: ... an outer scan on the sessions
+   index ..." only did `expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx')`
+   on the whole stringified plan, so a plan that keeps that index but seeks on `teacher_id` only
+   (pushing `student_id` to a `Filter`) would still pass. Replaced with
+   `findIndexScan(top, 'sessions')` and assertions on that scan node's `Index Name` (the exact
+   index), `Index Cond` (mentions both `teacher_id` and `student_id`), and `Filter` (undefined) —
+   the same rigor as the two mid-range tests. Added `'Index Name'` to the local `PlanNode`
+   interface for this. Also passed `'sessions'` to the existing `findIndexScan(top)` call in the
+   sessions mid-range-cursor test (typescript-reviewer LOW), so it explicitly targets the sessions
+   scan rather than relying on tree order.
+2. `captureAndExplain`'s `spy.mockRestore()` ran after the `return`, so a throwing step (e.g. the
+   `expect(spy.mock.calls).toHaveLength(1)` assertion, or the `raw.query` EXPLAIN call) left
+   `pool.query` spied for later tests. Wrapped the body in `try { ... } finally { spy.mockRestore(); }`.
+
+Also ran `prettier --write` on the test file (the edits needed re-wrapping a multi-line type
+annotation); `prettier --check` now passes.
+
+## Evidence
+
+- `export TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate && corepack pnpm turbo run typecheck lint test --filter=@edmate/db` → `Tasks: 8 successful, 8 total` (typecheck, lint, test all green).
+- `corepack pnpm --filter @edmate/db exec vitest run test/export-cursor-paging.int.test.ts` → `Test Files 1 passed (1)`, `Tests 8 passed (8)` (file ran, not skipped).
+- `corepack pnpm exec prettier --check packages/db/test/export-cursor-paging.int.test.ts` → "All matched files use Prettier code style!"
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
 ## Budget
 
 Tool calls used: 21
+Fix round tool calls used: 19

@@ -63,16 +63,19 @@ async function captureAndExplain<T>(
   run: () => Promise<T>,
 ): Promise<{ result: T; text: string; rows: { 'QUERY PLAN': { Plan: PlanNode }[] }[] }> {
   const spy = vi.spyOn(pool, 'query');
-  const result = await run();
-  expect(spy.mock.calls).toHaveLength(1);
-  const [config, params] = spy.mock.calls[0] as unknown as [string | { text: string }, unknown[]];
-  const text = typeof config === 'string' ? config : config.text;
-  const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
-    `EXPLAIN (FORMAT JSON) ${text}`,
-    params,
-  );
-  spy.mockRestore();
-  return { result, text, rows };
+  try {
+    const result = await run();
+    expect(spy.mock.calls).toHaveLength(1);
+    const [config, params] = spy.mock.calls[0] as unknown as [string | { text: string }, unknown[]];
+    const text = typeof config === 'string' ? config : config.text;
+    const { rows } = await raw.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
+      `EXPLAIN (FORMAT JSON) ${text}`,
+      params,
+    );
+    return { result, text, rows };
+  } finally {
+    spy.mockRestore();
+  }
 }
 
 describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
@@ -207,8 +210,13 @@ describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REAS
       expect(plan).toMatch(/Index( Only)? Scan/);
       // The outer scan (finding this pair's SESSION_COUNT sessions among NOISE_SESSION_COUNT
       // others) stays on the sessions (teacher_id, student_id) index too, rather than a seq scan
-      // that would run the lateral once per unrelated noise session.
-      expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx');
+      // that would run the lateral once per unrelated noise session -- and it seeks on both
+      // columns (not just teacher_id, with student_id pushed to a Filter).
+      const outerScan = findIndexScan(top, 'sessions');
+      expect(outerScan?.['Index Name']).toBe('sessions_teacher_id_student_id_created_at_id_idx');
+      expect(outerScan?.['Index Cond']).toMatch(/teacher_id/);
+      expect(outerScan?.['Index Cond']).toMatch(/student_id/);
+      expect(outerScan?.Filter).toBeUndefined();
       // "no full Sort": every "Plan Rows" figure in the tree stays under the pair's 10,000-message
       // history -- the lateral's bounded per-session candidate set, never the whole history.
       const plannedRows = collectPlannedRows(top);
@@ -231,7 +239,7 @@ describe.skipIf(!up)(`export cursor paging on Postgres${up ? '' : ` (${SKIP_REAS
     const plan = JSON.stringify(top);
     expect(plan).toContain('sessions_teacher_id_student_id_created_at_id_idx');
     expect(plan).toMatch(/Index( Only)? Scan/);
-    const scan = findIndexScan(top);
+    const scan = findIndexScan(top, 'sessions');
     expect(scan?.['Index Cond']).toMatch(/created_at/);
     expect(scan?.Filter).toBeUndefined();
   });
@@ -375,6 +383,7 @@ interface PlanNode {
   'Node Type'?: string;
   'Plan Rows'?: number;
   'Index Cond'?: string;
+  'Index Name'?: string;
   'Relation Name'?: string;
   Filter?: string;
   Plans?: PlanNode[];
