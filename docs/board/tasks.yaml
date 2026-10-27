@@ -8354,7 +8354,9 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.4e-chat-followups
+  model: plan:sonnet build:sonnet
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
