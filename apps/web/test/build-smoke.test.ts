@@ -177,7 +177,6 @@ describe.skipIf(!up)(
         emailVerifiedAt: null,
         name: 'Build Smoke',
       });
-      await identity.createSession(SID, user.id, new Date(Date.now() + 86_400_000));
       // 1.7d: deletes the student and session rows this test created, through the same identity
       // API that created them -- never a raw SQL delete. `recordAgeAnswer`'s `under_age` branch
       // (age.ts) erases the sign-in rows and the user row in one transaction; this store was opened
@@ -191,6 +190,8 @@ describe.skipIf(!up)(
           noticeVersion: 'build-smoke-cleanup',
         });
       };
+      // 1.7i: assigned before createSession, so a throw here still leaves cleanup set.
+      await identity.createSession(SID, user.id, new Date(Date.now() + 86_400_000));
 
       const port = await freePort();
       origin = `http://127.0.0.1:${port}`;
