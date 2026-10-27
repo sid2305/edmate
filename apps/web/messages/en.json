@@ -847,6 +847,7 @@
     "reloading": "Reloading…",
     "pollError": "Could not refresh the queue. Showing the last list.",
     "done": "Done.",
+    "liftedAgentDraft": "Done. The agent is back in draft, not yet visible to students.",
     "queueHeading": "Open reports",
     "empty": "No open reports.",
     "listLabel": "Open reports",

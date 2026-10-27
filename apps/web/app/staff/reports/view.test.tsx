@@ -243,6 +243,48 @@ describe('StaffReportsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lift takedown on doc_1' }));
     await waitFor(() => expect(screen.queryByText('Document')).toBeNull());
     expect(liftTakedown).toHaveBeenCalledWith({ takedownId: 'tkd_1' });
+    expect(screen.getByRole('status')).toHaveTextContent('Done.');
+  });
+
+  it('lifting an agent takedown that returns `live` shows the plain Done notice (9.3g)', async () => {
+    const agentTakedown = takedown({ id: 'tkd_agent', kind: 'agent', targetId: 'agt_1' });
+    const liftTakedown = vi.fn(async () => ({
+      ok: true as const,
+      id: 'tkd_agent',
+      agentStatus: 'live' as const,
+    }));
+    renderIntl(
+      <StaffReportsView
+        initialReports={[]}
+        initialTakedowns={[agentTakedown]}
+        liftTakedown={liftTakedown}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Lift takedown on agt_1' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Done.'));
+  });
+
+  it('lifting an agent takedown that returns `draft` shows the draft-specific notice, not the plain Done (9.3g)', async () => {
+    const agentTakedown = takedown({ id: 'tkd_agent', kind: 'agent', targetId: 'agt_1' });
+    const liftTakedown = vi.fn(async () => ({
+      ok: true as const,
+      id: 'tkd_agent',
+      agentStatus: 'draft' as const,
+    }));
+    renderIntl(
+      <StaffReportsView
+        initialReports={[]}
+        initialTakedowns={[agentTakedown]}
+        liftTakedown={liftTakedown}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Lift takedown on agt_1' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Done. The agent is back in draft, not yet visible to students.',
+      ),
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent(/^Done\.$/);
   });
 
   it('a takedown row shows its target, category and when, and Lift names its target', () => {

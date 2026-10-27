@@ -127,7 +127,11 @@ export function createStaffTakedownsHandlers(backend: StaffTakedownsBackend): {
         const row = await backend
           .repos()
           .takedowns.lift(by, takedownId, note === undefined ? {} : { note });
-        return ok({ id: row.id, status: row.status });
+        return ok({
+          id: row.id,
+          status: row.status,
+          ...(row.agentStatus === undefined ? {} : { agentStatus: row.agentStatus }),
+        });
       } catch (error) {
         return mapWriteError(error, 'act');
       }

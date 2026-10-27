@@ -110,6 +110,7 @@ describe('StaffQueueView', () => {
     const decide = vi.fn(async () => ({
       ok: true as const,
       verificationStatus: 'rejected' as const,
+      agentsTakenDown: 1,
     }));
     renderIntl(<StaffQueueView initial={[ASHA, BEN]} decide={decide} />);
     const row = rowOf('asha-math');
@@ -123,6 +124,28 @@ describe('StaffQueueView', () => {
         'asha-math was rejected and their agent is no longer available to students.',
       ),
     );
+    expect(decide).toHaveBeenCalledWith({
+      teacherId: 'tch_a',
+      status: 'rejected',
+      reason: '',
+      safety: true,
+    });
+  });
+
+  it('a safety rejection that took down zero agents shows the plain rejected notice, not rejectedSafety (9.3g)', async () => {
+    const decide = vi.fn(async () => ({
+      ok: true as const,
+      verificationStatus: 'rejected' as const,
+      agentsTakenDown: 0,
+    }));
+    renderIntl(<StaffQueueView initial={[ASHA, BEN]} decide={decide} />);
+    const row = rowOf('asha-math');
+    fireEvent.click(within(row).getByRole('checkbox', { name: SAFETY_LABEL }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Reject' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('asha-math was rejected.'),
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent('no longer available');
     expect(decide).toHaveBeenCalledWith({
       teacherId: 'tch_a',
       status: 'rejected',
@@ -383,6 +406,7 @@ describe('StaffQueueView: find a teacher by slug (9.3f)', () => {
     const decide = vi.fn(async () => ({
       ok: true as const,
       verificationStatus: 'rejected' as const,
+      agentsTakenDown: 1,
     }));
     renderIntl(
       <StaffQueueView initial={[]} findTeacherBySlug={findTeacherBySlug} decide={decide} />,

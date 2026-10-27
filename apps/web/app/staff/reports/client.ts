@@ -95,7 +95,11 @@ async function readBody<T>(res: Response, schema: z.ZodType<T>): Promise<T | nul
 const ReportsReply = z.object({ reports: ReportListSchema });
 const ReviewReply = z.object({ id: z.string(), status: z.string() });
 const TakedownsReply = z.object({ takedowns: TakedownListSchema });
-const ActReply = z.object({ id: z.string(), status: z.string() });
+const ActReply = z.object({
+  id: z.string(),
+  status: z.string(),
+  agentStatus: z.enum(['draft', 'live']).optional(),
+});
 
 /** GET the open report queue. */
 export async function loadReports(
@@ -166,7 +170,7 @@ export interface CreateTakedownInput {
 async function postTakedown(
   body: Record<string, unknown>,
   fetchImpl: FetchLike | undefined,
-): Promise<{ ok: true; id: string } | Failure> {
+): Promise<{ ok: true; id: string; agentStatus?: 'draft' | 'live' } | Failure> {
   const res = await call(
     fetchImpl,
     {
@@ -180,7 +184,13 @@ async function postTakedown(
   if (res === null) return FAILED;
   if (!res.ok) return { ok: false, code: (await responseError(res)).code };
   const parsed = await readBody(res, ActReply);
-  return parsed === null ? FAILED : { ok: true, id: parsed.id };
+  return parsed === null
+    ? FAILED
+    : {
+        ok: true,
+        id: parsed.id,
+        ...(parsed.agentStatus === undefined ? {} : { agentStatus: parsed.agentStatus }),
+      };
 }
 
 /** POST `{ action: 'create' }`: take down one document or a whole agent. */
@@ -212,7 +222,7 @@ export interface LiftTakedownInput {
 export async function liftTakedown(
   input: LiftTakedownInput,
   fetchImpl?: FetchLike,
-): Promise<{ ok: true; id: string } | Failure> {
+): Promise<{ ok: true; id: string; agentStatus?: 'draft' | 'live' } | Failure> {
   const note = input.note?.trim() ?? '';
   const result = await postTakedown(
     { action: 'lift', takedownId: input.takedownId, ...(note === '' ? {} : { note }) },

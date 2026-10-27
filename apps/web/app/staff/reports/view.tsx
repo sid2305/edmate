@@ -56,6 +56,8 @@ type Busy =
   | { kind: 'reload' }
   | null;
 type ErrorKey = 'forbidden' | 'not_found' | 'validation' | 'generic' | 'loadFailed';
+/** Task 9.3g: a lifted agent takedown that landed the agent back in `draft` gets its own notice. */
+type Notice = { kind: 'done' } | { kind: 'liftedAgentDraft' } | null;
 
 function errorKey(code: ErrorCode): ErrorKey {
   return code === 'forbidden' || code === 'not_found' || code === 'validation' ? code : 'generic';
@@ -94,7 +96,7 @@ export function StaffReportsView({
       : null,
   );
   const [pollFailed, setPollFailed] = useState(false);
-  const [notice, setNotice] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
   const busyRef = useRef<Busy>(null);
   busyRef.current = busy;
   const loadedRef = useRef(
@@ -134,7 +136,7 @@ export function StaffReportsView({
   const onReload = async () => {
     generationRef.current += 1;
     setError(null);
-    setNotice(false);
+    setNotice(null);
     setBusy({ kind: 'reload' });
     try {
       await refresh();
@@ -166,7 +168,7 @@ export function StaffReportsView({
   ) => {
     generationRef.current += 1;
     setError(null);
-    setNotice(false);
+    setNotice(null);
     setBusy({ kind: 'report', reportId: report.id, action });
     try {
       const result = await run();
@@ -175,7 +177,7 @@ export function StaffReportsView({
         return;
       }
       dropReport(report.id);
-      setNotice(true);
+      setNotice({ kind: 'done' });
     } catch {
       setError('generic');
     } finally {
@@ -184,7 +186,9 @@ export function StaffReportsView({
   };
 
   const onDismiss = (report: ReportView) =>
-    void runReportAction(report, 'dismiss', () => reviewReport({ reportId: report.id, decision: 'dismissed' }));
+    void runReportAction(report, 'dismiss', () =>
+      reviewReport({ reportId: report.id, decision: 'dismissed' }),
+    );
 
   const onTakedownDocument = (report: ReportView, documentId: string) =>
     void runReportAction(report, `doc:${documentId}`, () =>
@@ -212,7 +216,7 @@ export function StaffReportsView({
   const onLift = async (takedown: TakedownView) => {
     generationRef.current += 1;
     setError(null);
-    setNotice(false);
+    setNotice(null);
     setBusy({ kind: 'lift', takedownId: takedown.id });
     try {
       const result = await liftTakedown({ takedownId: takedown.id });
@@ -221,7 +225,11 @@ export function StaffReportsView({
         return;
       }
       setTakedowns((list) => (list ?? []).filter((td) => td.id !== takedown.id));
-      setNotice(true);
+      setNotice(
+        takedown.kind === 'agent' && result.agentStatus === 'draft'
+          ? { kind: 'liftedAgentDraft' }
+          : { kind: 'done' },
+      );
     } catch {
       setError('generic');
     } finally {
@@ -255,7 +263,7 @@ export function StaffReportsView({
       ) : null}
       {notice ? (
         <p role="status" className="staff-reports-notice">
-          {t('done')}
+          {t(notice.kind)}
         </p>
       ) : null}
       <p>
@@ -315,7 +323,9 @@ export function StaffReportsView({
                 aria-label={t('liftAriaLabel', { targetId: takedown.targetId })}
                 onClick={() => void onLift(takedown)}
               >
-                {busy?.kind === 'lift' && busy.takedownId === takedown.id ? t('working') : t('lift')}
+                {busy?.kind === 'lift' && busy.takedownId === takedown.id
+                  ? t('working')
+                  : t('lift')}
               </button>
             </li>
           ))}
