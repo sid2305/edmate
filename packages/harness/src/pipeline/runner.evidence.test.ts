@@ -127,6 +127,17 @@ describe('runner: evidenceFor records its skip reason (6.4c)', () => {
     const { result } = await turnWith({ attempt: 'correct' });
     expect(result.trace?.guards.some((g) => g.name === 'evidenceSkip')).toBe(false);
   });
+
+  it('a graded turn with a stored topic that fails the id shape records a bad_topic_id skip', async () => {
+    const help = heldHelp({ practiceTopicId: 'bad topic!' });
+    const { result, commit } = await turnWith({ attempt: 'correct', help });
+    expect(result.trace?.guards).toContainEqual({
+      name: 'evidenceSkip',
+      ok: false,
+      action: 'bad_topic_id',
+    });
+    expect(commit?.evidence).toBeUndefined();
+  });
 });
 
 // Fix round 1: a generated (non-bank) practice item has no real topic row (its own `topicId` is
