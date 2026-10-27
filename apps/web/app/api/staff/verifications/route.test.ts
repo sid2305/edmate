@@ -381,6 +381,43 @@ describe('GET: the pending queue', () => {
     ]);
     expect(m.audit.findSubjectHistoryForStaff).toHaveBeenCalledWith('stf_1', 'tch_a', 10);
   });
+
+  it('a scope error from findSubjectHistoryForStaff is 403, same as listForbidden (9.3n)', async () => {
+    const m = memory();
+    m.audit.findSubjectHistoryForStaff.mockRejectedValueOnce(
+      new RepositoryError('scope', 'audit.findSubjectHistoryForStaff'),
+    );
+    const res = await m.h.list(get(), ctx());
+    expect(res.status).toBe(403);
+    const text = await res.text();
+    expect(JSON.parse(text)).toMatchObject({
+      error: { code: 'forbidden', message: 'Only staff can see the verification queue.' },
+    });
+  });
+
+  it('a scope error from findLastVerifyForStaff is 403, same as listForbidden (9.3n)', async () => {
+    const m = memory();
+    m.audit.findLastVerifyForStaff.mockRejectedValueOnce(
+      new RepositoryError('scope', 'audit.findLastVerifyForStaff'),
+    );
+    const res = await m.h.list(get(), ctx());
+    expect(res.status).toBe(403);
+    expect(await codeOf(res)).toBe('forbidden');
+  });
+
+  it('an unexpected throw from enrichQueueRows is 500, generic message, no teacher id or detail (9.3n)', async () => {
+    const m = memory();
+    m.audit.findSubjectHistoryForStaff.mockRejectedValueOnce(new Error('boom tch_a'));
+    const res = await m.h.list(get(), ctx());
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(JSON.parse(text)).toMatchObject({
+      error: { code: 'provider_error', message: 'Something went wrong. Try again.' },
+    });
+    expect(text).not.toContain('tch_a');
+    expect(text).not.toContain('boom');
+    expect(m.logs).toEqual(['[staff] verifications.list failed: Error']);
+  });
 });
 
 describe('GET lookup: find one teacher by slug, any status', () => {
@@ -510,6 +547,43 @@ describe('GET lookup: find one teacher by slug, any status', () => {
     expect(res.status).toBe(500);
     expect(await codeOf(res)).toBe('provider_error');
     expect(m.logs).toEqual(['[staff] verifications.lookup failed: TypeError']);
+  });
+
+  it('a scope error from findSubjectHistoryForStaff is 403, lookupForbidden (9.3n)', async () => {
+    const m = memory();
+    m.audit.findSubjectHistoryForStaff.mockRejectedValueOnce(
+      new RepositoryError('scope', 'audit.findSubjectHistoryForStaff'),
+    );
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    expect(res.status).toBe(403);
+    const text = await res.text();
+    expect(JSON.parse(text)).toMatchObject({
+      error: { code: 'forbidden', message: 'Only staff can look up a teacher.' },
+    });
+  });
+
+  it('a scope error from findLastVerifyForStaff is 403, lookupForbidden (9.3n)', async () => {
+    const m = memory();
+    m.audit.findLastVerifyForStaff.mockRejectedValueOnce(
+      new RepositoryError('scope', 'audit.findLastVerifyForStaff'),
+    );
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    expect(res.status).toBe(403);
+    expect(await codeOf(res)).toBe('forbidden');
+  });
+
+  it('an unexpected throw from enrichQueueRows is 500, generic message, no teacher id or detail (9.3n)', async () => {
+    const m = memory();
+    m.audit.findSubjectHistoryForStaff.mockRejectedValueOnce(new Error('boom tch_a'));
+    const res = await m.h.lookup(getLookup('asha-math'), ctx());
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(JSON.parse(text)).toMatchObject({
+      error: { code: 'provider_error', message: 'Something went wrong. Try again.' },
+    });
+    expect(text).not.toContain('tch_a');
+    expect(text).not.toContain('boom');
+    expect(m.logs).toEqual(['[staff] verifications.lookup failed: Error']);
   });
 });
 
