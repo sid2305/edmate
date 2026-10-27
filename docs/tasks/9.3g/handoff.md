@@ -138,6 +138,18 @@ None.
 
 ## Decisions
 
+### 27 Oct 2026 · 9.3g merge of db repositories and staff consoles · decided by lead · risk: high
+- Decided: merge the setVerification stale-row audit and staff action (`packages/db/src/repositories/teacher-profiles.ts`), lift's returned agent status (`packages/db/src/repositories/takedowns.ts`, `README.md`), and the staff API handlers and consoles (`apps/web/app/api/staff/**`, `apps/web/app/staff/**`), all risky paths.
+- Why: security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved with no findings above LOW; staff-only gating is unchanged, the audit writes share the state change's transaction, and the new lock-order tests are real two-connection races.
+
+### 27 Oct 2026 · 9.3g budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (208 harness tool calls across two phases against a budget of 140; the builders reported 80 to 120).
+- Why: Phase A added two forced-order race tests and knock-on test fixes, and the full db and web gates were re-run around the known shared-Postgres flake; both phases stayed on scope.
+
+### 27 Oct 2026 · 9.3g stale-row staff action keeps the create shape · decided by lead · risk: low
+- Decided: wontfix the LOW that `packages/db/src/repositories/teacher-profiles.ts` appends a `create` staff action and a `takedown.create` audit row to an already existing takedown in the stale-active-row branch.
+- Why: the plan asked it to mirror `takeDownAgentInTx`'s shape, and `takedowns.countUpheld` counts distinct takedown rows, so nothing is double counted.
+
 ### 27 Oct 2026 · 9.3g export VerificationResultRow · decided by builder · risk: low
 - Decided: exported the new `VerificationResultRow` interface from `teacher-profiles.ts` (the plan
   only said "define a local interface").
@@ -211,3 +223,5 @@ None.
 
 Phase A tool calls used: 44
 Phase B tool calls used: 36
+
+Tool calls used: 208 (harness count: Phase A 114, Phase B 94; the builders reported 80 here and 120 in their returns)
