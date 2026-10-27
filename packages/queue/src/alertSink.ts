@@ -21,6 +21,9 @@ export interface QueuedAlertSinkOptions {
 }
 
 export function queuedAlertSink(queue: JobQueue, opts: QueuedAlertSinkOptions = {}): AlertSink {
+  // Same delay for every level on purpose (7.2n): self-harm distress alerts (level `alert`) are
+  // at least as urgent as a threat to others, so a shorter delay only for `critical` would rank
+  // them the wrong way round. A per-level delay is a safety-policy change for the human.
   const after = opts.escalateAfterMs ?? ALERT_ESCALATION_MS;
   if (!(after > 0)) throw new TypeError('queuedAlertSink: escalateAfterMs must be positive');
   return {

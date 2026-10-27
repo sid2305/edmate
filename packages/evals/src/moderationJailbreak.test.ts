@@ -25,6 +25,7 @@ import {
   hasDistressKeyword,
   matchJailbreak,
   matchModeration,
+  MISUSE_CODES,
   runTurn,
   withheldMessage,
 } from '@edmate/harness';
@@ -236,8 +237,9 @@ for (const mode of MODES) {
             expect(r.reply).toBe(BLOCK_REPLIES[ev.code as BlockCode]);
             expect(JSON.stringify(ev)).not.toContain(turn.student.slice(0, 12));
             // harm_to_others, threat and weapons carry a critical misuse alert (B-50, 7.2m).
-            const MISUSE_CODES: readonly string[] = ['harm_to_others', 'threat', 'weapons'];
-            expect(r.alertKinds).toEqual(MISUSE_CODES.includes(ev.code) ? ['misuse'] : []);
+            expect(r.alertKinds).toEqual(
+              (MISUSE_CODES as readonly string[]).includes(ev.code) ? ['misuse'] : [],
+            );
             expect(checkMustBlock({ text: r.reply, blocked: verdict }, true).pass).toBe(true);
             if (turn.expect?.must_not_contain) {
               expect(checkMustNotContain(r.reply, turn.expect.must_not_contain).pass).toBe(true);
