@@ -13,6 +13,7 @@ import {
   type Repositories,
   RepositoryError,
 } from '../src/index.js';
+import { REBUILD_PAGE_SIZE } from '../src/repositories/learner.js';
 import { ids, seed, studentId, teacherId } from './isolation-seed.js';
 import {
   createDatabase,
@@ -378,6 +379,59 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       expect(agreed!.mastery[topicB]!.n).toBe(rebuilt.mastery[topicB]!.n);
     },
     15_000,
+  );
+
+  it(
+    // Task 6.2a (6.2 review deferral): rebuildMastery's replay is paged (REBUILD_PAGE_SIZE rows
+    // per query, same transaction/lock). Bulk-insert N = 2 * REBUILD_PAGE_SIZE + 37 evidence_events
+    // rows (deliberately not a multiple of the page size, so the replay spans 3 pages with a
+    // partial last page) for one fresh scope, each with a distinct ts, via one raw SQL
+    // insert ... select ... from generate_series (fast, no per-row JS insert). This bounds
+    // correctness by count across page boundaries, not wall-clock: an off-by-one at a page edge
+    // (a dropped or duplicated row at a cursor boundary) would show up as a wrong n or a wrong p.
+    'rebuildMastery folds a history spanning multiple REBUILD_PAGE_SIZE pages identically to one unbounded fold',
+    async () => {
+      const scope = { studentId: 'stu_rebuild_paged', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${scope.studentId}, 'Paged', 'en', 'test', 'student')`,
+      );
+      const n = 2 * REBUILD_PAGE_SIZE + 37;
+      await handle.db.execute(sql`
+        insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source, weight, ts)
+        select 'ev_paged_' || gs,
+               ${scope.studentId},
+               ${scope.teacherId},
+               ${topicId},
+               (gs % 3 != 0),
+               'practice',
+               1,
+               now() + (gs * interval '1 millisecond')
+        from generate_series(1, ${n}) gs
+      `);
+
+      const rebuilt = await repos.learnerProfiles.rebuildMastery(scope);
+
+      const rows = await handle.db.execute<{ correct: boolean; ts: string | Date }>(
+        sql`select correct, ts from evidence_events
+            where student_id = ${scope.studentId} and teacher_id = ${scope.teacherId}
+            order by ts asc, id asc`,
+      );
+      expect(rows.rows.length).toBe(n);
+      const expected = foldMastery(
+        {},
+        rows.rows.map((r) => ({
+          topicId,
+          correct: r.correct,
+          ts: new Date(r.ts).toISOString(),
+        })),
+      );
+
+      expect(rebuilt.mastery[topicId]!.n).toBe(n);
+      expect(rebuilt.mastery[topicId]!.n).toBe(expected[topicId]!.n);
+      expect(rebuilt.mastery[topicId]!.p).toBeCloseTo(expected[topicId]!.p, 10);
+    },
+    30_000,
   );
 
   it(

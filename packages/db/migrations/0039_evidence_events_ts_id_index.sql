@@ -1,0 +1,10 @@
+-- Task 6.2a (6.2 review deferral; board title also names evidenceEvents.list's ORDER BY ts, id):
+-- an index on evidence_events backing learnerProfilesRepo(db).rebuildMastery's keyset-paged
+-- replay and evidenceEvents.list's export read (both filter by teacher_id/student_id and order
+-- by ts, id). Declared in src/schema/learning.ts so a later `db:generate` stays a no-op (the same
+-- pattern as 0036's teacher_profiles pending index and 0038's eval_runs gate index); built by the
+-- post-migrate step (packages/db/src/migrate.ts's runPostMigrateSteps) with CREATE INDEX
+-- CONCURRENTLY, not by this file: drizzle 0.45 runs every pending migration file in one
+-- transaction, and a plain CREATE INDEX here would hold evidence_events's ACCESS EXCLUSIVE lock
+-- for the build, where CONCURRENTLY outside the transaction only needs it briefly --
+-- evidence_events is a high-write, append-only table.
