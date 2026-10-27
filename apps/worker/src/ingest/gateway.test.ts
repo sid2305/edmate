@@ -24,7 +24,21 @@ describe('createIngestGateway', () => {
     // fails here instead of `undefined` resolving and the `rejects` below passing vacuously.
     expect(gateway.transcriber).toBeDefined();
     await expect(
-      gateway.transcriber!.transcribe({ url: 'https://evil.example/a.mp3', mimeType: 'audio/mpeg' }),
+      gateway.transcriber!.transcribe({
+        url: 'https://evil.example/a.mp3',
+        mimeType: 'audio/mpeg',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("11.4d: still rejects a disallowed host now that the ffmpeg chunker is wired in (chunker itself is covered by Phase A's tests)", async () => {
+    const gateway = await createIngestGateway({
+      EDMATE_OPENAI_API_KEY: FAKE_KEY,
+      S3_ENDPOINT: 'http://minio.internal:9000',
+    });
+    expect(gateway.transcriber).toBeDefined();
+    await expect(
+      gateway.transcriber!.transcribe({ url: 'https://evil.example/a.mp4', mimeType: 'video/mp4' }),
     ).rejects.toThrow();
   });
 
@@ -33,9 +47,7 @@ describe('createIngestGateway', () => {
   });
 
   it('rejects when the key is missing and the mode is explicitly openai', async () => {
-    await expect(
-      createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'openai' }),
-    ).rejects.toThrow();
+    await expect(createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'openai' })).rejects.toThrow();
   });
 
   it('EDMATE_INGEST_EMBEDDINGS=off reads no key and returns no embedder or transcriber', async () => {
