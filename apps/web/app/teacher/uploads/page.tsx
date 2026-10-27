@@ -1,6 +1,7 @@
 // Task 8.2 Phase 4: the teacher's upload centre. Teachers only (`requireRole`; clearance is a
-// student standing, so a teacher always meets it). The server reads only the teacher's module ids;
-// the file list itself is fetched and polled by the client `UploadsView`.
+// student standing, so a teacher always meets it). The server reads only the teacher's modules
+// (id + title, 8.2a Phase C); the file list itself is fetched and polled by the client
+// `UploadsView`.
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import messages from '../../../messages/en.json';
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function UploadsPage() {
   const principal = await requireRole(['teacher']);
-  const moduleIds = await serverDatabase().repos.modules.ids({ teacherId: principal.userId });
+  const modules = await serverDatabase().repos.modules.list({ teacherId: principal.userId });
   const shell = await getTranslations('shell');
   const teacher = await getTranslations('teacher');
   const t = await getTranslations('uploads');
@@ -32,7 +33,7 @@ export default async function UploadsPage() {
       <h1>{t('title')}</h1>
       {/* English-only pilot: only the upload centre's strings go to the client. */}
       <NextIntlClientProvider locale="en" messages={{ uploads: messages.uploads }}>
-        <UploadsView moduleIds={moduleIds} />
+        <UploadsView modules={modules} />
       </NextIntlClientProvider>
     </AppShell>
   );
