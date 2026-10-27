@@ -31,17 +31,22 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // Still no `--webpack` here (unlike `next build --webpack`, package.json / next.config.ts).
-    // 9.4's original blocker (`@edmate/gateway`'s `loadBundledPrices` reading `prices.yaml` via
-    // `import.meta.url`) is gone since fix round 9.4e embeds the prices statically, but 9.4a
-    // Phase D's trial of `next dev --webpack -p <port>` (Next 16.4, webpack dev) still 500s
-    // `/api/health`: webpack's dev compile of `instrumentation.ts` and the health route pulls
-    // `@edmate/queue` -> bullmq in through `src/auth/rate-limit.ts` and fails with
-    // `Module not found: Can't resolve 'crypto'` (bullmq's `bun-redis-client.js`) plus pg-native /
-    // valkey-glide optional-dependency resolutions -- a `next.config.ts` (`serverExternalPackages`)
-    // or `@edmate/queue` matter, out of 9.4a's scope. Turbopack (the default `next dev`) serves
-    // the same routes fine. Tracked in 9.4a's handoff "Left to do"; restore `--webpack` once the
-    // dev compile of those server modules is fixed.
+    // No `--webpack` here, by design (1.7e, Phase B): `apps/web/package.json`'s `build` script
+    // moved to plain `next build` (Turbopack) in 1.7e Phase A, so there's no remaining reason to
+    // run this suite's dev server on webpack for parity with the build -- both now default to
+    // Turbopack. 9.4a's original trial of `next dev --webpack -p <port>` (Next 16.4) 500s
+    // `/api/health`: webpack's dev compile of a target it names `/instrumentation` pulls in
+    // `@edmate/queue` -> `bullmq` (via `src/auth/rate-limit.ts`) and separately `packages/db` ->
+    // `pg`, and fails resolving `crypto`/`fs` inside each (bullmq's `bun-redis-client.js`, pg's
+    // `pg-connection-string`), plus unrelated optional-dependency misses (`pg-native`,
+    // `@valkey/valkey-glide`). 1.7e Phase B re-ran this trial and tried the obvious fix
+    // (`serverExternalPackages` in `next.config.ts`, see that file's comment) but it didn't clear
+    // the crash -- whatever compiles `/instrumentation` doesn't honour that option, unlike the
+    // route/page bundles it already works for (`@edmate/content`). A real fix would touch
+    // `instrumentation.ts` or `src/auth/*`, both out of 1.7e's scope (see
+    // `docs/tasks/1.7e/handoff.md`, Phase B). Turbopack (this line's default `next dev`) serves
+    // `/api/health` and every other route fine; kept as the dev default for that reason, not as a
+    // placeholder for a webpack fix still to come.
     command: 'node_modules/.bin/next dev -p ' + String(PORT),
     url: `${BASE_URL}/api/health`,
     reuseExistingServer: !process.env.CI,

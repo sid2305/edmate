@@ -24,7 +24,7 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     EDMATE_CONTENT_DIR=/app/content \
-    # Fix round (security review of PR #76, task 1.7b): `next build --webpack` bundles
+    # Fix round (security review of PR #76, task 1.7b): `next build` bundles
     # `@edmate/content` into the app's own server chunk and bakes the build machine's own absolute
     # path for the safe-regex worker file into it (see safeRegexGuard.ts). That baked path does not
     # exist here (built in a different directory than this image runs from), so the safe-regex

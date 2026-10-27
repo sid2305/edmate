@@ -20,7 +20,7 @@ const contents = `// GENERATED FILE. Do not edit by hand -- edit prices.yaml and
 //
 // Why generated instead of read at runtime (fix round 9.4e): loadBundledPrices used to do
 // \`readFileSync(new URL('./prices.yaml', import.meta.url))\`, which cannot find the file once
-// webpack bundles this module (\`next build --webpack\`), 503-ing every POST /api/sessions in
+// \`next build\` bundles this module, 503-ing every POST /api/sessions in
 // production. A statically imported TS module is bundler-safe.
 
 /** The raw text of prices.yaml, embedded so loadBundledPrices needs no runtime file read. */
