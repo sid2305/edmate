@@ -8508,15 +8508,36 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: running
+  status: done
   branch: m13/9.4e-chat-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 802
+    tokens_in: 2782
+    tokens_out: 199544
+    cache_read_tokens: 98373702
+    wall_time_seconds: 4875
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 9.4f
   milestone: M13
-  title: '9.4e deferred items and review LOWs: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works (needs next.config.ts or @edmate/queue, not playwright.config.ts); ports.ts reads
-    users.market once per resolve (needs a combined identity method; touches identity/store.ts, ports.ts and the db access fixtures); the listLiveForStudent grid case in repositories.int.test.ts does not depend
-    on CASES order; apiError''s headers param excludes cache-control keys by type and is documented as constant-only; layout.test.tsx keeps type safety on RootLayout''s props; fix the garbled bare-id-exception
-    sentence in packages/db/src/repositories/README.md'
+  title: '9.4e deferred items and review LOWs: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works (needs next.config.ts or @edmate/queue, not playwright.config.ts); ports.ts
+    reads users.market once per resolve (needs a combined identity method; touches identity/store.ts, ports.ts and the db access fixtures); the listLiveForStudent grid case in repositories.int.test.ts does
+    not depend on CASES order; apiError''s headers param excludes cache-control keys by type and is documented as constant-only; layout.test.tsx keeps type safety on RootLayout''s props; fix the garbled
+    bare-id-exception sentence in packages/db/src/repositories/README.md'
   accept: web and db typecheck, lint and test green; each item fixed or given a logged wontfix.
   deps:
   - 9.4e
