@@ -14,6 +14,7 @@ import {
   CLEAN_ADVICE_VERDICT,
   GROUNDED_VERDICT,
   judgeGateway,
+  type MemorySessionStateStore,
   ScriptedGateway,
 } from '@edmate/harness/testing';
 import { describe, expect, it } from 'vitest';
@@ -26,7 +27,13 @@ const STEP_BUDGET_SLACK = 10;
 const say = (text: string) => ({ type: 'text' as const, text });
 const used = {
   type: 'usage' as const,
-  usage: { model: 'claude-haiku-4-5', tier: 'main' as const, inputTokens: 10, outputTokens: 10, costMicroUsd: 1 },
+  usage: {
+    model: 'claude-haiku-4-5',
+    tier: 'main' as const,
+    inputTokens: 10,
+    outputTokens: 10,
+    costMicroUsd: 1,
+  },
 };
 
 /** `n` copies of a predicate entry: route's classifiers run once per turn, so one entry per turn
@@ -40,7 +47,8 @@ function scriptedChatGateway(replies: string[]) {
     {
       generateObject: [
         ...repeat(replies.length, {
-          match: (req: { system: string }) => req.system.includes('thoughts of suicide or self-harm'),
+          match: (req: { system: string }) =>
+            req.system.includes('thoughts of suicide or self-harm'),
           value: { distress: false },
         }),
         ...repeat(replies.length, {
@@ -73,11 +81,17 @@ async function collect(events: AsyncIterable<TurnEvent>): Promise<TurnEvent[]> {
   return out;
 }
 
+/**
+ * `deps.sessionState` is the real `MemorySessionStateStore` built by `buildChatDeps`'s test
+ * composition (never a production store), so the direct cast is enough: no `as unknown as` needed.
+ */
+function savedHelpStates(deps: PipelineDeps): MemorySessionStateStore['saved'] {
+  return (deps.sessionState as MemorySessionStateStore).saved;
+}
+
 /** Reloads the saved help state (3.9a gap, in-test plumbing only). */
 function withHelpStateReload(deps: PipelineDeps): PipelineDeps {
-  const saved = (
-    deps.sessionState as unknown as { saved: { sessionId: string; helpState: unknown }[] }
-  ).saved;
+  const saved = savedHelpStates(deps);
   const inner = deps.turnConfig;
   return {
     ...deps,
@@ -113,81 +127,75 @@ async function runOneTurn(
 }
 
 describe('same-topic turns climb the help ladder and never fall to locked (3.4c)', () => {
-  it(
-    'three same-topic allowed turns: never locked, the saved help rung climbs above 0',
-    async () => {
-      const allowedTurns = [
-        'What is a variable?',
-        'Is a variable a name for a value?',
-        'So is a variable just a name for a value?',
-      ];
-      const lockedTurns = ['Teach me loops please', 'Explain while loops'];
-      const replies = [
-        'A variable is a name that refers to a value.',
-        'Yes, a variable names a value so your program can use it again.',
-        "That's right: a variable is a name for a value.",
-      ];
+  it('three same-topic allowed turns: never locked, the saved help rung climbs above 0', async () => {
+    const allowedTurns = [
+      'What is a variable?',
+      'Is a variable a name for a value?',
+      'So is a variable just a name for a value?',
+    ];
+    const lockedTurns = ['Teach me loops please', 'Explain while loops'];
+    const replies = [
+      'A variable is a name that refers to a value.',
+      'Yes, a variable names a value so your program can use it again.',
+      "That's right: a variable is a name for a value.",
+    ];
 
-      const gateway = scriptedChatGateway(replies);
-      const setup = await buildChatDeps({
-        env: {},
-        market: 'global',
-        packageId: 'free',
-        source: 'teacher_preview',
-        gateway,
-        clock: slackClock(STEP_BUDGET_SLACK),
-      });
-      const deps = withHelpStateReload(setup.deps);
+    const gateway = scriptedChatGateway(replies);
+    const setup = await buildChatDeps({
+      env: {},
+      market: 'global',
+      packageId: 'free',
+      source: 'teacher_preview',
+      gateway,
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
+    const deps = withHelpStateReload(setup.deps);
 
-      let sawRungAboveZero = false;
-      for (const text of allowedTurns) {
-        const { events, result } = await runOneTurn(deps, setup, text);
-        // On failure, print the error event (code, retryable) and the trace's step outcomes (3.9b).
-        expect(
-          events.filter((e) => e.type === 'error'),
-          JSON.stringify(result.trace?.steps),
-        ).toEqual([]);
-        expect(events.some((e) => e.type === 'locked')).toBe(false);
-        expect(result.trace?.move).not.toBe('locked');
-        expect(events.at(-1)?.type).toBe('done');
-        const rung = events.find((e) => e.type === 'hint_rung');
-        if (rung !== undefined && rung.type === 'hint_rung' && rung.rung > 0) {
-          sawRungAboveZero = true;
-        }
+    let sawRungAboveZero = false;
+    for (const text of allowedTurns) {
+      const { events, result } = await runOneTurn(deps, setup, text);
+      // On failure, print the error event (code, retryable) and the trace's step outcomes (3.9b).
+      expect(
+        events.filter((e) => e.type === 'error'),
+        JSON.stringify(result.trace?.steps),
+      ).toEqual([]);
+      expect(events.some((e) => e.type === 'locked')).toBe(false);
+      expect(result.trace?.move).not.toBe('locked');
+      expect(events.at(-1)?.type).toBe('done');
+      const rung = events.find((e) => e.type === 'hint_rung');
+      if (rung !== undefined && rung.type === 'hint_rung' && rung.rung > 0) {
+        sawRungAboveZero = true;
       }
-      const saved = (
-        deps.sessionState as unknown as { saved: { sessionId: string; helpState: unknown }[] }
-      ).saved;
-      const last = saved.at(-1);
-      expect(last).toBeDefined();
-      const lastHelpState = last?.helpState as { rung?: number } | undefined;
-      expect((lastHelpState?.rung ?? 0) > 0 || sawRungAboveZero).toBe(true);
+    }
+    const saved = savedHelpStates(deps);
+    const last = saved.at(-1);
+    expect(last).toBeDefined();
+    const lastHelpState = last?.helpState as { rung?: number } | undefined;
+    expect((lastHelpState?.rung ?? 0) > 0 || sawRungAboveZero).toBe(true);
 
-      // Locked content still returns locked, even with an allowed-topic history behind it.
-      const lockedGateway = scriptedChatGateway([...replies, 'placeholder', 'placeholder']);
-      const lockedSetup = await buildChatDeps({
-        env: {},
-        market: 'global',
-        packageId: 'free',
-        source: 'teacher_preview',
-        gateway: lockedGateway,
-        clock: slackClock(STEP_BUDGET_SLACK),
-      });
-      const lockedDeps = withHelpStateReload(lockedSetup.deps);
-      for (const text of allowedTurns) {
-        await runOneTurn(lockedDeps, lockedSetup, text);
-      }
-      for (const text of lockedTurns) {
-        const { events, result } = await runOneTurn(lockedDeps, lockedSetup, text);
-        expect(
-          events.filter((e) => e.type === 'error'),
-          JSON.stringify(result.trace?.steps),
-        ).toEqual([]);
-        expect(events.some((e) => e.type === 'locked')).toBe(true);
-        expect(result.trace?.move).toBe('locked');
-        expect(events.at(-1)?.type).toBe('done');
-      }
-    },
-    20000,
-  );
+    // Locked content still returns locked, even with an allowed-topic history behind it.
+    const lockedGateway = scriptedChatGateway([...replies, 'placeholder', 'placeholder']);
+    const lockedSetup = await buildChatDeps({
+      env: {},
+      market: 'global',
+      packageId: 'free',
+      source: 'teacher_preview',
+      gateway: lockedGateway,
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
+    const lockedDeps = withHelpStateReload(lockedSetup.deps);
+    for (const text of allowedTurns) {
+      await runOneTurn(lockedDeps, lockedSetup, text);
+    }
+    for (const text of lockedTurns) {
+      const { events, result } = await runOneTurn(lockedDeps, lockedSetup, text);
+      expect(
+        events.filter((e) => e.type === 'error'),
+        JSON.stringify(result.trace?.steps),
+      ).toEqual([]);
+      expect(events.some((e) => e.type === 'locked')).toBe(true);
+      expect(result.trace?.move).toBe('locked');
+      expect(events.at(-1)?.type).toBe('done');
+    }
+  }, 20000);
 });
