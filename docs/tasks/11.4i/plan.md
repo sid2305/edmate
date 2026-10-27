@@ -110,7 +110,7 @@ edit, per the house TDD convention:
 4. `RecordingUpload.test.tsx` (30 MB mp4 now succeeds) — red until `RecordingUpload.tsx` drops the
    `needsSmallerFile` check.
 
-## Budget re-check (15-minute searchable budget for a long video)
+## 15-minute searchable time re-check (long video)
 Written reasoning, carried into the handoff verbatim (no code change required by this section
 alone):
 - **What changes.** Raising `audio/mp4`/`video/mp4`/`video/webm`'s cap from 24 MB to 500 MB lets a

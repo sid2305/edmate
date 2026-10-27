@@ -33,10 +33,12 @@ function setup(over: Partial<RecordingUploadProps> = {}) {
     calls.push('create');
     return { ok: true, value: TICKET };
   });
-  const putFile = vi.fn(async (_u: string, _h: Record<string, string>, _f: File, p: (n: number) => void) => {
-    calls.push('put');
-    p(50);
-  });
+  const putFile = vi.fn(
+    async (_u: string, _h: Record<string, string>, _f: File, p: (n: number) => void) => {
+      calls.push('put');
+      p(50);
+    },
+  );
   const completeDocument = vi.fn(
     async (): Promise<ApiResult<{ documentId: string; status: string }>> => {
       calls.push('complete');
@@ -94,9 +96,13 @@ describe('RecordingUpload', () => {
       sourceTitle: 'Live class: Ratios review, 2026-10-20',
       status: 'processing',
     });
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/recording is uploaded/));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(/recording is uploaded/),
+    );
     // Reset after success: both boxes cleared, so submit is disabled again.
-    expect(screen.getByLabelText('I confirm I hold the rights to upload this material.')).not.toBeChecked();
+    expect(
+      screen.getByLabelText('I confirm I hold the rights to upload this material.'),
+    ).not.toBeChecked();
     expect(submit()).toBeDisabled();
   });
 
@@ -108,7 +114,9 @@ describe('RecordingUpload', () => {
     });
     fireEvent.click(submit());
     await waitFor(() => expect(createDocument).toHaveBeenCalled());
-    expect(createDocument).toHaveBeenCalledWith(expect.objectContaining({ sourceTitle: 'Week 3 class' }));
+    expect(createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceTitle: 'Week 3 class' }),
+    );
   });
 
   it('refuses an empty title without calling the server', () => {
@@ -139,15 +147,21 @@ describe('RecordingUpload', () => {
 
   it('shows the consent hint about removing students’ names', () => {
     setup();
-    expect(screen.getByText("Best: upload your own transcript with students' names removed.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Best: upload your own transcript with students' names removed."),
+    ).toBeInTheDocument();
   });
 
-  it('a 30 MB .mp4 shows the 24 MB message and makes no create call', () => {
-    const { createDocument } = setup();
+  it('a 30 MB .mp4 completes create, put and complete (11.4i: no client-side size refusal)', async () => {
+    const { calls, createDocument, completeDocument } = setup();
     fill(file('class.mp4', 'video/mp4', 30 * 1024 * 1024));
     fireEvent.click(submit());
-    expect(screen.getByRole('alert')).toHaveTextContent(/over 24 MB can't be transcribed yet/);
-    expect(createDocument).not.toHaveBeenCalled();
+    await waitFor(() => expect(completeDocument).toHaveBeenCalled());
+    expect(calls).toEqual(['create', 'put', 'complete']);
+    expect(createDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ contentType: 'video/mp4', byteSize: 30 * 1024 * 1024 }),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('refuses a non-recording file type without calling the server', () => {
@@ -160,11 +174,16 @@ describe('RecordingUpload', () => {
 
   it('a malformed 200 create reply shows an error, clears busy and resets the form', async () => {
     const { putFile } = setup({
-      createDocument: vi.fn(async () => ({ ok: true as const, value: { nope: 1 } as unknown as UploadTicket })),
+      createDocument: vi.fn(async () => ({
+        ok: true as const,
+        value: { nope: 1 } as unknown as UploadTicket,
+      })),
     });
     fill();
     fireEvent.click(submit());
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'),
+    );
     expect(putFile).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Recording or transcript')).toBeEnabled();
     expect(screen.getByLabelText(/Everyone heard/)).not.toBeChecked();
@@ -175,7 +194,9 @@ describe('RecordingUpload', () => {
     setup({ createDocument: vi.fn(async () => Promise.reject(new Error('bad json'))) });
     fill();
     fireEvent.click(submit());
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'),
+    );
     expect(screen.getByLabelText('Module')).toBeEnabled();
   });
 
@@ -185,7 +206,9 @@ describe('RecordingUpload', () => {
     });
     fill();
     fireEvent.click(submit());
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/class or module was not found/));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/class or module was not found/),
+    );
     expect(putFile).not.toHaveBeenCalled();
     expect(onRecording).not.toHaveBeenCalled();
     expect(submit()).toBeDisabled();
@@ -211,7 +234,9 @@ describe('RecordingUpload', () => {
     });
     fill();
     fireEvent.click(submit());
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/upload didn't finish/));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/upload didn't finish/),
+    );
     expect(completeDocument).not.toHaveBeenCalled();
     expect(onRecording).toHaveBeenCalledTimes(2);
     expect(onRecording).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed' }));
@@ -220,11 +245,17 @@ describe('RecordingUpload', () => {
 
   it('a refused complete shows an error and reports the row as failed', async () => {
     const { onRecording } = setup({
-      completeDocument: vi.fn(async () => ({ ok: false as const, status: 500, code: 'enqueue_failed' })),
+      completeDocument: vi.fn(async () => ({
+        ok: false as const,
+        status: 500,
+        code: 'enqueue_failed',
+      })),
     });
     fill();
     fireEvent.click(submit());
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'),
+    );
     expect(onRecording).toHaveBeenCalledTimes(2);
     expect(onRecording).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed' }));
   });

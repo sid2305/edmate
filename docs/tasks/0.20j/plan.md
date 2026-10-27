@@ -150,3 +150,9 @@ typecheck/lint/test are green for `@edmate/web` and `@edmate/content`. Status: P
 ~55 tool calls, or if Question 2's fallback probe still doesn't localise the warning, or if 0.20h
 has not actually merged by the time this starts (its branch/handoff needed for the exact
 WARM_UP_TIMEOUT_MS comment text and current global-setup.ts state).
+
+## Lead answers (27 Oct 2026)
+- Q1: Yes. Try the doc's literal if/else `require` shape first, and check the dev server log for the node:worker_threads warning before writing tests or doing any 5x run.
+- Q2: Yes. If the warning survives, make one more targeted probe, then stop with Status: BLOCKED and the finding.
+- Q3: actionTimeout 10_000 ms, set before any long Playwright run.
+- 0.20h has merged (or will before this build starts); its branch is cut from main after that merge. Read the merged docs/tasks/0.20h/handoff.md and the e2e files on main.

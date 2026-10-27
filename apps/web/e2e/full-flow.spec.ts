@@ -95,7 +95,18 @@ test('full flow: discover -> subscribe (free) -> learn -> locked -> upgrade -> u
       { studentId, teacherId: DEMO_TEACHER },
       { agentId: DEMO_AGENT, text: UNCOVERED_QUESTION_TEXT, similarIds: [] },
     );
+    // 0.20h finding: a persistent local dev database can hold a `demo-teacher` row seeded long
+    // before `seed.ts` set `displayName: 'Demo Teacher'` -- `seed.js`'s insert is
+    // `ON CONFLICT (id) DO NOTHING` (global-setup.ts's own comment), so re-seeding never updates
+    // an already-seeded teacher, and `discovery.search`'s `displayName` falls back to the raw
+    // `slug` ('demo-teacher') whenever the column is still null. Reading the name this run's
+    // database actually has -- instead of hardcoding the seed's intended 'Demo Teacher' -- keeps
+    // this step working against both a fresh CI database and an old local one, without writing
+    // to a row this test did not create.
+    const demoTeacher = await repos.discovery.teacherBySlug({ slug: DEMO_TEACHER });
     await close();
+    if (demoTeacher === null) throw new Error('full-flow: demo-teacher is missing or unverified');
+    const demoTeacherName = demoTeacher.displayName;
 
     await mockTurns(studentPage, [
       sseBody([{ type: 'token', text: 'Hello! Ready to learn.' }, DONE('msg-full-flow-normal')]),
@@ -123,19 +134,19 @@ test('full flow: discover -> subscribe (free) -> learn -> locked -> upgrade -> u
       const searchButton = studentPage.getByRole('button', { name: 'Search' });
       await navigateUntil(studentPage, /\/teachers\?q=Python$/, async () => {
         const button = await searchButton.elementHandle();
-        await searchBox.evaluate(
-          (input, submit) => {
-            if (!(input instanceof HTMLInputElement) || !(submit instanceof HTMLButtonElement)) return;
-            input.value = 'Python';
-            input.form?.requestSubmit(submit);
-          },
-          button,
-        );
+        await searchBox.evaluate((input, submit) => {
+          if (!(input instanceof HTMLInputElement) || !(submit instanceof HTMLButtonElement))
+            return;
+          input.value = 'Python';
+          input.form?.requestSubmit(submit);
+        }, button);
       });
       await navigateUntil(studentPage, /\/teachers\/demo-teacher$/, () =>
-        studentPage.getByRole('link', { name: 'Demo Teacher' }).click(),
+        studentPage.getByRole('link', { name: demoTeacherName }).click(),
       );
-      await expect(studentPage.getByRole('heading', { level: 1, name: 'Demo Teacher' })).toBeVisible({
+      await expect(
+        studentPage.getByRole('heading', { level: 1, name: demoTeacherName }),
+      ).toBeVisible({
         timeout: STEP_TIMEOUT,
       });
       await navigateUntil(studentPage, /\/packages\/demo-agent$/, () =>
@@ -198,7 +209,9 @@ test('full flow: discover -> subscribe (free) -> learn -> locked -> upgrade -> u
     });
 
     await test.step('an uncovered question is sent to the teacher', async () => {
-      const notice = studentPage.getByText("Sent to your teacher. They'll answer in a live class or here.");
+      const notice = studentPage.getByText(
+        "Sent to your teacher. They'll answer in a live class or here.",
+      );
       await sendMessage(studentPage, UNCOVERED_QUESTION_TEXT);
       await expect(notice).toBeVisible({ timeout: STEP_TIMEOUT });
     });
