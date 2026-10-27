@@ -10,6 +10,53 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 26 Oct 2026 · 7.2l budget overrun · decided by lead · risk: low
+- Decided: accept 105 tool calls against a plan budget of 25.
+- Why: most of the extra calls polled a backgrounded gate run, which the brief forbids. The diff is small and both reviewers checked every pattern alternative before and after. The next harness briefs repeat the foreground-only rule.
+
+---
+
+### 26 Oct 2026 · 7.2l merge of the moderation guard changes · decided by lead · risk: high
+- Decided: merge the packages/harness/src/guardrails changes. The Devanagari past and habitual forms of the weapons-conceal and vapes-sell rules stay fail-closed (they block without an intent marker). The alternatives are reordered longest-first, and MISUSE_CODES is frozen.
+- Why: the pilot is English-only, and Devanagari is a safety-net table, as in 7.2j and 7.2k. A false block on a factual Hindi sentence is a smaller harm than a miss. code-reviewer and typescript-reviewer confirmed that every pattern matches the same set and that no behaviour changed beyond the new test.
+
+---
+
+### 26 Oct 2026 · 8.7i no new v8 ignore for RunShape.createdAt · decided by builder · risk: low
+- Decided: did not add a `/* v8 ignore next */` comment for the new `createdAt: z.date()` field,
+  despite the plan's wording suggesting one.
+- Why: `stored()`'s single `if (!r.success) throw` branch is shared across every `RunShape`
+  field and is already reachable (and covered by the existing "a corrupted stored row is
+  integrity" test) via other fields; there is no separate, newly-unreachable branch tied to
+  `createdAt` alone for v8 to flag. Confirmed by re-running coverage before/after: `publish.ts`
+  stayed at 100/98.82/100/100 with the same single uncovered line (shifted by the comment reword),
+  so no ignore was needed to keep the gate green.
+
+---
+
+### 26 Oct 2026 · 8.7i risk: high — publish.ts/README.md are risk paths · decided by builder · risk: high
+- Decided: this PR touches `packages/db/src/repositories/publish.ts` and
+  `packages/db/src/repositories/README.md`, both matched by
+  `.claude/skills/merge-gate/risk-paths.txt`'s `packages/db/src/repositories/**` glob; required
+  reviewer is security-reviewer (per the plan's "Risk paths touched" section).
+- Why: non-negotiable 6 — risky paths need a named reviewer and a logged `risk: high` decision at
+  merge, even for a comment-reword + defensive-validation change with no behaviour change on
+  reachable inputs.
+
+---
+
+### 26 Oct 2026 · 8.7i budget overrun · decided by lead · risk: low
+- Decided: accept 51 tool calls against a plan budget of 40.
+- Why: the builder also ran the dependents gate (--filter=...@edmate/db) against the shared dev database. The diff is small and both reviewers approved it with no findings.
+
+---
+
+### 26 Oct 2026 · 8.7i merge of publish.ts and the repositories README · decided by lead · risk: high
+- Decided: merge the packages/db/src/repositories/publish.ts change (RunShape validates createdAt; comment rewording) and the README note.
+- Why: security-reviewer and code-reviewer approved with no findings. No query, scope filter or migration changed.
+
+---
+
 ### 26 Oct 2026 · board: duplicate 13.4e id renamed to 13.4f · decided by lead · risk: low
 - Decided: the board entry for the 13.4d review MEDIUMs (account export dedupe and cap; zod-parse grantedBy) is now 13.4f. 13.4e stays the 13.4b payment-dispute hold, which this log already names. docs/tasks/13.4d/review.md now cites `deferred 13.4f`.
 - Why: board.py resolves an id to its first match, so the second 13.4e could never be set done. The 13.4e this log already names keeps its id.
