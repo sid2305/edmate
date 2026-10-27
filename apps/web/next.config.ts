@@ -1,15 +1,21 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 import type { NextConfig } from 'next';
 
-// `next build` runs with `--webpack` (package.json), not Turbopack. 1.7 fix round 1 traced
-// Turbopack's failure here to the same root cause webpack had (1.7b): `safeRegexGuard.ts`'s
-// `new URL(<literal>, import.meta.url)` worker-path expression, which both bundlers' "URL asset"
-// convention misparses. 1.7b removed that expression (now a plain string path, built with
-// `fileURLToPath` + `path.join`), which fixed `next build --webpack`. A `next build` trial after
-// that fix (no `--webpack`) still fails, but for a different reason now: Turbopack's build-time
-// page-data collection still somehow reaches apps/web/vitest.config.ts -> this workspace's own
-// Vite -> lightningcss's native addon, which Turbopack can't place in an ESM chunk. Kept on
-// `--webpack` for 1.7b (lead's call); a second look at Turbopack is a follow-up task, not this one.
+// `next build` runs with Turbopack (package.json's `build` script, no `--webpack`) as of 1.7e.
+// 1.7 fix round 1 traced Turbopack's original build failure to the same root cause webpack had
+// (1.7b): `safeRegexGuard.ts`'s `new URL(<literal>, import.meta.url)` worker-path expression,
+// which both bundlers' "URL asset" convention misparses. 1.7b removed that expression (now a
+// plain string path, built with `fileURLToPath` + `path.join`), which fixed `next build --webpack`.
+// A `next build` trial after that fix (no `--webpack`) still failed at the time with a *different*
+// error: Turbopack's build-time page-data collection reaching apps/web/vitest.config.ts -> this
+// workspace's own Vite -> lightningcss's native addon, which Turbopack couldn't place in an ESM
+// chunk. 1.7b kept `--webpack` for that reason (lead's call). 1.7e re-ran the same `next build`
+// (no `--webpack`) against today's `main` (Next 16.4.2) and that lightningcss/vitest.config.ts
+// error no longer reproduces -- the build compiles and finishes cleanly (only pre-existing Edge
+// Runtime "Node.js API used" warnings, same ones `--webpack` also prints, not build failures). No
+// narrow fix was needed; the underlying Next.js/Turbopack bug this plan expected to work around
+// appears to have already been fixed upstream between 1.7b and today. `build` now runs plain
+// `next build` (Turbopack); `build-smoke` passed against that output (1.7e handoff).
 //
 // Fix round (security review of PR #76): removing the `new URL(...)` asset-URL shape stopped
 // webpack from copying only the worker file's bytes, but webpack still *bundles* `@edmate/content`
