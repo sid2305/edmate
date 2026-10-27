@@ -50,6 +50,18 @@ already allowed this; the worker's alert pipeline is already generic over `level
   commands" section fails. Both are test-only changes with no behaviour change beyond what the
   plan and its lead amendment already decided.
 
+### 26 Oct 2026 · 7.2m budget overrun · decided by lead · risk: low
+- Decided: accept 87 tool calls against a plan budget of 45.
+- Why: the diff matches the plan and its amendment, it needed two test files outside the plan's list, and the full harness-dependents gate is slow; all three reviewers approved with no blocking finding.
+
+### 26 Oct 2026 · 7.2m review LOWs deferred · decided by lead · risk: low
+- Decided: defer to board task 7.2n: packages/evals/src/moderationJailbreak.test.ts keeps its own copy of MISUSE_CODES instead of importing it from packages/harness/src/guardrails/moderationIn.ts (typescript-reviewer), and packages/queue/src/alertSink.ts escalates a critical alert on the same timer as a level 'alert' one (silent-failure-hunter, pre-existing).
+- Why: neither blocks the alert from reaching staff; MVP first.
+
+### 26 Oct 2026 · 7.2m merge · decided by lead · risk: high
+- Decided: merge 7.2m. Moderation blocks for harm_to_others, threat and weapons now raise a misuse alert at level critical (the human's B-50 answer, with the lead's amendment that harm_to_others counts as a threat to hurt others); refusal replies are unchanged; two English near-miss eval cases stay alert-free.
+- Why: packages/harness/src/guardrails/** and evals/suites/safety/** are risky paths (reviewers: code-reviewer); code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+
 ## Gate
 - `pnpm --filter @edmate/harness exec vitest run` → 127 files / 5643 tests passed.
 - `pnpm turbo run typecheck lint test --filter=...@edmate/worker` → 11/11 tasks successful.
@@ -72,4 +84,4 @@ already allowed this; the worker's alert pipeline is already generic over `level
 `code-reviewer` is required pre-pilot-gate per the plan's own risk-paths reading).
 
 ## Budget
-Tool calls used: 44
+Tool calls used: 87 (harness count; the builder reported 44)
