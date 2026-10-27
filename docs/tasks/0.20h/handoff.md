@@ -105,6 +105,6 @@ of unbounded and sequential.
 
 ## Budget
 
-Tool calls used: approximately 95 (this session picked up mid-task after a context compaction;
+Tool calls used: 169 (harness count; the builder estimated about 95) (this session picked up mid-task after a context compaction;
 count includes the prior session's investigation work, carried over in the summary this session
 resumed from).
