@@ -13,6 +13,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { z } from 'zod';
 import type { ClientTurn } from '../turn/clientInput';
 import { Composer } from './Composer';
+import { EndSessionButton } from './EndSessionButton';
 import { HintButton } from './HintButton';
 import { LockedNotice } from './LockedNotice';
 import { MessageBubble, type MessageRole } from './MessageBubble';
@@ -389,6 +390,7 @@ export function ChatView({
         disabled={streaming}
         onHint={() => submit({ kind: 'hint_request' }, t('hintAsked'))}
       />
+      <EndSessionButton agentId={agentId} sessionId={reportSessionId} />
       {activeSkill === 'mock_interview' ? (
         <MockInterviewControls
           disabled={streaming}

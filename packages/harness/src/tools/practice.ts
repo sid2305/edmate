@@ -186,6 +186,13 @@ export function practiceNextItemTool(
     if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
     return generatedAnswerKeyFor(itemId);
   };
+  // 6.4a fix round 1: a generated item's own `topicId` is always `<moduleId>:practice`, a
+  // harness-internal label the student never sees — not a real topic row the teacher owns. Only
+  // the bank's own `topicId` (a real topic, EvidenceEventSchema's `id()` shape) is usable here;
+  // a generated item gets no topicId at all, so evidenceFor (runner.ts) skips emitting for it.
+  const topicIdFor = (itemId: string, scope: PracticeScope): string | undefined => {
+    return bank.itemFor(itemId, scope)?.topicId;
+  };
   // 5.6b: the active item, rebuilt inside the turn's entitlement: the bank first, then the
   // generator (its prompt and key recomputed from the id). Outside scope: undefined.
   const activeItem = (itemId: string, ctx: TurnContext): ItemContext | undefined => {
@@ -234,7 +241,14 @@ export function practiceNextItemTool(
         ...new Set([...(opts.heldKeys ?? []), ...(opts.issuedKeys ?? []), ...answerKey]),
       ];
       if (JSON.stringify(union).length > PRACTICE_KEYS_MAX_JSON) return undefined;
-      return { itemId, moduleId, answerKey: [...answerKey], shown: shownText(parsed.data) };
+      const topicId = topicIdFor(itemId, scope);
+      return {
+        itemId,
+        moduleId,
+        ...(topicId === undefined ? {} : { topicId }),
+        answerKey: [...answerKey],
+        shown: shownText(parsed.data),
+      };
     },
   };
 }
