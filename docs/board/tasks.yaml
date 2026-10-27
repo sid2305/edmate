@@ -8358,8 +8358,9 @@ tasks:
   deps:
   - 11.4b
   risk: high
-  status: planning
-  branch: null
+  status: running
+  branch: m13/11.4d-ffmpeg-chunker
+  model: plan:sonnet
 - id: 8.2n
   milestone: M13
   title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words;
@@ -10805,6 +10806,17 @@ tasks:
   deps:
   - 8.2a
   risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 11.4i
+  milestone: M13
+  title: 'After 11.4d: lift apps/web''s 24 MB cap (MAX_UNSPLIT_MEDIA_BYTES) for audio/mp4, video/mp4 and video/webm now that the worker chunks them with ffmpeg; re-check the 15-minute searchable budget
+    for a long video; a human builds the worker image once and records whether its ffmpeg is a GPL or LGPL build (swap to the ADR''s LGPL-only fallback if needed)'
+  accept: a teacher can upload an MP4, WebM or M4A over 24 MB and it becomes searchable; the ffmpeg build's licence is recorded in the handoff; web tests green.
+  deps:
+  - 11.4d
+  risk: low
   status: todo
   branch: null
   model: null
