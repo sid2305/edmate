@@ -23,16 +23,12 @@ describe('driver errors are scrubbed', () => {
   });
 
   it('sessions.listForStudent', async () => {
-    const err = await repos.sessions
-      .listForStudent(scope, { limit: 10 })
-      .catch((e: unknown) => e);
+    const err = await repos.sessions.listForStudent(scope, { limit: 10 }).catch((e: unknown) => e);
     expectScrubbed(err, 'sessions.listForStudent', SECRETS);
   });
 
   it('messages.listForStudent', async () => {
-    const err = await repos.messages
-      .listForStudent(scope, { limit: 10 })
-      .catch((e: unknown) => e);
+    const err = await repos.messages.listForStudent(scope, { limit: 10 }).catch((e: unknown) => e);
     expectScrubbed(err, 'messages.listForStudent', SECRETS);
   });
 
@@ -73,10 +69,22 @@ describe('driver errors are scrubbed', () => {
             packageVersionId: 'pv_leak_1',
           }),
       ],
-      ['subscriptions.pause', () => repos.subscriptions.pause(scope, { subscriptionId: 'sub_leak_1' })],
-      ['subscriptions.resume', () => repos.subscriptions.resume(scope, { subscriptionId: 'sub_leak_1' })],
-      ['subscriptions.cancel', () => repos.subscriptions.cancel(scope, { subscriptionId: 'sub_leak_1' })],
-      ['packageVersions.liveForAgent', () => repos.packageVersions.liveForAgent({ agentId: 'agt_x' })],
+      [
+        'subscriptions.pause',
+        () => repos.subscriptions.pause(scope, { subscriptionId: 'sub_leak_1' }),
+      ],
+      [
+        'subscriptions.resume',
+        () => repos.subscriptions.resume(scope, { subscriptionId: 'sub_leak_1' }),
+      ],
+      [
+        'subscriptions.cancel',
+        () => repos.subscriptions.cancel(scope, { subscriptionId: 'sub_leak_1' }),
+      ],
+      [
+        'packageVersions.liveForAgent',
+        () => repos.packageVersions.liveForAgent({ agentId: 'agt_x' }),
+      ],
       ['discovery.search', () => repos.discovery.search({ q: 'private words here' })],
       ['discovery.teacherBySlug', () => repos.discovery.teacherBySlug({ slug: 'tch-leak-9' })],
       ['sessions.get', () => repos.sessions.get(scope, 'ses_leak_3')],
@@ -140,10 +148,7 @@ describe('driver errors are scrubbed', () => {
           }),
       ],
       ['publish.latestRun', () => repos.publish.latestRun(tscope)],
-      [
-        'publish.changedSinceLastPublish',
-        () => repos.publish.changedSinceLastPublish(tscope),
-      ],
+      ['publish.changedSinceLastPublish', () => repos.publish.changedSinceLastPublish(tscope)],
       ['publish.failedCases', () => repos.publish.failedCases(tscope, 'run_leak_1')],
       ['publish.publicScorecard', () => repos.publish.publicScorecard({ agentId: 'agt_leak_1' })],
       [
@@ -187,6 +192,17 @@ describe('driver errors are scrubbed', () => {
     for (const [method, call] of calls) {
       expectScrubbed(await call().catch((e: unknown) => e), method, secrets);
     }
+  });
+
+  it('teacherProfiles.listPendingForStaff: a driver error never carries the staff id (task 12.1c)', async () => {
+    // The pool is unreachable, so the first query (the role check) always fails before the
+    // users-joined teacher_profiles read runs -- the same structural argument 12.1a's review
+    // accepted for the other staff-only reads above.
+    const secrets = [...SECRETS, 'stf_leak_13'];
+    const err = await repos.teacherProfiles
+      .listPendingForStaff('stf_leak_13')
+      .catch((e: unknown) => e);
+    expectScrubbed(err, 'teacherProfiles.listPendingForStaff', secrets);
   });
 
   it('safetyAlerts: a driver error never carries the excerpt or the note (task 12.5a)', async () => {

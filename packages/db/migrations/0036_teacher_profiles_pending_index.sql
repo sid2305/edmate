@@ -1,0 +1,8 @@
+-- Task 12.1c (12.1a review follow-up): a partial index on pending teacher profiles,
+-- (created_at, id), for the staff queue's keyset-paging order (listPendingForStaff). Declared in
+-- src/schema/users.ts so a later `db:generate` stays a no-op (the same pattern as 0010's
+-- open-session index, task 3.16c); built by the post-migrate step (packages/db/src/migrate.ts's
+-- runPostMigrateSteps) with CREATE INDEX CONCURRENTLY, not by this file: drizzle 0.45 runs every
+-- pending migration file in one transaction, and a plain CREATE INDEX here would hold the table's
+-- ACCESS EXCLUSIVE lock for the build, where CONCURRENTLY outside the transaction only needs it
+-- briefly.

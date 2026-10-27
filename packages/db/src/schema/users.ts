@@ -62,7 +62,9 @@ export const teacherProfiles = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    verificationStatus: teacherVerificationStatus('verification_status').notNull().default('pending'),
+    verificationStatus: teacherVerificationStatus('verification_status')
+      .notNull()
+      .default('pending'),
     payoutAccountRef: text('payout_account_ref'),
     /**
      * Task 9.2: free-text search over subject (weight A) and bio (weight B), 'simple' config (no
@@ -80,6 +82,14 @@ export const teacherProfiles = pgTable(
     uniqueIndex('teacher_profiles_slug_key').on(t.slug),
     index('teacher_profiles_search_idx').using('gin', t.search),
     index('teacher_profiles_languages_idx').using('gin', t.languages),
+    // Task 12.1c (12.1a review follow-up): listPendingForStaff's `verification_status = 'pending'`
+    // filter plus its (created_at, id) keyset order, in one partial index. Declared here so
+    // `db:generate` stays a no-op; built by the post-migrate step (packages/db/src/migrate.ts) with
+    // CREATE INDEX CONCURRENTLY, not by migration 0036's SQL (same pattern as learning.ts's
+    // sessions_open_teacher_id_student_id_idx).
+    index('teacher_profiles_pending_created_at_id_idx')
+      .on(t.createdAt, t.id)
+      .where(sql`${t.verificationStatus} = 'pending'`),
   ],
 );
 
