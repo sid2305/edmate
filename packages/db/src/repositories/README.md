@@ -464,10 +464,12 @@ every run is selected by id AND `teacher_id`.
 
 - `startRun(scope, pins)` takes a per-teacher advisory lock, checks the teacher is verified
   (`FOR SHARE`, else `scope`), locks the agent `FOR UPDATE`, refuses a suspended agent, an open run
-  (unless stale: no progress for its deadline plus 15 minutes, then it is closed as `error`), no
-  packages, or nothing changed since the last published run. It cuts agent version N+1 and inserts
-  a `queued` run whose `basis` snapshots the pins, material revision and each package's newest
-  version. Refusals are `PublishRefusedError` with a `reason`.
+  (unless stale: not marked running again for its deadline plus 15 minutes, then it is closed as
+  `error` — only `startRun`/`markRunning` ever update the run's `updated_at` while it is open, so
+  "stale" is since markRunning, not since the last `recordResults`), no packages, or nothing
+  changed since the last published run. It cuts agent version N+1 and inserts a `queued` run whose
+  `basis` snapshots the pins, material revision and each package's newest version. Refusals are
+  `PublishRefusedError` with a `reason`.
 - `markRunning`, `recordResults` (idempotent per case, at most `GATE_RESULTS_MAX`), `finishRun`
   (`failed` or `error`) move a run along.
 - `goLive(scope, input)` runs in one transaction: verified check `FOR SHARE`, run `FOR UPDATE`
@@ -477,6 +479,11 @@ every run is selected by id AND `teacher_id`.
 - `latestRun`, `getRun`, `failedCases` (at most `FAILED_CASES_MAX`) are teacher-scoped reads.
 - `publicScorecard({ agentId })` is public: it returns null unless the agent is live and its
   teacher verified, and carries each category forward from the newest passed run that measured it.
+
+Migration 0021 added `eval_runs`' FK and partial index as plain (non-`NOT VALID`/`CONCURRENTLY`)
+steps, which was fine on an empty column at the time; any later migration against a populated
+`eval_runs` (e.g. a `(teacher_id, created_at)` index, if runs ever grow past pilot scale) must add
+its constraint `NOT VALID` and its index `CONCURRENTLY`, same as the other tables' rule above.
 
 ## Live classes (task 11.1a, edit/cancel 11.1d)
 
