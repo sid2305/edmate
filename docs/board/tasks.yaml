@@ -3391,7 +3391,9 @@ tasks:
   deps:
   - 6.5a
   risk: medium
-  status: todo
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/6.5c-evidence-fold
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
