@@ -11038,7 +11038,7 @@ tasks:
 - id: 0.20h
   milestone: M13
   title: 'local e2e failures found by 0.20g (pass in CI): full-flow.spec.ts "discover: search, open the teacher page, choose a package" times out in 10 of 10 fresh local runs, and teacher-packages-walkthrough.spec.ts
-    "create the first/second package from preset" fails in 6 of 10; find out whether the cause is local data left in the dev database or a real bug, and fix the test setup or the code'
+    "create the first/second package from preset" fails in 6 of 10; find out whether the cause is local data left in the dev database or a real bug, and fix the test setup or the code; also (0.20g review MEDIUM/LOW) give each warm-up fetch in apps/web/e2e/global-setup.ts an AbortSignal.timeout so a hung route cannot stall globalSetup, and run the two warm-ups with Promise.all'
   accept: the cause is written in the handoff; both specs pass 5 fresh local runs in a row, and CI e2e stays green.
   deps:
   - 0.20g
