@@ -45,6 +45,10 @@ const OUTPUT_BYTE_RATE = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE;
 const HEADER_SLACK_BYTES = 4_096;
 
 const DEFAULT_TIMEOUT_MS = 10 * 60_000;
+/** How often, while ffmpeg runs, the running total of piece bytes already on disk is checked
+ * against `maxOutputBytes` -- so a decompression-bomb shape is caught while ffmpeg is still
+ * writing, not only after it exits. */
+const DEFAULT_OUTPUT_WATCH_MS = 500;
 const UNREADABLE = 'the recording could not be read by the chunker';
 
 /** What a process run reports back; a real run never carries stdout/stderr content (never logged). */
@@ -65,10 +69,14 @@ export type ProcessRunner = (
  * Overridable in `ProcessRunnerOptions` for tests that want a short grace window. */
 export const DEFAULT_SIGKILL_GRACE_MS = 5_000;
 
-function drain(stream: NodeJS.ReadableStream | null): void {
+export function drain(stream: NodeJS.ReadableStream | null): void {
   stream?.on('data', () => {
     /* ffmpeg's stderr/stdout is drained, never read into a string: it could carry
      * attacker-chosen bytes from the input file's metadata, and must never reach a log line. */
+  });
+  stream?.on('error', () => {
+    /* A stream error (e.g. EPIPE on a closed pipe) must not crash the worker; the child's own
+     * `exit`/`error` event still settles `run()`. */
   });
 }
 
@@ -111,12 +119,14 @@ export function createRealRunner(graceMs: number): ProcessRunner {
       if (opts.signal.aborted) onAbort();
       else opts.signal.addEventListener('abort', onAbort, { once: true });
       child.on('error', (err) => {
+        opts.signal.removeEventListener('abort', onAbort);
         if (settled) return;
         settled = true;
         clearGrace();
         reject(err);
       });
       child.on('exit', (code) => {
+        opts.signal.removeEventListener('abort', onAbort);
         if (settled) return;
         settled = true;
         clearGrace();
@@ -145,12 +155,20 @@ function wavDurationMs(bytes: Uint8Array): number {
     const id = ascii(bytes, at, 4);
     const size = u32le(bytes, at + 4);
     const body = at + 8;
-    if (id === 'fmt ' && size >= 16) byteRate = u32le(bytes, body + 8);
+    // A chunk only counts when its declared bounds actually land inside the buffer; a short or
+    // out-of-range chunk is never read for its value (which would silently see garbage), and a
+    // chunk whose declared size runs past the end of the buffer ends the walk below.
+    if (id === 'fmt ' && size >= 16 && body + 16 <= bytes.byteLength) {
+      byteRate = u32le(bytes, body + 8);
+    }
     if (id === 'data') {
+      if (body > bytes.byteLength) break;
       dataLength = Math.min(size, bytes.byteLength - body);
       break;
     }
-    at = body + size + (size % 2);
+    const next = body + size + (size % 2);
+    if (next <= at || next > bytes.byteLength) break;
+    at = next;
   }
   if (byteRate === undefined || byteRate === 0 || dataLength === undefined) {
     throw new TranscriberError('validation', false, UNREADABLE);
@@ -171,6 +189,9 @@ export interface FfmpegChunkerOptions {
   /** How long the default runner waits after SIGTERM before escalating to SIGKILL. Ignored when
    * `run` is supplied. Defaults to `DEFAULT_SIGKILL_GRACE_MS`. */
   readonly sigkillGraceMs?: number;
+  /** How often the running total of piece bytes already on disk is checked against
+   * `maxOutputBytes` while ffmpeg is still running. Defaults to `DEFAULT_OUTPUT_WATCH_MS`. */
+  readonly outputWatchMs?: number;
 }
 
 /**
@@ -230,27 +251,71 @@ export function createFfmpegChunker(opts: FfmpegChunkerOptions = {}): AudioChunk
         outputPattern,
       ];
 
-      const signal = AbortSignal.timeout(timeoutMs);
-      let result: ProcessResult;
-      try {
-        result = await run(ffmpegPath, args, { signal });
-      } catch {
-        if (signal.aborted) {
-          throw new TranscriberError(
-            'provider_error',
-            true,
-            'ffmpeg timed out while chunking the recording',
-          );
-        }
-        throw new TranscriberError('validation', false, UNREADABLE, undefined);
-      }
-      if (signal.aborted) {
-        throw new TranscriberError(
+      const timeoutSignal = AbortSignal.timeout(timeoutMs);
+      const sizeController = new AbortController();
+      const outputWatchMs = opts.outputWatchMs ?? DEFAULT_OUTPUT_WATCH_MS;
+      const tooLargeError = (): TranscriberError =>
+        new TranscriberError(
+          'input_too_large',
+          false,
+          `the chunker produced more audio than the ${String(maxOutputBytes)}-byte limit`,
+        );
+      const timedOutError = (): TranscriberError =>
+        new TranscriberError(
           'provider_error',
           true,
           'ffmpeg timed out while chunking the recording',
         );
+      let checking = false;
+      const watchInterval = setInterval(() => {
+        if (checking) return;
+        checking = true;
+        void (async () => {
+          try {
+            const names = await readdir(dir);
+            let total = 0;
+            for (const name of names) {
+              if (!name.startsWith('piece-') || !name.endsWith('.wav')) continue;
+              try {
+                const info = await stat(join(dir, name));
+                total += info.size;
+              } catch {
+                // the file vanished between readdir and stat (ffmpeg rotated it away); ignore
+              }
+            }
+            if (total > maxOutputBytes) sizeController.abort();
+          } catch {
+            // a transient dir read failure; the next tick retries
+          } finally {
+            checking = false;
+          }
+        })();
+      }, outputWatchMs);
+
+      const signal = AbortSignal.any([timeoutSignal, sizeController.signal]);
+      let result: ProcessResult;
+      try {
+        result = await run(ffmpegPath, args, { signal });
+      } catch (err) {
+        clearInterval(watchInterval);
+        if (sizeController.signal.aborted) throw tooLargeError();
+        if (timeoutSignal.aborted) throw timedOutError();
+        const code =
+          err !== null && typeof err === 'object' && 'code' in err
+            ? (err as { code?: unknown }).code
+            : undefined;
+        if (code === 'ENOENT' || code === 'EACCES') {
+          throw new TranscriberError(
+            'provider_error',
+            false,
+            `ffmpeg could not be started (${String(code)})`,
+          );
+        }
+        throw new TranscriberError('validation', false, UNREADABLE, undefined);
       }
+      clearInterval(watchInterval);
+      if (sizeController.signal.aborted) throw tooLargeError();
+      if (timeoutSignal.aborted) throw timedOutError();
       if (result.code !== 0) {
         throw new TranscriberError('validation', false, UNREADABLE);
       }
