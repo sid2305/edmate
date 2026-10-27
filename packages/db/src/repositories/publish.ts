@@ -75,6 +75,8 @@ export const FAILED_CASES_MAX = 500;
 const SCORECARD_RUNS_MAX = 50;
 /** Rows per insert statement in `recordResults`. */
 const INSERT_BATCH = 500;
+/** Most rows `liveAgentsWithMaterialChange` returns per sweep (task 13.regate). */
+export const REGATE_SWEEP_MAX = 200;
 
 /** Why `startRun` or `goLive` refused, for the studio's 409s (plan Phase D). */
 export type PublishRefusal =
@@ -955,3 +957,83 @@ export function publishRepo(db: Db) {
     },
   };
 }
+
+/**
+ * Task 13.regate: the scheduled sweep's candidate list, standalone like `retentionRepo`
+ * (`repositories/retention.ts`) and for the same reason -- a scheduled job across every teacher,
+ * not a signed-in teacher's own scoped call, so it is deliberately not part of `createRepositories`
+ * (and so not in `RepositoryMethod`/the per-teacher isolation grid in `test/repositories.int.test.ts`,
+ * which models per-teacher/per-student access, not a cross-account scheduled sweep). Wired into
+ * `openDatabase`'s return (`src/index.ts`), the same way `retention` is.
+ *
+ * `liveAgentsWithMaterialChange` is a *system* read (no scope), like
+ * `usageLedger.teacherIdsWithUsageSince` / `usageLedger.costByPackageSince` (task 3.8 / 13.5): ids
+ * only, nothing a student, package or figure could leak. A live agent is a candidate when its
+ * teacher's current material revision differs from its newest passed/published run's
+ * `basis.materialRevision` *and* no run of any status (`queued`, `running`, `passed`, `failed`,
+ * `error`) has been started at that current revision yet -- one automatic attempt per material
+ * revision (plan decision, lead answer Q2), so a candidate whose regate already ran and failed
+ * stays out until material changes again. Oldest-changed-first (by the teacher's
+ * `teacher_material_revisions.updated_at`), capped at `limit`.
+ */
+export function regateRepo(db: Db) {
+  return {
+    async liveAgentsWithMaterialChange(
+      limit = REGATE_SWEEP_MAX,
+    ): Promise<{ teacherId: string; agentId: string }[]> {
+      const result = await db.execute<{ teacher_id: string; agent_id: string }>(sql`
+        with last as (
+          select distinct on (agent_id)
+            ${evalRuns.agentId} as agent_id,
+            ${evalRuns.teacherId} as teacher_id,
+            (${evalRuns.basis}->>'materialRevision')::bigint as published_revision
+          from ${evalRuns}
+          where ${evalRuns.suite} = ${GATE_SUITE}
+            and ${evalRuns.status} = 'passed'
+            and ${evalRuns.publishedAt} is not null
+          order by agent_id, ${evalRuns.publishedAt} desc, ${evalRuns.id} desc
+        )
+        select last.teacher_id, last.agent_id
+        from last
+        inner join ${agents} on ${agents.id} = last.agent_id
+        left join ${teacherMaterialRevisions}
+          on ${teacherMaterialRevisions.teacherId} = last.teacher_id
+        where ${agents.status} = 'live'
+          and coalesce(${teacherMaterialRevisions.revision}, 0)
+            is distinct from last.published_revision
+          -- No open run (queued/running), at any revision, unless it is stale by the same
+          -- rule startRun uses to close one as stale itself (deadlineMs(changes) +
+          -- STALE_RUN_GRACE_MS): a crashed worker or a failed enqueue/finishRun pair must not
+          -- strand the agent out of every future sweep. A stale run still counts as its
+          -- revision's one attempt via the r3 check below (status-independent), so startRun
+          -- closes it as stale and this agent only comes back once material changes again.
+          and not exists (
+            select 1 from ${evalRuns} r2
+            where r2.agent_id = last.agent_id
+              and r2.suite = ${GATE_SUITE}
+              and r2.status in ('queued', 'running')
+              and (extract(epoch from (now() - r2.updated_at)) * 1000) <= (
+                case
+                  when coalesce(r2.changes, '{}'::text[]) && array['first_publish', 'prompt_pack_bump']
+                  then ${FULL_SCOPE_GATE_DEADLINE_MS}::float8
+                  else ${GATE_DEADLINE_MS}::float8
+                end
+              ) + ${STALE_RUN_GRACE_MS}::float8
+          )
+          -- One automatic attempt per material revision (lead answer Q2): a run of any outcome
+          -- already started at the current revision means this sweep has already tried it.
+          and not exists (
+            select 1 from ${evalRuns} r3
+            where r3.agent_id = last.agent_id
+              and r3.suite = ${GATE_SUITE}
+              and (r3.basis->>'materialRevision')::bigint
+                = coalesce(${teacherMaterialRevisions.revision}, 0)
+          )
+        order by ${teacherMaterialRevisions.updatedAt} asc nulls last, last.agent_id asc
+        limit ${limit}
+      `);
+      return result.rows.map((r) => ({ teacherId: r.teacher_id, agentId: r.agent_id }));
+    },
+  };
+}
+export type RegateRepo = ReturnType<typeof regateRepo>;

@@ -10,6 +10,204 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.5a sessions.end reads the watermark FOR UPDATE · decided by lead · risk: high
+- Decided: fix in this PR the security-reviewer HIGH (database-reviewer MEDIUM) that `sessions.end` read `memory_reset_at` without a lock; it now reads it `FOR UPDATE` in the sessions-then-profile order `reset` uses, and the comment explains that `end`'s own session-row UPDATE already serialises it against `reset`.
+- Why: a pre-reset summary surviving a reset is exactly what this task exists to prevent; the change is one clause, and security- and database-reviewer re-reviewed every interleaving.
+
+---
+
+### 27 Oct 2026 · 6.5a repositories.int.test.ts touch accepted · decided by lead · risk: low
+- Decided: accept the builder's two timestamp changes in packages/db/test/repositories.int.test.ts despite the lead answer to leave that file alone (database-reviewer raised it as a sequencing HIGH); 13.regate merged first and the fix round's merge of main was clean.
+- Why: the grid's own `learnerProfiles.reset` case stamps the watermark, so the old fixed-past timestamps were correctly dropped; the change was forced, minimal and caused no conflict.
+
+---
+
+### 27 Oct 2026 · 6.5a review follow-ups go to 6.5c · decided by lead · risk: low
+- Decided: defer to board task 6.5c the silent-failure-hunter MEDIUM (apps/worker/src/commit/processors.ts reports a watermark-dropped event as `already_written`, and its comment is now incomplete) and the LOWs asking for a debug log when packages/db/src/repositories/learner.ts `dropBeforeReset` drops events or `sessions.end` skips a stale summary.
+- Why: 6.5c already moves that worker handler onto `appendAndFold`; the drop is the planned behaviour and only its observability is missing.
+
+---
+
+### 27 Oct 2026 · 6.5a budget overrun · decided by lead · risk: low
+- Decided: accept 109 tool calls (build 69, fix round 40, harness counts) against a plan budget of 60 (1.8x).
+- Why: the extra cost was the forced test-file fix and the HIGH fix round; all five reviewers approved after the fix.
+
+---
+
+### 27 Oct 2026 · 6.5a memory-reset watermark closes the stale-job race deferred from 6.5 · decided by builder · risk: high
+- Decided: add `memory_reset_at` (nullable timestamptz) to `learner_profiles`, stamped by
+  `learnerProfiles.reset`. `evidenceEvents.append` now locks the profile row first (matching
+  `appendAndFold`, closing the 6.5 review's MEDIUM); both `append` and `appendAndFold` silently drop
+  any event dated strictly before the watermark, before it is ever inserted or folded.
+  `sessions.end` never writes `last_summary` for a session that started strictly before the
+  watermark, though it still ends the session row. Lead-decided Q1–Q4 (see plan): still close the
+  session row (Q1); strict `<` (Q2); leave the worker's evidence handler alone, deferred to board
+  task 6.5c (Q3); `append` throws `scope` on a vanished row, same shape as its sibling locked
+  methods (Q4).
+- Why: a job queued before a reset (an evidence event, or a session's end-of-session summary) that
+  lands after the reset must not resurrect memory the student explicitly cleared. Filtering by the
+  event's/session's own timestamp works regardless of how late the stale job arrives, and needs no
+  app-layer coordination.
+- risk: high (new locking and filtering behavior in `packages/db/src/repositories/**`, a risky
+  path; security-reviewer required).
+
+---
+
+### 27 Oct 2026 · 6.5a the worker's evidence-job handler is not moved onto appendAndFold here · decided by builder · risk: low
+- Decided: `apps/worker/src/commit/processors.ts`'s `JOB.evidence` handler keeps its existing
+  append-then-get-then-applyMastery shape; only the stale-after-reset case this task's acceptance
+  covers is closed (a filtered-to-empty `append` makes it skip the fold entirely). The handler's
+  own non-atomic two-transaction fold (present since task 3.17, the same class of race 6.2 fixed
+  elsewhere) is left as a deferred finding — the lead's plan answer already names board task 6.5c
+  for it.
+- Why: `apps/worker/**` is out of this task's files; fixing it is a bigger, separable change.
+- risk: low (documented gap, not a new regression).
+
+---
+
+### 27 Oct 2026 · 6.5a repositories.int.test.ts needed a forced, minimal fix · decided by builder · risk: low
+- Decided: bumped two hardcoded timestamp bases (`2026-10-17`/`2026-10-18`, in the
+  `evidenceEvents.append`/`appendAndFold` grid cases' `attempt` functions only) to a far-future
+  date (`2030-01-01`/`2030-01-02`). No other line in `repositories.int.test.ts` changed.
+- Why: that file's own `learnerProfiles.reset` grid case runs earlier in the same test file (same
+  throwaway database) and legitimately stamps every seeded pair's `memory_reset_at` to real "now"
+  during the test run; the two append-family cases' subsequent real writes then used fixed
+  **past** 2026-10-17/18 dates, which the new watermark filter correctly dropped — a genuine
+  conflict the plan's "memory_reset_at is NULL for every seeded row in that fixture" assumption did
+  not anticipate (the CASES object's own insertion order puts `reset` before both `append` cases).
+  Confirmed via an isolated single-test run (`vitest run … -t "evidenceEvents.append: student
+  scope"`, passed alone) versus the full-file run (failed) before concluding this was ordering, not
+  a logic bug in the new filter.
+- risk: low (test-only timestamp change, no behavior change; the two timestamps were already
+  arbitrary placeholders used only for per-attempt uniqueness, not for any watermark assertion).
+
+Deferred (not fixed here, per plan): the worker's non-atomic evidence fold (board task 6.5c, per
+lead); a locked/hardened (vs. plain-read) watermark check inside `sessions.end` for true
+concurrent hardening; exposing `memory_reset_at` on the student-facing memory page (no ask for it).
+
+---
+
+### 27 Oct 2026 · 13.regate budget overrun · decided by lead · risk: low
+- Decided: accept 296 tool calls (Phases A 96, B 92, B2 48, fix round 60, harness counts) against a plan budget of 115 (2.6x); no rework.
+- Why: Phase B stopped PARTIAL only because 9.2g was not yet on main, so B2 repeated setup; the fix round added three int tests for a real HIGH. The plan's budget did not cover a cross-package task with a worker wiring phase. Future cross-package plans budget each phase separately.
+
+---
+
+### 27 Oct 2026 · 13.regate Phase B PARTIAL finished by Phase B2 · decided by lead · risk: low
+- Decided: Phase B's PARTIAL (waiting on 9.2g in packages/db/src/index.ts) is closed by Phase B2, which wired `regate` into `openDatabase` and the worker after 9.2g merged; the top Status line is DONE.
+- Why: the left-to-do list in Phase B was exactly B2's scope, and B2's gate is green.
+
+---
+
+### 27 Oct 2026 · 13.regate a stale open run frees the agent only at a new material revision · decided by lead · risk: high
+- Decided: in packages/db/src/repositories/publish.ts `regateRepo(db).liveAgentsWithMaterialChange()`, a queued or running gate run blocks candidacy only while younger than `startRun`'s stale rule (deadline + `STALE_RUN_GRACE_MS`); the one-attempt-per-material-revision check stays status-independent, so a stale run at the current revision still counts as that revision's attempt.
+- Why: the review HIGH showed an unbounded open-run check could exclude an agent forever after a worker crash; keeping one automatic attempt per revision (the lead answer in the plan) caps judge cost even when a run goes stale.
+
+---
+
+### 27 Oct 2026 · 13.regate eval_runs index for the sweep deferred · decided by lead · risk: low
+- Decided: the review MEDIUM (database-reviewer, security-reviewer) asking for a partial index on eval_runs covering the gate suite's passed, published runs for the sweep's candidate query is deferred to board task 13.regatea.
+- Why: pilot data is small and the sweep runs every 15 minutes in the worker, off any request path; the index needs its own migration and review.
+
+---
+
+### 27 Oct 2026 · 13.regate pins reuses `GateUnavailableReason`, not its own four-reason copy · decided by builder · risk: low
+
+- Decided: `PinsUnavailableReason = GateUnavailableReason | 'prompt_pack_unsigned'`
+  (`apps/worker/src/gate/input.ts`'s existing type), not a hand-written union repeating
+  `dev_model` / `provider_key` / `judge_model` / `judge_provider`.
+- Why: `gateModelsFromEnv`'s declared return type is the full `GateUnavailableReason` (it shares
+  the type with the gate's other unavailable reasons, like `content_missing`, even though it only
+  ever produces the model-related four); a narrower hand-written union fails `tsc` the moment that
+  function's result is passed through, and the plan's own text for `pins.ts` says the judge piece
+  is literally `gateModelsFromEnv(env)`'s judge — reusing its reason type keeps the two in sync
+  without a cast.
+
+---
+
+### 27 Oct 2026 · 13.regate sweep's repo deps narrowed per-method, not per-repo · decided by builder · risk: low
+
+- Decided: `RegateSweepDeps.repos` is `{styleCards: Pick<Repositories['styleCards'], 'latest'>,
+  courses: Pick<Repositories['courses'], 'ensureDefault'>, publish: Pick<Repositories['publish'],
+  'startRun' | 'finishRun'>}`, not the plan text's literal `Pick<Repositories, 'styleCards' |
+  'courses' | 'publish'>`.
+- Why: `Pick` at the `Repositories` level picks whole sub-repo objects (`styleCards`'s `get`,
+  `latest` and `create` all at once), which would force every fake in `sweep.test.ts` to also
+  implement unused methods (`get`, `create`) just to satisfy the type — the opposite of "a narrow
+  injected interface" the brief and rule 4 ask for. Nested `Pick`s (the same shape
+  `apps/web/src/studio/publish.ts`'s `PublishBackend.repos` already uses) keep the fakes to only
+  the three methods the sweep actually calls.
+
+---
+
+### 27 Oct 2026 · 13.regate a candidate with no style card is skipped, not a hard failure · decided by builder · risk: low
+
+- Decided: `styleCards.latest(scope)` returning `null` is treated as a skip
+  (`style_card_required`, no write), not passed through to `courses.ensureDefault`/`startRun` to
+  fail there.
+- Why: not spec'd (a live agent has necessarily published once, so it should always have a style
+  card) but cheap to guard explicitly rather than rely on `startRun`'s own `styleCardId` lookup to
+  fail some other way for a `null` id; matches the style of `apps/web/src/studio/publish.ts`'s own
+  `style_card_required` check on the manual-publish path.
+
+---
+
+### 27 Oct 2026 · 13.regate no index.test.ts for the worker wiring · decided by builder · risk: low
+
+- Decided: no new test file for `apps/worker/src/index.ts`'s regate wiring.
+- Why: the brief asked to add a test "if the worker index has a test pattern for the other
+  scheduled jobs" and to say so otherwise. Checked `apps/worker/src/index.ts`'s existing wiring
+  for the cost alarm, weekly insights and retention jobs (each built and reviewed in earlier
+  tasks): none has a corresponding `index.test.ts`, so there is no pattern to extend. The sweep
+  job's own logic is already fully tested in isolation (`apps/worker/src/regate/*.test.ts`, 17
+  tests, Phase B); this phase only wires fakes-free, scripted singletons that match the shape of
+  the retention/cost-alarm wiring already in the file.
+
+---
+
+### 26 Oct 2026 · 13.regate standalone regate repo, not a `publishRepo` method · decided by builder · risk: high
+
+- Decided: `liveAgentsWithMaterialChange` is exported as a standalone `regateRepo(db)` factory
+  (same shape as `repositories/retention.ts`'s `retentionRepo`), not a method on the object
+  `publishRepo` returns, and `openDatabase`'s return type is **not** extended with a `regate`
+  field in this phase.
+- Why: the plan asked for "one method on the existing publish repo" (`repos.publish.…`). Adding
+  it there makes it part of `Repositories`/`RepositoryMethod`, which forces two edits to files
+  explicitly off-limits this phase (owned by the concurrent 9.2g builder): `scope.test.ts`'s
+  bad-scope grid would need a no-argument exemption (like `subscriptions.activeCountByPackage`),
+  and — the one that actually can't be worked around — `test/repositories.int.test.ts`'s
+  `CASES: Record<RepositoryMethod, IsolationCase>` fails `tsc` without a new entry for the
+  method, and that file is explicitly off-limits (shared with 9.2g). `retention.ts` hit the same
+  tension in task 13.4 and resolved it the same way: a cross-account scheduled-job read, kept out
+  of `createRepositories` entirely, exported standalone, wired into `openDatabase` only. I
+  followed that precedent for the method itself, but stopped short of the `openDatabase` wiring
+  because that return object's *shape* is also pinned by an exhaustive-keys assertion in the same
+  off-limits `repositories.int.test.ts` (`expect(Object.keys(opened).sort()).toEqual([...])`) —
+  adding a `regate` key breaks that assertion too. Phase B (apps/worker) needs the live `db`
+  handle either way to call `enqueueGate`'s queue, so it is better placed to decide how it
+  constructs `regateRepo(db)` (directly, or by extending `openDatabase` once 9.2g's edits to that
+  file have landed and the key list can be updated in the same PR). Logged `risk: high` per the
+  plan's own risk-paths note for this unscoped cross-teacher read (same reviewer set as 13.5:
+  **security-reviewer** required, **code-reviewer** plus, **database-reviewer**/
+  **typescript-reviewer** recommended).
+
+---
+
+### 27 Oct 2026 · 9.2h budget overrun · decided by lead · risk: low
+- Decided: accept 48 tool calls against a budget of 25 (1.92x); no rework.
+- Why: the work stayed inside the two planned files plus one int test, and all three reviewers approved with no findings; the plan's budget was set too low for a db int test plus a web client test.
+
+---
+
+### 27 Oct 2026 · 9.2h client.ts risky-path review · decided by builder · risk: high
+- Decided: `apps/web/app/staff/**` is a risky path per the plan; `review.md` for this PR must
+  name `security-reviewer` (plus `code-reviewer` and `typescript-reviewer`) as required
+  reviewers for the `client.ts`/`client.test.ts` change before merge.
+- Why: the plan itself calls this out; logging it here per non-negotiable 6/8 so the merge gate
+  can check it.
+
+---
+
 ### 27 Oct 2026 · 9.2g security-review LOWs deferred · decided by lead · risk: low
 - Decided: defer both security-review LOWs to new board task 9.2h: a Postgres int test for the staff queue reads with a NULL display name (coalesce to slug), and `.min(1)` on `displayName` in the staff client's `QueueItemSchema`.
 - Why: neither is reachable today (slug is never empty and the coalesce is the same one 9.2d's public reads already use); four reviewers approved with no blocking finding.
