@@ -4021,9 +4021,9 @@ tasks:
   deps:
   - 7.2s
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.2v-pedagogy-citations
+  model: plan:lead build:sonnet
 - id: 12.3g
   milestone: M13
   title: '12.3d review LOWs: type `by` as string in listRepeatInfringersForStaff (apps/web/app/api/staff/repeat-infringers/handlers.ts:67, drop the empty-string fallback); pin the exact 365-day boundary
