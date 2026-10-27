@@ -3990,6 +3990,26 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 7.2v
+  milestone: M13
+  title: 'Stale source citations (7.2s Phase J review): the Phase C pedagogy cases cite build-plan lines 350-365 and 513, which now hold the turn-pipeline table and a payments row; re-point each source line at the right build-plan or content/demo-teacher line'
+  accept: every evals/suites/pedagogy case source line points at the line it means; evals tests green.
+  deps:
+  - 7.2s
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 12.3g
+  milestone: M13
+  title: '12.3d review LOWs: type `by` as string in listRepeatInfringersForStaff (apps/web/app/api/staff/repeat-infringers/handlers.ts:67, drop the empty-string fallback); pin the exact 365-day boundary in route.test.ts; read listActiveForStaff once per request instead of twice (handlers.ts and the reused enrichQueueRows)'
+  accept: the three LOWs fixed; web tests green.
+  deps:
+  - 12.3d
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 7.4c
   milestone: M7
   title: 'Per-scope gate deadline (7.2 plan risk): GATE_DEADLINE_MS is 15 minutes for every scope, but a live first-publish or prompt-pack gate takes about 45-80 minutes and fails closed; give each change
