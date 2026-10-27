@@ -94,6 +94,32 @@ The background full-suite run also finished clean: `Test Files  127 passed (127)
   evidence above) even though no wall clock is read anywhere in the measure itself. `n = 200`
   keeps the same 16x shape (so the ratio math is identical) while finishing in milliseconds.
 
+### 27 Oct 2026 · 0.20f step count plus an absolute ceiling, no wall-clock ratio · decided by builder · risk: low
+- Decided: the measure is the original step count (`countStringIteratorSteps`/`expectLinear`,
+  unchanged) *plus* a second, independent absolute wall-clock ceiling (`expectUnderCeiling`,
+  `Date.now()`-based, a fixed `2_000` ms bound, not a ratio). No wall-clock ratio is used anywhere.
+- Why: fix round 1 found the step count blind to regex-internal work (`.replace`, `.matchAll`,
+  regex `exec`), so a catastrophic-backtracking regex in `forgedLabelPattern` or
+  `decodeHtmlEntities` would pass unseen. An absolute ceiling (not a ratio) catches that: ordinary
+  CI load cannot push a sub-100-ms real scan past a 2-second ceiling, but a backtracking or
+  quadratic regex blow-up on a similarly sized hostile string takes seconds to many seconds (shown
+  by the self-test), so the gap between "real work" and "blow-up" stays wide without any
+  load-dependent tuning. This keeps the acceptance's "does not use wall-clock ratios" intact: the
+  step-count ratio check (16x input -> ratio < 64) still carries all the linear-vs-quadratic
+  judgment; the new check only ever compares one elapsed time to one fixed constant.
+
+### 27 Oct 2026 · 0.20f approve the test-only change under packages/harness/src/pedagogy · decided by lead · risk: high
+- Decided: merge 0.20f. It changes only packages/harness/src/pedagogy/modelRequest.test.ts and packages/harness/src/pipeline/runner.test.ts; no source file changes. code-reviewer (required for the group) and typescript-reviewer approved after one fix round.
+- Why: the change is test-only; the earlier HIGH (the step count missed regex work) is fixed by an absolute 2,000 ms ceiling over the real functions, confirmed by both reviewers.
+
+### 27 Oct 2026 · 0.20f budget overrun accepted · decided by lead · risk: low
+- Decided: accept 145 tool calls against a budget of 40 (build 48, fix round 97 by harness count; the agents reported 29 and 44).
+- Why: the fix round had to measure timings under load to pick a ceiling and a self-test size; the work is done and both reviewers approved.
+
+### 27 Oct 2026 · 0.20f backtracking self-test margin left as is · decided by lead · risk: low
+- Decided: wontfix the MEDIUM on packages/harness/src/pedagogy/modelRequest.test.ts: the backtracking self-test (k=25, about 2.9 s locally) is only about 1.5x over the 2,000 ms ceiling. If it is ever seen passing too fast (not throwing), open a task then.
+- Why: CI runners are slower than the dev Mac, so the margin is wider there, not thinner; raising k makes the test exponentially slower (k=26 hit 17.6 s under load), which risks the 20 s test timeout, a worse flake.
+
 ## Gate
 
 ```
@@ -198,23 +224,7 @@ $ python3 .githooks/secret-scan.py --all
 ```
 No output (clean).
 
-## Decisions
-
-### 27 Oct 2026 · 0.20f step count plus an absolute ceiling, no wall-clock ratio · decided by builder · risk: low
-- Decided: the measure is the original step count (`countStringIteratorSteps`/`expectLinear`,
-  unchanged) *plus* a second, independent absolute wall-clock ceiling (`expectUnderCeiling`,
-  `Date.now()`-based, a fixed `2_000` ms bound, not a ratio). No wall-clock ratio is used anywhere.
-- Why: fix round 1 found the step count blind to regex-internal work (`.replace`, `.matchAll`,
-  regex `exec`), so a catastrophic-backtracking regex in `forgedLabelPattern` or
-  `decodeHtmlEntities` would pass unseen. An absolute ceiling (not a ratio) catches that: ordinary
-  CI load cannot push a sub-100-ms real scan past a 2-second ceiling, but a backtracking or
-  quadratic regex blow-up on a similarly sized hostile string takes seconds to many seconds (shown
-  by the self-test), so the gap between "real work" and "blow-up" stays wide without any
-  load-dependent tuning. This keeps the acceptance's "does not use wall-clock ratios" intact: the
-  step-count ratio check (16x input -> ratio < 64) still carries all the linear-vs-quadratic
-  judgment; the new check only ever compares one elapsed time to one fixed constant.
-
 ## Budget
 
 Tool calls used (round 1): 29
-Fix tool calls used: 44
+Fix tool calls used: 44 (harness count 97; build harness count 48; total 145, see the lead budget decision)
