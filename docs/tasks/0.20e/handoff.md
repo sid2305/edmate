@@ -33,6 +33,10 @@ expected false to be true
 None (the plan made every call; prettier's reformat of pre-existing lines is mechanical, not a
 decision).
 
+### 26 Oct 2026 · 0.20e budget overrun · decided by lead · risk: low
+- Decided: accept 32 tool calls against a plan budget of 15.
+- Why: the regression proof needed extra SLO runs against the shared dev database, and each run is slow. The diff is one test file.
+
 ## Gate
 - `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run typecheck lint test --filter=@edmate/db`
   → 8/8 tasks successful (typecheck, lint, test all pass; retrieval-leak.int.test.ts included,
@@ -46,4 +50,4 @@ decision).
 - `python3 .githooks/secret-scan.py --all` → clean, no findings.
 
 ## Budget
-Tool calls used: 20
+Tool calls used: 32 (harness count; the builder reported 20)
