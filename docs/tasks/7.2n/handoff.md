@@ -34,6 +34,14 @@ No behaviour change anywhere; existing harness and evals tests are the check, an
   list instead of keeping a second copy in sync by hand; the existing harness and evals tests are
   the check, and they pass unchanged.
 
+### 26 Oct 2026 · 7.2n budget and review LOW · decided by lead · risk: low
+- Decided: Accept 40 tool calls against a budget of 20. The review LOW (Object.freeze on the exported MISUSE_CODES) is deferred to 7.2l, the guardrails follow-up task.
+- Why: Most of the overrun was the turbo test run across harness's dependents. Mutating the array needs a deliberate cast, so freezing it is hardening, not a fix.
+
+### 26 Oct 2026 · 7.2n merge · decided by lead · risk: high
+- Decided: Merge 7.2n, which touches packages/harness/src/guardrails/moderationIn.ts and guardrails/index.ts. code-reviewer approved it.
+- Why: It exports an existing list with no change to the guard's behaviour. The evals test now uses the same list, and the alertSink change is a comment.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=...@edmate/queue`
   → 38 successful, 38 total (exit code 0).
@@ -42,4 +50,4 @@ No behaviour change anywhere; existing harness and evals tests are the check, an
 - `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
 
 ## Budget
-Tool calls used: 27
+Tool calls used: 40 (harness count; the builder reported 27, and 30 in its return)
