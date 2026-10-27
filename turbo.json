@@ -20,7 +20,8 @@
     "build-smoke": {
       "dependsOn": ["build"],
       "env": ["TEST_DATABASE_URL"],
-      "passThroughEnv": ["CI"]
+      "passThroughEnv": ["CI"],
+      "cache": false
     },
     "dev": {
       "cache": false,
