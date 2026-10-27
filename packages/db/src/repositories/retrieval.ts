@@ -464,10 +464,24 @@ export type LeakFallback = 'leak_timeout' | 'leak_failed';
  */
 export const LEAK_CANDIDATES_MAX = 2_048;
 export const LEAK_CANDIDATE_MAX_LENGTH = 65_536;
+/**
+ * The most total characters across one leakCheck batch (5.4a #10). Derived the same way as the
+ * per-candidate and count caps above: the harness's largest legitimate batch (the same 16 KB
+ * `text`/4,000-character student message pair test/retrieval-leak.int.test.ts measures) totals
+ * well under 200,000 characters; this cap leaves at least 4x headroom over that. Without it, a
+ * maximal-count, maximal-length batch (within each individual cap) could still total up to
+ * `LEAK_CANDIDATES_MAX * LEAK_CANDIDATE_MAX_LENGTH` (~128 MB) run through `index.hits()`
+ * synchronously, which `leakTimeoutMs` can't interrupt once started.
+ */
+export const LEAK_CANDIDATES_TOTAL_CHARS_MAX = 800_000;
 
 const CandidatesSchema = z
   .array(z.string().max(LEAK_CANDIDATE_MAX_LENGTH))
-  .max(LEAK_CANDIDATES_MAX);
+  .max(LEAK_CANDIDATES_MAX)
+  .refine(
+    (list) => list.reduce((sum, c) => sum + c.length, 0) <= LEAK_CANDIDATES_TOTAL_CHARS_MAX,
+    'candidates total length exceeds LEAK_CANDIDATES_TOTAL_CHARS_MAX',
+  );
 
 const PortSearchScopeSchema = z.strictObject({
   teacherId: IdSchema,
@@ -542,6 +556,10 @@ export function retrievalIndexFor(
     // The key and the build use only the allowed ids the teacher owns (5.4): every package version
     // with the same owned allowed set shares one entry, and foreign or unknown ids can't fill the
     // cache with copies.
+    // `repos.modules.ids` is read on every call, even when the cache entry for this key is
+    // already warm, because the key itself needs the owned ids before the cache can be checked;
+    // this is intentional, not an oversight, and the leakCheck SLO (the "p95 <= 50 ms, p99 <=
+    // 100 ms" test in test/retrieval-leak.int.test.ts) still holds with it (5.4a #11).
     const [revision, ownedIds] = await Promise.all([
       repos.retrieval.revision({ teacherId }),
       repos.modules.ids({ teacherId }),

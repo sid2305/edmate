@@ -46,6 +46,7 @@ import { type Prng, prng } from '../testing/prng.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import type { StreamStep } from '../testing/scriptedGateway.js';
 import { testDeps, testSteps } from '../testing/testSteps.js';
+import type { Steps } from '../pipeline/types.js';
 
 const SEED = 20261020;
 const ITERATIONS = 200;
@@ -223,6 +224,84 @@ describe('access property: whole turn (task 5.4)', () => {
       expect(tally.call_not_run ?? 0).toBeGreaterThan(0);
     },
     TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'a decide stub that ignores the entitlement and offers every tool is still filtered by ' +
+      "generate's own access/tools.ts check (LOW #6, 5.4a)",
+    async () => {
+      const r = prng(SEED);
+      const chunks = markedWorld(r, TEACHERS);
+      // Entitled for 'coach' only; every registered tool below is 'practice', so none is entitled.
+      const e: Entitlement = { ...demoEntitlementSubscription, skills: ['coach'] };
+      const toolNames = TOOL_NAMES;
+      const tools = memoryToolRegistry(
+        toolNames.map((name) =>
+          testTool({ name, skill: 'practice', run: () => Promise.resolve({ value: 'six' }) }),
+        ),
+      );
+      // Unlike the real decide, this stub names every registered tool regardless of entitlement
+      // (bypassing decide's own policyTools pre-filter) -- so if generate's filter were ever
+      // removed, this is the test that would catch it, not the property above.
+      const offerEveryTool: Partial<Steps['decide']> = {
+        run: async (env, x) => {
+          const real = await decide.run(env, x);
+          return { ...real, decision: { ...real.decision, tools: [...toolNames] } };
+        },
+      };
+      const first: StreamStep[] = [
+        say('Try this step.'),
+        { type: 'tool_call', id: 'call_1', name: 'calculator', args: {} } satisfies ModelChunk,
+        used,
+      ];
+      const second: StreamStep[] = [say('Next question.'), used];
+      const t = testDeps({
+        script: { stream: [{ steps: first }, { steps: second }, { steps: second }] },
+      });
+      const entitlements: EntitlementStore = {
+        resolve: (x) =>
+          Promise.resolve(x.studentId === e.studentId && x.agentId === e.agentId ? { ...e } : null),
+      };
+      const turnConfig: TurnConfigStore = {
+        load: () =>
+          Promise.resolve({
+            agent: {
+              ...demoAgentConfig,
+              languages: ['en'],
+              promptPackVersion: FIXTURE_PROMPT_PACK_VERSION,
+            },
+            pkg: {
+              ...demoPackagePaid,
+              moduleIds: [...MARKED_MODULES],
+              skills: [...SKILLS],
+            },
+            styleCard: demoStyleCard,
+            locale: demoLocalePack,
+            helpState: null,
+          }),
+      };
+      const deps = {
+        ...t.deps,
+        entitlements,
+        turnConfig,
+        retrieval: memoryRetrieval({ chunks }),
+        tools,
+        profiles: {
+          get: (studentId: string, teacherId: string) =>
+            Promise.resolve({ ...learnerProfileNew, studentId, teacherId }),
+          applyEvidence: () => Promise.reject(new Error('unused')),
+        },
+        transcripts: memoryTranscriptStore(),
+      };
+      const steps = testSteps({ admit, entitle, buildContext, decide: offerEveryTool, generate });
+      const input = { ...demoTurnInput, text: 'try the calculator' };
+      await driveTurn(runTurn(input, { deps, steps }), t.clock);
+
+      for (const req of t.gateway.requests) {
+        expect((req.tools ?? []).map((x) => x.name)).not.toContain('calculator');
+      }
+      expect(tools.runs.map((x) => x.name)).not.toContain('calculator');
+    },
   );
 
   it('a package version change alone changes the prompt cache key', async () => {

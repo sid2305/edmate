@@ -1,5 +1,5 @@
 import type { EvidenceEvent, LearnerProfile, Message, TurnTrace } from '@edmate/contracts';
-import { type Repositories, RepositoryError } from '@edmate/db';
+import { foldMastery, type Repositories, RepositoryError } from '@edmate/db';
 import { evidenceEventId, JOB, usageRowId } from '@edmate/queue';
 import { describe, expect, it } from 'vitest';
 import type { LogLine } from '../log.js';
@@ -44,7 +44,13 @@ function memoryRepos(fail: Partial<Record<string, unknown>> = {}) {
   const help: { sessionId: string; value: unknown }[] = [];
   const evidence: (EvidenceEvent & { id: string })[] = [];
   const profile: { value: LearnerProfile } = {
-    value: { studentId: scope.studentId, teacherId: scope.teacherId, lang: 'en', mastery: {}, mistakes: [] },
+    value: {
+      studentId: scope.studentId,
+      teacherId: scope.teacherId,
+      lang: 'en',
+      mastery: {},
+      mistakes: [],
+    },
   };
   const calls: string[] = [];
   const check = (name: string) => {
@@ -108,8 +114,8 @@ function memoryRepos(fail: Partial<Record<string, unknown>> = {}) {
       },
     },
     evidenceEvents: {
-      append: (_s: unknown, events: (EvidenceEvent & { id?: string })[]) => {
-        check('evidenceEvents.append');
+      appendAndFold: (_s: unknown, events: (EvidenceEvent & { id?: string })[]) => {
+        check('evidenceEvents.appendAndFold');
         const written: EvidenceEvent[] = [];
         for (const e of events) {
           const id = e.id ?? `ev_${evidence.length}`;
@@ -126,22 +132,29 @@ function memoryRepos(fail: Partial<Record<string, unknown>> = {}) {
           evidence.push({ ...rest, id });
           written.push(rest);
         }
+        if (written.length > 0) {
+          profile.value = {
+            ...profile.value,
+            mastery: foldMastery(
+              profile.value.mastery,
+              written.map((e) => ({ topicId: e.topicId, correct: e.correct, ts: e.ts })),
+            ),
+          };
+        }
         return Promise.resolve(written);
       },
     },
-    learnerProfiles: {
-      get: () => {
-        check('learnerProfiles.get');
-        return Promise.resolve(profile.value);
-      },
-      applyMastery: (_s: unknown, patch: LearnerProfile['mastery']) => {
-        check('learnerProfiles.applyMastery');
-        profile.value = { ...profile.value, mastery: { ...profile.value.mastery, ...patch } };
-        return Promise.resolve();
-      },
-    },
   };
-  return { repos: repos as unknown as Repositories, ledger, messages, traces, help, evidence, profile, calls };
+  return {
+    repos: repos as unknown as Repositories,
+    ledger,
+    messages,
+    traces,
+    help,
+    evidence,
+    profile,
+    calls,
+  };
 }
 
 const usageJob = (index = 0) => ({
@@ -346,12 +359,17 @@ describe('commitProcessor', () => {
   });
 
   it('a db outage on the write is retryable; scope/not_found/invalid/integrity are permanent', async () => {
-    const down = new RepositoryError('failed', 'evidenceEvents.append');
+    const down = new RepositoryError('failed', 'evidenceEvents.appendAndFold');
     await expect(
-      commitProcessor(memoryRepos({ 'evidenceEvents.append': down }).repos, noLog)(evidenceJob),
+      commitProcessor(
+        memoryRepos({ 'evidenceEvents.appendAndFold': down }).repos,
+        noLog,
+      )(evidenceJob),
     ).rejects.toBe(down);
     for (const kind of ['scope', 'not_found', 'invalid', 'integrity'] as const) {
-      const w = memoryRepos({ 'evidenceEvents.append': new RepositoryError(kind, 'evidenceEvents.append') });
+      const w = memoryRepos({
+        'evidenceEvents.appendAndFold': new RepositoryError(kind, 'evidenceEvents.appendAndFold'),
+      });
       await expect(commitProcessor(w.repos, noLog)(evidenceJob)).rejects.toBeInstanceOf(
         PermanentJobError,
       );

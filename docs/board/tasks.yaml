@@ -2974,7 +2974,7 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 6.3b
@@ -3391,9 +3391,29 @@ tasks:
   deps:
   - 6.5a
   risk: medium
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/6.5c-evidence-fold
+  metrics:
+    tool_calls: 383
+    tokens_in: 1328
+    tokens_out: 101651
+    cache_read_tokens: 48771877
+    wall_time_seconds: 2186
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 6.5b
   milestone: M13
   title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
@@ -9343,10 +9363,30 @@ tasks:
   accept: each new audit rule is shown failing on a fixture; scopedRetrieval refuses wrong-typed fields; migrate.int has no clock-skew flake; db and harness tests pass
   deps:
   - '5.4'
-  status: running
+  status: done
   risk: risky
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/5.4a-access-filter-followups
+  metrics:
+    tool_calls: 518
+    tokens_in: 1816
+    tokens_out: 166747
+    cache_read_tokens: 65324641
+    wall_time_seconds: 3195
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.5a
   milestone: M13
   title: 'Calculator follow-ups (5.5 review MEDIUM/LOW): refuse implicit multiplication across spaces and after ")" (1 e 2, 2 pi, sqrt(4)pi, (1)(2)); add them to the rejection table and fuzz attacks; fix
@@ -10385,5 +10425,15 @@ tasks:
   accept: per docs/tasks/13.3/review.md deferred 13.3b findings; db and web typecheck, lint and test green.
   deps:
   - '13.3'
+  risk: risky
+  status: planning
+- id: 12.2h
+  milestone: M13
+  title: '12.2f review MEDIUM/LOW: packages/db/src/repositories/reports.ts listOpenForStaff''s per-row catch skips bad rows with no signal; return a dropped-row count or log one line per call (counts only,
+    no row content) so a shrinking staff queue is visible, and narrow the catch if the coverage gate allows (silent-failure-hunter, security-reviewer, typescript-reviewer); the trust-inbox excerpt in apps/web/app/api/sessions/[id]/reports/handlers.ts
+    reads "a inappropriate reply" / "a other reply": use a category-to-label map (code-reviewer)'
+  accept: a skipped staff report row leaves a countable signal; every report category gives grammatical inbox copy; db and web typecheck, lint and test green
+  deps:
+  - 12.2f
   risk: risky
   status: todo

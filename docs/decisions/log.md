@@ -10,6 +10,87 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 5.4a access filter and retrieval paths reviewed · decided by lead · risk: high
+- Decided: merge 5.4a. It changes packages/harness/src/access/** and packages/db/src/repositories/** (scopedRetrieval.ts parses each chunk once through a non-strict view of the contracts schema; retrieval.ts caps the leak-candidate text). security-reviewer, code-reviewer and typescript-reviewer all approved with no findings.
+- Why: every required reviewer ran; the cap rejects an oversized batch rather than cutting it, and the leak check fails closed on that rejection.
+
+---
+
+### 27 Oct 2026 · 5.4a budget overrun · decided by lead · risk: low
+- Decided: accept 151 tool calls (harness count: Phase A 63, Phase B 88; the builders reported 29 and 61) against about 70 planned, about 2.2x.
+- Why: Phase B's db gate takes about 5 minutes and the builder polled it in the foreground. Later db briefs allow a background gate run and budget the wait.
+
+---
+
+### 27 Oct 2026 · 5.4a nested source schema also needs a non-strict view · decided by builder · risk: low
+- Decided: `ChunkFields` nests a non-strict `z.object(SourceRefSchema.shape)` for the `source`
+  field, not `ChunkSchema.shape.source` (the strict `SourceRefSchema`) directly.
+- Why: `SourceRefSchema` is `z.strictObject` too; using it as-is inside the otherwise non-strict
+  `ChunkFields` would turn an index's extra key under `source` (e.g. `textLeakingRetrieval`'s
+  `leak` field, exercised by the existing "extra keys an index adds are dropped" test) into a
+  parse failure instead of a silently-dropped key, breaking a review-approved passing test. The
+  plan's Q2 answer (non-strict, `z.object(ChunkSchema.shape)`) only covers the top level; this is
+  the one-level-deeper extension the plan's Design section didn't spell out.
+
+---
+
+### 27 Oct 2026 · 5.4a no folders added to the audit's file walk · decided by builder · risk: low
+- Decided: `sourceFiles()`'s walked folders stay `src` (packages) and `src`/`app` (apps); no
+  package's `scripts`/`bin` folder is added to the walk.
+- Why: checked every top-level non-`src`/`app` folder in the repo (`find packages apps -maxdepth 2
+  -type d`, excluding `node_modules`/`dist`/`.turbo`): `packages/db/scripts`,
+  `packages/gateway/scripts`, `packages/harness/scripts`, `apps/web/scripts`, `apps/cli/bin` each
+  hold exactly one dev/build-tooling script (a demo-embedding recorder, a sandbox magic-link
+  script, a price generator, a load-test runner, the CLI's launcher) — none is shipped
+  application code that could reach a chunk at runtime, so walking them would scan tooling the
+  audit is meant to exempt, not close a gap. Per the plan's Q4 answer.
+
+---
+
+### 27 Oct 2026 · 5.4a `LEAK_CANDIDATES_TOTAL_CHARS_MAX` needs its own re-export line · decided by builder · risk: low
+- Decided: added `LEAK_CANDIDATES_TOTAL_CHARS_MAX` to `packages/db/src/repositories/index.ts`'s
+  explicit named re-export list from `retrieval.ts`, alongside `LEAK_CANDIDATE_MAX_LENGTH` and
+  `LEAK_CANDIDATES_MAX`.
+- Why: this package's repositories barrel re-exports by explicit name, not `export *`; the plan's
+  Design section didn't call this file out, but a new exported const from `retrieval.ts` needs its
+  own line here or `packages/db/src/index.ts`'s `export * from './repositories/index.js'` never
+  sees it. Not in the plan's "Files to modify" list, but a one-line addition inside the existing
+  export block of an already-touched area (not a new file, not a behavior or signature change) —
+  caught by a failing test import, not a new design decision, so handled in-flight.
+
+- Risk: high (this task's own board risk is `risky`; `packages/db/src/repositories/**` is a risky
+  path per `.claude/skills/merge-gate/risk-paths.txt`'s "access filter" group) — `review.md` must
+  name **security-reviewer** (plus code-reviewer, typescript-reviewer) for `retrieval.ts`'s
+  changes, per the plan's "Risky paths touched" section.
+
+---
+
+### 27 Oct 2026 · 6.5c review and merge · decided by lead · risk: high
+- Decided: merge with code-reviewer, typescript-reviewer, security-reviewer and database-reviewer, all APPROVE with no findings. The change touches packages/db/src/repositories/** (learner.ts, sessions.ts), so security-reviewer was required.
+- Why: the evidence job now appends and folds mastery in one transaction under the profile-row lock, so two concurrent jobs for one learner both count. A retried job still cannot double-count (a stable event id and ON CONFLICT DO NOTHING). The new debug log lines carry only counts and ids, never student text.
+
+---
+
+### 27 Oct 2026 · 6.5c moves the worker's evidence job onto `appendAndFold` · decided by builder · risk: high
+- Decided: `apps/worker/src/commit/processors.ts`'s `JOB.evidence` handler now calls
+  `repos.evidenceEvents.appendAndFold` instead of `append` followed by a separate
+  `learnerProfiles.get`/`applyMastery` pair, closing the same class of lost-update race 6.2 fixed
+  for `profileStoreFor.applyEvidence` — the write and the fold now share one `FOR UPDATE` lock
+  inside one transaction. `packages/db/src/repositories/learner.ts` and `sessions.ts` each gain
+  one `node:util` `debuglog('edmate:db')` call (no behavior change, no signature change) so a
+  reset watermark drop is distinguishable, in logs, from a replayed duplicate, and so a
+  stale-summary skip in `sessions.end` is no longer silent.
+- Why: a job queued, retried or re-delivered twice for one learner must never lose one of two
+  genuinely distinct updates to that learner's mastery; `appendAndFold`'s lock already gives this
+  guarantee everywhere else it's used — the worker's own evidence path was the one place left on
+  the older, two-transaction shape. (Per the lead's Q1/Q2 answers: `debuglog` now, no new
+  `JobOutcome` value.)
+
+Deferred (not fixed here, per plan): threading a real logger through `packages/db`; a
+`JobOutcome` taxonomy expansion; exposing `memory_reset_at` anywhere student-facing.
+
+---
+
 ### 27 Oct 2026 · 6.5b budget overrun accepted · decided by lead · risk: low
 - Decided: accept 44 tool calls against the plan's budget of 35 (1.26x).
 - Why: one phase, three approving reviews with no findings, and the extra calls went on prettier passes and on running the web gate; no scope was added.

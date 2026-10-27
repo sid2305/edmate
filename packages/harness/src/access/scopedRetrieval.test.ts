@@ -92,10 +92,46 @@ describe('scopedRetrieval.search', () => {
     expect(got.map((c) => c.id)).toEqual(['chk_m_0', 'chk_m_1', 'chk_m_2']);
   });
 
-  it.each([0, -1, Number.NaN, 0.5])('k = %s returns [] without calling the index', async (k) => {
-    const s = stub({ search: [demoChunk] });
-    expect(await scopedRetrieval(s.index, E).search(Q, k)).toEqual([]);
-    expect(s.calls).toEqual([]);
+  it.each([0, -1, Number.NaN, 0.5, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'k = %s returns [] without calling the index',
+    async (k) => {
+      const s = stub({ search: [demoChunk] });
+      expect(await scopedRetrieval(s.index, E).search(Q, k)).toEqual([]);
+      expect(s.calls).toEqual([]);
+    },
+  );
+
+  it.each([
+    ['text', { ...demoChunk, text: 42 }],
+    ['id', { ...demoChunk, id: 42 }],
+    ['teacherId', { ...demoChunk, teacherId: 42 }],
+    ['moduleId', { ...demoChunk, moduleId: null }],
+    ['kind', { ...demoChunk, kind: 'essay' }],
+  ])(
+    'a chunk with a wrong-typed %s field throws RetrievalScopeError, never reaching output',
+    async (_l, bad) => {
+      const s = stub({ search: [bad] });
+      const p = scopedRetrieval(s.index, E).search(Q, 5);
+      await expect(p).rejects.toBeInstanceOf(RetrievalScopeError);
+    },
+  );
+
+  it('a valid but adversarial-looking id is embedded in the message, but a too-long or unsafe one is refused before it can be', async () => {
+    // Safe, in-bounds id containing the marker text: embedded in the scope error, but the schema
+    // bounds it (1-128 safe characters) before it ever reaches that message, so this is safe by
+    // construction, not by escaping.
+    const safeAdversarial = `${OUT_OF_SCOPE_TEXT}_000`;
+    const strayValid = { ...demoChunk, id: safeAdversarial, teacherId: 'tch_test_02' };
+    const pValid = scopedRetrieval(stub({ search: [strayValid] }).index, E).search(Q, 5);
+    await expect(pValid).rejects.toBeInstanceOf(RetrievalScopeError);
+    await expect(pValid).rejects.toThrow(safeAdversarial);
+
+    // Too long (>128) or unsafe characters: fails the id schema itself, so it never reaches the
+    // scope-error message at all.
+    const tooLong = { ...demoChunk, id: `${OUT_OF_SCOPE_TEXT}_${'x'.repeat(200)}` };
+    const pTooLong = scopedRetrieval(stub({ search: [tooLong] }).index, E).search(Q, 5);
+    await expect(pTooLong).rejects.toBeInstanceOf(RetrievalScopeError);
+    await expect(pTooLong).rejects.not.toThrow(tooLong.id);
   });
 
   it('an empty query or an empty allowed list returns [] without calling the index', async () => {
