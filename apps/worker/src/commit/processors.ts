@@ -13,7 +13,6 @@
 // integrity error) is thrown as `PermanentJobError`, which the worker turns into BullMQ's
 // UnrecoverableError (no retries, straight to the dead-letter queue). Anything else is retried.
 import {
-  foldMastery,
   type Repositories,
   RepositoryError,
   sessionStateStoreFor,
@@ -197,18 +196,18 @@ export function commitProcessor(
     }
     if (job.name === JOB.evidence) {
       const d = parse(EvidenceJobSchema, job);
-      // evidenceEvents.append is itself idempotent (ON CONFLICT (id) DO NOTHING, task 3.17): a
-      // replayed job's id already exists, `applied` comes back empty, and mastery is folded zero
-      // times more (never once more). No separate exists() check is needed (unlike usage/trace
-      // above), so this isn't built on `once()`.
+      // evidenceEvents.appendAndFold is itself idempotent (ON CONFLICT (id) DO NOTHING, task
+      // 3.17): a replayed job's id already exists, `applied` comes back empty, and mastery is
+      // folded zero times more (never once more) — the same empty-`applied` result also happens
+      // when the reset watermark drops the event (dropBeforeReset, task 6.5a; its debug log,
+      // `NODE_DEBUG=edmate:db`, tells the two cases apart in logs). No separate exists() check is
+      // needed (unlike usage/trace above), so this isn't built on `once()`. The write and the
+      // fold now share one `FOR UPDATE` lock inside one transaction (task 6.5c), so two jobs for
+      // the same learner can never race a read of `mastery` against the other's write (no second,
+      // unlocked transaction, unlike the old append-then-get-then-applyMastery shape).
       try {
         const id = evidenceEventId(d.event);
-        const applied = await repos.evidenceEvents.append(d.scope, [{ ...d.event, id }]);
-        if (applied.length > 0) {
-          const current = await repos.learnerProfiles.get(d.scope);
-          const patch = foldMastery(current?.mastery ?? {}, applied);
-          await repos.learnerProfiles.applyMastery(d.scope, patch);
-        }
+        const applied = await repos.evidenceEvents.appendAndFold(d.scope, [{ ...d.event, id }]);
         return applied.length > 0 ? 'written' : 'already_written';
       } catch (error) {
         return classify(job.name, error);

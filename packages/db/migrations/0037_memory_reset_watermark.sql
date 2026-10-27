@@ -1,0 +1,1 @@
+ALTER TABLE "learner_profiles" ADD COLUMN "memory_reset_at" timestamp with time zone;

@@ -5,6 +5,7 @@
 // body's agentId into the scope `reports.file` needs; a scope that can't be built this way (the
 // agent is not live right now) is `not_found`, exactly like the turn routes. `created` is true or
 // false either way the reply is `{ ok: true }`: a duplicate report is not an error (12.2 design).
+import { createHash } from 'node:crypto';
 import { RepositoryError, type Repositories } from '@edmate/db';
 import { TurnInputSchema } from '@edmate/contracts';
 import type { NextRequest } from 'next/server';
@@ -15,6 +16,17 @@ import { readJson, TOO_LARGE } from '../../../../../src/studio/routes';
 import { studentTurnScope, type AgentOwners } from '../../../../../src/turn/scope';
 
 const agentIdShape = TurnInputSchema.shape.agentId;
+
+/**
+ * Task 12.2f Phase B: the staff alert inbox row id for a filed report, derived from the report's
+ * own id with a domain tag different from `reportRowId`'s (`@edmate/db`) so it can never collide
+ * with a report id. Deterministic: a retried or replayed report never double-records (the
+ * safety-alerts insert is `on conflict (id) do nothing`).
+ */
+function reportAlertId(reportId: string): string {
+  const digest = createHash('sha256').update(`report-alert\u0000${reportId}`).digest('hex');
+  return `ra_${digest.slice(0, 40)}`;
+}
 
 const ParamsSchema = z.object({ id: z.string().min(1).max(200) });
 const ReportBody = z.strictObject({
@@ -31,7 +43,7 @@ export interface ServerLog {
 /** Everything the route needs, built once per process (runtime.ts) or per test. */
 export interface SessionReportsBackend {
   agents: AgentOwners;
-  repos(): Pick<Repositories, 'reports'>;
+  repos(): Pick<Repositories, 'reports' | 'safetyAlerts'>;
   log?: ServerLog;
 }
 
@@ -71,11 +83,29 @@ export function createSessionReportsHandlers(backend: SessionReportsBackend): { 
       try {
         const scope = await studentTurnScope(backend.agents, principal, body.data.agentId);
         if (scope === null) return notFound();
-        const { created } = await backend.repos().reports.file(scope, {
+        const { id, created } = await backend.repos().reports.file(scope, {
           sessionId: path.data.id,
           messageId: body.data.messageId,
           category: body.data.category,
         });
+        if (created) {
+          try {
+            await backend.repos().safetyAlerts.record({
+              id: reportAlertId(id),
+              level: 'info',
+              kind: 'other',
+              studentId: scope.studentId,
+              teacherId: scope.teacherId,
+              sessionId: path.data.id,
+              excerptRedacted: `A student reported a ${body.data.category} reply.`,
+              createdAt: new Date().toISOString(),
+            });
+          } catch (error) {
+            log.error('sessions.reports.alert_failed', {
+              error: error instanceof Error ? error.name : 'unknown',
+            });
+          }
+        }
         return ok(created ? 201 : 200);
       } catch (error) {
         if (error instanceof RepositoryError) {

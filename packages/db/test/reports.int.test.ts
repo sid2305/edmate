@@ -295,14 +295,21 @@ describe.skipIf(!up)(`reports on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () =
       });
     });
 
-    it('a stored row with an unknown category is integrity, never returned', async () => {
+    it('a stored row with an unknown category is skipped, not thrown for the whole batch', async () => {
       await raw.query(
         `insert into reports (id, target, reason) values ('rp_bad', 'message:${AGENT_MSG}', 'free text')`,
       );
-      expect(await failure(repos.reports.listOpenForStaff(STAFF))).toEqual({
-        kind: 'integrity',
-        method: 'reports.listOpenForStaff',
-      });
+      expect(await repos.reports.listOpenForStaff(STAFF)).toEqual([]);
+    });
+
+    it('one bad row drops out of the queue; a normal row alongside it still returns', async () => {
+      await raw.query(
+        `insert into reports (id, target, reason, created_at) values
+         ('rp_bad_2', 'message:${AGENT_MSG}', 'free text', '2026-10-17T09:00:00Z'),
+         ('rp_good_2', 'message:${AGENT_MSG}', 'other', '2026-10-17T09:00:01Z')`,
+      );
+      const rows = await repos.reports.listOpenForStaff(STAFF);
+      expect(rows.map((r) => r.id)).toEqual(['rp_good_2']);
     });
 
     it('a non-staff or unknown id is scope', async () => {

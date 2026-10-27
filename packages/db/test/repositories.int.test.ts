@@ -1887,8 +1887,12 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     attempt: async (r, scope, _actor, target) => {
-      // A timestamp unique to this attempt, so verify finds exactly this write.
-      const ts = new Date(Date.UTC(2026, 9, 17, 12, 0, ++counter)).toISOString();
+      // A timestamp unique to this attempt, so verify finds exactly this write. Task 6.5a: this
+      // grid's own `learnerProfiles.reset` case (above) runs first and stamps every pair's
+      // `memory_reset_at` to this test run's real "now" — a fixed-past ts here would be dropped
+      // by the new watermark filter, so this uses a far-future ts instead (unrelated to the
+      // watermark semantics this file otherwise never exercises; see memory-reset-watermark.int.test.ts).
+      const ts = new Date(Date.UTC(2030, 0, 1, 12, 0, ++counter)).toISOString();
       const event: EvidenceEvent = {
         ...sScope(target),
         topicId: ids.topic(teacherOf(target)),
@@ -1953,7 +1957,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     attempt: async (r, scope, _actor, target) => {
-      const ts = new Date(Date.UTC(2026, 9, 18, 12, 0, ++counter)).toISOString();
+      // Far-future ts, same reason as `evidenceEvents.append` above (this grid's own
+      // `learnerProfiles.reset` case runs first and stamps `memory_reset_at`).
+      const ts = new Date(Date.UTC(2030, 0, 2, 12, 0, ++counter)).toISOString();
       const topicId = ids.topic(teacherOf(target));
       const event: EvidenceEvent = {
         ...sScope(target),
@@ -4891,6 +4897,44 @@ describe.skipIf(!up)(
       return cases;
     }
 
+    // Task 12.2f Phase C: the teacher-facing document read (`documents.get` and
+    // `documents.listForTeacher`) now carries `takenDown`, the same boolean the staff report
+    // query already computes (reports.int.test.ts's `citedDocuments`), so the upload centre can
+    // show a "Removed by Edmate staff" badge. A fixture of its own, lifted at the end, so it
+    // doesn't affect any other test's view of teacher A's documents.
+    it('documents.get and listForTeacher carry takenDown: false until an active takedown, true while active, false once lifted', async () => {
+      const docId = 'doc_12_2f_takedown';
+      await repos.documents.create(tScope('A'), {
+        id: docId,
+        moduleId: ids.module('A', 1),
+        kind: 'material',
+        sourceTitle: '[A] takedown badge fixture',
+        rightsDeclared: true,
+      });
+      const before = await repos.documents.get(tScope('A'), docId);
+      expect(before?.takenDown).toBe(false);
+      const listedBefore = (await repos.documents.listForTeacher(tScope('A'), {
+        moduleId: ids.module('A', 1),
+      })) as (DocRow & { takenDown: boolean })[];
+      expect(listedBefore.find((d) => d.id === docId)?.takenDown).toBe(false);
+
+      const { id: takedownId } = await repos.takedowns.create(ISO_STAFF, {
+        kind: 'document',
+        targetId: docId,
+        category: 'copyright',
+      });
+      const during = await repos.documents.get(tScope('A'), docId);
+      expect(during?.takenDown).toBe(true);
+      const listedDuring = (await repos.documents.listForTeacher(tScope('A'), {
+        moduleId: ids.module('A', 1),
+      })) as (DocRow & { takenDown: boolean })[];
+      expect(listedDuring.find((d) => d.id === docId)?.takenDown).toBe(true);
+
+      await repos.takedowns.lift(ISO_STAFF, takedownId, {});
+      const after = await repos.documents.get(tScope('A'), docId);
+      expect(after?.takenDown).toBe(false);
+    });
+
     // Task 9.3c: a teacher rejected (or never verified) after publishing can't be started by
     // typing the URL. A fixture of its own (not A/B, whose verification status churns across the
     // grid above), so this is self-contained.
@@ -6229,10 +6273,16 @@ describe.skipIf(!up)(
       expect(await snapshot()).toBe(before);
     });
 
-    it('openDatabase gives repositories, the identity store, retention jobs and a close, without a raw handle', async () => {
+    it('openDatabase gives repositories, the identity store, retention jobs, the regate sweep and a close, without a raw handle', async () => {
       const opened = openDatabase({ DATABASE_URL: TEST_URL });
       try {
-        expect(Object.keys(opened).sort()).toEqual(['close', 'identity', 'repos', 'retention']);
+        expect(Object.keys(opened).sort()).toEqual([
+          'close',
+          'identity',
+          'regate',
+          'repos',
+          'retention',
+        ]);
         expect(await opened.repos.learnerProfiles.get(sScope('1B'))).not.toBeNull();
       } finally {
         await opened.close();

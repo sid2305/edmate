@@ -28,7 +28,13 @@ const GROUP_KEYS = [
   'advice',
   'grounding',
 ] as const;
-const CHANGE_KEYS = ['first_publish', 'prompt_pack_bump', 'material', 'packages', 'style_card'] as const;
+const CHANGE_KEYS = [
+  'first_publish',
+  'prompt_pack_bump',
+  'material',
+  'packages',
+  'style_card',
+] as const;
 const SCORECARD_KEYS = ['hints_before_answers', 'locked_content', 'accuracy'] as const;
 const RUN_ERROR_KEYS = [
   'gate_unavailable',
@@ -72,6 +78,7 @@ export function PublishView({ pollMs = DEFAULT_POLL_MS }: { pollMs?: number }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [pollFailed, setPollFailed] = useState(false);
   const [run, setRun] = useState<PublishRun | null>(null);
+  const [suspended, setSuspended] = useState(false);
   const [busy, setBusy] = useState(false);
   const [startError, setStartError] = useState<StartErrorKey | null>(null);
   const loaded = useRef(false);
@@ -81,7 +88,8 @@ export function PublishView({ pollMs = DEFAULT_POLL_MS }: { pollMs?: number }) {
       const r = await loadLatestRun();
       if (r.ok) {
         loaded.current = true;
-        setRun(r.value);
+        setRun(r.value.run);
+        setSuspended(r.value.agentStatus === 'suspended');
         setLoadFailed(false);
         setPollFailed(false);
       } else if (loaded.current) {
@@ -137,6 +145,7 @@ export function PublishView({ pollMs = DEFAULT_POLL_MS }: { pollMs?: number }) {
   return (
     <div>
       <p>{t('intro')}</p>
+      {suspended ? <p role="alert">{t('suspendedBanner')}</p> : null}
       {run === null ? <p>{t('idle')}</p> : <RunDetails run={run} />}
       {pollFailed ? <p role="status">{t('pollError')}</p> : null}
       {startError === null ? null : <p role="alert">{t(`startErrors.${startError}`)}</p>}
@@ -212,7 +221,12 @@ function Scorecard({ run }: { run: PublishRun }) {
           return [
             <li key={k}>
               {c.measured && c.percent !== null
-                ? t('scorecardLine', { label, passed: c.passed, total: c.total, percent: c.percent })
+                ? t('scorecardLine', {
+                    label,
+                    passed: c.passed,
+                    total: c.total,
+                    percent: c.percent,
+                  })
                 : t('scorecardNotMeasured', { label })}
             </li>,
           ];

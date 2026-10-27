@@ -22,7 +22,11 @@ const ctx: RoleContext = { principal: ASHA, params: Promise.resolve({}) };
 const SCOPE = { teacherId: 't_asha' };
 const POLICY = { small: { provider: 'anthropic', model: 'm' } } as unknown as ModelPolicy;
 const CARD = { id: 'sc_1', teacherId: 't_asha', version: 1 } as unknown as StyleCard;
-const PKG = { packageId: 'pkg_1', agentId: 'agt_1', liveVersion: null } as unknown as TeacherPackageRow;
+const PKG = {
+  packageId: 'pkg_1',
+  agentId: 'agt_1',
+  liveVersion: null,
+} as unknown as TeacherPackageRow;
 
 function run(over: Partial<GateRunRow> = {}): GateRunRow {
   return {
@@ -53,6 +57,8 @@ interface Opts {
   enqueueFails?: boolean;
   /** ISO timestamp for `b.now()`; defaults to the fixture's own `createdAt` (never stale). */
   now?: string;
+  /** The agent row `agents.get` returns; `null` for "agent not found" (task 12.2f Phase D). */
+  agent?: { status: 'draft' | 'live' | 'suspended' } | null;
 }
 
 function memoryBackend(opts: Opts = {}) {
@@ -66,7 +72,8 @@ function memoryBackend(opts: Opts = {}) {
   const backend: PublishBackend = {
     repos: {
       teacherProfiles: {
-        assertVerifiedForPublish: async (scope) => step('teacherProfiles.assertVerifiedForPublish', scope),
+        assertVerifiedForPublish: async (scope) =>
+          step('teacherProfiles.assertVerifiedForPublish', scope),
       },
       packages: {
         listForTeacher: async (scope) => {
@@ -103,6 +110,15 @@ function memoryBackend(opts: Opts = {}) {
         changedSinceLastPublish: async (scope) => {
           await step('publish.changedSinceLastPublish', scope);
           return opts.changed ?? false;
+        },
+      },
+      agents: {
+        get: async (scope, agentId) => {
+          await step('agents.get', scope, agentId);
+          const a = opts.agent === undefined ? { status: 'live' as const } : opts.agent;
+          return a === null
+            ? null
+            : { id: agentId, teacherId: 't_asha', status: a.status, liveVersion: 2 };
         },
       },
     },
@@ -193,7 +209,11 @@ describe('POST /api/studio/publish', () => {
       413,
       'input_too_large',
     );
-    await expectError(await h.start(post('x'.repeat(MAX_BODY_BYTES + 1)), ctx), 413, 'input_too_large');
+    await expectError(
+      await h.start(post('x'.repeat(MAX_BODY_BYTES + 1)), ctx),
+      413,
+      'input_too_large',
+    );
     expect(calls).toEqual([]);
   });
 
@@ -222,14 +242,17 @@ describe('POST /api/studio/publish', () => {
     ['nothing_to_publish', 409, 'validation'],
     ['no_packages', 409, 'validation'],
     ['suspended', 409, 'validation'],
-  ])('startRun refusing %s is %i with that reason; nothing enqueued', async (reason, status, code) => {
-    const kind = reason === 'gate_running' ? 'integrity' : 'invalid';
-    const { h, calls } = handlers({
-      fail: { 'publish.startRun': new PublishRefusedError(kind, 'publish.startRun', reason) },
-    });
-    await expectError(await h.start(post(), ctx), status, code, reason);
-    expect(calls.map((c) => c.method)).not.toContain('enqueue');
-  });
+  ])(
+    'startRun refusing %s is %i with that reason; nothing enqueued',
+    async (reason, status, code) => {
+      const kind = reason === 'gate_running' ? 'integrity' : 'invalid';
+      const { h, calls } = handlers({
+        fail: { 'publish.startRun': new PublishRefusedError(kind, 'publish.startRun', reason) },
+      });
+      await expectError(await h.start(post(), ctx), status, code, reason);
+      expect(calls.map((c) => c.method)).not.toContain('enqueue');
+    },
+  );
 
   it('startRun scope (verification lost in the race) is 403 not_verified', async () => {
     const { h } = handlers({ fail: { 'publish.startRun': new RepositoryError('scope', 'x') } });
@@ -246,7 +269,9 @@ describe('POST /api/studio/publish', () => {
   });
 
   it('a repo that is down is 503 unavailable, logged by code', async () => {
-    const { h, log } = handlers({ fail: { 'packages.listForTeacher': new RepositoryError('failed', 'x') } });
+    const { h, log } = handlers({
+      fail: { 'packages.listForTeacher': new RepositoryError('failed', 'x') },
+    });
     await expectError(await h.start(post(), ctx), 503, 'provider_error', 'unavailable');
     expect(log.error).toHaveBeenCalledWith('studio.publish_failed', { reason: 'failed' });
   });
@@ -255,17 +280,29 @@ describe('POST /api/studio/publish', () => {
     const { h, log } = handlers({ fail: { 'styleCards.latest': new TypeError('secret text') } });
     const body = await expectError(await h.start(post(), ctx), 500, 'provider_error', 'internal');
     expect(JSON.stringify(body)).not.toContain('secret');
-    expect(log.error).toHaveBeenCalledWith('studio.publish_failed', { reason: 'internal', error: 'TypeError' });
+    expect(log.error).toHaveBeenCalledWith('studio.publish_failed', {
+      reason: 'internal',
+      error: 'TypeError',
+    });
   });
 
   it('an enqueue failure ends the run error (enqueue_failed) and is 503; never the error text', async () => {
     const { h, calls, log } = handlers({ enqueueFails: true });
-    const body = await expectError(await h.start(post(), ctx), 503, 'provider_error', 'unavailable');
+    const body = await expectError(
+      await h.start(post(), ctx),
+      503,
+      'provider_error',
+      'unavailable',
+    );
     expect(JSON.stringify(body)).not.toContain('secret');
     expect(calls.at(-1)).toEqual({
       method: 'publish.finishRun',
       scope: SCOPE,
-      input: { runId: 'run_1', status: 'error', summary: { groups: [], errorCode: 'enqueue_failed' } },
+      input: {
+        runId: 'run_1',
+        status: 'error',
+        summary: { groups: [], errorCode: 'enqueue_failed' },
+      },
     });
     expect(log.error).toHaveBeenCalledWith('studio.publish_enqueue_failed', { error: 'Error' });
     expect(JSON.stringify(log.error.mock.calls)).not.toContain('secret');
@@ -277,7 +314,9 @@ describe('POST /api/studio/publish', () => {
       fail: { 'publish.finishRun': new RepositoryError('failed', 'x') },
     });
     await expectError(await h.start(post(), ctx), 503, 'provider_error', 'unavailable');
-    expect(log.error).toHaveBeenCalledWith('studio.publish_finish_failed', { error: 'RepositoryError' });
+    expect(log.error).toHaveBeenCalledWith('studio.publish_finish_failed', {
+      error: 'RepositoryError',
+    });
   });
 
   it('a backend that cannot be built is 503, logged by reason code', async () => {
@@ -286,22 +325,47 @@ describe('POST /api/studio/publish', () => {
     const h = createPublishHandlers(async () => Promise.reject(err), fallback);
     await expectError(await h.start(post(), ctx), 503, 'provider_error', 'unavailable');
     await expectError(await h.latest(get(), ctx), 503, 'provider_error', 'unavailable');
-    expect(fallback.error).toHaveBeenCalledWith('studio.publish_unavailable', { reason: 'judge_model' });
+    expect(fallback.error).toHaveBeenCalledWith('studio.publish_unavailable', {
+      reason: 'judge_model',
+    });
     const h2 = createPublishHandlers(async () => Promise.reject(new RangeError('y')), fallback);
     await h2.start(post(), ctx);
-    expect(fallback.error).toHaveBeenCalledWith('studio.publish_unavailable', { reason: 'RangeError' });
+    expect(fallback.error).toHaveBeenCalledWith('studio.publish_unavailable', {
+      reason: 'RangeError',
+    });
   });
 });
 
 describe('GET /api/studio/publish', () => {
-  it('no run yet is {run: null}', async () => {
-    const { h, calls } = handlers();
+  it('no run yet and no packages (no agent to look up) is {run: null}, no agents.get call', async () => {
+    const { h, calls } = handlers({ rows: [] });
     const res = await h.latest(get(), ctx);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({ run: null });
-    expect(calls).toEqual([{ method: 'publish.latestRun', scope: SCOPE, input: undefined }]);
+    expect(calls.map((c) => c.method)).toEqual(['publish.latestRun', 'packages.listForTeacher']);
+    expect(calls.map((c) => c.method)).not.toContain('agents.get');
   });
+
+  it.each<['suspended' | 'draft', 'suspended' | 'draft']>([
+    ['suspended', 'suspended'],
+    ['draft', 'draft'],
+  ])(
+    'no run yet but a %s agent (task 12.2f fix round 1: a takedown can suspend a draft agent) ' +
+      'carries agentStatus %s',
+    async (agentStatus) => {
+      const { h, calls } = handlers({ agent: { status: agentStatus } });
+      const res = await h.latest(get(), ctx);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ run: null, agentStatus });
+      expect(calls.map((c) => c.method)).toEqual([
+        'publish.latestRun',
+        'packages.listForTeacher',
+        'agents.get',
+      ]);
+      expect(calls).toContainEqual({ method: 'agents.get', scope: SCOPE, input: 'agt_1' });
+    },
+  );
 
   it('a running run has no failed cases and is not asked for them', async () => {
     const { h, calls } = handlers({ latest: run({ status: 'running' }) });
@@ -322,7 +386,19 @@ describe('GET /api/studio/publish', () => {
     expect(calls.map((c) => c.method)).toEqual([
       'publish.latestRun',
       'publish.changedSinceLastPublish',
+      'agents.get',
     ]);
+  });
+
+  it('carries the agent status (task 12.2f Phase D): live by default, suspended after a takedown', async () => {
+    let r = handlers({ latest: run({ status: 'passed' }) });
+    let body = (await (await r.h.latest(get(), ctx)).json()) as { agentStatus: unknown };
+    expect(body.agentStatus).toBe('live');
+    expect(r.calls).toContainEqual({ method: 'agents.get', scope: SCOPE, input: 'agt_1' });
+
+    r = handlers({ latest: run({ status: 'passed' }), agent: { status: 'suspended' } });
+    body = (await (await r.h.latest(get(), ctx)).json()) as { agentStatus: unknown };
+    expect(body.agentStatus).toBe('suspended');
   });
 
   it('a changed-since-publish run round-trips the flag', async () => {
@@ -333,12 +409,26 @@ describe('GET /api/studio/publish', () => {
 
   it('a failed run lists its failed cases (teacher-scoped) and groups with reasons', async () => {
     const groups = [
-      { origin: 'platform', group: 'accuracy', total: 0, passed: 0, minPercent: 0, pass: false, reason: 'empty_group' },
+      {
+        origin: 'platform',
+        group: 'accuracy',
+        total: 0,
+        passed: 0,
+        minPercent: 0,
+        pass: false,
+        reason: 'empty_group',
+      },
     ] as const;
     const failed: FailedCase[] = [
       {
         caseId: 'acc-1',
-        details: { origin: 'agent', group: 'accuracy', suite: 'accuracy', failedChecks: ['expected_answer'], question: 'What is 2+2?' },
+        details: {
+          origin: 'agent',
+          group: 'accuracy',
+          suite: 'accuracy',
+          failedChecks: ['expected_answer'],
+          question: 'What is 2+2?',
+        },
       },
     ];
     const { h, calls } = handlers({
@@ -352,24 +442,46 @@ describe('GET /api/studio/publish', () => {
     const body = (await (await h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
     expect(body.run.groups).toEqual(groups);
     expect(body.run.failedCases).toEqual([
-      { caseId: 'acc-1', origin: 'agent', group: 'accuracy', suite: 'accuracy', failedChecks: ['expected_answer'], question: 'What is 2+2?' },
+      {
+        caseId: 'acc-1',
+        origin: 'agent',
+        group: 'accuracy',
+        suite: 'accuracy',
+        failedChecks: ['expected_answer'],
+        question: 'What is 2+2?',
+      },
     ]);
     expect(calls).toContainEqual({ method: 'publish.failedCases', scope: SCOPE, input: 'run_1' });
   });
 
   it('an error run carries its code; a passed run its scorecard and published time', async () => {
-    let r = handlers({ latest: run({ status: 'error', summary: { groups: [], errorCode: 'gate_unavailable' } }) });
+    let r = handlers({
+      latest: run({ status: 'error', summary: { groups: [], errorCode: 'gate_unavailable' } }),
+    });
     let body = (await (await r.h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
     expect(body.run.errorCode).toBe('gate_unavailable');
     const scorecard = {
       pass: true,
       changes: ['first_publish' as const],
       categories: [
-        { key: 'accuracy' as const, measured: true, total: 10, passed: 9, percent: 90, pass: true, byOrigin: [] },
+        {
+          key: 'accuracy' as const,
+          measured: true,
+          total: 10,
+          passed: 9,
+          percent: 90,
+          pass: true,
+          byOrigin: [],
+        },
       ],
     };
     r = handlers({
-      latest: run({ status: 'passed', scorecard, publishedAt: '2026-10-22T10:06:00.000Z', finishedAt: '2026-10-22T10:05:59.000Z' }),
+      latest: run({
+        status: 'passed',
+        scorecard,
+        publishedAt: '2026-10-22T10:06:00.000Z',
+        finishedAt: '2026-10-22T10:05:59.000Z',
+      }),
     });
     body = (await (await r.h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
     expect(body.run.scorecard).toEqual(scorecard);
@@ -377,6 +489,7 @@ describe('GET /api/studio/publish', () => {
     expect(r.calls.map((c) => c.method)).toEqual([
       'publish.latestRun',
       'publish.changedSinceLastPublish',
+      'agents.get',
     ]);
   });
 

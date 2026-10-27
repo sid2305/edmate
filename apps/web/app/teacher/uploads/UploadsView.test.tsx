@@ -22,6 +22,7 @@ const doc = (over: Partial<DocumentView>): DocumentView => ({
   status: 'ready',
   createdAt: '2026-10-20T00:00:00.000Z',
   updatedAt: '2026-10-20T00:00:00.000Z',
+  takenDown: false,
   ...over,
 });
 
@@ -118,6 +119,20 @@ describe('UploadsView', () => {
     expect(rows[2]).toHaveTextContent('Replace the file to try again.');
   });
 
+  it('shows a "Removed by Edmate staff" badge only for a taken-down document, alongside its status (task 12.2f Phase C)', async () => {
+    api([
+      doc({ id: 'doc_1', sourceTitle: 'Algebra notes.pdf', status: 'ready', takenDown: true }),
+      doc({ id: 'doc_2', sourceTitle: 'Lecture.mp3', status: 'ready', takenDown: false }),
+    ]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    const list = await screen.findByRole('list', { name: 'Your files' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('Removed by Edmate staff');
+    expect(rows[0]).toHaveTextContent('Ready');
+    expect(rows[1]).not.toHaveTextContent('Removed by Edmate staff');
+  });
+
   it('accepts caption files and shows the YouTube hint (task 8.2c)', async () => {
     api([]);
     renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
@@ -125,9 +140,7 @@ describe('UploadsView', () => {
     const picker = screen.getByLabelText('Upload a file');
     if (!(picker instanceof HTMLInputElement)) throw new Error('the file picker is not an input');
     expect(picker.accept.split(',')).toEqual(expect.arrayContaining(['.vtt', '.srt']));
-    expect(
-      await screen.findByText(/In YouTube Studio, download its captions/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/In YouTube Studio, download its captions/)).toBeInTheDocument();
   });
 
   it('shows an empty state, and no upload control without a module', async () => {
@@ -344,7 +357,9 @@ describe('UploadsView', () => {
     const list = await screen.findByRole('list', { name: 'Your files' });
     expect(within(list).getByText('Fresh.pdf')).toBeInTheDocument();
     await waitFor(() =>
-      expect(within(screen.getByRole('list', { name: 'Your files' })).getAllByText('Ready').length).toBe(1),
+      expect(
+        within(screen.getByRole('list', { name: 'Your files' })).getAllByText('Ready').length,
+      ).toBe(1),
     );
   });
 
@@ -419,9 +434,7 @@ describe('UploadsView', () => {
     s.state.docs = [doc({ id: 'doc_9', source: 'link', status: 'processing' })];
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
     await waitFor(() =>
-      expect(s.calls.some((c) => c.method === 'POST' && c.url === '/api/studio/links')).toBe(
-        true,
-      ),
+      expect(s.calls.some((c) => c.method === 'POST' && c.url === '/api/studio/links')).toBe(true),
     );
     expect(s.calls.find((c) => c.url === '/api/studio/links')!.body).toEqual({
       moduleId: 'mod_1',

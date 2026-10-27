@@ -5,12 +5,14 @@
 // staff console acknowledges through the repository, not this worker) and
 // the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows) and
 // the publish-gate worker (8.7: one gate run at a time; models, content and suites from the
-// environment, failing closed per run when any is missing).
+// environment, failing closed per run when any is missing) and the regate sweep (13.regate:
+// every 15 minutes, re-runs the gate for a live agent whose material changed since its last
+// passed/published run).
 // REDIS_URL and DATABASE_URL come from the environment (docker/compose.yaml sets both).
 import { S3Client } from '@aws-sdk/client-s3';
 import { openDatabase } from '@edmate/db';
 import { warmPreGuardPatterns } from '@edmate/harness';
-import { ALERT_QUEUE, DEAD_LETTER_QUEUE } from '@edmate/queue';
+import { ALERT_QUEUE, createGateQueue, DEAD_LETTER_QUEUE, enqueueGate } from '@edmate/queue';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { createCostAlarmWorker, logCostAlarmSink, scheduleCostAlarm } from './alarms/index.js';
@@ -31,6 +33,12 @@ import {
   scheduleWeeklyInsights,
   WEEKLY_INSIGHTS_QUEUE,
 } from './insights/index.js';
+import {
+  createRegateSweepWorker,
+  regatePinsFromEnv,
+  REGATE_QUEUE,
+  scheduleRegateSweep,
+} from './regate/index.js';
 import { createRetentionWorker, RETENTION_QUEUE, scheduleRetention } from './retention/index.js';
 import { createWorkerWebFetcher, WebLinkConfigError } from './webLink/index.js';
 import type { WebFetcher } from '@edmate/ingest';
@@ -49,6 +57,8 @@ const costAlarmQueue = new Queue(COST_ALARM_QUEUE, { connection });
 const weeklyInsightsQueue = new Queue(WEEKLY_INSIGHTS_QUEUE, { connection });
 const retentionQueue = new Queue(RETENTION_QUEUE, { connection });
 const alertQueue = new Queue(ALERT_QUEUE, { connection });
+const regateQueue = new Queue(REGATE_QUEUE, { connection });
+const gateProducerQueue = createGateQueue(connection);
 
 // Task 3.9c (found by 3.9b): warm preGuard's pattern matchers before the first queue worker
 // starts, so a freshly started process's first turn does not pay the cold regex-compile cost
@@ -132,6 +142,21 @@ const gate = createGateWorker({
   },
 });
 
+// The regate sweep worker (task 13.regate, Phase B2): every 15 minutes, re-runs the publish gate
+// for a live agent whose teacher's material changed since its last passed/published run.
+const regate = createRegateSweepWorker({
+  connection,
+  deadLetter,
+  autorun: true,
+  deps: {
+    candidates: () => db.regate.liveAgentsWithMaterialChange(),
+    repos: db.repos,
+    pins: () => regatePinsFromEnv(process.env),
+    enqueue: (job) => enqueueGate(gateProducerQueue, job),
+    log,
+  },
+});
+
 // The ingest worker (task 8.2 Phase 2) needs the OpenAI key; without one it is skipped, same as a
 // dev box with no provider keys configured for the turn-side adapters.
 let ingest: ReturnType<typeof createIngestWorker> | undefined;
@@ -183,6 +208,7 @@ const workers = [
   alert,
   safetyEvent,
   gate,
+  regate,
   ...(ingest ? [ingest] : []),
 ];
 
@@ -211,6 +237,11 @@ scheduleRetention(retentionQueue).catch((error: unknown) => {
   process.exitCode = 1;
 });
 
+scheduleRegateSweep(regateQueue).catch((error: unknown) => {
+  log({ level: 'error', event: 'regate_sweep.schedule_failed', error: describeError(error) });
+  process.exitCode = 1;
+});
+
 // Dead-letter entries expire after 7 days (FAILED_JOB_TTL_SECONDS): prune at start, then hourly.
 const PRUNE_EVERY_MS = 60 * 60 * 1_000;
 void pruneDeadLetters(deadLetter, log);
@@ -228,6 +259,8 @@ async function shutdown(signal: string): Promise<void> {
     weeklyInsightsQueue.close(),
     retentionQueue.close(),
     alertQueue.close(),
+    regateQueue.close(),
+    gateProducerQueue.close(),
   ]);
   await db.close();
   await connection.quit();

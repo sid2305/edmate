@@ -22,6 +22,7 @@ function row(over: Partial<DocumentRow> = {}): DocumentRow {
     sourceTitle: 'Lesson one',
     storageKey: 'docs/doc_1/v1',
     status: 'processing',
+    takenDown: false,
     createdAt: now,
     updatedAt: now,
     ...over,

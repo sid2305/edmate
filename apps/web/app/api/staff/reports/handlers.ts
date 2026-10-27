@@ -4,7 +4,12 @@
 // The staff id is always the session's principal: the body is strict, so a `by` (or any other
 // unknown key) is a 400, never read. Repository errors map to fixed codes; only the error's name
 // is logged, never its message (it can hold the reported reply's text).
-import { RepositoryError, type Repositories, type StaffReportRow } from '@edmate/db';
+import {
+  REPORT_NOTE_MAX,
+  RepositoryError,
+  type Repositories,
+  type StaffReportRow,
+} from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { describeError } from '../../../../src/auth/describe-error';
@@ -13,7 +18,7 @@ import type { RoleContext } from '../../../../src/auth/guard';
 import { readJson, TOO_LARGE } from '../../../../src/studio/routes';
 
 /** reports.review's own note cap (packages/db REPORT_NOTE_MAX). */
-export const MAX_NOTE_CHARS = 500;
+export const MAX_NOTE_CHARS = REPORT_NOTE_MAX;
 
 const ReviewBody = z.strictObject({
   reportId: z.string().min(1).max(200),
