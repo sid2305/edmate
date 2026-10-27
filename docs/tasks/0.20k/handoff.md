@@ -42,17 +42,20 @@ the finding (with the trace evidence summarized) was added above `createOrRename
   reuse): run 1 2.5s, run 2 1.9s, run 3 2.0s, run 4 1.7s, run 5 2.2s.
 - *Starting empty* (5 runs): the local dev teacher cannot be brought under the cap without
   deleting rows (forbidden), so per the plan's own fallback ("use a fresh teacher id the spec
-  creates"), added `createFreshTeacher()` to `apps/web/e2e/fixtures.ts`. It is built only from
+  creates"), I added a `createFreshTeacher()` helper to `apps/web/e2e/fixtures.ts` built only from
   public `@edmate/db` repository methods already used elsewhere in that file —
   `identity.createStudent`, then `identity.grantRole({ role: 'teacher', by: 'operator' })` (the
   documented path to mint a teacher with no staff account yet), then `repos.styleCards.create` so
-  the package builder's presets render — and returns the new teacher's id for
+  the package builder's presets render — returning the new teacher's id for
   `signInAsTeacher(context, baseURL, id)`. To exercise it, I wrote a temporary, uncommitted spec
   (`apps/web/e2e/tmp-empty.spec.ts`, deleted before this handoff) that signs in as a fresh teacher
   and creates two packages via the "Free starter"/"Full course" presets (a fresh teacher is never
   at cap, so this only exercises the create branch, not reuse/edit — that branch is covered by the
   5 at-cap runs above). Ran it five times; all 5 passed (~1.8–3.0s each): run 1 3.0s, run 2 2.2s,
-  run 3 1.8s, run 4 1.9s, run 5 2.3s. No row any other test created was touched or deleted.
+  run 3 1.8s, run 4 1.9s, run 5 2.3s. No row any other test created was touched or deleted. The
+  helper itself was used only for that one-off local proof and nothing committed calls it; it was
+  removed in fix round 1 (below), and CI's empty database already covers the starting-empty path
+  for the committed spec.
 
 ## Decisions
 
@@ -64,9 +67,9 @@ the finding (with the trace evidence summarized) was added above `createOrRename
   committed walkthrough spec already exercises both the create and (when at cap) reuse/edit paths
   against `demo-teacher`, and CI's database starts empty anyway so the committed spec already
   proves the "empty" case there. A second committed spec would duplicate coverage for no gain, so
-  the fresh-teacher run was done once as a local proof and not left in the tree; `createFreshTeacher()`
-  itself is kept since it is small, reusable, and documents the "mint a teacher" pattern for any
-  future e2e spec that needs one.
+  the fresh-teacher run was done once as a local proof and not left in the tree. The helper was
+  used only for that one-off local proof: nothing committed calls it, so it was removed in fix
+  round 1 (see below) — CI's empty database already covers the starting-empty path on its own.
 
 ## Gate
 
@@ -84,6 +87,20 @@ git status --porcelain
 
 10 Playwright runs of `teacher-packages-walkthrough.spec.ts`/the temporary empty-case spec, all
 passed (details above).
+
+## Fix round 1
+
+- [MEDIUM] `apps/web/e2e/fixtures.ts:162` (code-reviewer and typescript-reviewer) —
+  `createFreshTeacher()` is exported but nothing committed calls it; the "starting empty" proof
+  used a temporary spec that was deleted.
+- Change: removed `createFreshTeacher()` and its doc comment from `apps/web/e2e/fixtures.ts`. No
+  import in that file was only used by it, so no import changes were needed. No new spec was
+  added — CI's empty database already covers the starting-empty path.
+- Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` green;
+  `git grep -n createFreshTeacher` returns only handoff lines; `corepack pnpm exec prettier --check`
+  clean on changed files; `python3 .githooks/secret-scan.py --all` clean.
+
+Fix round builder count: 10
 
 ## Budget
 

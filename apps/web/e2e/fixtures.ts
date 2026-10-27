@@ -65,7 +65,11 @@ async function withDb<T>(fn: (db: ReturnType<typeof openDatabase>) => Promise<T>
 }
 
 /** Issues a session token for `userId` and sets it as a cookie on `context`. */
-async function signInSession(context: BrowserContext, baseURL: string, userId: string): Promise<void> {
+async function signInSession(
+  context: BrowserContext,
+  baseURL: string,
+  userId: string,
+): Promise<void> {
   const token = randomBytes(24).toString('hex');
   await withDb(({ identity }) =>
     identity.createSession(token, userId, new Date(Date.now() + 86_400_000)),
@@ -102,7 +106,10 @@ export async function signInAsTeacher(
  * A brand-new student, 15 years old, with no parental consent on record: `learnerStatus` is
  * `parent_needed` (the age gate, task 1.7; `DEFAULT_AGE_POLICY` requires consent under 18).
  */
-export async function signInAsParentNeeded(context: BrowserContext, baseURL: string): Promise<void> {
+export async function signInAsParentNeeded(
+  context: BrowserContext,
+  baseURL: string,
+): Promise<void> {
   const user: IdentityUser = await withDb(async ({ identity }) => {
     const created = await identity.createStudent({
       email: `e2e-parent-needed-${randomBytes(4).toString('hex')}@example.invalid`,
@@ -129,7 +136,10 @@ export async function signInAsParentNeeded(context: BrowserContext, baseURL: str
  * compare-and-start page for real. Returns the created user id (`teacherQuestions.open`'s scope
  * needs it).
  */
-export async function signInAsFreshStudent(context: BrowserContext, baseURL: string): Promise<string> {
+export async function signInAsFreshStudent(
+  context: BrowserContext,
+  baseURL: string,
+): Promise<string> {
   const user: IdentityUser = await withDb(async ({ identity }) => {
     const created = await identity.createStudent({
       email: `e2e-fresh-student-${randomBytes(4).toString('hex')}@example.invalid`,
@@ -145,34 +155,6 @@ export async function signInAsFreshStudent(context: BrowserContext, baseURL: str
     return created;
   });
   await signInSession(context, baseURL, user.id);
-  return user.id;
-}
-
-/**
- * A brand-new teacher (task 0.20k), well under `PACKAGES_MAX`, with a style card so the package
- * builder's presets render (`/api/studio/packages` requires one before `create` will work; see
- * `apps/web/src/studio/packages.ts`). Built only through `@edmate/db`'s public repository layer,
- * the same way the rest of this file signs users in: `identity.createStudent` then
- * `identity.grantRole` (the only way a role changes; `by: 'operator'` is the documented path with
- * no staff account yet) makes a teacher id with no admin UI or seed script involved, and
- * `repos.styleCards.create` gives it one card version. Returns the new teacher's id so a test can
- * sign in as them (`signInAsTeacher(context, baseURL, id)`); no row any other test created is
- * ever touched.
- */
-export async function createFreshTeacher(): Promise<string> {
-  const user = await withDb(async (db) => {
-    const created = await db.identity.createStudent({
-      email: `e2e-fresh-teacher-${randomBytes(4).toString('hex')}@example.invalid`,
-      emailVerifiedAt: null,
-      name: 'E2E Fresh Teacher',
-    });
-    await db.identity.grantRole({ userId: created.id, role: 'teacher', by: 'operator' });
-    await db.repos.styleCards.create(
-      { teacherId: created.id },
-      { text: 'Warm, encouraging, and concise.', mistakeTags: [] },
-    );
-    return created;
-  });
   return user.id;
 }
 
@@ -203,7 +185,11 @@ export async function mockTurns(page: Page, bodies: readonly string[]): Promise<
         `mockTurns: turn request #${at + 1} has no scripted fixture (only ${bodies.length} ` +
         'provided) -- likely a double-send (postOnce re-running act after a slow hydration) or ' +
         'a test sending more turns than it scripted; add one fixture per expected send.';
-      await route.fulfill({ status: 500, headers: { 'content-type': 'text/plain' }, body: message });
+      await route.fulfill({
+        status: 500,
+        headers: { 'content-type': 'text/plain' },
+        body: message,
+      });
       throw new Error(message);
     }
     const body = bodies[at]!;
