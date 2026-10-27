@@ -10956,7 +10956,7 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: running
+  status: review
   branch: m13/8.2r-documents-index
   model: plan:sonnet build:sonnet
 - id: 11.4i
@@ -11012,7 +11012,7 @@ tasks:
   deps:
   - 6.4a
   risk: risky
-  status: running
+  status: review
   branch: m13/6.4c-review-lows
   model: plan:lead build:sonnet
 - id: 1.4f
@@ -11067,9 +11067,9 @@ tasks:
   deps:
   - 0.20g
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/0.20h-local-e2e
+  model: plan:lead build:sonnet
 - id: 13.3c
   milestone: M13
   title: 'B-60 (human, 27 Oct 2026): database sign-in sessions last 7 days, renewed on use; set SESSION_MAX_AGE_S in apps/web/src/auth/config.ts to 7 days (keep the daily SESSION_UPDATE_AGE_S renewal) and
@@ -11078,9 +11078,9 @@ tasks:
   deps:
   - 13.3b
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/13.3c-seven-day-sessions
+  model: plan:lead build:sonnet
 - id: 11.4j
   milestone: M13
   title: '11.4d review MEDIUM/LOWs for apps/worker/src/ingest/ffmpegChunker.ts: cap output while ffmpeg runs (-fs or a size watch), not only after it exits; bounds-check the fmt and data chunks in wavDurationMs;
@@ -11090,6 +11090,17 @@ tasks:
   deps:
   - 11.4d
   risk: low
+  status: running
+  branch: m13/11.4j-ffmpeg-hardening
+  model: plan:lead build:sonnet
+- id: 6.3e
+  milestone: M13
+  title: '6.3d review LOWs for packages/db/src/repositories/ports.ts profileStoreFor: name the unused third applyMistakes parameter _proposed so the omission reads as intentional; add a profile-store int
+    test that calls applyMistakes(scope, [], [proposedTag]) and checks it is a no-op'
+  accept: the test passes; @edmate/db typecheck, lint and test green.
+  deps:
+  - 6.3d
+  risk: risky
   status: todo
   branch: null
   model: null
