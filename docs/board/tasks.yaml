@@ -10470,9 +10470,29 @@ tasks:
   deps:
   - '13.3'
   risk: risky
-  status: running
+  status: done
   branch: m13/13.3b-scope-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 206
+    tokens_in: 694
+    tokens_out: 67954
+    cache_read_tokens: 32529094
+    wall_time_seconds: 3076
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 12.2h
   milestone: M13
   title: '12.2f review MEDIUM/LOW: packages/db/src/repositories/reports.ts listOpenForStaff''s per-row catch skips bad rows with no signal; return a dropped-row count or log one line per call (counts only,
