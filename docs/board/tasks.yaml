@@ -3009,9 +3009,29 @@ tasks:
   - 6.4a
   - 6.3b
   risk: risky
-  status: running
+  status: done
   branch: m13/6.3c-mistake-tagging
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 189
+    tokens_in: 612
+    tokens_out: 108656
+    cache_read_tokens: 19462282
+    wall_time_seconds: 3905
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 6.3d
   milestone: M13
   title: '6.3c Phase B (split out by lead decision): implement ProfileStore.applyMistakes and recordProposedMistakes (ADR-0017) in packages/db profileStoreFor, passing the style card''s mistakeTags as allowedTags
@@ -8414,9 +8434,33 @@ tasks:
   deps:
   - 11.4b
   risk: high
-  status: running
+  status: done
   branch: m13/11.4d-ffmpeg-chunker
-  model: plan:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 901
+    tokens_in: 3120
+    tokens_out: 291287
+    cache_read_tokens: 123788344
+    wall_time_seconds: 5328
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 9
+      by_severity:
+        CRITICAL: 1
+        HIGH: 1
+        MEDIUM: 4
+        LOW: 3
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 6
+        wontfix: 0
+    human_questions: 0
 - id: 8.2n
   milestone: M13
   title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words;
@@ -10909,9 +10953,9 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2r-documents-index
+  model: plan:sonnet build:sonnet
 - id: 11.4i
   milestone: M13
   title: 'After 11.4d: lift apps/web''s 24 MB cap (MAX_UNSPLIT_MEDIA_BYTES) for audio/mp4, video/mp4 and video/webm now that the worker chunks them with ffmpeg; re-check the 15-minute searchable budget
