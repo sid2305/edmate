@@ -11451,9 +11451,32 @@ tasks:
   deps:
   - 0.20h
   risk: low
-  status: running
+  status: done
   branch: m13/0.20j-dev-overlay-hang
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 598
+    tokens_in: 2088
+    tokens_out: 172473
+    cache_read_tokens: 78040564
+    wall_time_seconds: 4264
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 0
 - id: 6.3f
   milestone: M13
   title: '6.3a Phase A security review MEDIUMs and LOW (packages/db/src/repositories/mistake-proposals.ts): approve validates the merged mistakeTags against STYLE_CARD_LIMITS.tagsMax (20) and raises limit
@@ -11476,5 +11499,6 @@ tasks:
   deps:
   - 0.20j
   risk: low
-  status: todo
-  branch: null
+  status: running
+  branch: m13/0.20k-walkthrough-at-cap
+  model: plan:lead build:sonnet
