@@ -106,3 +106,36 @@ merged 6.3c Phase A) through the real db adapter (6.3c Phase B).
 
 ## Budget
 Tool calls used: 56
+
+## Fix round 1
+CI on PR #379 failed `@edmate/db`'s test job: `ERROR: Coverage for statements (99.93%) does not
+meet "src/repositories/**" threshold (100%)`. The two uncovered lines were
+`packages/db/src/repositories/ports.ts:130-132`, inside `profileStoreFor`'s
+`resolveMistakeTagAllowList`: the `RepositoryError('integrity', ...)` thrown when
+`repos.agentVersions.get` returns `null`, and the one thrown when `repos.styleCards.get` returns
+`null` — both reachable only with a non-empty `known` array and a session that *does* resolve (the
+existing 6.3d cases only drove the "no sessionId"/"session not found" branches).
+
+Added two cases to `packages/db/test/profile-store.int.test.ts`, inside the existing
+`profileStoreFor.applyMistakes / recordProposedMistakes` describe block, against the real
+throwaway Postgres (no source change):
+- **`a session whose agent version does not exist is an integrity error, not a silent drop`** — a
+  session row inserted by hand (`insert into sessions ...`) naming an `agent_version` that has no
+  row in `agent_versions`; `profileStoreFor(...).applyMistakes!` with a non-empty `known` rejects
+  with `integrity`, and `learnerProfiles.get` stays `null`.
+- **`an agent version whose style card does not exist is an integrity error, not a silent drop`** —
+  a real session built through `repos.sessions.create` whose `agent_versions.config.styleCardId`
+  points at a style card id that was never created; same `integrity` rejection, same no-write
+  check.
+
+`packages/db/test/profile-store.int.test.ts` is the only file touched besides this handoff; no
+change to `ports.ts` or any other source file. Ran `corepack pnpm exec prettier --write` once on
+the test file to fix formatting the new blocks introduced, then confirmed `--check` is clean.
+
+Coverage for `src/repositories` after the fix (full `@edmate/db` suite, 89 files / 1855 passed / 4
+skipped):
+```
+src/repositories | 100 | 98.53 | 100 | 100 |
+```
+100% statements, functions and lines; branches at 98.53% (the package's branch threshold is looser
+and was already passing before this fix — unaffected by it). No threshold errors in the run.

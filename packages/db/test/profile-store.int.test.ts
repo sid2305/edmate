@@ -755,6 +755,79 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       ).toBe('integrity');
     }, 15_000);
 
+    it(// Task 6.3d fix round 1: the session resolves, but its agent version row is missing --
+    // `resolveMistakeTagAllowList` throws `integrity` rather than defaulting the allow-list, and
+    // the write never happens.
+    'a session whose agent version does not exist is an integrity error, not a silent drop', async () => {
+      const scope = { studentId: 'stu_mistakes_adapter_noagentversion', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'No Agent Version', 'en', 'test', 'student')`,
+      );
+      const agentVersion = nextAgentVersion++;
+      // A session naming a (agent_id, version) pair that has no row in agent_versions: insert
+      // the session row directly (repos.sessions.create would need the agent_versions row to
+      // already exist for other call sites, so this is built by hand for this case only).
+      const sessionId = 'sess_mistakes_noagentversion';
+      await handle.db.execute(sql`
+          insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+          values (${sessionId}, ${scope.studentId}, ${own.teacherId}, ${ids.agent('A')}, ${agentVersion}, ${ids.pkg('A')}, 1)
+        `);
+      const store = profileStoreFor(repos, scope, sessionId);
+      expect(
+        await kind(
+          store.applyMistakes!(
+            scope,
+            [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+            [],
+          ),
+        ),
+      ).toBe('integrity');
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
+
+    it(// Task 6.3d fix round 1: the session and its agent version both resolve, but the agent
+    // version's style card id points at a style card that does not exist -- same `integrity`
+    // guard, not "allow everything".
+    'an agent version whose style card does not exist is an integrity error, not a silent drop', async () => {
+      const scope = { studentId: 'stu_mistakes_adapter_nostylecard', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+              values (${scope.studentId}, 'No Style Card', 'en', 'test', 'student')`,
+      );
+      const agentVersion = nextAgentVersion++;
+      const config = {
+        ...(await repos.agentVersions.get(
+          { teacherId: own.teacherId },
+          { agentId: ids.agent('A'), version: 1 },
+        ))!,
+        version: agentVersion,
+        styleCardId: 'sty_does_not_exist',
+      };
+      const agentVersionId = 'av_mistakes_nostylecard';
+      await handle.db.execute(sql`
+          insert into agent_versions (id, teacher_id, agent_id, version, config)
+          values (${agentVersionId}, ${own.teacherId}, ${ids.agent('A')}, ${agentVersion}, ${JSON.stringify(config)}::jsonb)
+        `);
+      const { id: sessionId } = await repos.sessions.create(scope, {
+        agentId: ids.agent('A'),
+        agentVersion,
+        packageId: ids.pkg('A'),
+        packageVersion: 1,
+      });
+      const store = profileStoreFor(repos, scope, sessionId);
+      expect(
+        await kind(
+          store.applyMistakes!(
+            scope,
+            [{ tag: 'late_carry', count: 1, lastSeen: '2026-10-27T10:00:00.000Z' }],
+            [],
+          ),
+        ),
+      ).toBe('integrity');
+      expect(await repos.learnerProfiles.get(scope)).toBeNull();
+    }, 15_000);
+
     it('an empty known array is a no-op even with no sessionId', async () => {
       const scope = { studentId: 'stu_mistakes_adapter_emptyknown', teacherId: own.teacherId };
       await handle.db.execute(
