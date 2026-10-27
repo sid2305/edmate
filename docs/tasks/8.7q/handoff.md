@@ -50,6 +50,14 @@ Status: DONE
   allowed `audit.test.ts` that is under the pre-cap raw but grows past it after redaction, so the
   post-redaction check line stays covered without touching anything out of bounds.
 
+### 26 Oct 2026 · 8.7q budget overrun · decided by lead · risk: low
+- Decided: accept 51 tool calls against a budget of 20 (2.5x). The change is one line plus tests, and both reviewers approved it.
+- Why: most of the overrun came from the turbo gate going to the background at the 120 s Bash timeout and then waiting on it. Future briefs tell builders to run the gate with a 600000 ms Bash timeout in the foreground; this brief already said so.
+
+### 26 Oct 2026 · 8.7q merge of audit.ts · decided by lead · risk: high
+- Decided: merge. packages/db/src/repositories/audit.ts (a risk path) now rejects an oversized plain value with RepositoryError invalid before redactPersonalData runs. security-reviewer and code-reviewer approved it.
+- Why: this is strictly tighter. The post-redaction check is unchanged, the error message carries no payload, and the spy test proves redaction never runs on oversized input.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db` -- 8/8 tasks successful
   (typecheck, lint, test x2 build deps, etc.), coverage thresholds met.
@@ -58,4 +66,4 @@ Status: DONE
 - `python3 .githooks/secret-scan.py --all` -- clean, no output.
 
 ## Budget
-Tool calls used: 33
+Tool calls used: 51 (harness count; the builder reported 33)
