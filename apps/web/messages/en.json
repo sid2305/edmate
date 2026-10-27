@@ -626,11 +626,12 @@
   "staff": {
     "nav": "Verification",
     "title": "Teacher verification",
-    "intro": "Teachers waiting for a manual identity check, oldest first. Check the declared name and email before you approve.",
+    "intro": "Teachers waiting for a manual identity check, oldest first. Check the public display name, declared name and email before you approve.",
     "listLabel": "Pending teachers",
     "empty": "No teachers are waiting for verification.",
     "reload": "Reload",
     "reloading": "Reloading…",
+    "displayName": "Public display name",
     "subject": "Subject",
     "name": "Declared name",
     "email": "Email",

@@ -7,6 +7,7 @@ import { decide, findTeacherBySlug, loadQueue } from './client';
 const ITEM = {
   teacherId: 'tch_a',
   slug: 'asha-math',
+  displayName: 'Asha Public',
   subject: 'Math',
   name: 'Asha',
   email: null,

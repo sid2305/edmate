@@ -74,6 +74,8 @@ export interface SubjectChange {
 export interface QueueItem {
   teacherId: string;
   slug: string;
+  /** Task 9.2g: the public display name (slug-fallback), same source as discovery's public reads. */
+  displayName: string;
   subject: string;
   name: string;
   email: string | null;
@@ -94,6 +96,7 @@ export function toQueueItem(
   return {
     teacherId: row.teacherId,
     slug: row.slug,
+    displayName: row.displayName,
     subject: row.subject,
     name: row.name,
     email: row.email,

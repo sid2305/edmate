@@ -17,6 +17,7 @@ const ASHA: QueueItem = {
   teacherId: 'tch_a',
   slug: 'asha-math',
   subject: 'Math',
+  displayName: 'Asha R.',
   name: 'Asha Rao',
   email: 'asha@example.test',
   activeTakedowns: [],
@@ -27,6 +28,7 @@ const BEN: QueueItem = {
   teacherId: 'tch_b',
   slug: 'ben-physics',
   subject: 'Physics',
+  displayName: 'Ben',
   name: 'Ben',
   email: null,
   activeTakedowns: [],
@@ -45,11 +47,15 @@ function rowOf(slug: string) {
 }
 
 describe('StaffQueueView', () => {
-  it('lists each pending teacher with slug, subject, declared name and email', () => {
+  it('lists each pending teacher with slug, subject, declared name, display name and email', () => {
     renderIntl(<StaffQueueView initial={[ASHA, BEN]} />);
     const asha = rowOf('asha-math');
     expect(within(asha).getByText('Math')).toBeInTheDocument();
-    expect(within(asha).getByText('Asha Rao')).toBeInTheDocument();
+    const displayName = within(asha).getByText('Asha R.');
+    const declaredName = within(asha).getByText('Asha Rao');
+    expect(displayName).toBeInTheDocument();
+    expect(declaredName).toBeInTheDocument();
+    expect(displayName).not.toBe(declaredName);
     expect(within(asha).getByText('asha@example.test')).toBeInTheDocument();
     expect(within(rowOf('ben-physics')).getByText('No email on file')).toBeInTheDocument();
   });

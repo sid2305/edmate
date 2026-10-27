@@ -2571,7 +2571,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         (r) =>
           r.teacherProfiles.create(tScope(a), {
             slug: `${profileSlug(a)}-2`,
-            displayName: 'X',
+            // displayName must be well-formed (2+ chars) so this case reaches the
+            // duplicate-profile check it's named for, not DisplayName's own length refinement
+            // (task 9.2d code-review LOW, fixed task 9.2g).
+            displayName: 'XX',
             subject: 'x',
           }),
         'invalid',
@@ -2581,7 +2584,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         (r) =>
           r.teacherProfiles.create(tScope(a), {
             slug: profileSlug(otherTeacher(a)),
-            displayName: 'X',
+            // displayName must be well-formed (2+ chars) so this case reaches the
+            // slug-collision check it's named for, not DisplayName's own length refinement
+            // (task 9.2d code-review LOW, fixed task 9.2g).
+            displayName: 'XX',
             subject: 'x',
           }),
         'invalid',
@@ -2766,7 +2772,16 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       for (const row of rows) {
         expect(row.verificationStatus, 'only pending rows').toBe('pending');
         expect(Object.keys(row).sort()).toEqual(
-          ['email', 'id', 'name', 'slug', 'subject', 'teacherId', 'verificationStatus'].sort(),
+          [
+            'displayName',
+            'email',
+            'id',
+            'name',
+            'slug',
+            'subject',
+            'teacherId',
+            'verificationStatus',
+          ].sort(),
         );
       }
       n += 1;
