@@ -9319,9 +9319,9 @@ tasks:
   accept: removing locked precedence fails the coverage test through the gate assertion, not only through the module check; mergeByScore ties are ordered by id
   deps:
   - 3.4c
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/3.4d-same-topic-lows
+  model: plan:sonnet build:sonnet
 - id: 3.9b
   milestone: M3
   title: 'CI flake: apps/cli chat tests intermittently end a turn in an error event on CI runners, then pass on re-run (sameTopic.test.ts "three same-topic allowed turns", PR #78 and main c8b295b; deps.test.ts
