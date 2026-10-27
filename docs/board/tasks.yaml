@@ -3098,9 +3098,9 @@ tasks:
   deps:
   - '6.5'
   risk: risky
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/6.5a-memory-reset-watermark
+  model: plan:sonnet build:sonnet
 - id: 7.3a
   milestone: M13
   title: 'Per-agent suite generator: Hindi (Devanagari), romanised Hindi and Hinglish variants of the locked templates, as a safety net after the English-only pilot.'
@@ -5031,6 +5031,14 @@ tasks:
   status: running
   branch: m13/13.regate-material-regate
   model: plan:sonnet build:sonnet
+- id: 13.regatea
+  milestone: M13
+  title: '13.regate review MEDIUM: a partial index on eval_runs for the regate sweep''s last passed, published gate-suite run per agent (database-reviewer, security-reviewer), with a migration and EXPLAIN evidence'
+  accept: a migration adds the index; the sweep's candidate query uses it (EXPLAIN in the handoff); db typecheck, lint and test green
+  deps:
+  - 13.regate
+  risk: medium
+  status: todo
 - id: 8.9d
   milestone: M13
   title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes; 8.9c review
@@ -9833,9 +9841,29 @@ tasks:
   deps:
   - 9.2g
   risk: medium
-  status: running
+  status: done
   branch: m13/9.2h-staff-queue-lows
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 461
+    tokens_in: 1642
+    tokens_out: 112028
+    cache_read_tokens: 45425497
+    wall_time_seconds: 2108
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.6f
   milestone: M13
   title: '5.6b plan Q5 follow-up (pilot-blocking): release the practice key on a turn that is graded correct, so a confirmation that restates the key ("Yes, B is right!") is not replaced by the safe hint;

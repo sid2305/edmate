@@ -10,6 +10,21 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 9.2h budget overrun · decided by lead · risk: low
+- Decided: accept 48 tool calls against a budget of 25 (1.92x); no rework.
+- Why: the work stayed inside the two planned files plus one int test, and all three reviewers approved with no findings; the plan's budget was set too low for a db int test plus a web client test.
+
+---
+
+### 27 Oct 2026 · 9.2h client.ts risky-path review · decided by builder · risk: high
+- Decided: `apps/web/app/staff/**` is a risky path per the plan; `review.md` for this PR must
+  name `security-reviewer` (plus `code-reviewer` and `typescript-reviewer`) as required
+  reviewers for the `client.ts`/`client.test.ts` change before merge.
+- Why: the plan itself calls this out; logging it here per non-negotiable 6/8 so the merge gate
+  can check it.
+
+---
+
 ### 27 Oct 2026 · 9.2g security-review LOWs deferred · decided by lead · risk: low
 - Decided: defer both security-review LOWs to new board task 9.2h: a Postgres int test for the staff queue reads with a NULL display name (coalesce to slug), and `.min(1)` on `displayName` in the staff client's `QueueItemSchema`.
 - Why: neither is reachable today (slug is never empty and the coalesce is the same one 9.2d's public reads already use); four reviewers approved with no blocking finding.
