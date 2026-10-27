@@ -10,6 +10,75 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2i merge of db repositories and ADR-0014 · decided by lead · risk: high
+- Decided: merge the `failIfStorageKey` compare-and-set (`packages/db/src/repositories/chunks.ts`), the new `ingestSweep` repository (`packages/db/src/repositories/ingestSweep.ts`, `index.ts`), the worker's stuck-ingest sweep and pinned-transport Host header, and the ADR-0014 wording change (`docs/adr/0014-web-link-egress.md`), all risky paths.
+- Why: security-reviewer, architect, typescript-reviewer, code-reviewer and database-reviewer reviewed the branch; both HIGHs were fixed in one round and the reviewers who raised them approved the fix; the index MEDIUM is deferred to 8.2p.
+
+---
+
+### 27 Oct 2026 · 8.2i sweep checks the ingest job before failing a row · decided by lead · risk: high
+- Decided: before failing a stuck `processing` row, `apps/worker/src/ingest/sweep.ts` looks up the BullMQ job `jobId.ingest(documentId, storageKey)`; waiting, delayed, prioritized, waiting-children or active skips the row (logged `ingest_sweep.still_queued`); a missing, completed or failed job fails the row as before.
+- Why: `documents.updated_at` is set once on entering `processing`, so without this a slow or backlogged job past 30 minutes was failed and then finished into a `failed` row with indexed chunks (database-reviewer HIGH, typescript-reviewer MEDIUM). A job lookup fixes it without a heartbeat column or a migration.
+
+---
+
+### 27 Oct 2026 · 8.2i IPv6 Host header keeps its brackets · decided by lead · risk: low
+- Decided: `apps/worker/src/webLink/pinnedTransport.ts` sends `Host: [addr]` for an IPv6 literal, plus `:port` only for a non-default port; names and IPv4 are unchanged.
+- Why: a bare IPv6 Host header is malformed (RFC 7230/3986) and was a regression from this branch (code-reviewer and typescript-reviewer HIGH, security-reviewer MEDIUM, architect LOW).
+
+---
+
+### 27 Oct 2026 · 8.2i budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (308 harness tool calls across three phases and one fix round, against a budget of 130; the builders reported 150).
+- Why: Phase B carried the sweep, a new repository and the worker wiring, and the fix round added the job-state lookup; each phase stayed on scope.
+
+---
+
+### 27 Oct 2026 · 8.2i isolation case for a method that never throws · decided by builder · risk: low
+- Decided: `documents.failIfStorageKey`'s `CASES` entry uses `owns: () => true` to skip the shared
+  cross-actor grid (which calls `expectFailsClosed`, always expecting a throw) and instead asserts
+  cross-teacher isolation directly inside `verify` (one teacher's call against another's document,
+  checked to be `{ updated: false }` with the row left unchanged).
+- Why: the plan itself calls out that this method "returns `{ updated: boolean }` instead of
+  throwing `not_found`", which is exactly what the generic grid's `expectFailsClosed` cannot
+  express (it asserts a `RepositoryError` was thrown and nothing was written). `owns: () => true`
+  is the existing pattern this file already uses for every other case whose cross-actor behaviour
+  doesn't fit that generic throw-and-check-nothing-written shape (e.g. `courses.ensureDefault`,
+  `styleCards.create`).
+
+### 27 Oct 2026 · 8.2i Host header carries the request's port when non-default · decided by builder · risk: low
+- Decided: `pinnedRequestOptions` sets `headers.host` to `bareHostName(host)`, with
+  `:${req.url.port}` appended only when `req.url.port` is non-empty (i.e. not the URL's default
+  port), rather than the plan's literal `headers: { ...req.headers, host }` (bare host, no port
+  logic at all).
+- Why: the plan's suggested one-line fix drops the port entirely, which would have broken two
+  passing 8.2h tests that depend on `req(port)` building an explicit non-default port into the URL
+  (`http://teacher-site.test:${port}/...`) and asserting the `Host` header still carries it — real
+  HTTP semantics require `Host` to carry a non-default port, and SNI's `servername` never carries
+  a port either way (TLS has no notion of one), so this doesn't put SNI and `Host` out of sync.
+
+### 27 Oct 2026 · 8.2i two pre-existing Host-header test assertions updated · decided by builder · risk: low
+- Decided: updated `'lands on the pinned address for a host that is not in DNS...'` and `'fetches
+  a page end to end, pinned to the checked address'` to expect `Host: teacher-site.test` (no port)
+  instead of the previous `teacher-site.test:<local test server port>`.
+- Why: before this fix, Node derived `Host` from whatever target it actually connected to; in the
+  `toLocalServer` test helper that target is a locally-redirected port even when the real teacher
+  URL (default https, no explicit port) carries none. `Host` should reflect the real request URL's
+  authority, not an artifact of the test harness's local-port redirect, so the old assertion was
+  testing the previous bug's exact byproduct. The other 8.2h test (`req(port)`, explicit port in
+  the URL itself) is unaffected and still expects the port, which the new port-aware fix preserves.
+
+### 27 Oct 2026 · 8.2i openDatabase's exact-keys test updated for the new `ingestSweep` key · decided by builder · risk: low
+- Decided: `packages/db/test/repositories.int.test.ts`'s `openDatabase gives repositories, ...`
+  test (not in Phase B's file list) gets `'ingestSweep'` added to its exact, sorted
+  `Object.keys(opened)` expectation and its title extended to name the ingest sweep, instead of
+  leaving that test red.
+- Why: the plan's lead answer to Q4 explicitly asks `openDatabase()` to attach `ingestSweep` the
+  same way it attaches `retention`/`regate`; that one-line addition is exactly what this
+  pre-existing test asserts the full key list of, so it fails the moment the new key is added. The
+  plan's own exit condition is each phase's gate green; fixing this one assertion is the minimal,
+  direct consequence of the file the plan did ask for, not new scope.
+
 ### 27 Oct 2026 · 6.2a merge of db/repositories/learner.ts · decided by lead · risk: high
 - Decided: merge the keyset-paged `rebuildMastery` in `packages/db/src/repositories/learner.ts` (a risky path) with migration 0039's concurrent index.
 - Why: security-reviewer, code-reviewer, database-reviewer and typescript-reviewer all approved with no findings above LOW; every page stays scoped to teacher and student under the same row lock, and the index is built with `CREATE INDEX CONCURRENTLY` like 0036 and 0038.

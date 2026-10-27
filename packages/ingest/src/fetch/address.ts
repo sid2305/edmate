@@ -123,7 +123,11 @@ export function errorCode(reason: unknown): string {
  * answers with addresses, the other gets FAMILY_GRACE_MS before it is cancelled (its answers are
  * then simply missing, as for a transient failure). A name with no address throws code
  * ENOTFOUND; any other failure keeps its code (SERVFAIL, timeout, cancelled) so the caller can
- * retry it.
+ * retry it. When every query settles rejected (no family ever answered with addresses),
+ * `graceOver` never resolves, `grace` is never armed, both queries are still awaited through
+ * `Promise.allSettled`, and the thrown code is the first non-`NO_SUCH_NAME` rejection code (or
+ * `ENOTFOUND` if every rejection happened to be a `NO_SUCH_NAME` code, which should not occur for
+ * two different families but is the safe fallback).
  */
 export async function systemResolveHost(host: string, signal?: AbortSignal): Promise<string[]> {
   const resolver = new Resolver(RESOLVER_OPTIONS);

@@ -222,20 +222,22 @@ export function ingestProcessor(
 
     /**
      * Marks the document failed with `code` and ends the job for good, or reports a stale skip
-     * when the row moved on (deleted or replaced) first. The row is re-read before the write and
-     * left alone unless it still holds the storageKey this job started with (task 8.2h): a
-     * replace can reset it to `uploading` or hand it to a newer job's `processing`, both of which
-     * updateStatus would otherwise move to `failed`. Only the code is in the error.
+     * when the row moved on (deleted or replaced) first. One atomic compare-and-set
+     * (`failIfStorageKey`, task 8.2i) checks the row still holds the storageKey this job started
+     * with and writes `failed` in the same statement, so there is no window left between a check
+     * and a write for a replace to land in (task 8.2h's re-read-then-write had exactly that
+     * window). A replace that reset the row to `uploading` or handed it to a newer job's
+     * `processing` looks the same as a storageKey mismatch here: `{ updated: false }`. Only the
+     * code is in the error.
      */
     const failWith = async (code: IngestErrorCode, startedWith: string): Promise<IngestOutcome> => {
+      let result;
       try {
-        const current = await deps.repos.documents.get(scope, documentId);
-        if (current?.storageKey !== startedWith) return staleSkip();
-        await deps.repos.documents.updateStatus(scope, documentId, 'failed', code);
+        result = await deps.repos.documents.failIfStorageKey(scope, documentId, startedWith, code);
       } catch (error) {
-        if (error instanceof RepositoryError && error.kind === 'not_found') return staleSkip();
         return classifyRepoError(job.name, error);
       }
+      if (!result.updated) return staleSkip();
       throw new PermanentJobError(`${job.name}: ${code}`);
     };
 

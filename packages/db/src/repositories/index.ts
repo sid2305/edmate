@@ -363,3 +363,16 @@ export {
   type RetentionRepo,
   type RetentionResult,
 } from './retention.js';
+/**
+ * Task 8.2i (Phase B): the stuck-`processing` sweep's candidate list. A scheduled job, not a
+ * signed-in teacher or student's own scoped read, so it is deliberately outside
+ * `createRepositories` and the isolation grid in `test/repositories.int.test.ts` (same pattern as
+ * `retention` above). A caller builds one with its own `Db` the same way `openDatabase` builds
+ * `repos` and `retention`.
+ */
+export {
+  ingestSweepRepo,
+  INGEST_SWEEP_LIMIT,
+  type IngestSweepRepo,
+  type StaleProcessingDocument,
+} from './ingestSweep.js';

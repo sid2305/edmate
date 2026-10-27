@@ -11,8 +11,10 @@ import {
   createRepositories,
   retentionRepo,
   regateRepo,
+  ingestSweepRepo,
   type RetentionRepo,
   type RegateRepo,
+  type IngestSweepRepo,
   type Repositories,
 } from './repositories/index.js';
 
@@ -46,6 +48,8 @@ export function openDatabase(
   retention: RetentionRepo;
   /** Task 13.regate: the regate sweep's candidate list (apps/worker's Phase B calls this). */
   regate: RegateRepo;
+  /** Task 8.2i (Phase B): the stuck-`processing` sweep's candidate list (apps/worker calls this). */
+  ingestSweep: IngestSweepRepo;
   close: () => Promise<void>;
 } {
   const { db, close } = createDb(env);
@@ -54,6 +58,7 @@ export function openDatabase(
     identity: createIdentityStore(db, options.identity),
     retention: retentionRepo(db),
     regate: regateRepo(db),
+    ingestSweep: ingestSweepRepo(db),
     close,
   };
 }

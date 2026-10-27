@@ -279,6 +279,87 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
     });
   });
 
+  describe('failIfStorageKey (8.2i: the atomic compare-and-set failWith/the sweeper use)', () => {
+    it('matches and updates: storageKey, status and failure reason', async () => {
+      const id = await doc([], 'uploads/doc/f1.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      const res = await repos.documents.failIfStorageKey(
+        A,
+        id,
+        'uploads/doc/f1.pdf',
+        'provider_error',
+      );
+      expect(res).toEqual({ updated: true });
+      const row = await repos.documents.get(A, id);
+      expect(row?.status).toBe('failed');
+      expect(row?.failureReason).toBe('provider_error');
+    });
+
+    it('a storageKey mismatch is a no-op: updated: false, row unchanged', async () => {
+      const id = await doc([], 'uploads/doc/f2.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      const res = await repos.documents.failIfStorageKey(
+        A,
+        id,
+        'uploads/doc/other.pdf',
+        'provider_error',
+      );
+      expect(res).toEqual({ updated: false });
+      const row = await repos.documents.get(A, id);
+      expect(row?.status).toBe('processing');
+      expect(row && Object.keys(row)).not.toContain('failureReason');
+    });
+
+    it('a wrong current status (already ready) is a no-op', async () => {
+      const id = await doc([], 'uploads/doc/f3.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      await repos.documents.updateStatus(A, id, 'ready');
+      const res = await repos.documents.failIfStorageKey(
+        A,
+        id,
+        'uploads/doc/f3.pdf',
+        'provider_error',
+      );
+      expect(res).toEqual({ updated: false });
+      expect((await repos.documents.get(A, id))?.status).toBe('ready');
+    });
+
+    it("a missing document or another teacher's is a no-op, not a throw", async () => {
+      const id = await doc([], 'uploads/doc/f4.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      expect(
+        await repos.documents.failIfStorageKey(B, id, 'uploads/doc/f4.pdf', 'provider_error'),
+      ).toEqual({ updated: false });
+      expect(
+        await repos.documents.failIfStorageKey(
+          A,
+          'doc_nope',
+          'uploads/doc/f4.pdf',
+          'provider_error',
+        ),
+      ).toEqual({ updated: false });
+      expect((await repos.documents.get(A, id))?.status).toBe('processing');
+    });
+
+    it('rejects a bad failure reason before any SQL', async () => {
+      const id = await doc([], 'uploads/doc/f5.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      const err = await rejection(
+        repos.documents.failIfStorageKey(A, id, 'uploads/doc/f5.pdf', 'Raw error: x'),
+      );
+      expect(err.kind).toBe('invalid');
+      expect((await repos.documents.get(A, id))?.status).toBe('processing');
+    });
+
+    it('does not bump the material revision', async () => {
+      const id = await doc([], 'uploads/doc/f6.pdf');
+      await repos.documents.updateStatus(A, id, 'processing');
+      const before = await repos.retrieval.revision(A);
+      await repos.documents.failIfStorageKey(A, id, 'uploads/doc/f6.pdf', 'provider_error');
+      expect(await repos.retrieval.revision(A)).toBe(before);
+    });
+  });
+
   describe('delete', () => {
     it('removes chunks and row, bumps the revision, and the next search misses it', async () => {
       const id = await doc(['zygomorphic petals unique marker', 'second zygomorphic chunk']);

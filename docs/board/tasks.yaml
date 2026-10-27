@@ -7288,9 +7288,32 @@ tasks:
   deps:
   - 8.2h
   risk: high
-  status: running
+  status: done
   branch: m13/8.2i-ingest-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1471
+    tokens_in: 5126
+    tokens_out: 363520
+    cache_read_tokens: 158481275
+    wall_time_seconds: 412668
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 3
+        LOW: 1
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 11.2c
   milestone: M13
   title: '11.2a review LOW: a composite index on class_questions (live_class_id, created_at, id) for the teacher queue scan once volumes grow'
@@ -10625,6 +10648,6 @@ tasks:
   deps:
   - 8.2i
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.2p-sweep-index
+  model: plan:lead build:sonnet review:sonnet

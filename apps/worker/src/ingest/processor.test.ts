@@ -69,6 +69,25 @@ function memoryRepos(initial: DocumentRow) {
           current = { ...current, status, ...(failureReason ? { failureReason } : {}) };
           return Promise.resolve();
         },
+        // Mirrors the db repo (task 8.2i): the storageKey check, the status check and the write
+        // are one call; a mismatch of any kind is `{ updated: false }`, never a throw.
+        failIfStorageKey: (
+          _scope: unknown,
+          id: string,
+          expectedStorageKey: string,
+          failureReason: string,
+        ) => {
+          calls.push('failIfStorageKey');
+          if (current === null || current.id !== id) return Promise.resolve({ updated: false });
+          if (current.storageKey !== expectedStorageKey) {
+            return Promise.resolve({ updated: false });
+          }
+          if (!['uploading', 'processing'].includes(current.status)) {
+            return Promise.resolve({ updated: false });
+          }
+          current = { ...current, status: 'failed', failureReason };
+          return Promise.resolve({ updated: true });
+        },
       },
       chunks: {
         insertMany: (_scope: unknown, documentId: string, drafts: { ord: number }[]) => {
@@ -908,8 +927,8 @@ describe('ingestProcessor: the last attempt for file jobs', () => {
         ...mem.repos,
         documents: {
           ...mem.repos.documents,
-          updateStatus: () =>
-            Promise.reject(new RepositoryError('failed', 'documents.updateStatus')),
+          failIfStorageKey: () =>
+            Promise.reject(new RepositoryError('failed', 'documents.failIfStorageKey')),
         },
       } satisfies IngestProcessorDeps['repos'],
       storage: fakeStorage(),
@@ -994,18 +1013,15 @@ describe('ingestProcessor: the last attempt for file jobs', () => {
     expect(mem.calls).not.toContain('updateStatus:failed');
   });
 
-  it('a db outage on the re-read before the failed write is rethrown for a retry', async () => {
+  it('a db outage on the atomic failed write is rethrown for a retry', async () => {
     const mem = memoryRepos(row());
-    let gets = 0;
     const deps: IngestProcessorDeps = {
       repos: {
         ...mem.repos,
         documents: {
           ...mem.repos.documents,
-          get: (scope, id) =>
-            ++gets === 1
-              ? mem.repos.documents.get(scope, id)
-              : Promise.reject(new RepositoryError('failed', 'documents.get')),
+          failIfStorageKey: () =>
+            Promise.reject(new RepositoryError('failed', 'documents.failIfStorageKey')),
         },
       } satisfies IngestProcessorDeps['repos'],
       storage: fakeStorage(),
