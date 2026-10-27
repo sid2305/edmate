@@ -9213,9 +9213,38 @@ tasks:
   accept: each item in docs/tasks/5.3/review.md marked [deferred 5.3a] is fixed or explicitly declined in the decision log, with tests where behaviour changes; the db gate passes
   deps:
   - '5.3'
-  status: running
+  status: done
   branch: m13/5.3a-retrieval-query-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 710
+    tokens_in: 2452
+    tokens_out: 215735
+    cache_read_tokens: 67198227
+    wall_time_seconds: 568200
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
+- id: 5.3c
+  milestone: M13
+  title: '5.3a declined items 4 and 11: widen the out-of-course calibration set for the retrieval coverage threshold, and design a per-course recalibration path; build once a second real course exists to validate against'
+  accept: the out-of-course calibration set covers more than one course's vocabulary and a documented recalibration step per course exists, with tests; the db and harness gates pass
+  deps:
+  - 5.3a
+  status: todo
 - id: 5.4a
   milestone: M13
   title: 'Access-filter follow-ups (5.4 review MEDIUM/LOW): audit rule 1 also catches db.query.chunks, namespace imports and public.chunks SQL; rule 2 needs a real scope filter; rule 5 covers apps/* once
