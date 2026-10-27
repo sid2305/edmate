@@ -170,3 +170,24 @@ gate commands); no chatDbRetrieval.int.test.ts involvement.
 
 ## Budget
 Tool calls used: 53 (harness count from the builder transcript; the builder reported 34)
+
+## Fix round (CI coverage)
+
+CI failed on `src/auth/**` statement coverage (99.84%, needed 100%): an uncovered `return false`
+on `apps/web/src/auth/config.ts:172` (`if (owner && (await isAgeBlocked(identity, owner.id)))
+return false;` in the Google sign-in branch). No existing test drove `isAgeBlocked` to `true` for
+an owner reached through the Google flow — the `hasLinkedAccount` test added earlier in this task
+always short-circuits before that line.
+
+Added one test to `apps/web/src/auth/config.test.ts`: a `memoryIdentity()` student with a verified
+email, marked `ageBlocked`, signing in with Google and matched only by email (no linked account)
+is refused (`false`), exercising the `isAgeBlocked` branch directly via the fixture's exposed
+`ageBlocked` set rather than mocking `IdentityStore`.
+
+Result: `corepack pnpm --filter @edmate/web exec vitest run --coverage` → 168 test files passed, 4
+skipped, 2686 tests passed, 31 skipped, no `FAIL`, no coverage-threshold error (statements 94.77%
+overall, `src/auth/config.test.ts` alone: config.ts 100% statements/lines/functions). Typecheck and
+lint for `@edmate/web` clean (pre-existing unrelated eslint warnings only). `prettier --check` on
+the changed file clean. `python3 .githooks/secret-scan.py --all` clean.
+
+Fix tool calls used: 17

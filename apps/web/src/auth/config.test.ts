@@ -439,6 +439,28 @@ describe('createAuthConfig', () => {
       ).toBe(true);
       expect(hasLinkedAccount).toHaveBeenCalledWith('owner-4', 'google');
     });
+
+    it('1.4c: an age-blocked owner matched by email is refused before linkAccount runs', async () => {
+      const id = memoryIdentity();
+      const owner = await id.createStudent({
+        email: 'blocked@example.test',
+        emailVerifiedAt: new Date(),
+        name: 'Blocked',
+      });
+      id.ageBlocked.add(owner.id);
+      const ageBlockedConfig = createAuthConfig({
+        identity: id as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await ageBlockedConfig.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g-blocked' } as Account,
+          profile: { email: 'blocked@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(false);
+    });
   });
 
   describe('signIn callback while already signed in (shared device)', () => {
