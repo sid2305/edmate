@@ -2996,9 +2996,32 @@ tasks:
   - '6.3'
   - 6.3c
   risk: risky
-  status: running
+  status: done
   branch: m13/6.3a-mistake-proposals
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 556
+    tokens_in: 1988
+    tokens_out: 142022
+    cache_read_tokens: 74856176
+    wall_time_seconds: 5745
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 10
+      by_severity:
+        HIGH: 1
+        MEDIUM: 3
+        LOW: 6
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 6
+        wontfix: 3
+    human_questions: 0
 - id: 6.3c
   milestone: M13
   title: 'Wire mistake tagging into practice turns (found while planning 6.3a): nothing in production calls classifyMistakeTags or learnerRepo.applyMistakes yet, so 6.3a''s proposals table would have no
@@ -11431,3 +11454,27 @@ tasks:
   status: running
   branch: m13/0.20j-dev-overlay-hang
   model: plan:sonnet build:sonnet
+- id: 6.3f
+  milestone: M13
+  title: '6.3a Phase A security review MEDIUMs and LOW (packages/db/src/repositories/mistake-proposals.ts): approve validates the merged mistakeTags against STYLE_CARD_LIMITS.tagsMax (20) and raises limit
+    instead of writing a 21-tag style card; record checks the teacher role (lockRole) like approve and reject; record takes a per-teacher advisory lock before its MISTAKE_PROPOSALS_MAX count check so two
+    concurrent calls cannot pass 100 rows; lastSeen uses the contracts timestamp() schema. Phase B review LOWs (apps/web/src/studio/mistakeProposalRoutes.ts): the route Tag schema imports the repository
+    tag max length instead of a hardcoded 60; consider a per-teacher rate limit on approve and reject'
+  accept: one failing-then-passing int test per fix (21st tag refused with limit; a student id refused on record; concurrent record calls stay at or under the cap; a malformed lastSeen is invalid); @edmate/db
+    typecheck, lint and test green; security-reviewer re-check.
+  deps:
+  - 6.3a
+  risk: high
+  status: running
+  branch: m13/6.3f-mistake-proposal-hardening
+  model: plan:sonnet build:sonnet
+- id: 0.20k
+  milestone: M13
+  title: 'walkthrough Save-button timeout found by 0.20j: one of 6 local runs of teacher-packages-walkthrough.spec.ts timed out waiting for the Save button on the reuse/edit path (no intercepted click),
+    likely when leftover rows put the teacher at PACKAGES_MAX; reproduce by seeding a teacher at the cap and make the at-cap path pass'
+  accept: teacher-packages-walkthrough.spec.ts passes 5 fresh local runs against next dev starting with the teacher already at PACKAGES_MAX, and 5 starting empty; apps/web typecheck, lint and test green.
+  deps:
+  - 0.20j
+  risk: low
+  status: todo
+  branch: null

@@ -10,6 +10,89 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.3a recordProposedMistakes now calls mistakeProposalsRepo.record, teacher-scoped only · decided by builder · risk: low
+- Decided: `profileStoreFor.recordProposedMistakes(scope, proposed)` persists via the new repo,
+  scoped by `{ teacherId: bound.teacherId }` (no `studentId` column on `mistake_tag_proposals`).
+- Why: matches "shown to its teacher only" (acceptance) and `classifyMistakeTags`'s own per-teacher
+  `allowedTags` input; aggregating by student would need a column and index this feature doesn't
+  need.
+
+---
+
+### 27 Oct 2026 · 6.3a approve shares style-cards.ts's version-insert logic via an extracted helper · decided by builder · risk: low
+- Decided: extracted `insertNextVersion(tx, teacherId, draft, method)` from `styleCardsRepo.create`'s
+  transaction body; both `create` and `mistakeProposalsRepo.approve` call it from inside their own
+  `db.transaction`, so the proposal-row update and the new style-card version commit or roll back
+  together.
+- Why: reuses the existing versioning path exactly, keeps one atomic write, avoids nesting
+  `db.transaction` calls (no precedent for that in this codebase).
+
+---
+
+### 27 Oct 2026 · 6.3a no contracts change · decided by builder · risk: low
+- Decided: `ProposedMistakeTagInput`/`MistakeProposalRow` stay `packages/db`-internal.
+- Why: the `ProfileStore` port ADR-0017 already froze the right method signatures; nothing new
+  needed.
+
+---
+
+### 27 Oct 2026 · 6.3a new table, repository and a ports.ts write-path change in packages/db · decided by builder · risk: high
+- Decided: shipped `mistake_tag_proposals`, `mistakeProposalsRepo`, the `style-cards.ts`
+  extraction, and the `recordProposedMistakes` wire-up, logged `risk: high` per the merge gate's
+  rule for any `packages/db/src/repositories/**` change, reviewed by security-reviewer (required)
+  and code-reviewer/typescript-reviewer (default); database-reviewer recommended.
+- Why: the risk-paths group requires `risk: high` for this path regardless of change size, same as
+  6.3d's own precedent for the same file.
+
+---
+
+### 27 Oct 2026 · 6.3a decide uses POST, not PATCH (Q2) · decided by builder · risk: low
+- Decided: the single decide endpoint (`{tag, action: 'approve'|'reject'}`) is `POST
+  /api/studio/mistake-proposals`, not `PATCH` as the plan's Q2 recommended.
+- Why: `src/auth/policy.ts`'s `ROUTE_POLICY` row for `/api/studio/**` allows only
+  `GET, POST, PUT, DELETE`; `route-coverage.test.ts` fails any exported HTTP method with no
+  matching policy row (deny by default). Extending that row to add `PATCH` would touch
+  `apps/web/src/auth/**`, which this task's own "Files out of bounds" list reserves ("reuse
+  requireRole/withRole as-is") and which this builder's brief also forbids touching. `POST` is
+  already allowed for teachers on this path and carries the same body shape, so no behaviour is
+  lost.
+
+---
+
+### 27 Oct 2026 · 6.3a no optimistic removal on decide (plan's own line, confirmed in the test) · decided by builder · risk: low
+- Decided: `StyleCardView`'s proposed-tags list only drops a tag after `decideMistakeProposal`
+  resolves `ok: true`; a failed call leaves the tag listed and shows the existing error banner.
+- Why: matches the plan's acceptance line for Phase B ("approving one removes it from the pending
+  list client-side ... rejecting removes it without changing the card") read together with the
+  existing `onSave`/`onDraft` pattern in the same file, which never assumes success before the
+  response is in.
+
+---
+
+### 27 Oct 2026 · 6.3a Phase A repositories approval · decided by lead · risk: high
+- Decided: approve the packages/db changes for merge: mistake-proposals.ts (packages/db/src/repositories/mistake-proposals.ts), the extracted insertNextVersion in style-cards.ts, ports.ts recordProposedMistakes, and migration 0042. security-reviewer, database-reviewer and code-reviewer found no CRITICAL or HIGH issues. The three security MEDIUMs and a LOW move to 6.3f, which must merge before the pilot.
+- Why: teacher scoping, idempotent approve/reject and parameterised SQL were all verified. The MEDIUMs are bounded: an over-cap card needs 20 tags already, `record` is only reached through the bound teacher id, and a race overshoots the 100-row cap by a few rows at most.
+
+---
+
+### 27 Oct 2026 · 6.3a content.ts pending index without last_seen · decided by lead · risk: low
+- Decided: keep the partial `(teacher_id, status)` index in content.ts (packages/db/src/schema/content.ts) without `last_seen`.
+- Why: a teacher has at most 100 proposal rows, so the in-memory sort is negligible.
+
+---
+
+### 27 Oct 2026 · 6.3a Phase B review LOWs not fixed · decided by lead · risk: low
+- Decided: leave the unused `_log` parameter in mistakeProposalRoutes.ts (apps/web/src/studio/mistakeProposalRoutes.ts) and the two sequential reads in page.tsx (apps/web/app/teacher/style-card/page.tsx) as they are. The hardcoded 60-character tag limit and a rate limit on approve and reject move to 6.3f.
+- Why: the parameter is deliberate, and one extra round trip on a server page costs nothing at pilot scale.
+
+---
+
+### 27 Oct 2026 · 6.3a merge and budget, 264 tool calls against 120 · decided by lead · risk: low
+- Decided: merge at 264 harness-counted tool calls (Phase A 156, Phase B 82, fix round 26) against the plan's 120.
+- Why: Phase A ran over through a session restart and a coverage fix round, and Phase B and its fix stayed close to plan. Both phases are reviewed and green.
+
+---
+
 ### 27 Oct 2026 · 11.4i keep the unreachable mediaTooLarge arm · decided by lead · risk: low
 - Decided: leave the `!type.splittable` arm and `MSG.mediaTooLarge` in routes.ts (apps/web/src/studio/routes.ts) as they are, although no current upload type reaches them.
 - Why: the plan keeps them so a future media type the worker cannot split still gets the right refusal. Removing them now saves a few lines but loses that guard.
