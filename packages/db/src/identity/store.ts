@@ -233,6 +233,33 @@ const Grant = z.strictObject({
 const Market = z.string().regex(/^(?:[A-Z]{2}|global)$/);
 const NoticeVersion = z.string().min(1).max(64);
 
+/** Who granted a consent row: the `consents_granted_by_check` DB constraint already blocks any
+ * other value from being written through this store's own inserts, but `listConsentsForStudent`
+ * parses every row read back anyway (belt-and-braces against a future looser constraint or a row
+ * from outside this store's own writes) instead of trusting the column's string type with a cast. */
+const GrantedBy = z.enum(['self', 'parent']);
+
+/**
+ * A `consents` row, as the database driver hands it back, mapped to `ConsentRow` (13.4d account
+ * export). Pure (no I/O), same pattern as `age.ts`'s `ageStatus`, so it is unit-testable with no
+ * database: a `grantedBy` outside `GrantedBy` throws instead of being cast.
+ */
+export function parseConsentRow(row: {
+  kind: string;
+  version: string;
+  grantedBy: string;
+  ts: Date;
+  withdrawnAt: Date | null;
+}): ConsentRow {
+  return {
+    kind: row.kind,
+    version: row.version,
+    grantedBy: GrantedBy.parse(row.grantedBy),
+    ts: row.ts.toISOString(),
+    withdrawnAt: row.withdrawnAt ? row.withdrawnAt.toISOString() : null,
+  };
+}
+
 const userColumns = {
   id: users.id,
   role: users.role,
@@ -674,13 +701,7 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
         .from(consents)
         .where(eq(consents.userId, id))
         .orderBy(asc(consents.ts));
-      return rows.map((row) => ({
-        kind: row.kind,
-        version: row.version,
-        grantedBy: row.grantedBy as 'self' | 'parent',
-        ts: row.ts.toISOString(),
-        withdrawnAt: row.withdrawnAt ? row.withdrawnAt.toISOString() : null,
-      }));
+      return rows.map(parseConsentRow);
     },
   };
 }
