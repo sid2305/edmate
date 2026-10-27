@@ -4,7 +4,6 @@
 // complete route learns the type from the key it stored, never from the client.
 import { randomUUID } from 'node:crypto';
 import type { FileChunkKind } from '@edmate/db';
-import { WHISPER_MAX_UPLOAD_BYTES } from '@edmate/gateway';
 import type { IngestFileKind } from '@edmate/queue';
 
 /** Ingest's own document limit (`MAX_DOCUMENT_BYTES` in @edmate/ingest): 20 MB. */
@@ -15,14 +14,14 @@ export const MAX_DOCUMENT_UPLOAD_BYTES = 20 * 1024 * 1024;
  */
 export const MAX_MEDIA_UPLOAD_BYTES = 500 * 1024 * 1024;
 /**
- * Task 11.4 Phase B (Q3): the worker composes `createWhisperTranscriber` with no chunker, so only
- * WAV and MP3 over `WHISPER_MAX_UPLOAD_BYTES` can be split before transcription. An M4A, MP4 or
- * WebM over this cap uploads today (the 500 MB media cap) and then fails minutes later as
- * `input_too_large`, after the download. This equals `@edmate/gateway`'s own Whisper cap, so the
- * two caps can never drift apart; a test pins the number too. A real fix is an ffmpeg chunker in
- * the worker image, tracked as board task 11.4d (M13; needs an ADR for the new system binary).
+ * Task 11.4 Phase B (Q3) found the gap this constant used to document: the worker composed
+ * `createWhisperTranscriber` with no chunker, so only WAV and MP3 over
+ * `WHISPER_MAX_UPLOAD_BYTES` (24 MB) could be split before transcription -- an M4A, MP4 or WebM
+ * over that cap uploaded and then failed minutes later as `input_too_large`, after the download.
+ * Task 11.4d closed that gap: the worker now runs every media type through an ffmpeg chunker
+ * before Whisper, so all five media types can be split. Task 11.4i (this task) therefore lifts
+ * the cap for the three types that used to be capped lower, removing the gap entirely.
  */
-export const MAX_UNSPLIT_MEDIA_BYTES = WHISPER_MAX_UPLOAD_BYTES;
 
 /**
  * The retrieval kind an uploaded file can have: never `teacher_note` (those rows have no file).
@@ -43,8 +42,11 @@ export interface UploadType {
    */
   transcribe: boolean;
   /**
-   * Task 11.4f: whether the worker's Whisper transcriber can split a large file of this type.
-   * Only meaningful when `transcribe` is true; `doc()` and `caption()` set it to `false`.
+   * Task 11.4f/11.4i: whether the worker can split a large file of this type before
+   * transcription. `true` for every `transcribe` type (11.4d's ffmpeg chunker splits all of
+   * them); `false` otherwise. Kept as its own field, not merged into `transcribe`, because
+   * `routes.ts`'s message selection already reads it, and a future format that genuinely can't be
+   * split would set it back to `false`.
    */
   splittable: boolean;
 }
@@ -58,19 +60,14 @@ const doc = (contentType: string, ext: string, fileKind: IngestFileKind): Upload
   transcribe: false,
   splittable: false,
 });
-const media = (
-  contentType: string,
-  ext: string,
-  fileKind: IngestFileKind,
-  { splittable }: { splittable: boolean },
-): UploadType => ({
+const media = (contentType: string, ext: string, fileKind: IngestFileKind): UploadType => ({
   contentType,
   ext,
   fileKind,
   chunkKind: 'transcript',
-  maxBytes: splittable ? MAX_MEDIA_UPLOAD_BYTES : MAX_UNSPLIT_MEDIA_BYTES,
+  maxBytes: MAX_MEDIA_UPLOAD_BYTES,
   transcribe: true,
-  splittable,
+  splittable: true,
 });
 /**
  * Task 8.2c, Phase C: a caption file (.vtt or .srt) the teacher exports from YouTube Studio.
@@ -93,11 +90,11 @@ export const UPLOAD_TYPES: readonly UploadType[] = [
   doc('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx', 'docx'),
   doc('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'pptx', 'pptx'),
   doc('text/markdown', 'md', 'markdown'),
-  media('audio/mpeg', 'mp3', 'audio', { splittable: true }),
-  media('audio/wav', 'wav', 'audio', { splittable: true }),
-  media('audio/mp4', 'm4a', 'audio', { splittable: false }),
-  media('video/mp4', 'mp4', 'video', { splittable: false }),
-  media('video/webm', 'webm', 'video', { splittable: false }),
+  media('audio/mpeg', 'mp3', 'audio'),
+  media('audio/wav', 'wav', 'audio'),
+  media('audio/mp4', 'm4a', 'audio'),
+  media('video/mp4', 'mp4', 'video'),
+  media('video/webm', 'webm', 'video'),
   // Task 8.2c: no IANA type exists for SubRip; `application/x-subrip` is the common convention
   // (decisions, risk: low). The client falls back to the extension when the browser reports none.
   caption('text/vtt', 'vtt', 'vtt'),

@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 11.4i keep the unreachable mediaTooLarge arm · decided by lead · risk: low
+- Decided: leave the `!type.splittable` arm and `MSG.mediaTooLarge` in routes.ts (apps/web/src/studio/routes.ts) as they are, although no current upload type reaches them.
+- Why: the plan keeps them so a future media type the worker cannot split still gets the right refusal. Removing them now saves a few lines but loses that guard.
+
+---
+
 ### 27 Oct 2026 · 0.20h local e2e failures · decided by builder · risk: low
 
 - Decided: fixed `full-flow.spec.ts` and `teacher-packages-walkthrough.spec.ts`'s stale-DB-row

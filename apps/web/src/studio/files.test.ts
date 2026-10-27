@@ -1,9 +1,9 @@
+import { WHISPER_MAX_UPLOAD_BYTES } from '@edmate/gateway';
 import { IngestJobSchema } from '@edmate/queue';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_DOCUMENT_UPLOAD_BYTES,
   MAX_MEDIA_UPLOAD_BYTES,
-  MAX_UNSPLIT_MEDIA_BYTES,
   UPLOAD_TYPES,
   isLinkKey,
   isRecordingType,
@@ -79,26 +79,25 @@ describe('upload types', () => {
     expect(MAX_DOCUMENT_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
     expect(MAX_MEDIA_UPLOAD_BYTES).toBeLessThan(600_000_000);
   });
+
+  it('pins WHISPER_MAX_UPLOAD_BYTES to 24 MB -- the 15-minute budget re-check (11.4i) depends on this', () => {
+    expect(WHISPER_MAX_UPLOAD_BYTES).toBe(24 * 1024 * 1024);
+  });
 });
 
-describe('the fail-fast cap for media the worker cannot split (task 11.4 Phase B, Q3)', () => {
-  it('pins MAX_UNSPLIT_MEDIA_BYTES to 24 MB', () => {
-    expect(MAX_UNSPLIT_MEDIA_BYTES).toBe(24 * 1024 * 1024);
-  });
-
-  it("sets splittable per type (task 11.4f): mp3/wav true, m4a/mp4/webm and every document or caption false", () => {
+describe('every audio/video type is now splittable at the ordinary media cap (11.4d, 11.4i)', () => {
+  it('sets splittable per type: true for every transcribe type (mp3, wav, m4a, mp4, webm), false otherwise', () => {
     for (const t of UPLOAD_TYPES) {
-      const expected = t.contentType === 'audio/mpeg' || t.contentType === 'audio/wav';
-      expect(t.splittable, t.contentType).toBe(expected);
+      expect(t.splittable, t.contentType).toBe(t.transcribe);
     }
   });
 
-  it('keeps the mp3/wav cap at 500 MB; m4a/mp4/webm get the 24 MB cap', () => {
+  it('gives every media type (mp3, wav, m4a, mp4, webm) the ordinary 500 MB cap', () => {
     expect(uploadTypeFor('audio/mpeg')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
     expect(uploadTypeFor('audio/wav')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
-    expect(uploadTypeFor('audio/mp4')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
-    expect(uploadTypeFor('video/mp4')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
-    expect(uploadTypeFor('video/webm')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
+    expect(uploadTypeFor('audio/mp4')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
+    expect(uploadTypeFor('video/mp4')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
+    expect(uploadTypeFor('video/webm')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
   });
 
   it('isRecordingType is true exactly for the transcript-kind types', () => {

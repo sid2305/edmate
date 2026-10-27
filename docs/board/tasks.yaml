@@ -11032,9 +11032,30 @@ tasks:
   deps:
   - 11.4d
   risk: low
-  status: running
+  status: done
   branch: m13/11.4i-media-cap-lift
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 340
+    tokens_in: 1128
+    tokens_out: 134281
+    cache_read_tokens: 43021656
+    wall_time_seconds: 12542
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 3
 - id: 6.4b
   milestone: M13
   title: 'Session-end summary cost race (6.4a security MEDIUM): concurrent POSTs to apps/web/app/api/sessions/[id]/end can each run an unmetered summarize before one write lands; add a per-session in-flight

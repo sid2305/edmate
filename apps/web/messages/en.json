@@ -738,7 +738,6 @@
       "added": "The recording is uploaded. It will be ready to search in a few minutes.",
       "errors": {
         "unsupported_type": "That file type can't be used for a recording. Use a caption or transcript file (.vtt or .srt), MP3, WAV, M4A, MP4 or WebM.",
-        "media_too_large": "Videos and M4A audio over 24 MB can't be transcribed yet. Upload the audio as MP3, or the class transcript (.vtt or .srt).",
         "title": "Give the recording a title of up to 500 characters.",
         "not_found": "This class or module was not found. Reload and try again.",
         "upload_failed": "The upload didn't finish. Check your connection, then try again.",

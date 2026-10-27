@@ -77,26 +77,6 @@ export const RECORDING_ACCEPT = [
 ].join(',');
 
 /**
- * Task 11.4 Phase B (Q3): the Whisper-split cap for M4A, MP4 and WebM -- a client-side mirror of
- * `MAX_UNSPLIT_MEDIA_BYTES` in `studio/files.ts` (which needs node:crypto, so the browser can't
- * import it; a test keeps the two numbers equal). MP3 and WAV keep the ordinary 500 MB media cap.
- */
-export const UNSPLIT_MEDIA_MAX_BYTES = 24 * 1024 * 1024;
-
-const UNSPLIT_EXTS = new Set(['m4a', 'mp4', 'webm']);
-
-/**
- * Whether a file needs a smaller alternative before it's worth uploading: an M4A, MP4 or WebM
- * over `UNSPLIT_MEDIA_MAX_BYTES`. Lets the recording form show the 24 MB message at once, instead
- * of after a slow upload the server would refuse anyway.
- */
-export function needsSmallerFile(file: File, contentType: string | null): boolean {
-  const ext = CLIENT_UPLOAD_TYPES.find((t) => t.contentType === contentType)?.ext;
-  if (ext === undefined || !UNSPLIT_EXTS.has(ext)) return false;
-  return file.size > UNSPLIT_MEDIA_MAX_BYTES;
-}
-
-/**
  * The content type to declare for a file: the browser's own when it is allowed, else the one its
  * extension names (browsers often report '' for Markdown or a vendor type for m4a), else null.
  */
