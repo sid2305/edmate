@@ -190,7 +190,9 @@ export interface FfmpegChunkerOptions {
    * `run` is supplied. Defaults to `DEFAULT_SIGKILL_GRACE_MS`. */
   readonly sigkillGraceMs?: number;
   /** How often the running total of piece bytes already on disk is checked against
-   * `maxOutputBytes` while ffmpeg is still running. Defaults to `DEFAULT_OUTPUT_WATCH_MS`. */
+   * `maxOutputBytes` while ffmpeg is still running. Defaults to `DEFAULT_OUTPUT_WATCH_MS`. This
+   * in-run cap is approximate: a fast writer can pass `maxOutputBytes` between ticks. The
+   * total-size check after ffmpeg exits is exact and is the real limit. */
   readonly outputWatchMs?: number;
 }
 
@@ -314,6 +316,9 @@ export function createFfmpegChunker(opts: FfmpegChunkerOptions = {}): AudioChunk
         throw new TranscriberError('validation', false, UNREADABLE, undefined);
       }
       clearInterval(watchInterval);
+      // A watch tick already in flight can abort `sizeController` after this branch has read it
+      // as not aborted. Harmless today (the exact post-exit check below still catches it), but
+      // later code must not re-read this signal and expect the earlier answer.
       if (sizeController.signal.aborted) throw tooLargeError();
       if (timeoutSignal.aborted) throw timedOutError();
       if (result.code !== 0) {
