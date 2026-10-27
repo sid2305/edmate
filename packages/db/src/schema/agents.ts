@@ -27,6 +27,8 @@ export const agents = pgTable(
   },
   (t) => [
     index('agents_teacher_id_idx').on(t.teacherId),
+    // Task 12.4e: backs regulated-subjects.ts listForStaff's ORDER BY (created_at desc, id desc).
+    index('agents_created_at_id_idx').on(t.createdAt, t.id),
     check(
       'agents_regulated_subject_check',
       sql`${t.regulatedSubject} in ('investing', 'health', 'law')`,
