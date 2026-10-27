@@ -123,6 +123,11 @@ export type PostMigrateStep =
  * Migration 0014 (task 1.7a, 1.7 review deferral) adds `consents_granted_by_check` and
  * `users_birth_year_check` as `NOT VALID` the same way (a database that already applied the old
  * version of 0014 keeps its already-valid constraints; these two steps are then a no-op there).
+ * Migration 0035 (task 9.6f, 9.6a review follow-up) adds
+ * `sessions_teacher_id_student_id_created_at_id_idx` and `messages_session_id_created_at_id_idx`
+ * the same schema-only way, with `CREATE INDEX CONCURRENTLY` (not a plain migration-file
+ * `CREATE INDEX`, unlike 0034's `agents` index): both `sessions` and `messages` are big,
+ * high-write tables, same reasoning as the package-pin and open-session indexes above.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -186,6 +191,18 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
   // Migration 0014 (task 1.7a, 1.7 review deferral): both CHECK constraints added NOT VALID.
   { kind: 'validateConstraint', table: 'consents', constraint: 'consents_granted_by_check' },
   { kind: 'validateConstraint', table: 'users', constraint: 'users_birth_year_check' },
+  // Migration 0035 (task 9.6f, 9.6a review follow-up): sessions.listForStudent's and
+  // messages.listForStudent's keyset-paging indexes.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'sessions_teacher_id_student_id_created_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "sessions_teacher_id_student_id_created_at_id_idx" ON "sessions" USING btree ("teacher_id","student_id","created_at","id")`,
+  },
+  {
+    kind: 'concurrentIndex',
+    indexName: 'messages_session_id_created_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "messages_session_id_created_at_id_idx" ON "messages" USING btree ("session_id","created_at","id")`,
+  },
 ];
 
 /** True once `ALTER TABLE ... VALIDATE CONSTRAINT` has already succeeded for this constraint. */
