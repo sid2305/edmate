@@ -1,0 +1,28 @@
+-- Hand-edited (task 8.2r, 8.2a review deferral): two LOW hygiene items, no new runtime behaviour.
+--
+-- 1. documents_teacher_id_created_at_id_idx: a composite index backing documents.listForTeacher's
+-- `WHERE teacher_id = $1 ORDER BY created_at DESC, id DESC LIMIT 500` (packages/db/src/
+-- repositories/chunks.ts). Declared in src/schema/content.ts so a later `db:generate` stays a
+-- no-op (the same pattern as 0036's teacher_profiles pending index, 0039's evidence_events index
+-- and 0040's documents processing-sweep index); built by the post-migrate step
+-- (packages/db/src/migrate.ts's runPostMigrateSteps) with CREATE INDEX CONCURRENTLY, not by this
+-- file: drizzle 0.45 runs every pending migration file in one transaction, and a plain CREATE
+-- INDEX here would hold documents's ACCESS EXCLUSIVE lock for the whole build, where
+-- CONCURRENTLY outside the transaction only needs it briefly. (`db:generate` on its own would
+-- emit a plain, non-concurrent CREATE INDEX for this; that statement is deleted here in favour of
+-- the post-migrate step, same as 0040.)
+--
+-- 2. documents_failure_reason_only_when_failed: migration 0017 added this CHECK as a plain,
+-- immediately-validated `ADD CONSTRAINT ... CHECK` -- unlike every later CHECK/FK in this repo
+-- (migrations 0009, 0014, 0023, 0024, 0028, 0032, 0033, 0035, 0036, 0038, 0039, 0040; see
+-- packages/db/src/migrate.ts's POST_MIGRATE_STEPS comment), which all add NOT VALID and validate
+-- as a separate autocommit step so the validation scan never holds documents's ACCESS EXCLUSIVE
+-- lock for longer than adding the constraint itself. 0017 already shipped (dev and any
+-- already-migrated database have it), so it can't be hand-edited in place; this migration drops
+-- and re-adds the exact same CHECK expression as NOT VALID instead, validated by this task's new
+-- POST_MIGRATE_STEPS entry. This only re-adds the same check, immediately as NOT VALID -- no row
+-- is ever not covered by the constraint for longer than the drop-and-reinstate pair below takes,
+-- and no data is read, written or lost. Exact template: migration 0033's drop-the-old-constraint
+-- then add-the-replacement-as-NOT-VALID shape, CHECK instead of FOREIGN KEY.
+ALTER TABLE "documents" DROP CONSTRAINT "documents_failure_reason_only_when_failed";--> statement-breakpoint
+ALTER TABLE "documents" ADD CONSTRAINT "documents_failure_reason_only_when_failed" CHECK ("documents"."failure_reason" is null or "documents"."status" = 'failed') NOT VALID;

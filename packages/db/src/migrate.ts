@@ -141,6 +141,13 @@ export type PostMigrateStep =
  * Migration 0040 (task 8.2p) adds `documents_processing_updated_at_id_idx` the same schema-only
  * way: ingestSweep.staleProcessing's `status = 'processing'` filter plus its
  * `ORDER BY updated_at, id` keyset, in one partial index.
+ * Migration 0041 (task 8.2r, 8.2a review deferral) adds `documents_teacher_id_created_at_id_idx`
+ * the same schema-only way: documents.listForTeacher's `teacher_id = $1` filter plus its
+ * `ORDER BY created_at DESC, id DESC LIMIT 500` keyset, in one full (non-partial) index. It also
+ * drops and re-adds `documents_failure_reason_only_when_failed` (originally added by migration
+ * 0017 as a plain, immediately-validated `ADD CONSTRAINT ... CHECK`, unlike every other CHECK/FK
+ * in this list) as `NOT VALID`, validated here the same way, for hygiene with this list's
+ * convention -- not a behaviour change.
  * Append here, don't edit past entries: migrations are forward-only and
  * this list is replayed, idempotently, on every migrateDatabase() call.
  */
@@ -241,6 +248,19 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     kind: 'concurrentIndex',
     indexName: 'documents_processing_updated_at_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "documents_processing_updated_at_id_idx" ON "documents" USING btree ("updated_at","id") WHERE "documents"."status" = 'processing'`,
+  },
+  // Migration 0041 (task 8.2r, 8.2a review deferral): documents.listForTeacher's candidate scan.
+  {
+    kind: 'concurrentIndex',
+    indexName: 'documents_teacher_id_created_at_id_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "documents_teacher_id_created_at_id_idx" ON "documents" USING btree ("teacher_id","created_at" DESC,"id" DESC)`,
+  },
+  // Migration 0041: validates documents_failure_reason_only_when_failed, dropped and re-added
+  // NOT VALID by the same migration for hygiene with this list's other CHECK/FK entries.
+  {
+    kind: 'validateConstraint',
+    table: 'documents',
+    constraint: 'documents_failure_reason_only_when_failed',
   },
 ];
 

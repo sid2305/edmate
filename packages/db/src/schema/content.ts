@@ -111,6 +111,16 @@ export const documents = pgTable(
     index('documents_processing_updated_at_id_idx')
       .on(t.updatedAt, t.id)
       .where(sql`${t.status} = 'processing'`),
+    // Task 8.2r: backs listForTeacher's `WHERE teacher_id = $1 ORDER BY created_at DESC, id DESC
+    // LIMIT 500` (chunks.ts). Full (non-partial) index -- all three columns are NOT NULL, so no
+    // `.where()` and no `.nullsFirst()`/`.nullsLast()` annotation (Postgres's default NULLS
+    // ordering never applies). Schema-only (see migrate.ts's POST_MIGRATE_STEPS), same pattern as
+    // documents_processing_updated_at_id_idx above.
+    index('documents_teacher_id_created_at_id_idx').on(
+      t.teacherId,
+      t.createdAt.desc(),
+      t.id.desc(),
+    ),
     check(
       'documents_failure_reason_only_when_failed',
       sql`${t.failureReason} is null or ${t.status} = 'failed'`,
