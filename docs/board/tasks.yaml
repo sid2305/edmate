@@ -3042,7 +3042,9 @@ tasks:
   deps:
   - 6.3c
   risk: risky
-  status: planning
+  status: running
+  branch: m13/6.3d-mistake-db-adapter
+  model: plan:sonnet build:sonnet
 - id: 6.2a
   milestone: M13
   title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
@@ -10942,7 +10944,7 @@ tasks:
   deps:
   - 8.2a
   risk: risky
-  status: running
+  status: review
   branch: m13/8.2q-upload-hardening
   model: plan:sonnet build:sonnet
 - id: 8.2r
