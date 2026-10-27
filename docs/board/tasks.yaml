@@ -6730,7 +6730,7 @@ tasks:
   deps:
   - 12.2e
   risk: high
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 12.2g
@@ -9240,7 +9240,8 @@ tasks:
     human_questions: 0
 - id: 5.3c
   milestone: M13
-  title: '5.3a declined items 4 and 11: widen the out-of-course calibration set for the retrieval coverage threshold, and design a per-course recalibration path; build once a second real course exists to validate against'
+  title: '5.3a declined items 4 and 11: widen the out-of-course calibration set for the retrieval coverage threshold, and design a per-course recalibration path; build once a second real course exists to
+    validate against'
   accept: the out-of-course calibration set covers more than one course's vocabulary and a documented recalibration step per course exists, with tests; the db and harness gates pass
   deps:
   - 5.3a
