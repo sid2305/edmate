@@ -33,6 +33,10 @@ interface SessionRow {
   summary: string | null;
 }
 
+function errorNameOf(error: unknown): string {
+  return error instanceof Error ? error.constructor.name : typeof error;
+}
+
 function message(role: Message['role'], text: string): Message {
   return { id: `msg_${role}_${text}`, role, text, createdAt: new Date().toISOString() };
 }
@@ -43,6 +47,7 @@ function memory(
     summary?: string;
     gatewayFails?: boolean;
     attachSummaryFails?: boolean;
+    historyFails?: unknown;
     history?: Message[];
   } = {},
 ) {
@@ -111,7 +116,10 @@ function memory(
     },
   );
 
-  const historyFn = vi.fn(async (): Promise<Message[]> => history);
+  const historyFn = vi.fn(async (): Promise<Message[]> => {
+    if (options.historyFails !== undefined) throw options.historyFails;
+    return history;
+  });
 
   const repos = {
     sessions: { get, end, attachSummary },
@@ -256,6 +264,25 @@ describe('POST: end a session', () => {
       { event: 'sessions.end.attach_failed', fields: { error: 'RepositoryError' } },
     ]);
   });
+
+  it.each([
+    ['a RepositoryError', new RepositoryError('failed', 'messages.history')],
+    ['a plain Error', new Error('pg says person@example.test')],
+  ])(
+    'a messages.history failure (%s) after a successful claim still returns ok(), stays ended, never summarises, logs by name only',
+    async (_label, thrown) => {
+      const m = memory({ historyFails: thrown });
+      const res = await m.h.end(post(VALID), ctx());
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(m.sessions.get('ses_1')?.endedAt).not.toBeNull();
+      expect(m.gateway).not.toHaveBeenCalled();
+      expect(m.attachSummary).not.toHaveBeenCalled();
+      expect(m.logs).toEqual([
+        { event: 'sessions.end.history_failed', fields: { error: errorNameOf(thrown) } },
+      ]);
+    },
+  );
 
   it('an agent that is not live (suspended, draft or unknown) is 404, nothing ended', async () => {
     const m = memory();

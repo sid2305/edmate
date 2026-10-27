@@ -84,6 +84,54 @@ cases against the not-yet-existing method gave a `TypeError: ... is not a functi
   freshly seeded session rather than reusing `endable`/`endable2` so it never races with those
   cases' own state.
 
+## Fix round 1
+
+typescript-reviewer HIGH: after the claim (`repos.sessions.end(scope, id, undefined)` returning
+`{ ended: true }`), `repos.messages.history(...)` ran unguarded -- if it threw, the outer
+try/catch mapped it to an error response (e.g. 500) for an end that had already succeeded in the
+database.
+
+- `apps/web/app/api/sessions/[id]/end/route.ts` — wrapped the `repos.messages.history(...)` read
+  (and the `lazyGateway`/`summarizeSession` call that depends on it) in its own try/catch, inside
+  the existing post-claim block. A history failure now logs `sessions.end.history_failed`
+  (`errorName` only) and falls through to `return ok()`, same as the existing
+  `summarize_failed`/`attach_failed` steps. Pre-claim failures (scope, `get`, the claim itself)
+  still reach the outer `catch` and keep their existing `RepositoryError`-kind-to-status mapping,
+  unchanged.
+- `apps/web/app/api/sessions/[id]/end/route.test.ts` — added a `historyFails` option to the
+  `memory()` stub's `messages.history` and an `errorNameOf` helper; added an
+  `it.each(['a RepositoryError', 'a plain Error'])` case asserting that a `messages.history`
+  throw after a successful claim still returns `{ ok: true }` (200), the session stays ended,
+  `gateway`/`attachSummary` are never called, and `logs` holds exactly one
+  `sessions.end.history_failed` entry keyed by error name only.
+
+### Red → green evidence
+
+Reverted `route.ts` to the pre-fix shape (the plain unguarded `await repos.messages.history(...)`)
+and ran only the new cases:
+
+```
+corepack pnpm --filter @edmate/web exec vitest run -t "messages.history failure"
+```
+
+```
+ × a messages.history failure (a RepositoryError) ... 443ms
+ × a messages.history failure (a plain Error) ... 89ms
+AssertionError: expected 500 to be 200 // Object.is equality
+- Expected: 200
++ Received: 500
+```
+
+Confirmed RED: both throws reached the outer `catch` and were mapped to a 500. Restored the fix
+(history read wrapped in its own try/catch) and re-ran the full suite:
+
+```
+corepack pnpm --filter @edmate/web exec vitest run -t "end a session"
+# 25 passed (23 existing + the 2 new history-failure cases)
+```
+
+GREEN.
+
 ## Gate
 
 ```
@@ -121,6 +169,18 @@ python3 .githooks/secret-scan.py --all                   # clean, no output
 Postgres was reachable at the default `TEST_DATABASE_URL` (127.0.0.1:55432) throughout, so the
 `packages/db` int tests ran for real against it, including the three files this task changed.
 
+### Fix round 1 gate
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/web   # 10 tasks pass
+<repo>/node_modules/.bin/prettier --check route.ts route.test.ts   # pass (run from the route's
+                                                                    # own directory; the sandbox
+                                                                    # blocks a literal "[id]" path
+                                                                    # segment in a corepack command)
+python3 .githooks/secret-scan.py --all                             # clean, no output
+```
+
 ## Budget
 
 Tool calls used: 56
+Fix tool calls used: 21

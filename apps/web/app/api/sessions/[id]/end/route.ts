@@ -114,24 +114,33 @@ export function createSessionEndHandlers(backend: SessionEndBackend): { end: Han
         // (the actual fix for the session-end summary cost race, 6.4a security MEDIUM).
         const claim = await repos.sessions.end(scope, path.data.id, undefined);
         if (!claim.ended) return ok();
-        const history: readonly Pick<Message, 'role' | 'text'>[] = await repos.messages.history(
-          scope,
-          path.data.id,
-          SUMMARY_HISTORY_LIMIT,
-        );
-        // The gateway is built lazily, inside this one-method shim: an empty transcript (no
-        // messages yet) must never build or call it (`summarizeSession` itself short-circuits on
-        // an empty history, but only if the gateway is never awaited ahead of that check).
-        const lazyGateway: Pick<ModelGateway, 'generateObject'> = {
-          generateObject: async (req, schema) =>
-            (await backend.gateway()).generateObject(req, schema),
-        };
+        // Task 6.4b fix round 1 (typescript-reviewer HIGH): once the claim above has succeeded,
+        // the session is already ended in the database -- no failure in any step below (the
+        // history read, the summariser, the attach) may turn that into anything but ok(). Each
+        // step keeps its own try/catch and its own distinct, error-name-only log event.
         let summary: string | undefined;
         try {
-          summary = await summarizeSession(lazyGateway, history);
+          const history: readonly Pick<Message, 'role' | 'text'>[] = await repos.messages.history(
+            scope,
+            path.data.id,
+            SUMMARY_HISTORY_LIMIT,
+          );
+          // The gateway is built lazily, inside this one-method shim: an empty transcript (no
+          // messages yet) must never build or call it (`summarizeSession` itself short-circuits
+          // on an empty history, but only if the gateway is never awaited ahead of that check).
+          const lazyGateway: Pick<ModelGateway, 'generateObject'> = {
+            generateObject: async (req, schema) =>
+              (await backend.gateway()).generateObject(req, schema),
+          };
+          try {
+            summary = await summarizeSession(lazyGateway, history);
+          } catch (error) {
+            // sessionSummary.ts's own rule (6.4): a model failure never blocks ending the session.
+            log.error('sessions.end.summarize_failed', { error: errorName(error) });
+          }
         } catch (error) {
-          // sessionSummary.ts's own rule (6.4): a model failure never blocks ending the session.
-          log.error('sessions.end.summarize_failed', { error: errorName(error) });
+          // The claim already succeeded -- a history-read failure must never fail the response.
+          log.error('sessions.end.history_failed', { error: errorName(error) });
         }
         if (summary !== undefined) {
           try {
