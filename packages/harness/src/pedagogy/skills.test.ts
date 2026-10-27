@@ -3,7 +3,8 @@ import { demoPersona } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { PERSONA_QUESTIONS_MAX } from './helpState.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from './policy.js';
-import { rolePlayControl, selectSkill, skillStep } from './skills.js';
+import { rolePlayStep } from './roleplay.js';
+import { pauseHasExtraText, rolePlayControl, selectSkill, skillStep } from './skills.js';
 import { ctxWith, helpWith, turnOf } from './testing.js';
 
 const ALL: Skill[] = [
@@ -386,6 +387,20 @@ describe('rolePlayControl', () => {
   });
 });
 
+describe('pauseHasExtraText (5.8b, B-37 q8)', () => {
+  it.each([
+    [{ kind: 'message' as const, text: '/pause' }, false],
+    [{ kind: 'message' as const, text: '  /PAUSE  ' }, false],
+    [{ kind: 'message' as const, text: '/pause explain fractions' }, true],
+    [{ kind: 'message' as const, text: '/PAUSE please' }, true],
+    [{ kind: 'message' as const, text: 'stop' }, false],
+    [{ kind: 'message' as const }, false],
+    [{ kind: 'skill_action' as const, text: '/pause please' }, false],
+  ])('%j → %s', (input, expected) => {
+    expect(pauseHasExtraText(input)).toBe(expected);
+  });
+});
+
 describe('role-play phases through skillStep (5.8, ADR-0013 §1)', () => {
   const M = demoPersona.endAfterQuestions;
   const at = (n: number, o: Parameters<typeof helpWith>[0] = {}) =>
@@ -483,5 +498,19 @@ describe('role-play phases through skillStep (5.8, ADR-0013 §1)', () => {
       skill: 'practice',
     });
     expect(r.next.help).toMatchObject({ personaQuestionsAsked: 3, personaPhase: 'ended' });
+  });
+
+  it('a bug, never a content error: a passed-in rolePlayStep for another persona throws (5.8b)', () => {
+    const r = rolePlayStep({ persona: demoPersona, help: at(2) });
+    expect(() =>
+      skillStep({
+        ctx: ctxWith({ entitlement: { skills: ALL }, persona: demoPersona }),
+        turn: turnOf('message', 'mock_interview'),
+        help: at(2),
+        skill: 'mock_interview',
+        rolePlayStep: r,
+        rolePlayStepPersonaId: 'per_test_02',
+      }),
+    ).toThrow(/rolePlayStep was computed for a different persona/);
   });
 });

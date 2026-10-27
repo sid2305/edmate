@@ -252,10 +252,11 @@ describe('role-play through the pipeline (5.8)', () => {
     expect(start.system).not.toContain(MATERIAL);
     expect(start.help.personaQuestionsAsked).toBe(1);
 
-    // An answer to question 1 on an uncovered topic meets the coverage gate.
+    // An answer to question 1 on an uncovered topic now skips the gate too (5.8b, B-37
+    // reversal): a gated answer could route a personal reply to the teacher inbox.
     const a1 = await s.turn({ text: 'Something the teacher never covered.' });
-    expect(a1.record?.decision?.move).toBe('ask_teacher');
-    expect(stateLine(a1.system)).toBeUndefined();
+    expect(a1.record?.decision?.move).toBe('ask');
+    expect(stateLine(a1.system)).toBe('[[ROLEPLAY-QUESTION]] Ask question 2 of 5, in role.');
 
     // Control, resume and debrief turns skip the gate, so the role-play still steers.
     const paused = await s.turn({ text: '/pause' });
