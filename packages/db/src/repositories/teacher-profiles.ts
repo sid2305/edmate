@@ -92,10 +92,7 @@ export const DisplayName = z
       .min(2)
       .max(60)
       .refine((s) => DISPLAY_NAME_HAS_LETTER.test(s), 'needs at least one letter')
-      .refine(
-        (s) => DISPLAY_NAME_SHAPE.test(s),
-        "letters, numbers, spaces, ' . - only",
-      )
+      .refine((s) => DISPLAY_NAME_SHAPE.test(s), "letters, numbers, spaces, ' . - only")
       .refine(
         (s) => !DISPLAY_NAME_URL_SHAPE.test(s) && !DISPLAY_NAME_WORD_TLD.test(s),
         'no web address',
@@ -202,31 +199,88 @@ export function teacherProfilesRepo(db: Db) {
      * under the row lock the UPDATE already takes, so there is no read-then-write window. A
      * subject equal to the stored one (after the schema's trim) is not a change; bio and
      * languages edits never touch the status.
+     *
+     * Task 9.3m (B-58): a subject change that *is* a change also writes a `teacher.subject`
+     * audit row (old and new subject only). The pre-update subject is captured by a read-only
+     * CTE sibling to the UPDATE in one statement (so, like the CASE above, there is no separate
+     * `SELECT` and no new read-then-write window), compared to the new subject in application
+     * code, and the audit insert runs in the same transaction as the UPDATE.
      */
     async update(scope: TeacherScope, patch: TeacherProfileUpdate): Promise<TeacherProfileRow> {
       const method = 'teacherProfiles.update';
       const { teacherId } = teacherScope(scope, method);
       const p = parseArg(UpdateInput, patch, method);
       return translateWrite(method, async () => {
-        const [row] = await db
-          .update(teacherProfiles)
-          .set({
-            ...(p.displayName === undefined ? {} : { displayName: p.displayName }),
-            ...(p.subject === undefined
-              ? {}
-              : {
-                  subject: p.subject,
-                  verificationStatus: sql`case when ${teacherProfiles.subject} <> ${p.subject}
+        if (p.subject === undefined) {
+          const [row] = await db
+            .update(teacherProfiles)
+            .set({
+              ...(p.displayName === undefined ? {} : { displayName: p.displayName }),
+              ...(p.bio === undefined ? {} : { bio: p.bio }),
+              ...(p.languages === undefined ? {} : { languages: p.languages }),
+            })
+            .where(eq(teacherProfiles.userId, teacherId))
+            .returning(columns);
+          if (!row) throw new RepositoryError('not_found', method);
+          return toTeacherProfile(row, method);
+        }
+        return db.transaction(async (tx) => {
+          const result = await tx.execute<{
+            id: string;
+            user_id: string;
+            slug: string;
+            display_name: string | null;
+            subject: string;
+            bio: string;
+            languages: string[];
+            verification_status: string;
+            prev_subject: string;
+          }>(sql`
+            with prev as (
+              select subject from teacher_profiles where user_id = ${teacherId}
+            ), upd as (
+              update teacher_profiles
+              set subject = ${p.subject},
+                  verification_status = case when prev.subject <> ${p.subject}
                     then 'pending'::teacher_verification_status
-                    else ${teacherProfiles.verificationStatus} end`,
-                }),
-            ...(p.bio === undefined ? {} : { bio: p.bio }),
-            ...(p.languages === undefined ? {} : { languages: p.languages }),
-          })
-          .where(eq(teacherProfiles.userId, teacherId))
-          .returning(columns);
-        if (!row) throw new RepositoryError('not_found', method);
-        return toTeacherProfile(row, method);
+                    else teacher_profiles.verification_status end
+                  ${p.displayName === undefined ? sql`` : sql`, display_name = ${p.displayName}`}
+                  ${p.bio === undefined ? sql`` : sql`, bio = ${p.bio}`}
+                  ${p.languages === undefined ? sql`` : sql`, languages = ${sql.param(p.languages)}::text[]`}
+              from prev
+              where teacher_profiles.user_id = ${teacherId}
+              returning teacher_profiles.id, teacher_profiles.user_id, teacher_profiles.slug,
+                teacher_profiles.display_name, teacher_profiles.subject, teacher_profiles.bio,
+                teacher_profiles.languages, teacher_profiles.verification_status
+            )
+            select upd.*, prev.subject as prev_subject from upd, prev
+          `);
+          const row = result.rows[0];
+          if (!row) throw new RepositoryError('not_found', method);
+          if (row.subject !== row.prev_subject) {
+            await insertAuditEntry(tx, method, teacherId, null, {
+              actor: teacherId,
+              actorRole: 'teacher',
+              action: 'teacher.subject',
+              target: `teacher:${teacherId}`,
+              before: { subject: row.prev_subject },
+              after: { subject: row.subject },
+            });
+          }
+          return toTeacherProfile(
+            {
+              id: row.id,
+              userId: row.user_id,
+              slug: row.slug,
+              displayName: row.display_name,
+              subject: row.subject,
+              bio: row.bio,
+              languages: row.languages,
+              verificationStatus: row.verification_status,
+            },
+            method,
+          );
+        });
       });
     },
 

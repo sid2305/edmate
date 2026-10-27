@@ -52,6 +52,16 @@ const statusOf = async (tid: string) =>
   ).rows[0]?.s;
 const auditCount = async () =>
   Number((await raw.query<{ n: string }>('select count(*) as n from audit_log')).rows[0]?.n);
+/** Every `teacher.subject` audit row for `tid`, newest first. */
+const subjectAuditRows = async (tid: string) =>
+  (
+    await raw.query<{ before: { subject: string }; after: { subject: string } }>(
+      `select before, after from audit_log
+       where teacher_id = $1 and action = 'teacher.subject'
+       order by ts desc, id desc`,
+      [tid],
+    )
+  ).rows;
 
 describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
   beforeAll(async () => {
@@ -98,7 +108,16 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       verificationStatus: 'pending',
     });
     expect(Object.keys(made).sort()).toEqual(
-      ['bio', 'displayName', 'id', 'languages', 'slug', 'subject', 'teacherId', 'verificationStatus'].sort(),
+      [
+        'bio',
+        'displayName',
+        'id',
+        'languages',
+        'slug',
+        'subject',
+        'teacherId',
+        'verificationStatus',
+      ].sort(),
     );
     expect(await repos.teacherProfiles.get(A)).toEqual(made);
     expect(await repos.teacherProfiles.get(B)).toBeNull();
@@ -184,10 +203,25 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
   });
 
+  it('a no-subject patch on a profile that does not exist is also not_found', async () => {
+    expect(await failure(repos.teacherProfiles.update(A, { bio: 'X' }))).toEqual({
+      kind: 'not_found',
+      method: 'teacherProfiles.update',
+    });
+  });
+
   describe('setVerification (staff only)', () => {
     beforeEach(async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
+      await repos.teacherProfiles.create(B, {
+        slug: 'mr-beta',
+        displayName: 'Mr Beta',
+        subject: 'Maths',
+      });
     });
 
     it.each([
@@ -215,10 +249,13 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       expect(await statusOf(teacherId('A'))).toBe('verified');
       expect(await statusOf(teacherId('B'))).toBe('pending');
 
-      const rows = await repos.audit.listForTeacher(A, {
+      const allRows = await repos.audit.listForTeacher(A, {
         target: `teacher:${teacherId('A')}`,
         limit: 10,
       });
+      // 9.3m: a subject change elsewhere in this file's shared teacherId('A') can also leave a
+      // `teacher.subject` row with the same target; this test is about `teacher.verify` only.
+      const rows = allRows.filter((r) => r.action === 'teacher.verify');
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
         actor: STAFF,
@@ -271,7 +308,7 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
   // Task 9.3e (B-46 (c)): a safety-reason rejection takes down every live agent of the teacher in
   // the same transaction (one `harmful` takedown row each, agent suspended, audited); a plain
   // rejection writes no takedown. Each case gets a fresh teacher (raw SQL, like takedowns tests).
-  describe('setVerification with safety: true takes the teacher\'s live agents down', () => {
+  describe("setVerification with safety: true takes the teacher's live agents down", () => {
     let k = 0;
     async function makeTeacher(liveAgents: number) {
       const n = ++k;
@@ -300,11 +337,17 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       return { scope: { teacherId: tid }, tid, live, draft };
     }
     const agentStatus = async (id: string) =>
-      (await raw.query<{ s: string }>('select status as s from agents where id = $1', [id]))
-        .rows[0]?.s;
+      (await raw.query<{ s: string }>('select status as s from agents where id = $1', [id])).rows[0]
+        ?.s;
     const takedownsFor = async (tid: string) =>
       (
-        await raw.query<{ id: string; target: string; reason: string; status: string; staff_actions: unknown }>(
+        await raw.query<{
+          id: string;
+          target: string;
+          reason: string;
+          status: string;
+          staff_actions: unknown;
+        }>(
           `select id, target, reason, status, staff_actions from takedowns
            where target in (select 'agent:' || id from agents where teacher_id = $1) order by target`,
           [tid],
@@ -489,8 +532,16 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
   // UPDATE statement; bio, languages and a same-value subject leave the status alone.
   describe('update: a subject change resets verification', () => {
     beforeEach(async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
+      await repos.teacherProfiles.create(B, {
+        slug: 'mr-beta',
+        displayName: 'Mr Beta',
+        subject: 'Maths',
+      });
       await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
       await repos.teacherProfiles.setVerification(B, { status: 'verified', by: STAFF });
     });
@@ -504,6 +555,8 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
         kind: 'scope',
         method: 'teacherProfiles.assertVerifiedForPublish',
       });
+      const rows = await subjectAuditRows(teacherId('A'));
+      expect(rows[0]).toEqual({ before: { subject: 'Maths' }, after: { subject: 'Physics' } });
     });
 
     it('a subject change together with a bio edit still resets', async () => {
@@ -519,6 +572,10 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       await repos.teacherProfiles.setVerification(A, { status: 'rejected', by: STAFF });
       const row = await repos.teacherProfiles.update(A, { subject: 'Physics' });
       expect(row.verificationStatus).toBe('pending');
+      expect((await subjectAuditRows(teacherId('A')))[0]).toEqual({
+        before: { subject: 'Maths' },
+        after: { subject: 'Physics' },
+      });
     });
 
     it.each([
@@ -543,6 +600,28 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       );
       const row = await repos.teacherProfiles.update(A, { subject: 'Physics' });
       expect(row.verificationStatus).toBe('pending');
+      expect((await subjectAuditRows(teacherId('A')))[0]).toEqual({
+        before: { subject: 'Maths' },
+        after: { subject: 'Physics' },
+      });
+    });
+
+    it('a patch that sets subject to its current value (trimmed) writes no audit row', async () => {
+      const before = await subjectAuditRows(teacherId('A'));
+      await repos.teacherProfiles.update(A, { subject: '  Maths  ' });
+      expect(await subjectAuditRows(teacherId('A'))).toEqual(before);
+    });
+
+    it('two sequential subject changes write two audit rows, newest first', async () => {
+      const before = await subjectAuditRows(teacherId('A'));
+      await repos.teacherProfiles.update(A, { subject: 'Physics' });
+      await repos.teacherProfiles.update(A, { subject: 'Chemistry' });
+      const after = await subjectAuditRows(teacherId('A'));
+      expect(after.slice(0, 2)).toEqual([
+        { before: { subject: 'Physics' }, after: { subject: 'Chemistry' } },
+        { before: { subject: 'Maths' }, after: { subject: 'Physics' } },
+      ]);
+      expect(after.length).toBe(before.length + 2);
     });
   });
 
@@ -559,8 +638,16 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
 
     it('a staff user sees only pending teachers, oldest first, ties broken by id, with name and email joined', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Science' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
+      await repos.teacherProfiles.create(B, {
+        slug: 'mr-beta',
+        displayName: 'Mr Beta',
+        subject: 'Science',
+      });
       // Both rows share one created_at, so only the id tie-breaker decides the order. A is
       // inserted (and rewritten) first but gets the larger id, so insertion order would put it first.
       const [idA, idB] = ['tp-tie-2', 'tp-tie-1'];
@@ -642,7 +729,11 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       ['a user who is no longer staff', () => FORMER_STAFF],
       ['an id that is no user', () => 'stf_ghost'],
     ])('refuses %s as scope', async (_label, by) => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
       expect(await failure(repos.teacherProfiles.findBySlugForStaff(by(), 'ms-alpha'))).toEqual({
         kind: 'scope',
         method: 'teacherProfiles.findBySlugForStaff',
@@ -650,16 +741,27 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
 
     it('finds a pending, a verified and a rejected teacher by slug; an unknown slug is null', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Science' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
+      await repos.teacherProfiles.create(B, {
+        slug: 'mr-beta',
+        displayName: 'Mr Beta',
+        subject: 'Science',
+      });
       await raw.query(
         `insert into users (id, name, locale, market, role) values ('tch_rejected', 'Rejected Teacher', 'en', 'test', 'teacher')`,
       );
-      await repos.teacherProfiles.create({ teacherId: 'tch_rejected' }, {
-        slug: 'ms-gamma',
-        displayName: 'Ms Gamma',
-        subject: 'History',
-      });
+      await repos.teacherProfiles.create(
+        { teacherId: 'tch_rejected' },
+        {
+          slug: 'ms-gamma',
+          displayName: 'Ms Gamma',
+          subject: 'History',
+        },
+      );
 
       const pending = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'mr-beta');
       expect(pending).toMatchObject({ teacherId: teacherId('B'), verificationStatus: 'pending' });
@@ -668,10 +770,13 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       const verified = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-alpha');
       expect(verified).toMatchObject({ teacherId: teacherId('A'), verificationStatus: 'verified' });
 
-      await repos.teacherProfiles.setVerification({ teacherId: 'tch_rejected' }, {
-        status: 'rejected',
-        by: STAFF,
-      });
+      await repos.teacherProfiles.setVerification(
+        { teacherId: 'tch_rejected' },
+        {
+          status: 'rejected',
+          by: STAFF,
+        },
+      );
       const rejected = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-gamma');
       expect(rejected).toMatchObject({ teacherId: 'tch_rejected', verificationStatus: 'rejected' });
 
@@ -687,20 +792,26 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
         `insert into users (id, name, locale, market, role) values ($1, 'Verified Teacher', 'en', 'test', 'teacher')`,
         [tid],
       );
-      await repos.teacherProfiles.create({ teacherId: tid }, {
-        slug: 'ms-verified',
-        displayName: 'Ms Verified',
-        subject: 'Maths',
-      });
-      await repos.teacherProfiles.setVerification({ teacherId: tid }, {
-        status: 'verified',
-        by: STAFF,
-      });
+      await repos.teacherProfiles.create(
+        { teacherId: tid },
+        {
+          slug: 'ms-verified',
+          displayName: 'Ms Verified',
+          subject: 'Maths',
+        },
+      );
+      await repos.teacherProfiles.setVerification(
+        { teacherId: tid },
+        {
+          status: 'verified',
+          by: STAFF,
+        },
+      );
       const agentId = 'agt_sr_verified';
-      await raw.query(`insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`, [
-        agentId,
-        tid,
-      ]);
+      await raw.query(
+        `insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`,
+        [agentId, tid],
+      );
 
       const found = await repos.teacherProfiles.findBySlugForStaff(STAFF, 'ms-verified');
       expect(found).toMatchObject({ teacherId: tid, verificationStatus: 'verified' });
@@ -716,7 +827,9 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
         [agentId],
       );
       expect(agentStatus.rows[0]?.s).toBe('suspended');
-      const tds = await raw.query('select id from takedowns where target = $1', [`agent:${agentId}`]);
+      const tds = await raw.query('select id from takedowns where target = $1', [
+        `agent:${agentId}`,
+      ]);
       expect(tds.rows).toHaveLength(1);
     });
 
@@ -726,7 +839,9 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       ['an empty string', ''],
       ['a 129-char id', 'a'.repeat(129)],
     ])('rejects by %s as invalid before any SQL', async (_label, by) => {
-      expect(await failure(repos.teacherProfiles.findBySlugForStaff(by as never, 'ms-alpha'))).toEqual({
+      expect(
+        await failure(repos.teacherProfiles.findBySlugForStaff(by as never, 'ms-alpha')),
+      ).toEqual({
         kind: 'invalid',
         method: 'teacherProfiles.findBySlugForStaff',
       });
@@ -743,19 +858,35 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
 
     it('pending: refused', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
       expect(await failure(publish(A))).toEqual(SCOPE);
     });
 
     it('rejected: refused', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
       await repos.teacherProfiles.setVerification(A, { status: 'rejected', by: STAFF });
       expect(await failure(publish(A))).toEqual(SCOPE);
     });
 
     it('verified: allowed, and only for that teacher', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, {
+        slug: 'ms-alpha',
+        displayName: 'Ms Alpha',
+        subject: 'Maths',
+      });
+      await repos.teacherProfiles.create(B, {
+        slug: 'mr-beta',
+        displayName: 'Mr Beta',
+        subject: 'Maths',
+      });
       await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
       await expect(publish(A)).resolves.toBeUndefined();
       expect(await failure(publish(B))).toEqual(SCOPE);
