@@ -2960,9 +2960,9 @@ tasks:
   deps:
   - '6.2'
   risk: risky
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 5.8b
   milestone: M13
   title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
