@@ -593,8 +593,10 @@ tasks:
   accept: a user who signed up by link can then sign in with Google on the same verified address; an unverified Google email never links; auth tests pass
   deps:
   - '1.4'
-  status: planning
+  status: running
   risk: risky
+  branch: m13/1.4c-google-link
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '1.5'
   milestone: M1
   title: 'Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions'
@@ -10658,7 +10660,7 @@ tasks:
   deps:
   - 12.2h
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 8.2p
