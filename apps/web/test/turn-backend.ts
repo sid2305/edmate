@@ -79,7 +79,9 @@ export function deadlineSafeClock(real: Clock): Clock {
     },
     sleep: (ms, cancel) =>
       cancel === undefined
-        ? real.sleep(Math.min(Math.max(ms, 0), MAX_REAL_SLEEP_MS))
+        ? // 9.4e item 9: NaN propagates through Math.min/max unclamped (NaN is neither > nor < any
+          // number); clamp it to 0 first. Infinity/-Infinity already clamp correctly via min/max.
+          real.sleep(Math.min(Math.max(Number.isNaN(ms) ? 0 : ms, 0), MAX_REAL_SLEEP_MS))
         : new Promise((resolve) => cancel.onCancel(resolve)),
   };
 }
@@ -87,8 +89,14 @@ export function deadlineSafeClock(real: Clock): Clock {
 /** preGuard's three classifiers, all clear. */
 export function clearClassifiers(): ScriptedObjectCall[] {
   return [
-    { match: (r) => r.system.includes('thoughts of suicide or self-harm'), value: { distress: false } },
-    { match: (r) => r.system.includes('self_harm (wants to hurt themselves)'), value: { category: 'none' } },
+    {
+      match: (r) => r.system.includes('thoughts of suicide or self-harm'),
+      value: { distress: false },
+    },
+    {
+      match: (r) => r.system.includes('self_harm (wants to hurt themselves)'),
+      value: { category: 'none' },
+    },
     { match: (r) => r.system.includes('jailbreak_override'), value: { category: 'none' } },
   ];
 }
@@ -100,7 +108,13 @@ export function says(...parts: string[]): ScriptedStreamCall {
       ...parts.map((text) => ({ type: 'text' as const, text })),
       {
         type: 'usage' as const,
-        usage: { model: 'claude-haiku-4-5', tier: 'main' as const, inputTokens: 10, outputTokens: 10, costMicroUsd: 1 },
+        usage: {
+          model: 'claude-haiku-4-5',
+          tier: 'main' as const,
+          inputTokens: 10,
+          outputTokens: 10,
+          costMicroUsd: 1,
+        },
       },
     ],
   };
@@ -187,7 +201,10 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
   );
   const observed = observedGateway(
     opts.gateway ??
-      adviceJudgeGateway(judgeGateway(scripted, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT),
+      adviceJudgeGateway(
+        judgeGateway(scripted, () => GROUNDED_VERDICT),
+        () => CLEAN_ADVICE_VERDICT,
+      ),
   );
   const entitlements = memoryEntitlementStore(world, { market: 'IN' });
   const transcripts = memoryTranscriptStore();
@@ -196,7 +213,12 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
   const retrieval = memoryRetrieval({
     chunks: [
       chunk('chk_a1', 'tch_a', 'mod_a1', 'Fractions have a numerator and a denominator.'),
-      chunk('chk_a3', 'tch_a', 'mod_a3', 'Photosynthesis makes sugar from sunlight in chlorophyll.'),
+      chunk(
+        'chk_a3',
+        'tch_a',
+        'mod_a3',
+        'Photosynthesis makes sugar from sunlight in chlorophyll.',
+      ),
     ],
   });
   let created = 0;
