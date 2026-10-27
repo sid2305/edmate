@@ -76,6 +76,18 @@ merged 6.3c Phase A) through the real db adapter (6.3c Phase B).
   on; a synchronous throw from a non-async function broke that at the first scope-violation test
   case (caught during red-then-green testing, not spec'd either way by the plan).
 
+### 27 Oct 2026 · 6.3d approve merge of the profile store mistake-tag adapter · decided by lead · risk: high
+- Decided: merge the change to `packages/db/src/repositories/ports.ts` (profileStoreFor's applyMistakes allow-list and recordProposedMistakes). security-reviewer, database-reviewer, typescript-reviewer and code-reviewer ran; none raised a CRITICAL, HIGH or MEDIUM finding.
+- Why: the scope check runs before any read, every lookup in the session → agent version → style card chain is scoped to the bound pair, and a broken chain fails with `integrity` rather than a silent default.
+
+### 27 Oct 2026 · 6.3d database LOWs left as they are · decided by lead · risk: low
+- Decided: wontfix both database-reviewer LOWs in ports.ts (packages/db/src/repositories/): the repeated session → agent version → style card lookup per mistake-bearing turn, and resolving the session regardless of endedAt.
+- Why: the first is forced by the frozen ProfileStore.applyMistakes signature (ADR-0017) and costs three indexed reads only on turns that carry known tags; the second is the behaviour the plan chose and the handoff already records. The two typescript-reviewer LOWs go to 6.3e.
+
+### 27 Oct 2026 · 6.3d budget overrun accepted · decided by lead · risk: low
+- Decided: accept 83 harness-counted tool calls against a 65-call budget (1.28x).
+- Why: the extra calls went on the web composition-root threading and the int-test fixtures the plan asked for; the result needed no fix round.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint --filter=...@edmate/db --filter=@edmate/web...` — **green**
   (30 tasks, 30 successful; two pre-existing unrelated eslint warnings in
