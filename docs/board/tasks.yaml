@@ -7032,8 +7032,9 @@ tasks:
   deps:
   - 7.2h
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m13/7.2m-threat-alerts
+  model: plan:sonnet build:sonnet
 - id: 9.1c
   milestone: M13
   title: '9.1a review LOW: /teacher scores exactly the 95 Lighthouse accessibility threshold in apps/web/test/lighthouse-a11y.test.ts; find what costs the points and fix it so a one-point drift does not
