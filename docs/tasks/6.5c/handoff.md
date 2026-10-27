@@ -56,6 +56,10 @@ MEDIUM/LOW debug-log follow-ups inside `packages/db`.
 
 ## Decisions
 
+### 27 Oct 2026 · 6.5c review and merge · decided by lead · risk: high
+- Decided: merge with code-reviewer, typescript-reviewer, security-reviewer and database-reviewer, all APPROVE with no findings. The change touches packages/db/src/repositories/** (learner.ts, sessions.ts), so security-reviewer was required.
+- Why: the evidence job now appends and folds mastery in one transaction under the profile-row lock, so two concurrent jobs for one learner both count. A retried job still cannot double-count (a stable event id and ON CONFLICT DO NOTHING). The new debug log lines carry only counts and ids, never student text.
+
 ### 27 Oct 2026 · 6.5c moves the worker's evidence job onto `appendAndFold` · decided by builder · risk: high
 - Decided: `apps/worker/src/commit/processors.ts`'s `JOB.evidence` handler now calls
   `repos.evidenceEvents.appendAndFold` instead of `append` followed by a separate
@@ -89,4 +93,4 @@ Deferred (not fixed here, per plan): threading a real logger through `packages/d
 - `git diff origin/main -- packages/contracts` → empty.
 
 ## Budget
-Tool calls used: 32
+Tool calls used: 57 (harness count; the builder reported 32)
