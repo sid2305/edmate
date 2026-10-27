@@ -12,6 +12,7 @@ import {
   createRepositories,
   LEAK_CANDIDATE_MAX_LENGTH,
   LEAK_CANDIDATES_MAX,
+  LEAK_CANDIDATES_TOTAL_CHARS_MAX,
   type LeakFallback,
   type Repositories,
   RepositoryError,
@@ -395,6 +396,31 @@ describe.skipIf(!up)(`leakCheck on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       await expect(
         guarded.leakCheck(['x'.repeat(LEAK_CANDIDATE_MAX_LENGTH + 1)], SCOPE),
       ).rejects.toMatchObject({ kind: 'invalid' });
+      expect(calls).toBe(0);
+    });
+
+    it('a batch within the per-item and count caps is refused once its total length exceeds the cap (5.4a)', async () => {
+      await loadWorld(world());
+      const n = 100;
+      const perItem = Math.floor(LEAK_CANDIDATES_TOTAL_CHARS_MAX / n);
+      const atLimit = Array.from({ length: n }, () => 'y'.repeat(perItem));
+      expect(atLimit.reduce((sum, c) => sum + c.length, 0)).toBeLessThanOrEqual(
+        LEAK_CANDIDATES_TOTAL_CHARS_MAX,
+      );
+      const r = retrievalIndexFor(repos);
+      expect(await r.leakCheck(atLimit, SCOPE)).toEqual({ hit: false });
+
+      let calls = 0;
+      const count = () => {
+        calls += 1;
+        return Promise.resolve(0);
+      };
+      const guarded = retrievalIndexFor(withRetrieval({ revision: count }));
+      const overLimit = [...atLimit, 'z'];
+      expect(overLimit.reduce((sum, c) => sum + c.length, 0)).toBeGreaterThan(
+        LEAK_CANDIDATES_TOTAL_CHARS_MAX,
+      );
+      await expect(guarded.leakCheck(overLimit, SCOPE)).rejects.toMatchObject({ kind: 'invalid' });
       expect(calls).toBe(0);
     });
   });

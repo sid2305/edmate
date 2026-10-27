@@ -9,6 +9,16 @@
 //      and `.leakCheck(` only in guardrails/lockedLeak.ts.
 // Each rule also runs on a fixture string that breaks it, so the audit is shown to be able to fail.
 // The harness has no Node types, so this lives here; CI runs turbo without a cache.
+//
+// Known limits of this static scan (5.4a #9), left as a comment rather than fixed: it only
+// recognises a member read written as `name.chunks` or `name.query.chunks` (a destructured read,
+// e.g. `const { chunks: c } = schema`, or a bracket-access read, e.g. `schema['chunks']`, is
+// invisible to it); `sourceFiles()` walks each package's `src` and each app's `src`/`app` only —
+// a package's `scripts`/`bin` folder (checked 27 Oct 2026: packages/db/scripts,
+// packages/gateway/scripts, packages/harness/scripts, apps/web/scripts, apps/cli/bin) holds only
+// dev/build tooling (a demo-embedding recorder, a sandbox magic-link script, a price generator, a
+// load-test runner, the CLI's bin launcher) and none of it is walked, by design, since it isn't
+// shipped application code that could reach a chunk at runtime.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +26,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
-const SOURCE = /\.(ts|tsx|mts|js|mjs)$/;
+const SOURCE = /\.(ts|tsx|mts|cts|js|mjs|cjs|jsx)$/;
 const TEST_FILE = /(\.(test|spec)\.[cm]?[jt]sx?$)|(^|\/)(test|tests|__tests__)\//;
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', '.turbo', 'coverage']);
 
@@ -84,6 +94,14 @@ const LEAK_CALLERS = new Set([
   'packages/harness/src/testing/hostileRetrieval.ts',
   'packages/harness/src/testing/retrievalContract.ts',
 ]);
+/**
+ * App files allowed to call search/probe/leakCheck directly on a RetrievalIndex-shaped value
+ * (5.4a #8): empty today — apps are not yet wired to retrieval (M9 wires the student app). Once
+ * one is, its file goes here only if it genuinely must bypass access/scopedRetrieval.ts; the
+ * usual path is to call through the harness's access filter instead.
+ */
+const APPS_SEARCH_CALLERS = new Set<string>();
+const APPS_LEAK_CALLERS = new Set<string>();
 /** Reads of the chunks table in retrieval.ts: textRows, vectorRows, the count, material; the df join. */
 export const PINNED_CHUNK_READS = 5;
 
@@ -97,9 +115,18 @@ export function namesChunksTable(text: string): boolean {
       /(schema|internal|@edmate\/db)/.test(from) &&
       names.split(',').some((n) => n.trim().split(/\s+as\s+/)[0] === 'chunks'),
   );
-  const member = /\b(?:s|schema|tables)\.chunks\b/.test(c);
-  const sqlText = /\b(?:from|join|update|into)\s+"?chunks"?\b/i.test(c);
-  return imported || member || sqlText;
+  // Any alias a namespace import of the schema/internal module binds (not just s/schema/tables),
+  // so `import * as t from '../schema/index.js'` catches `t.chunks` too.
+  const namespaceAliases = [...c.matchAll(/import\s+\*\s+as\s+(\w+)\s+from\s*['"]([^'"]+)['"]/g)]
+    .filter(([, , from = '']) => /(schema|internal|@edmate\/db)/.test(from))
+    .map(([, alias = '']) => alias);
+  const aliasPattern = ['s', 'schema', 'tables', ...namespaceAliases].join('|');
+  const member = new RegExp(`\\b(?:${aliasPattern})\\.chunks\\b`).test(c);
+  // Drizzle's relational query API: db.query.chunks.findMany(...) / .query.chunks directly.
+  const queryApi = /\.query\.chunks\b/.test(c);
+  // An optional schema qualifier before the table name, so `from public.chunks` is caught too.
+  const sqlText = /\b(?:from|join|update|into)\s+"?(?:\w+\.)?chunks"?\b/i.test(c);
+  return imported || member || queryApi || sqlText;
 }
 
 /** Rule 2: each read of chunks in `text`, with whether its statement carries the scope. */
@@ -108,7 +135,12 @@ export function chunkReads(text: string): { at: number; scoped: boolean }[] {
   return [...c.matchAll(/\.from\(chunks\)|\$\{chunks\}/g)].map((m) => {
     const end = c.indexOf(';', m.index);
     const statement = c.slice(m.index, end === -1 ? undefined : end);
-    return { at: m.index, scoped: /\bscope\b|\bscoped\(|chunks\.teacherId/.test(statement) };
+    return {
+      at: m.index,
+      // A bare "scope" word (including inside a string, since `code()` strips comments but not
+      // strings) no longer counts (5.4a #7) — only a statement that actually carries the scope.
+      scoped: /\$\{scope\}|\bscoped\(|chunks\.teacherId/.test(statement),
+    };
   });
 }
 
@@ -210,6 +242,14 @@ describe('no unfiltered search exists anywhere (static audit)', () => {
     expect(leakers).toContain('packages/harness/src/guardrails/lockedLeak.ts');
     expect(leakers.filter((f) => !LEAK_CALLERS.has(f))).toEqual([]);
   });
+
+  it('5b. in apps, no file calls the index directly (apps are not yet wired to retrieval)', () => {
+    const apps = files.filter((f) => f.startsWith('apps/'));
+    const searchers = apps.filter((f) => callsSearchOrProbe(read(f)));
+    expect(searchers.filter((f) => !APPS_SEARCH_CALLERS.has(f))).toEqual([]);
+    const leakers = apps.filter((f) => callsLeakCheck(read(f)));
+    expect(leakers.filter((f) => !APPS_LEAK_CALLERS.has(f))).toEqual([]);
+  });
 });
 
 describe('each rule fails on a fixture that breaks it', () => {
@@ -221,15 +261,35 @@ describe('each rule fails on a fixture that breaks it', () => {
     expect(namesChunksTable('db.select().from(s.chunks)')).toBe(true);
     expect(namesChunksTable('sql`select text from chunks where true`')).toBe(true);
     expect(namesChunksTable('sql`select 1 from x join "chunks" on true`')).toBe(true);
-    // Not the table: prose in comments, the repo member, other imports.
+    // The relational query API: db.query.chunks.findMany(...).
+    expect(
+      namesChunksTable('await db.query.chunks.findMany({ where: eq(chunks.teacherId, id) });'),
+    ).toBe(true);
+    // A namespace import under any alias, not just s/schema/tables.
+    expect(namesChunksTable(`import * as t from '../schema/index.js';\nconst a = t.chunks;`)).toBe(
+      true,
+    );
+    // Schema-qualified SQL: "from public.chunks".
+    expect(namesChunksTable('sql`select text from public.chunks where true`')).toBe(true);
+    // Not the table: prose in comments, the repo member, other imports, an unrelated alias.
     expect(namesChunksTable('// returns text from chunks\nconst a = repos.chunks;')).toBe(false);
     expect(namesChunksTable(`import { chunksRepo } from './chunks.js';`)).toBe(false);
+    expect(namesChunksTable('const alias = repos;\nalias.chunks;')).toBe(false);
   });
 
   it('2. an extra read, or a read without the scope in its statement', () => {
-    const scoped = 'db.select().from(chunks).where(scope);';
+    const templateScope = 'db.select().from(chunks).where(${scope});';
+    const scopedCall = 'db.select().from(chunks).where(scoped(x));';
+    const teacherIdCol = 'db.select().from(chunks).where(eq(chunks.teacherId, teacherId));';
+    // The bare word "scope" alone (an identifier, or inside a string) no longer counts.
+    const bareWord = 'db.select().from(chunks).where(scope);';
+    const bareWordInString = 'db.select().from(chunks).where(sql`scope = 1`);';
     const bare = 'db.select({ t: chunks.text }).from(chunks).limit(5);';
-    expect(chunkReads(scoped)).toEqual([{ at: expect.any(Number), scoped: true }]);
+    expect(chunkReads(templateScope)[0]?.scoped).toBe(true);
+    expect(chunkReads(scopedCall)[0]?.scoped).toBe(true);
+    expect(chunkReads(teacherIdCol)[0]?.scoped).toBe(true);
+    expect(chunkReads(bareWord)[0]?.scoped).toBe(false);
+    expect(chunkReads(bareWordInString)[0]?.scoped).toBe(false);
     expect(chunkReads(bare)).toEqual([{ at: expect.any(Number), scoped: false }]);
     expect(chunkReads('sql`select * from ${chunks} where true`;')[0]?.scoped).toBe(false);
     expect(
@@ -275,6 +335,9 @@ describe('each rule fails on a fixture that breaks it', () => {
     expect(callsLeakCheck('const f = o.retrieval.leakCheck;')).toBe(true);
     expect(callsLeakCheck('const hits = index.hits(c);')).toBe(false);
     expect(callsLeakCheck('if (opts.leakCheck instanceof Error) return;')).toBe(false);
+    // Rule 5 extends to apps/* (5.4a #8): a direct, unscoped call would be caught there too, the
+    // same way it is in harness src — apps report none today because none are wired yet.
+    expect(callsSearchOrProbe('await repos.retrieval.search(q, scope, k);')).toBe(true);
   });
 
   it('comments are ignored but URLs inside strings are kept', () => {

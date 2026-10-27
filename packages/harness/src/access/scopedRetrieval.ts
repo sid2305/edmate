@@ -6,7 +6,14 @@
 //   names ids only. Results are fresh objects holding only the Chunk fields, at most k of them.
 // - probeLocked: asks only for the locked modules and passes on a fresh `{ hit, score }`, so an
 //   index that adds text or any other key passes none of it on (code-only probe).
-import type { Chunk, Entitlement, RetrievalIndex } from '@edmate/contracts';
+import {
+  ChunkSchema,
+  SourceRefSchema,
+  type Chunk,
+  type Entitlement,
+  type RetrievalIndex,
+} from '@edmate/contracts';
+import { z } from 'zod';
 import { HarnessError } from '../pipeline/errors.js';
 
 /** The index returned something outside the entitlement's scope: refused, never passed on. */
@@ -32,25 +39,22 @@ const NO_HIT: LockedProbe = { hit: false, score: 0 };
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null;
 
-/** Exactly the Chunk fields, copied; nothing else an index attaches is kept. */
-function copyChunk(c: Chunk): Chunk {
-  const out: Chunk = {
-    id: c.id,
-    teacherId: c.teacherId,
-    documentId: c.documentId,
-    moduleId: c.moduleId,
-    kind: c.kind,
-    text: c.text,
-    source: { title: c.source.title, locator: c.source.locator, kind: c.source.kind },
-  };
-  if (c.score !== undefined) out.score = c.score;
-  return out;
-}
+/**
+ * A non-strict view of the contracts Chunk schema (5.4a): extra top-level keys an index attaches
+ * are still silently dropped (unlike `ChunkSchema` itself, which is `strictObject` and would
+ * reject them), but every known field is now type-checked -- a non-string `text`/`id`/etc. fails
+ * the parse instead of being copied through unchecked. `source` is nested the same way (it is
+ * `strictObject` too), so an extra key an index attaches there (e.g. a leaking `leak` field) is
+ * dropped rather than failing the whole parse.
+ */
+const ChunkFields = z.object({ ...ChunkSchema.shape, source: z.object(SourceRefSchema.shape) });
 
 /**
  * Defence in depth (ADR-0003): every chunk must be the entitlement's teacher's, in an allowed
  * module and not in a locked one. One stray chunk fails the whole search instead of being dropped
- * quietly, so the trace shows the fallback. The message names ids only, never chunk text.
+ * quietly, so the trace shows the fallback. The message names ids only, never chunk text; the id
+ * is always the schema-parsed one (1-128 safe characters), so embedding it is safe by
+ * construction, not by escaping.
  */
 export function checkScope(chunks: unknown, e: Scope): Chunk[] {
   if (!Array.isArray(chunks)) {
@@ -59,14 +63,17 @@ export function checkScope(chunks: unknown, e: Scope): Chunk[] {
   const allowed = new Set(e.allowedModuleIds);
   const locked = new Set(e.lockedModuleIds);
   return chunks.map((raw: unknown, i) => {
-    if (!isObject(raw) || !isObject(raw.source)) {
+    const parsed = ChunkFields.safeParse(raw);
+    if (!parsed.success) {
       throw new RetrievalScopeError(`result ${String(i)} is not a chunk`);
     }
-    const c = raw as unknown as Chunk;
+    // Read and copy from this one parsed snapshot only -- never the raw input again -- so a
+    // getter-backed object can't disagree with itself between the scope check and the copy.
+    const c = parsed.data;
     if (c.teacherId !== e.teacherId || !allowed.has(c.moduleId) || locked.has(c.moduleId)) {
-      throw new RetrievalScopeError(`chunk ${String(c.id)} is outside the entitlement's scope`);
+      throw new RetrievalScopeError(`chunk ${c.id} is outside the entitlement's scope`);
     }
-    return copyChunk(c);
+    return c;
   });
 }
 
@@ -83,7 +90,7 @@ export function scopedRetrieval(index: RetrievalIndex, e: Scope): ScopedRetrieva
   return {
     async search(q, k) {
       const n = Math.floor(k);
-      if (q === '' || allowedModuleIds.length === 0 || !(n > 0)) return [];
+      if (q === '' || allowedModuleIds.length === 0 || !(Number.isFinite(n) && n > 0)) return [];
       const found: unknown = await index.search(
         q,
         { teacherId, allowedModuleIds: [...allowedModuleIds] },
