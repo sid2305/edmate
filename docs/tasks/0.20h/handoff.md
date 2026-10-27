@@ -1,6 +1,6 @@
 # Handoff: 0.20h
 
-Status: BLOCKED (app bug: Next dev overlay portal intercepts clicks, hanging teacher-packages-walkthrough.spec.ts)
+Status: DONE (the local walkthrough proof moves to 0.20j: a Next dev overlay portal intercepts clicks; see Part 2)
 
 ## Summary
 
@@ -82,6 +82,11 @@ of unbounded and sequential.
 - Why: the plan explicitly scopes this task to `apps/web/e2e/**` and to making specs independent
   of leftover rows; the overlay bug is a dev-server/build concern outside that scope and outside
   the no-delete, no-docker constraints this task operates under.
+
+### 27 Oct 2026 · 0.20h merge with the walkthrough check moved to 0.20j · decided by lead · risk: low
+- Decided: merge 0.20h's test-only fixes (full-flow.spec.ts passed 5 of 5 fresh local runs; the walkthrough's create path runs in CI). The local proof of teacher-packages-walkthrough.spec.ts's at-cap path, and the warm-up comment fix, move to 0.20j, which fixes the dev overlay click hang the builder found.
+- Why: the hang is a separate app bug in local `next dev` (a node:worker_threads Edge warning brings up the dev overlay). The plan said not to fix app bugs in this task. Holding the test fixes back gains nothing.
+- Budget: about 169 tool calls across two sessions against a 60-call plan (2.8x). Most of it went on 900 s hangs and diagnosing them. 0.20j's brief sets a Playwright actionTimeout first, so a blocked click fails fast.
 
 ## Gate
 
