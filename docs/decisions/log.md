@@ -10,6 +10,43 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 12.3d repeat-infringer flag approval · decided by lead · risk: high
+- Decided: approve the new staff-only GET route under apps/web/app/api/staff/repeat-infringers/** and the page under apps/web/app/staff/repeat-infringers/** (risk groups apps/web/app/api/staff/** and apps/web/app/staff/**) for merge. security-reviewer approved with no findings: staff-only through withRole and ROUTE_POLICY, no new write path, the same data the verification queue already shows, bounded lists. code-reviewer approved with three LOWs, deferred to 12.3g.
+- Why: it carries out the human's B-63 answer with no table, column or contracts change; "suspend" is the existing reject path (B-46), so current students keep access unless staff tick the existing safety-concern box.
+
+---
+
+### 27 Oct 2026 · 12.3d review LOWs deferred · decided by lead · risk: low
+- Decided: the three code-reviewer LOWs (the `by` typing in handlers.ts, an exact 365-day boundary test, reading listActiveForStaff twice) go to board task 12.3g.
+- Why: none changes behaviour today; the MVP rule fixes only CRITICAL and HIGH before merge.
+
+---
+
+### 27 Oct 2026 · 12.3d repeat-infringer flag design · decided by builder · risk: high
+
+- Decided: threshold (3) and window (365 days) are plain code constants, not a table/config row;
+  "upheld" = an active (not lifted) copyright-category takedown inside the rolling window,
+  matching 12.3b's `countUpheld` precedent; a teacher already `rejected` is excluded from the
+  flagged list; "suspend" is the existing `teacherProfiles.setVerification` reject path reached
+  through `/api/staff/verifications`'s `decide` — no new write path, table or column, and no
+  `packages/contracts` change. The new page/API GET-only read path lives under
+  `apps/web/app/api/staff/**` and `apps/web/app/staff/**` (both risk-paths groups).
+- Why: matches the plan's explicit acceptance criteria and open-question answers (pre-accepted by
+  the lead), keeps the change read-only and additive, and reuses every existing security boundary
+  (role guard, `RepositoryError` mapping, no-PII logging) instead of adding a new one.
+
+---
+
+### 27 Oct 2026 · 12.3d int-test seeding via agent-kind takedowns · decided by builder · risk: low
+
+- Decided: the Postgres integration test seeds takedowns against `agent`-kind targets (a trivial
+  raw-SQL `agents` row with just `id`/`teacher_id`) instead of `document`-kind targets.
+- Why: `document` targets need an owned course and module first; `agents` needs nothing beyond a
+  teacher id, which keeps the test-only seeding minimal while still exercising the same
+  `takedowns` table and `category`/`teacherId` columns the feature reads.
+
+---
+
 ### 27 Oct 2026 · Three upheld copyright takedowns in 12 months raise a staff alert; staff decide on suspension (B-63, task 12.3d) · decided by you · risk: high
 Decided: A teacher with 3 upheld copyright takedowns in any 12 months is flagged to staff as a repeat infringer. Staff decide whether to suspend the teacher; a suspended teacher's agent takes no new students, and current students keep access until staff act. Nothing is suspended automatically in the pilot.
 Why: A US platform hosting uploads needs a written repeat-infringer policy it applies, to keep its copyright safe harbour; a person decides during the pilot, the same shape as B-12's jailbreak strikes.
