@@ -638,10 +638,19 @@ it again (`takedowns.ts`; the `takedowns` table is from 0001, no migration).
   `chunks.listForModule` (the outline drafter). Create and lift bump the material revision, so
   leakCheck rebuilds. The predicate probes `takedowns_target_idx`.
 - An agent takedown sets the agent `suspended` (every student-facing read requires `live`;
-  publish refuses it). A lift sets `live` when it has a live version, else `draft`.
+  publish refuses it). A lift sets `live` when it has a live version, else `draft` (task 9.3g:
+  the resolved value of `lift` carries this restored `agentStatus` for an agent target only --
+  never for a document).
 - Lock order: staff role row (`FOR SHARE`), the target row (`FOR UPDATE`), the takedown row,
   then the report. publish takes advisory, profile, agent, run; the agent is the only shared
   row, so there is no cycle (two-connection test against `publish.goLive`).
+  `teacherProfiles.setVerification`'s own safety rejection (below) shares the same agent row too
+  (profile before agent, same as publish and this file), proven the same way against both
+  `publish.goLive` and `takedowns.create` (task 9.3g). When that rejection finds a live agent
+  that already has a stale active takedown (never written by this file's own `create`), it no
+  longer only suspends the agent: it also appends its own staff action to that existing takedown
+  row and writes its own `takedown.create` audit row for the agent, mirroring `takeDownAgentInTx`'s
+  shape (task 9.3g).
 - `countUpheld(scope)` (task 12.3b) counts the teacher's active `copyright` takedowns on their
   own documents and agents; a lifted one does not count. The owner is the target's teacher now
   or the teacher on the takedown's `takedown.create` audit row, so deleting a taken-down

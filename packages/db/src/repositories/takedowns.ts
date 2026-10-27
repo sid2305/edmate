@@ -192,7 +192,7 @@ async function lockTarget(
 }
 
 /** Appends one `{ actor, action, note, ts }` entry to a trust row's `staff_actions`. */
-const staffAction = (
+export const staffAction = (
   column: typeof takedowns.staffActions | typeof reports.staffActions,
   actor: string,
   action: string,
@@ -340,13 +340,14 @@ export function takedownsRepo(db: Db) {
      * agent goes back to `live` when it has a live version and its teacher's profile is
      * `verified` (task 9.3e: no profile, pending or rejected stays off), else `draft`; a
      * document bumps the material revision. Audited `takedown.lift`. A stored target that is
-     * malformed or gone is `integrity`.
+     * malformed or gone is `integrity`. The resolved value carries the restored `agentStatus`
+     * (task 9.3g) for an agent target only; a document lift never has it.
      */
     async lift(
       by: unknown,
       takedownId: unknown,
       input: TakedownLiftInput,
-    ): Promise<{ id: string; status: 'lifted' }> {
+    ): Promise<{ id: string; status: 'lifted'; agentStatus?: 'draft' | 'live' }> {
       const method = 'takedowns.lift';
       const staff = parseArg(IdSchema, by, method);
       const id = parseArg(IdSchema, takedownId, method);
@@ -413,7 +414,11 @@ export function takedownsRepo(db: Db) {
               ...(locked.agent ? { agentStatus: restored } : {}),
             },
           });
-          return { id, status: 'lifted' as const };
+          return {
+            id,
+            status: 'lifted' as const,
+            ...(locked.agent ? { agentStatus: restored } : {}),
+          };
         }),
       );
     },

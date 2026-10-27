@@ -72,6 +72,7 @@ const QueueReply = z.object({ teachers: QueueSchema });
 const DecisionReply = z.object({
   teacherId: z.string(),
   verificationStatus: z.enum(['verified', 'rejected']),
+  agentsTakenDown: z.number().int().min(0).optional(),
 });
 
 async function call(fetchImpl: FetchLike | undefined, init: RequestInit): Promise<Response | null> {
@@ -140,7 +141,7 @@ export interface DecideInput {
 export async function decide(
   input: DecideInput,
   fetchImpl?: FetchLike,
-): Promise<{ ok: true; verificationStatus: Decision } | Failure> {
+): Promise<{ ok: true; verificationStatus: Decision; agentsTakenDown?: number } | Failure> {
   const reason = input.reason?.trim() ?? '';
   const res = await call(fetchImpl, {
     method: 'POST',
@@ -163,5 +164,9 @@ export async function decide(
   ) {
     return FAILED;
   }
-  return { ok: true, verificationStatus: body.verificationStatus };
+  return {
+    ok: true,
+    verificationStatus: body.verificationStatus,
+    ...(body.agentsTakenDown === undefined ? {} : { agentsTakenDown: body.agentsTakenDown }),
+  };
 }

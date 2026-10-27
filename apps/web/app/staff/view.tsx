@@ -86,7 +86,7 @@ export function StaffQueueView({
       setNotice({
         status: result.verificationStatus,
         slug: item.slug,
-        safety: safety && result.verificationStatus === 'rejected',
+        safety: result.verificationStatus === 'rejected' && (result.agentsTakenDown ?? 0) > 0,
       });
     } catch {
       setError('generic');
@@ -148,7 +148,11 @@ export function StaffQueueView({
       {notice ? (
         <p role="status" className="staff-notice">
           {t(
-            notice.status === 'verified' ? 'approved' : notice.safety ? 'rejectedSafety' : 'rejected',
+            notice.status === 'verified'
+              ? 'approved'
+              : notice.safety
+                ? 'rejectedSafety'
+                : 'rejected',
             { slug: notice.slug },
           )}
         </p>
@@ -183,9 +187,13 @@ export function StaffQueueView({
             key={found.teacherId}
             item={found}
             currentStatus={found.verificationStatus}
-            pending={busy?.kind === 'decide' && busy.teacherId === found.teacherId ? busy.status : null}
+            pending={
+              busy?.kind === 'decide' && busy.teacherId === found.teacherId ? busy.status : null
+            }
             disabled={busy !== null}
-            onDecide={(status, reason, safety) => void onDecide(found, status, reason, safety, true)}
+            onDecide={(status, reason, safety) =>
+              void onDecide(found, status, reason, safety, true)
+            }
           />
         </ul>
       ) : null}
@@ -202,7 +210,9 @@ export function StaffQueueView({
             <VerificationRow
               key={item.teacherId}
               item={item}
-              pending={busy?.kind === 'decide' && busy.teacherId === item.teacherId ? busy.status : null}
+              pending={
+                busy?.kind === 'decide' && busy.teacherId === item.teacherId ? busy.status : null
+              }
               disabled={busy !== null}
               onDecide={(status, reason, safety) => void onDecide(item, status, reason, safety)}
             />

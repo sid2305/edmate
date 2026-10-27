@@ -279,7 +279,11 @@ export function createStaffVerificationHandlers(backend: StaffVerificationBacken
             ...(safety === true ? { safety: true } : {}),
           },
         );
-        return ok({ teacherId: row.teacherId, verificationStatus: row.verificationStatus });
+        return ok({
+          teacherId: row.teacherId,
+          verificationStatus: row.verificationStatus,
+          ...(safety === true ? { agentsTakenDown: row.agentsTakenDown } : {}),
+        });
       } catch (error) {
         if (error instanceof RepositoryError) {
           switch (error.kind) {

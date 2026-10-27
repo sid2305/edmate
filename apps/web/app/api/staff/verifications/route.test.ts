@@ -130,7 +130,7 @@ function memory() {
       async (
         scope: { teacherId: string },
         input: { status: 'verified' | 'rejected'; by: string; reason?: string; safety?: boolean },
-      ): Promise<TeacherProfileRow> => {
+      ): Promise<TeacherProfileRow & { agentsTakenDown: number }> => {
         const m = 'teacherProfiles.setVerification';
         if (input.reason !== undefined && (input.reason.length < 1 || input.reason.length > 500)) {
           throw new RepositoryError('invalid', m);
@@ -155,7 +155,7 @@ function memory() {
           reason: input.reason ?? null,
           ts: new Date().toISOString(),
         });
-        return next;
+        return { ...next, agentsTakenDown: 0 };
       },
     ),
     async assertVerifiedForPublish(scope: { teacherId: string }): Promise<void> {
@@ -641,7 +641,11 @@ describe('POST: approve or reject', () => {
       ctx(),
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ teacherId: 'tch_b', verificationStatus: 'rejected' });
+    expect(await res.json()).toEqual({
+      teacherId: 'tch_b',
+      verificationStatus: 'rejected',
+      agentsTakenDown: 0,
+    });
     expect(m.teacherProfiles.setVerification).toHaveBeenCalledWith(
       { teacherId: 'tch_b' },
       { status: 'rejected', by: 'stf_1', reason: 'unsafe advice', safety: true },

@@ -215,7 +215,11 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
       }),
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ teacherId: teacherB, verificationStatus: 'rejected' });
+    expect(await res.json()).toEqual({
+      teacherId: teacherB,
+      verificationStatus: 'rejected',
+      agentsTakenDown: 0,
+    });
     const rows = await verifyRows(teacherB);
     expect(rows).toHaveLength(before.length + 1);
     expect(rows.find((r) => r.reason === 'safety concern')).toMatchObject({
@@ -257,7 +261,11 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
       }),
     );
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ teacherId: teacherA, verificationStatus: 'rejected' });
+    expect(await res.json()).toEqual({
+      teacherId: teacherA,
+      verificationStatus: 'rejected',
+      agentsTakenDown: 0,
+    });
     const rows = await verifyRows(teacherA);
     expect(rows).toHaveLength(before.length + 1);
     expect(rows.find((r) => r.reason === 'safety concern found via lookup')).toMatchObject({

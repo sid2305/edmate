@@ -32,7 +32,7 @@ const PROFILE: TeacherProfileRow = {
 
 function fakeOpen(
   identityOverrides: Partial<IdentityStore> = {},
-  setVerification?: (...a: unknown[]) => Promise<TeacherProfileRow>,
+  setVerification?: (...a: unknown[]) => Promise<TeacherProfileRow & { agentsTakenDown: number }>,
 ) {
   const close = vi.fn(async () => undefined);
   const identity = {
@@ -46,6 +46,7 @@ function fakeOpen(
         (async (_s: unknown, v: { status: TeacherProfileRow['verificationStatus'] }) => ({
           ...PROFILE,
           verificationStatus: v.status,
+          agentsTakenDown: 0,
         })),
     ),
   };
