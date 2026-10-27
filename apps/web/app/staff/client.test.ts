@@ -32,6 +32,7 @@ describe('loadQueue', () => {
     ['a network failure', async () => Promise.reject(new TypeError('offline'))],
     ['unreadable JSON', async () => new Response('{nope', { status: 200 })],
     ['a wrong shape', async () => json({ teachers: [{ teacherId: 1 }] })],
+    ['an empty displayName (9.2h)', async () => json({ teachers: [{ ...ITEM, displayName: '' }] })],
     ['no teachers key', async () => json({})],
   ])('%s is provider_error', async (_label, f) => {
     expect(await loadQueue(f)).toEqual({ ok: false, code: 'provider_error' });
