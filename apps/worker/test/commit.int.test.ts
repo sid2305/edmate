@@ -343,6 +343,36 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
     ).toBe(1);
   });
 
+  it('two concurrent evidence jobs for one learner both fold (appendAndFold shares the lock)', async () => {
+    const scope2 = { studentId: 'stu_test_02', teacherId: scope.teacherId };
+    const eventA = {
+      studentId: scope2.studentId,
+      teacherId: scope2.teacherId,
+      topicId: 'top_test_01',
+      correct: true,
+      source: 'practice' as const,
+      weight: 1,
+      ts: '2026-10-20T10:00:00.000Z',
+    };
+    const eventB = {
+      studentId: scope2.studentId,
+      teacherId: scope2.teacherId,
+      topicId: 'top_test_01',
+      correct: true,
+      source: 'practice' as const,
+      weight: 1,
+      ts: '2026-10-20T11:00:00.000Z',
+    };
+    const commit = commitProcessor(db.repos, (l) => lines.push(l));
+    const jobA = { name: JOB.evidence, data: { scope: scope2, event: eventA } };
+    const jobB = { name: JOB.evidence, data: { scope: scope2, event: eventB } };
+    const [outcomeA, outcomeB] = await Promise.all([commit(jobA), commit(jobB)]);
+    expect(outcomeA).toBe('written');
+    expect(outcomeB).toBe('written');
+    const profile = await db.repos.learnerProfiles.get(scope2);
+    expect(profile?.mastery[eventA.topicId]?.n).toBe(2);
+  });
+
   it('a permanent failure (another student’s session) is dead-lettered after one attempt', async () => {
     const message = {
       id: 'msg_wrong',
