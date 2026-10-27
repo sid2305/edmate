@@ -4009,9 +4009,9 @@ tasks:
   deps:
   - 12.3d
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.3g-repeat-infringer-lows
+  model: plan:lead build:sonnet
 - id: 7.4c
   milestone: M7
   title: 'Per-scope gate deadline (7.2 plan risk): GATE_DEADLINE_MS is 15 minutes for every scope, but a live first-publish or prompt-pack gate takes about 45-80 minutes and fails closed; give each change
