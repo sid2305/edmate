@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { StaleProcessingDocument } from '@edmate/db';
+import { jobId } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import type { LogLine } from '../log.js';
 import {
@@ -29,6 +30,7 @@ function deps(overrides: Partial<IngestSweepDeps> = {}): IngestSweepDeps {
   return {
     staleProcessing: () => Promise.resolve([]),
     documents: { failIfStorageKey: () => Promise.resolve({ updated: true }) },
+    ingestJobState: () => Promise.resolve(undefined),
     now: () => NOW,
     log: () => undefined,
     ...overrides,
@@ -107,6 +109,82 @@ describe('ingestSweepJob', () => {
     await expect(job()).rejects.toThrow(/ingest_sweep/);
     expect(failIfStorageKey).toHaveBeenCalledTimes(2);
     expect(lines.some((l) => l.event === 'ingest_sweep.candidate_failed')).toBe(true);
+    expect(lines.find((l) => l.event === 'ingest_sweep.candidate_failed')).toEqual(
+      expect.objectContaining({ level: 'error', documentId: 'doc_bad' }),
+    );
+  });
+
+  it('a row whose own ingest job is still active or waiting is skipped, not failed (8.2i fix round 1)', async () => {
+    const lines: LogLine[] = [];
+    const rows = [ROW({ id: 'doc_active' }), ROW({ id: 'doc_waiting' })];
+    const failIfStorageKey = vi.fn(() => Promise.resolve({ updated: true }));
+    const ingestJobState = vi.fn((id: string) =>
+      Promise.resolve(
+        id === jobId.ingest('doc_active', rows[0]?.storageKey ?? '') ? 'active' : 'waiting',
+      ),
+    );
+    const summary = await ingestSweepJob(
+      deps({
+        staleProcessing: () => Promise.resolve(rows),
+        documents: { failIfStorageKey },
+        ingestJobState,
+        log: (l) => lines.push(l),
+      }),
+    )();
+    expect(summary).toEqual({ marked: 0, skipped: 2, cutoff: expect.any(String), pages: 1 });
+    expect(failIfStorageKey).not.toHaveBeenCalled();
+    expect(ingestJobState).toHaveBeenCalledWith(jobId.ingest('doc_active', 'uploads/tch_1/f1.pdf'));
+    expect(ingestJobState).toHaveBeenCalledWith(
+      jobId.ingest('doc_waiting', 'uploads/tch_1/f1.pdf'),
+    );
+    const stillQueued = lines.filter((l) => l.event === 'ingest_sweep.still_queued');
+    expect(stillQueued).toEqual([
+      expect.objectContaining({ documentId: 'doc_active', state: 'active' }),
+      expect.objectContaining({ documentId: 'doc_waiting', state: 'waiting' }),
+    ]);
+  });
+
+  it('a row whose own ingest job is missing, completed or failed is still failed as today (8.2i fix round 1)', async () => {
+    const rows = [ROW({ id: 'doc_missing' }), ROW({ id: 'doc_done' }), ROW({ id: 'doc_dead' })];
+    const failIfStorageKey = vi.fn(() => Promise.resolve({ updated: true }));
+    const ingestJobState = vi.fn((id: string) => {
+      if (id === jobId.ingest('doc_done', rows[1]?.storageKey ?? ''))
+        return Promise.resolve('completed');
+      if (id === jobId.ingest('doc_dead', rows[2]?.storageKey ?? ''))
+        return Promise.resolve('failed');
+      return Promise.resolve(undefined);
+    });
+    const summary = await ingestSweepJob(
+      deps({
+        staleProcessing: () => Promise.resolve(rows),
+        documents: { failIfStorageKey },
+        ingestJobState,
+        log: () => undefined,
+      }),
+    )();
+    expect(summary.marked).toBe(3);
+    expect(failIfStorageKey).toHaveBeenCalledTimes(3);
+  });
+
+  it('a job-state lookup that throws is logged per row and the run still rejects (8.2i fix round 1)', async () => {
+    const lines: LogLine[] = [];
+    const rows = [ROW({ id: 'doc_bad' }), ROW({ id: 'doc_ok' })];
+    const failIfStorageKey = vi.fn(() => Promise.resolve({ updated: true }));
+    const ingestJobState = vi.fn((id: string) =>
+      id === jobId.ingest('doc_bad', rows[0]?.storageKey ?? '')
+        ? Promise.reject(new Error('redis down'))
+        : Promise.resolve(undefined),
+    );
+    const job = ingestSweepJob(
+      deps({
+        staleProcessing: () => Promise.resolve(rows),
+        documents: { failIfStorageKey },
+        ingestJobState,
+        log: (l) => lines.push(l),
+      }),
+    );
+    await expect(job()).rejects.toThrow(/ingest_sweep/);
+    expect(failIfStorageKey).toHaveBeenCalledTimes(1);
     expect(lines.find((l) => l.event === 'ingest_sweep.candidate_failed')).toEqual(
       expect.objectContaining({ level: 'error', documentId: 'doc_bad' }),
     );

@@ -13,7 +13,13 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { openDatabase } from '@edmate/db';
 import { warmPreGuardPatterns } from '@edmate/harness';
-import { ALERT_QUEUE, createGateQueue, DEAD_LETTER_QUEUE, enqueueGate } from '@edmate/queue';
+import {
+  ALERT_QUEUE,
+  createGateQueue,
+  DEAD_LETTER_QUEUE,
+  INGEST_QUEUE,
+  enqueueGate,
+} from '@edmate/queue';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { createCostAlarmWorker, logCostAlarmSink, scheduleCostAlarm } from './alarms/index.js';
@@ -65,6 +71,10 @@ const retentionQueue = new Queue(RETENTION_QUEUE, { connection });
 const alertQueue = new Queue(ALERT_QUEUE, { connection });
 const regateQueue = new Queue(REGATE_QUEUE, { connection });
 const ingestSweepQueue = new Queue(INGEST_SWEEP_QUEUE, { connection });
+// A read side only (8.2i fix round 1): the sweep asks this queue whether a stale row's own job
+// is still queued or running before failing the row; it never adds jobs to it (the producer side
+// lives in apps/web's studio runtime, on this same queue name).
+const ingestQueue = new Queue(INGEST_QUEUE, { connection });
 const gateProducerQueue = createGateQueue(connection);
 
 // Task 3.9c (found by 3.9b): warm preGuard's pattern matchers before the first queue worker
@@ -174,6 +184,7 @@ const ingestSweep = createIngestSweepWorker({
   deps: {
     staleProcessing: (cutoff) => db.ingestSweep.staleProcessing(cutoff),
     documents: db.repos.documents,
+    ingestJobState: async (id) => (await ingestQueue.getJob(id))?.getState(),
     now: () => new Date(),
     log,
   },
@@ -289,6 +300,7 @@ async function shutdown(signal: string): Promise<void> {
     alertQueue.close(),
     regateQueue.close(),
     ingestSweepQueue.close(),
+    ingestQueue.close(),
     gateProducerQueue.close(),
   ]);
   await db.close();

@@ -65,10 +65,15 @@ export type PinnedRequestOptions = https.RequestOptions & { readonly autoSelectF
 /** The request options for one pinned request; exported so the safety rules can be asserted. */
 export function pinnedRequestOptions(req: TransportRequest): PinnedRequestOptions {
   const host = bareHostName(req.url.hostname.replace(/^\[(.*)\]$/, '$1'));
+  const ipVersion = isIP(host);
   // Explicit, so the wire's Host header always matches SNI's servername (both come from the same
   // bare `host`): Node would otherwise derive Host from `req.url` as-is, trailing dot kept. Node's
   // own default Host also carries a non-default port; an explicit value has to do that itself.
-  const hostHeader = req.url.port === '' ? host : `${host}:${req.url.port}`;
+  // An IPv6 literal's Host keeps its brackets (RFC 3986 / RFC 7230 S5.4) -- `host` above is the
+  // bare address, so it is re-bracketed here; SNI below stays unbracketed since it is never an
+  // IP literal in the first place (8.2i fix round 1).
+  const hostForHeader = ipVersion === 6 ? `[${host}]` : host;
+  const hostHeader = req.url.port === '' ? hostForHeader : `${hostForHeader}:${req.url.port}`;
   return {
     method: 'GET',
     headers: { ...req.headers, host: hostHeader },
@@ -80,7 +85,7 @@ export function pinnedRequestOptions(req: TransportRequest): PinnedRequestOption
     rejectUnauthorized: true,
     signal: req.signal,
     // SNI must be a host name, never an IP literal (RFC 6066).
-    ...(isIP(host) === 0 ? { servername: host } : {}),
+    ...(ipVersion === 0 ? { servername: host } : {}),
   };
 }
 

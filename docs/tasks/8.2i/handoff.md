@@ -312,3 +312,69 @@ $ python3 .githooks/secret-scan.py --all
 
 ### Budget
 Phase B tool calls used: 68
+
+## Fix round 1
+
+### 1. [HIGH] IPv6 Host header lost its brackets (`apps/worker/src/webLink/pinnedTransport.ts:67-74`)
+- Finding (code-reviewer, typescript-reviewer, security-reviewer; architect LOW): `pinnedRequestOptions`
+  stripped the `[...]` brackets off an IPv6 literal host for SNI, then reused that same bare string
+  as the Host header, so `https://[2606:4700:4700::1111]/x` sent `Host: 2606:4700:4700::1111`
+  instead of the bracketed form Node's own default Host derivation (`req.url.host`) used to send.
+- Fix: `pinnedRequestOptions` now computes `isIP(host)` once; when it is `6`, the Host header
+  re-brackets the bare host (`[host]`, plus `:port` only when the URL carries a non-default port).
+  Names and IPv4 stay exactly as before (bare host, trailing dot stripped, matching SNI).
+- Test first (red): added "an IPv6 literal Host header keeps its brackets (8.2i fix round 1)" to
+  `pinnedTransport.test.ts`, asserting `headers.host` for an IPv6 literal with no port
+  (`[2606:4700:4700::1111]`) and with a port (`[2606:4700:4700::1111]:8443`). Ran alone before the
+  fix: failed (`expected '2606:4700:4700::1111' to be '[2606:4700:4700::1111]'`). After the fix:
+  all 22 tests in the file pass, including the pre-existing IPv4/name/trailing-dot cases.
+
+### 2. [HIGH] A still-live ingest job got swept to `failed` (`apps/worker/src/ingest/sweep.ts:41` / `processor.ts:332-339`)
+- Finding (database-reviewer HIGH, typescript-reviewer MEDIUM): `documents.updated_at` is set once
+  when a row enters `processing` and never bumped, so a job still waiting behind others, or still
+  genuinely running (long transcription, a retry with backoff) past the 30-minute cutoff, was
+  swept to `failed` even though nothing was actually stuck; when that live job later finished,
+  `updateStatus(..., 'ready')` found `failed` already written, logged `stale_skipped`, and a fully
+  indexed document stayed `failed` forever.
+- Lead decision implemented: before failing a stale row, the sweep now asks the ingest queue for
+  that row's own job (id: `jobId.ingest(documentId, storageKey)`, from `@edmate/queue`). If the job
+  exists and is `waiting`, `delayed`, `prioritized`, `waiting-children` or `active`, the row is
+  skipped (not failed) and logged `ingest_sweep.still_queued` with `documentId` and `state` only,
+  counted as skipped. If the job is missing, `completed` or `failed`, the row is failed exactly as
+  before (a worker that died mid-job leaves an `active` job whose lock expires; BullMQ's stalled
+  check then moves it to waiting or failed, so a later sweep run catches it).
+- Added a narrow `ingestJobState(jobId: string): Promise<string | undefined>` to `IngestSweepDeps`
+  (`apps/worker/src/ingest/sweep.ts`) -- no new bullmq types beyond what the file already imports.
+  Wired in `apps/worker/src/index.ts`: a new read-only `Queue(INGEST_QUEUE, { connection })`
+  instance (the producer side stays in apps/web's studio runtime, same queue name), implemented as
+  `async (id) => (await ingestQueue.getJob(id))?.getState()`, closed alongside the other queues on
+  shutdown. `packages/queue`'s `JobQueue` port needed no change -- `index.ts` already instantiates
+  raw bullmq `Queue`s for every other queue it owns, so the same pattern covers this read.
+  `sweep.ts`'s header comment now explains the check.
+- Tests first (red): three new cases in `sweep.test.ts` -- (a) a stale row whose job is `active` or
+  `waiting` is skipped and `failIfStorageKey` is never called; (b) a row whose job is missing,
+  `completed` or `failed` is still failed as before; (c) an `ingestJobState` throw is logged per
+  row (`ingest_sweep.candidate_failed`, same shape as a `failIfStorageKey` throw) and the run still
+  rejects at the end. Ran alone before the fix (deps had no `ingestJobState`): (a) and (c) failed
+  (`marked: 2, skipped: 0` instead of the expected skip; the throwing-lookup case resolved instead
+  of rejecting). After the fix: all 10 cases in `sweep.test.ts` pass (including the pre-existing
+  7).
+
+### Gate
+```
+$ corepack pnpm turbo run typecheck lint test --filter=...@edmate/worker --filter=...@edmate/queue
+Tasks:    17 successful, 17 total
+@edmate/worker:test:  Test Files  46 passed (46)
+@edmate/worker:test:       Tests  450 passed (450)
+```
+```
+$ corepack pnpm exec prettier --check apps/worker/src/webLink/pinnedTransport.ts apps/worker/src/webLink/pinnedTransport.test.ts apps/worker/src/ingest/sweep.ts apps/worker/src/ingest/sweep.test.ts apps/worker/src/index.ts
+All matched files use Prettier code style! (one file needed --write first: sweep.test.ts, re-checked clean)
+```
+```
+$ python3 .githooks/secret-scan.py --all
+(clean; no output)
+```
+
+### Budget
+Fix round tool calls used: 26

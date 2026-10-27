@@ -169,6 +169,28 @@ describe('createPinnedTransport: the pin', () => {
       expect(options.family).toBe(family);
     }
   });
+
+  it('an IPv6 literal Host header keeps its brackets (8.2i fix round 1)', () => {
+    const noPort = pinnedRequestOptions(
+      req(443, {
+        url: new URL('https://[2606:4700:4700::1111]/x'),
+        address: '2606:4700:4700::1111',
+        family: 6,
+      }),
+    );
+    const noPortHeaders = noPort.headers as Record<string, unknown> | undefined;
+    expect(noPortHeaders?.host).toBe('[2606:4700:4700::1111]');
+
+    const withPort = pinnedRequestOptions(
+      req(443, {
+        url: new URL('https://[2606:4700:4700::1111]:8443/x'),
+        address: '2606:4700:4700::1111',
+        family: 6,
+      }),
+    );
+    const withPortHeaders = withPort.headers as Record<string, unknown> | undefined;
+    expect(withPortHeaders?.host).toBe('[2606:4700:4700::1111]:8443');
+  });
 });
 
 describe('createPinnedTransport: decompression', () => {

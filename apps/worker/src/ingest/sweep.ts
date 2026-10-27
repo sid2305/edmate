@@ -15,11 +15,23 @@
 // whole sweep -- but the run still fails at the end (so BullMQ retries it; the failed handler logs
 // it), same "log every failure, still fail the job" shape as `alarms/schedule.ts`'s cost alarm.
 //
+// Fix round 1 (8.2i review): `documents.updated_at` is set once, when the row enters
+// `processing`, and never bumped again -- a job still waiting behind others, or still genuinely
+// running (a long transcription, a retry with backoff), can still be past the 30-minute cutoff
+// with nothing wrong. So before failing a stale row, the sweep asks the ingest queue for that
+// row's own job (its id is deterministic: `jobId.ingest(documentId, storageKey)`). If that job is
+// `waiting`, `delayed`, `prioritized`, `waiting-children` or `active`, the row is left alone (logged
+// `ingest_sweep.still_queued`, counted as skipped) -- it is live, not stuck. If the job is missing,
+// `completed` or `failed`, the row is failed as before: a worker that died mid-job leaves an
+// `active` job whose lock expires, and BullMQ's stalled check then moves it to waiting or failed,
+// so a later run of this sweep catches it. A per-row job-state lookup that throws is logged and
+// counted exactly like a `failIfStorageKey` throw -- the run continues, but still fails at the end.
+//
 // Modelled byte-for-byte on `apps/worker/src/alarms/schedule.ts`: one file for the queue/job
 // constants, the schedule function, the job processor and the worker factory (this job is simple
 // enough for one file, unlike `retention/`'s 4-file split).
 import { INGEST_SWEEP_LIMIT, type Repositories, type StaleProcessingDocument } from '@edmate/db';
-import type { JobQueue } from '@edmate/queue';
+import { jobId, type JobQueue } from '@edmate/queue';
 import { type ConnectionOptions, type JobsOptions, Worker } from 'bullmq';
 import { onJobFailed } from '../commit/deadLetter.js';
 import { describeError, type Log } from '../log.js';
@@ -46,11 +58,26 @@ export const MAX_ITERATIONS = 1000;
 /** The fixed failure code the sweep writes (lead answer Q2). */
 export const INGEST_SWEEP_FAILURE_REASON = 'provider_error';
 
+/** A job state that means the row's own ingest job is still live; the row is skipped, not failed. */
+const STILL_QUEUED_STATES: ReadonlySet<string> = new Set([
+  'waiting',
+  'delayed',
+  'prioritized',
+  'waiting-children',
+  'active',
+]);
+
 /** What `ingestSweepJob` needs; a narrow, fake-able interface (rule 4: no real db in tests). */
 export interface IngestSweepDeps {
   /** `ingestSweepRepo(db).staleProcessing`. */
   staleProcessing(cutoff: Date, limit?: number): Promise<StaleProcessingDocument[]>;
   documents: Pick<Repositories['documents'], 'failIfStorageKey'>;
+  /**
+   * The ingest queue's state for a job id (BullMQ's `Queue.getJob(id)` then `job.getState()`, or
+   * `undefined` when there is no such job). Narrow on purpose, so this file imports no bullmq
+   * types beyond what it already does.
+   */
+  ingestJobState(jobId: string): Promise<string | undefined>;
   now?: () => Date;
   log: Log;
 }
@@ -80,6 +107,18 @@ export function ingestSweepJob(deps: IngestSweepDeps): () => Promise<IngestSweep
 
       for (const row of rows) {
         try {
+          const state = await deps.ingestJobState(jobId.ingest(row.id, row.storageKey));
+          if (state !== undefined && STILL_QUEUED_STATES.has(state)) {
+            skipped += 1;
+            deps.log({
+              level: 'warn',
+              event: 'ingest_sweep.still_queued',
+              documentId: row.id,
+              state,
+            });
+            continue;
+          }
+
           const result = await deps.documents.failIfStorageKey(
             { teacherId: row.teacherId },
             row.id,
