@@ -131,6 +131,10 @@ instead of throwing `OAuthAccountNotLinked`. Two phases, both green.
 No further decisions beyond the plan's draft; the plan's open questions (Q1-Q5) and the lead's
 answers were followed as given, with no deviation.
 
+### 27 Oct 2026 · 1.4c approve Google linking to a verified email-link account · decided by lead · risk: high
+- Decided: merge 1.4c. This replaces the Google-provider part of the 1.3 decision (18 Oct 2026) that kept `allowDangerousEmailAccountLinking` false. The flag is now true on the Google provider only, and Edmate's `signIn` callback refuses the link unless Google reports `email_verified` true, the existing user's `emailVerifiedAt` is set, and that user has no Google account linked yet. The email-link provider is unchanged.
+- Why: the lead and the security reviewer checked the installed `@auth/core` 0.41.3 and confirmed that `signIn` runs before `handleLoginOrRegister` links anything, so a refusal writes nothing; flow tests against the real handlers prove the linked same-user case and every refusal. The unique `(user_id, provider)` index backs the app check. Security, database, code and typescript reviewers approved with LOW notes only.
+
 ## Gate
 
 ```
@@ -161,4 +165,4 @@ No `apps/cli` test run in this task (only `@edmate/db` and `@edmate/web` filters
 gate commands); no chatDbRetrieval.int.test.ts involvement.
 
 ## Budget
-Tool calls used: 34
+Tool calls used: 53 (harness count from the builder transcript; the builder reported 34)
