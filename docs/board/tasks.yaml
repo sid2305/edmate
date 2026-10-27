@@ -2542,10 +2542,32 @@ tasks:
   accept: a production worker or web with missing or dev storage config refuses to start ingest or uploads and logs only a code; no orphan uploading row after a signing failure.
   deps:
   - '8.2'
-  status: running
+  status: done
   branch: m13/8.2a-storage-hardening
   risk: risky
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 935
+    tokens_in: 3198
+    tokens_out: 357473
+    cache_read_tokens: 107938010
+    wall_time_seconds: 559913
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        MEDIUM: 2
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 2
+    human_questions: 0
 - id: 5.10b
   milestone: M13
   title: '5.10 review follow-ups: teacherQuestions.answer locks the group rows in one id-ordered statement (no 40P01 deadlock between two answers in one group) and takes the agent lock first like open;

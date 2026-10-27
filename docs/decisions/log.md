@@ -10,6 +10,74 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 8.2a unmount test asserts no extra fetch call, not just no console warning · decided by builder · risk: low
+- Decided: the Phase B unmount test's primary assertion is that no extra `fetch` call fires after
+  unmount (checked by comparing the call count before and after the late response resolves), with
+  a `console.error` spy kept as a secondary check.
+- Why: the plan's test sketch (spy `console.error` for "state update on an unmounted component")
+  no longer applies under React 19 — React removed that warning because a post-unmount `setState`
+  is a silent no-op, not a bug to warn about. A console.error-only assertion would pass even
+  against the unfixed component (confirmed: it did), so it would not be red before the fix. The
+  extra-fetch-call assertion is red against the unmodified component (5 calls instead of 4,
+  verified by stashing just the component file) and green after the guard, which is what the plan's
+  exit condition ("the unmount-guard test is red-then-green") requires.
+
+---
+
+### 27 Oct 2026 · 8.2a packages/db/src/repositories/modules.ts gains a list() read method · decided by builder · risk: high
+- Decided: `modules.ts` (under the risky `packages/db/src/repositories/**` glob) gains a `list()`
+  method returning each of the scope's modules as `{ id, title }`, alongside the existing `ids()`.
+- Why: the upload centre's module picker needs a real title, not a bare id, and the title column
+  (`modules.title`, `packages/db/src/schema/content.ts`) already exists -- no migration. The new
+  method adds no write, no new table or column, and uses the exact same `teacherScope` guard and
+  `orderBy(asc(modules.id))` as `ids()`, so it opens no new access path; it is flagged `risk: high`
+  only because it falls under the risky repositories glob, per this repo's merge-gate rule (any
+  risky-path file makes the whole PR's decision `risk: high`), and needs security-reviewer plus
+  database-reviewer (this repo's standing convention for `packages/db` changes) before merge.
+
+---
+
+### 27 Oct 2026 · 8.2a create keeps write-before-sign, cleans up on signing failure · decided by builder · risk: low
+- Decided: `create` does not reorder to "sign then write" the way `replace` does. It keeps
+  `documents.create` first, then signs, and on a signing failure deletes the row it just wrote
+  (best-effort, logged) before rethrowing.
+- Why: unlike `replace`'s ownership check (a plain `get`, cheap to run before signing),
+  `create`'s moduleId/liveClassId ownership check is embedded in `documents.create`'s write itself
+  (a foreign-key-shaped check against another teacher's module or live class). Two existing tests
+  depend on this: a foreign `moduleId` or `liveClassId` must be `not_found` with
+  `storage.createUploadUrl` never called. Reordering to sign-first would either break those tests
+  or require a new separate ownership-read repository method, which is outside Phase A's file list
+  (`apps/worker/src/storage/roundtrip.ts`, `apps/web/src/storage/presign.ts`,
+  `apps/web/src/studio/routes.ts`, `docker/env.example`) and risks the scope creep the plan's exit
+  conditions warn against. The net effect for the accept line is the same either way: a signing
+  failure leaves no visible `uploading` row.
+
+---
+
+### 27 Oct 2026 · 8.2a approve the merge (repositories and storage paths) · decided by lead · risk: high
+- Decided: merge 8.2a. It touches the risky path packages/db/src/repositories/** (a read-only modules.list(), scoped like ids()); security-reviewer and database-reviewer ran and found nothing above MEDIUM, and code-reviewer, typescript-reviewer and silent-failure-hunter approved.
+- Why: storage now fails closed in production, signing happens before any write on replace, a signing failure on create removes its row, and the uploads page stops updating after unmount; every finding is MEDIUM or LOW.
+
+---
+
+### 27 Oct 2026 · 8.2a signing-failure orphan and onAddLink guard deferred to 8.2q · decided by lead · risk: low
+- Decided: defer two MEDIUMs to 8.2q: (1) apps/web/src/studio/routes.ts create: if the signing fails and the cleanup delete also fails, an uploading row survives, and the ingest sweep only scans processing rows; 8.2q makes the sweep reconcile stale uploading rows and tests the cleanup-failure branch; (2) apps/web/app/teacher/uploads/UploadsView.tsx onAddLink lacks the unmount guard the other handlers got. S3_REGION joining the production-required list also goes to 8.2q.
+- Why: (1) needs two failures in a row and leaves a row with no file and no data, which the teacher can delete; 8.2q already owns the upload-centre retry and cleanup work. (2) is a no-op state update after unmount in React 19, not a user-visible bug.
+
+---
+
+### 27 Oct 2026 · 8.2a two LOWs left as is · decided by lead · risk: low
+- Decided: wontfix (1) the production storage-config check duplicated in apps/web/src/storage/presign.ts and apps/worker/src/storage/roundtrip.ts, and (2) no row limit on packages/db/src/repositories/modules.ts list().
+- Why: (1) the two apps don't share a storage package, and a shared helper in packages/contracts would need an ADR for a few lines; both copies have their own tests. (2) list() has the same bound as the existing ids() (one course per teacher in the MVP); both get a cap together if that changes.
+
+---
+
+### 27 Oct 2026 · 8.2a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 182 tool calls by harness count (Phase A 64, Phases B and C 118; the agents reported 32, 19 and 42) against a plan budget of 110.
+- Why: Phase C added a db repository method with an integration test and a full dependents gate; the work is done and the reviewers approved.
+
+---
+
 ### 27 Oct 2026 · 0.20f step-count measure instead of the fallback · decided by builder · risk: low
 - Decided: used the preferred step-count approach (patching `String.prototype[Symbol.iterator]`
   to count character-scan work), not the 3-attempts-pass-if-any-under-bound fallback the plan
