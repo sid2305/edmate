@@ -7294,9 +7294,31 @@ tasks:
   deps:
   - 13.4b
   risk: high
-  status: running
+  status: done
   branch: m13/13.4d-export-consents-subs
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 441
+    tokens_in: 1574
+    tokens_out: 131062
+    cache_read_tokens: 53450538
+    wall_time_seconds: 7489
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 13.4e
   milestone: M13
   title: '13.4b follow-up (B-59 (3), payments): DELETE /api/me is also held while the student has an open payment dispute, once disputes exist in the ledger and refunds work (apps/web/src/account/delete.ts)'
