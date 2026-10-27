@@ -9715,7 +9715,7 @@ tasks:
   - 9.2d
   - 9.3e
   risk: medium
-  status: todo
+  status: planning
 - id: 5.6f
   milestone: M13
   title: '5.6b plan Q5 follow-up (pilot-blocking): release the practice key on a turn that is graded correct, so a confirmation that restates the key ("Yes, B is right!") is not replaced by the safe hint;
