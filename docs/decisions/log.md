@@ -10,6 +10,76 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 6.4a end route reads repos directly, not TurnBackend · decided by builder · risk: low
+- Decided: `apps/web/app/api/sessions/[id]/end/route.ts` reads the transcript and session row via
+  `serverDatabase().repos.messages.history` / `.repos.sessions`, not by widening
+  `TurnBackend`/`turn/depsFor` as the plan's Phase B file list suggested.
+- Why: ending a session is housekeeping, not a teaching turn — `depsFor` wires Redis and queue
+  machinery for the turn pipeline that this route has no need of. `runtime.test.ts` confirms
+  production `TurnBackend.sessions` is literally `repos.sessions`, so the result is behaviourally
+  the same object, just without the unrelated dependency. `turn/routes.ts` was not edited.
+
+---
+
+### 27 Oct 2026 · 6.4a endSession strings added to en.json · decided by builder · risk: low
+- Decided: added an `endSession` namespace to `apps/web/messages/en.json` (not in the plan's
+  literal Phase B file list).
+- Why: `EndSessionButton.tsx` needs real button/confirm/error text and the test harness
+  (`renderIntl`) renders against the real `en.json`; every other button on this page
+  (`ReportButton`, `HintButton`) follows the same pattern of owning its own namespace there.
+
+---
+
+### 27 Oct 2026 · 6.4a helpState.ts practiceTopicId · decided by builder · risk: high
+- Decided: add `practiceTopicId?: string` to `HelpState` (`packages/harness/src/pedagogy/
+  helpState.ts`), parallel to `practiceModuleId`, carried by `practiceFields()`/`copyHelp()`; a
+  blob saved before this task still parses (the field is simply absent).
+- Why: the plan calls for it directly and flags `packages/harness/src/pedagogy/**` as a risky path
+  under the MVP-first rule in `risk-paths.txt` — logged `risk: high` per that rule, not because the
+  change itself is risky (it is a narrow, additive, optional string field with no behavior change
+  to existing saved state).
+
+---
+
+### 27 Oct 2026 · 6.4a evidence topic source · decided by builder · risk: low
+- Decided: the `EvidenceEvent`'s `topicId` comes from the *loaded* help state
+  (`this.loadedHelp?.help.practiceTopicId`, i.e. the item the student held before this turn and is
+  now grading), not from any item issued during this same turn.
+- Why: `ctx.attempt` is computed by classifying the student's text against the loaded
+  `answerKey` (the item they are answering); a freshly issued item this turn has no graded attempt
+  yet. The plan's runner.ts bullet names `help.practiceTopicId` without saying which help state,
+  and this is the only one `finish()` has in scope that matches the already-computed `attempt`.
+
+---
+
+### 27 Oct 2026 · 6.4a decide's skill routed through a new `turnSkill` field · decided by builder · risk: low
+- Decided: added a private `turnSkill: Skill | null` field, set from `decided.skill` right after
+  decide, and read inside `finish()`'s new `evidenceFor` helper, instead of threading `skill`
+  through `CommitRecord`/`rec`.
+- Why: `decided.skill` is local to `main()`; `finish()` is the one place every outcome path (error,
+  blocked, escalated, replied) funnels through to build `CommitRecord`, and the field avoids
+  widening `CommitRecord` or every `finish()` call site for a value only this new producer reads.
+
+---
+
+### 27 Oct 2026 · 6.4a approve the session-end and evidence change on risky paths · decided by lead · risk: high
+- Decided: merge 6.4a. It touches packages/harness/src/pedagogy/helpState.ts (risky group: code-reviewer) and the new session-end route in apps/web. code-reviewer, typescript-reviewer, security-reviewer and silent-failure-hunter reviewed it; the one HIGH (a generated practice item's `<module>:practice` topic id reaching evidence and failing the commit) was fixed in fix round 1 and re-checked by typescript-reviewer.
+- Why: all four reviewers approve; the remaining MEDIUM and LOW findings are deferred to 6.4b and 6.4c.
+
+---
+
+### 27 Oct 2026 · 6.4a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 378 tool calls against a budget of 95 (Phase A 145, Phase B 130, fix round 103 by harness count; the agents reported 68, about 95 and 34).
+- Why: two phases plus a fix round across harness and web, with a mid-phase compaction; the work is reviewed and complete. Future tasks of this size get a larger budget or a third phase.
+
+---
+
+### 27 Oct 2026 · 6.4a local dependents gate · decided by lead · risk: low
+- Decided: the code-reviewer MEDIUM (the dependents-form gate never ran clean locally) is closed by fix round 1's dependents run, whose only failures were the two known timing flakes that 0.20f fixes, passing alone, and by the PR's CI node job, which runs the full suite.
+- Why: the failures were load-only flakes outside this task's files; CI is the clean run.
+
+---
+
 ### 27 Oct 2026 · 1.4c Google sign-in links to an existing email-verified user; Google's own dangerous-linking flag is on, gated entirely by Edmate's own check · decided by builder · risk: high
 
 - Decided:
