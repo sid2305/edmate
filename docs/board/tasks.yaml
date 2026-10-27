@@ -5866,8 +5866,9 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 9.6g
   milestone: M13
-  title: '9.6f database-review follow-ups: packages/db/test/export-cursor-paging.int.test.ts EXPLAINs the real cross join lateral statement messages.listForStudent sends (outer scan stays on the sessions (teacher_id, student_id) index, no per-noise-session
-    lateral), not a hand-written copy (MEDIUM); the mid-range cursor EXPLAIN tests run the SQL the repositories build instead of parallel hand-written SQL, so a future query edit cannot pass them while losing the index seek (LOW).'
+  title: '9.6f database-review follow-ups: packages/db/test/export-cursor-paging.int.test.ts EXPLAINs the real cross join lateral statement messages.listForStudent sends (outer scan stays on the sessions
+    (teacher_id, student_id) index, no per-noise-session lateral), not a hand-written copy (MEDIUM); the mid-range cursor EXPLAIN tests run the SQL the repositories build instead of parallel hand-written
+    SQL, so a future query edit cannot pass them while losing the index seek (LOW).'
   accept: the EXPLAIN tests run the repositories' own SQL and assert the index seek for both the lateral messages query and the sessions cursor.
   deps:
   - 9.6f
@@ -8344,9 +8345,9 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 13.4g
   milestone: M13
-  title: '13.4f review follow-ups: apps/web/src/export/accountExport.ts dedupe keeps the first row on an exact periodEnd tie (strict >), and listAllForStudent orders only by agent id, so an ended row can beat the live row for the same
-    (teacherId, agentId); break ties toward the non-ended row (then a stable key) and add a tie test (code-reviewer MEDIUM). packages/db/src/identity/store.ts parseConsentRow is exported and throws a raw ZodError when called outside
-    the guarded store methods; note that it must stay behind guarded, or wrap its error (security-reviewer LOW).'
+  title: '13.4f review follow-ups: apps/web/src/export/accountExport.ts dedupe keeps the first row on an exact periodEnd tie (strict >), and listAllForStudent orders only by agent id, so an ended row can
+    beat the live row for the same (teacherId, agentId); break ties toward the non-ended row (then a stable key) and add a tie test (code-reviewer MEDIUM). packages/db/src/identity/store.ts parseConsentRow
+    is exported and throws a raw ZodError when called outside the guarded store methods; note that it must stay behind guarded, or wrap its error (security-reviewer LOW).'
   accept: on an exact periodEnd tie the export keeps the non-ended subscription, shown by a test; parseConsentRow's error contract is documented or wrapped.
   deps:
   - 13.4f
@@ -9135,9 +9136,9 @@ tasks:
   accept: each listed item is fixed or closed with a logged reason; an interrupted build-smoke run leaves the checkout usable
   deps:
   - 1.7b
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/1.7d-build-smoke-hardening
+  model: plan:lead build:sonnet
 - id: 1.7e
   milestone: M13
   title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain
@@ -9192,7 +9193,8 @@ tasks:
   model: plan:lead build:sonnet
 - id: 5.2b
   milestone: M13
-  title: 'Real-transcriber timing check for video ingestion (third 5.2 review LOW, split from 5.2a): packages/db/test/video-ingest.int.test.ts times a scripted transcriber, so it cannot show a real transcription fits the 15-minute budget; a human runs one real recording through the production transcriber with the 8.2 timeouts and records the time (no real model calls in tests).'
+  title: 'Real-transcriber timing check for video ingestion (third 5.2 review LOW, split from 5.2a): packages/db/test/video-ingest.int.test.ts times a scripted transcriber, so it cannot show a real transcription
+    fits the 15-minute budget; a human runs one real recording through the production transcriber with the 8.2 timeouts and records the time (no real model calls in tests).'
   accept: a recorded timing for one real recording against the 15-minute budget, with the timeouts tuned if it does not fit.
   deps:
   - 5.2a
