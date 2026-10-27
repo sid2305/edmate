@@ -151,7 +151,9 @@ export function profileStoreFor(
       const profile = await repos.learnerProfiles.get(bound);
       return profile ?? defaultProfile(bound);
     },
-    async applyMistakes(mistakeScope, known) {
+    // `_proposed` is deliberately unused: this adapter does not persist proposed tags yet
+    // (6.3a lands that; `recordProposedMistakes` is the separate port for it).
+    async applyMistakes(mistakeScope, known, _proposed) {
       const method = 'profileStoreFor.applyMistakes';
       checkPair(mistakeScope.studentId, mistakeScope.teacherId, method);
       if (known.length === 0) return;
