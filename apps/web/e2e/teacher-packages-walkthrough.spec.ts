@@ -35,6 +35,19 @@ function logStep(label: string, startedAt: number): void {
  * at the cap, this edits one of this suite's own older packages instead (`existingPrefix`
  * matches only names this file itself has ever used) and renames it -- editing never touches the
  * count, and no row this run did not create is ever deleted.
+ *
+ * 0.20k finding: the completion check used to be `page.getByRole('heading', { name:
+ * options.newName })` with no scope, which also matches the edit form's own
+ * `<h2>Editing {name}</h2>` title (`PackagesView.tsx`, `editingTitle`) the instant the name field
+ * is filled in -- long before the real `PUT` the Save click sends has round-tripped. On the reuse
+ * path, that let step 1 (editing the Starter package) "complete" and start step 2 (editing the
+ * Full package) while step 1's save was still in flight; when that save's response finally
+ * arrived it reset `editingId` to `null` and the form to blank (`onSave`'s success branch, by
+ * design: it doesn't know a newer edit started), wiping out step 2's in-progress edit and leaving
+ * no "Save" button at all, which is exactly the hang this task reproduced (see the trace evidence
+ * in docs/tasks/0.20k/handoff.md). Scoping both the per-step and the final checks to the package
+ * list's own `<h3>` headings (never the edit form's `<h2>`) means a check only passes once the
+ * real save has actually landed in the list, so the next step never starts early.
  */
 async function createOrRenamePackage(
   page: Page,
@@ -57,7 +70,9 @@ async function createOrRenamePackage(
   await nameInput.fill('');
   await nameInput.fill(options.newName);
   await page.getByRole('button', { name: reuse ? 'Save' : 'Create package' }).click();
-  await expect(page.getByRole('heading', { name: options.newName })).toBeVisible({
+  await expect(
+    packageItems.getByRole('heading', { level: 3, name: options.newName }),
+  ).toBeVisible({
     timeout: STEP_TIMEOUT,
   });
 }
@@ -107,8 +122,11 @@ test('teacher creates two packages from the presets in under 15 minutes', async 
     });
     logStep('second package created (Full course)', start);
 
-    await expect(page.getByRole('heading', { name: firstName })).toBeVisible();
-    await expect(page.getByRole('heading', { name: secondName })).toBeVisible();
+    // Scoped to the list (not just any heading) for the same reason as the per-step check above:
+    // the edit form's own `<h2>Editing {name}</h2>` title could otherwise satisfy this too.
+    const packageItems = page.getByRole('list', { name: 'Your packages' }).getByRole('listitem');
+    await expect(packageItems.getByRole('heading', { level: 3, name: firstName })).toBeVisible();
+    await expect(packageItems.getByRole('heading', { level: 3, name: secondName })).toBeVisible();
 
     const totalMs = Date.now() - start;
     logStep('both packages visible, walkthrough complete', start);

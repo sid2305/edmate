@@ -148,6 +148,34 @@ export async function signInAsFreshStudent(context: BrowserContext, baseURL: str
   return user.id;
 }
 
+/**
+ * A brand-new teacher (task 0.20k), well under `PACKAGES_MAX`, with a style card so the package
+ * builder's presets render (`/api/studio/packages` requires one before `create` will work; see
+ * `apps/web/src/studio/packages.ts`). Built only through `@edmate/db`'s public repository layer,
+ * the same way the rest of this file signs users in: `identity.createStudent` then
+ * `identity.grantRole` (the only way a role changes; `by: 'operator'` is the documented path with
+ * no staff account yet) makes a teacher id with no admin UI or seed script involved, and
+ * `repos.styleCards.create` gives it one card version. Returns the new teacher's id so a test can
+ * sign in as them (`signInAsTeacher(context, baseURL, id)`); no row any other test created is
+ * ever touched.
+ */
+export async function createFreshTeacher(): Promise<string> {
+  const user = await withDb(async (db) => {
+    const created = await db.identity.createStudent({
+      email: `e2e-fresh-teacher-${randomBytes(4).toString('hex')}@example.invalid`,
+      emailVerifiedAt: null,
+      name: 'E2E Fresh Teacher',
+    });
+    await db.identity.grantRole({ userId: created.id, role: 'teacher', by: 'operator' });
+    await db.repos.styleCards.create(
+      { teacherId: created.id },
+      { text: 'Warm, encouraging, and concise.', mistakeTags: [] },
+    );
+    return created;
+  });
+  return user.id;
+}
+
 /** One SSE fixture's bytes, built from events checked against `TurnEventSchema` (via `formatSseEvent`). */
 export function sseBody(events: readonly TurnEvent[]): string {
   return events.map((e) => formatSseEvent(e)).join('');
