@@ -9721,7 +9721,9 @@ tasks:
   deps:
   - 9.3m
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.3n-staff-history-lows
+  model: plan:lead build:sonnet
 - id: 9.3l
   milestone: M13
   title: '9.3i review LOWs: apps/web/app/learn/[agentId]/plan/page.tsx header comment still says a suspended agent gives notFound (now the student''s own unavailable-agent fallback renders the page); apps/web/src/subscriptions/PlanView.tsx
