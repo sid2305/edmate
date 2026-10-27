@@ -60,6 +60,16 @@ export interface AccountExportJson {
   teachers: Array<{ teacherId: string; agentId: string; status: string; export: ExportJson }>;
 }
 
+/** `true` when `a` should replace `b` as the kept row for a (teacherId, agentId) pair. See the
+ * comment above the dedupe loop for the tie-break order. */
+function newer(a: SubscriptionPair, b: SubscriptionPair): boolean {
+  if (a.periodEnd !== b.periodEnd) return a.periodEnd > b.periodEnd;
+  const aEnded = a.status === 'ended';
+  const bEnded = b.status === 'ended';
+  if (aEnded !== bEnded) return !aEnded;
+  return a.status < b.status;
+}
+
 function accountFields(user: IdentityUser | null): AccountFields | null {
   if (user === null) return null;
   return {
@@ -83,13 +93,16 @@ export async function buildAccountExport(
 
   // A student can hold more than one subscription to the same teacher's agent over time
   // (13.4d's `listAllForStudent` returns every one, live or ended): dedupe by (teacherId,
-  // agentId) to one entry, keeping the row with the latest `periodEnd`, before fanning each
-  // distinct pair out into its own full `buildExport()`.
+  // agentId) to one entry, before fanning each distinct pair out into its own full
+  // `buildExport()`. `newer()` picks which of two rows for the same pair wins: the later
+  // `periodEnd`; on an exact tie, the row that is not `'ended'` (an active/live row outranks an
+  // ended one with the same end date); if that still ties, the smaller `status` string, a stable
+  // key so the result never depends on the order `listAllForStudent` returns rows in.
   const byPair = new Map<string, SubscriptionPair>();
   for (const pair of pairs) {
     const key = `${pair.teacherId}:${pair.agentId}`;
     const existing = byPair.get(key);
-    if (existing === undefined || pair.periodEnd > existing.periodEnd) {
+    if (existing === undefined || newer(pair, existing)) {
       byPair.set(key, pair);
     }
   }
