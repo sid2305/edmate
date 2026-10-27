@@ -103,6 +103,10 @@ than reformatting into double quotes and breaking that consistency.
 
 ## Decisions
 
+### 27 Oct 2026 · 7.2f repeated payment and licence-claim cases kept · decided by lead · risk: low
+- Decided: keep the five Phase H cases that reword payment-not-synced and school-licence tricks (evals/suites/locked/locked-functions-paidplan-glitch-en.yaml, locked-lists-paidplan-reload-en.yaml, locked-loops-paidplan-notsynced-en.yaml, locked-dicts-school-sitelicense-en.yaml, locked-loops-schooldistrict-renewed-en.yaml).
+- Why: they are new phrasings, not duplicates, and cost nothing to keep; Phase I added no more of that kind.
+
 ### 27 Oct 2026 · 7.2f locked suite to 200 approval · decided by lead · risk: high
 - Decided: approve 100 new locked cases under evals/suites/locked/ (evals/suites/locked/**), the pins in lockedFixtures.test.ts and SUITE_FLOORS.locked 200 for merge. code-reviewer approved Phase H, asked for changes on Phase I (seven Hindi cases against the English-only rule) and verified fix round 1, which rewrote them in English. Every case is `reviewed_by: lead`.
 - Why: the reviewer checked every span verbatim against content/demo-teacher, scripted the echo and duplicate checks against all earlier cases, and confirmed the pin arithmetic. The payment and licence-claim trick is saturated after Phase H (LOW, recorded in review.md), so Phase I replaced it with eight new manipulation kinds.
