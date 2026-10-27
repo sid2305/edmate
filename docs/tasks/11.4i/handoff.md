@@ -100,4 +100,4 @@ licence the built image turns out to have.
 - `python3 .githooks/secret-scan.py --all` -- clean, no output.
 
 ## Budget
-Tool calls used: 29
+Tool calls used: 49 (harness count; the builder counted 29)
