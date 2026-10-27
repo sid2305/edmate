@@ -10697,9 +10697,30 @@ tasks:
   deps:
   - 12.2h
   risk: risky
-  status: running
+  status: done
   branch: m13/12.2i-takedown-cycle
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 420
+    tokens_in: 1478
+    tokens_out: 92309
+    cache_read_tokens: 58363013
+    wall_time_seconds: 3687
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.2p
   milestone: M13
   title: '8.2i review MEDIUM (database-reviewer): the ingest sweep''s staleProcessing query (packages/db/src/repositories/ingestSweep.ts, WHERE status = ''processing'' AND updated_at < cutoff, oldest first)
