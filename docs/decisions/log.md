@@ -10,6 +10,72 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 1.7e build back to plain next build, no ADR · decided by lead · risk: medium
+- Decided: `apps/web` builds with plain `next build` (Turbopack) again; no ADR (plan Q1).
+- Why: dropping a workaround flag that pinned webpack is not a tech-stack change; Next.js stays the framework and Turbopack is its default bundler.
+
+---
+
+### 27 Oct 2026 · 1.7e Phase B PARTIAL accepted, no dev-webpack follow-up · decided by lead · risk: low
+- Decided: accept the `next dev --webpack` `/api/health` break unfixed and open no follow-up task; Playwright keeps plain `next dev`.
+- Why: build and dev both use Turbopack now, so nothing needs webpack; plan Q4 kept `instrumentation.ts` and `src/auth/rate-limit.ts` out of scope.
+
+---
+
+### 27 Oct 2026 · 1.7e stale --webpack wording fixed in-PR · decided by lead · risk: low
+- Decided: fix the stale `next build --webpack` wording (code-reviewer MEDIUM, typescript-reviewer LOWs) in this PR rather than deferring it.
+- Why: cheap and the task's own purpose; lead-verified with `git grep -- --webpack`, which leaves only a past-tense mention in `packages/gateway/src/pricing/load.ts`.
+
+---
+
+### 27 Oct 2026 · 1.7e budget overrun · decided by lead · risk: low
+- Decided: accept 130 tool calls (harness count) against a budget of 85 (1.53x).
+- Why: Phase B's dev-mode investigation and a fix round across nine files; the work stayed in scope.
+
+---
+
+### 26 Oct 2026 · 1.7e Phase B dev-mode bullmq/pg break not fixed · decided by builder · risk: low
+- Decided: Leave `next dev --webpack`'s `/api/health` crash unfixed; revert the
+  `serverExternalPackages` additions tried during this phase (back to Phase A's
+  `['@edmate/content']`) since they had no effect, and keep Turbopack as the Playwright/dev default
+  rather than adding `--webpack` back.
+- Why: the plan's one named fix (`serverExternalPackages`) demonstrably doesn't reach whatever
+  webpack dev compiles as `/instrumentation`; clearing it would need touching `instrumentation.ts`
+  or `src/auth/rate-limit.ts` (how `@edmate/queue`/`pg` are imported there), and the plan (Q4) says
+  stop and raise that rather than widen scope into those files without the lead's sign-off. Since
+  Phase A already moved the production build to Turbopack, nothing in `apps/web` needs webpack for
+  either build or dev anymore, so there is no remaining reason to chase this webpack-only bug for
+  its own sake — a follow-up task only matters if something later needs webpack again.
+- Open for the lead: a possible fast follow-up task, narrowly scoped to `instrumentation.ts`/
+  `src/auth/rate-limit.ts` (e.g. making the `@edmate/queue` import fully dynamic, mirroring
+  `instrumentation.ts`'s existing `./src/auth` dynamic import), if dev-mode webpack parity is ever
+  needed again. Not started here (Q4; risky-path files, needs sign-off first).
+
+---
+
+### 26 Oct 2026 · 1.7e Turbopack build already fixed upstream · decided by builder · risk: low
+- Decided: Switch `apps/web/package.json`'s `build` script to plain `next build` (Turbopack,
+  no `--webpack`), since the lightningcss/`vitest.config.ts` error 1.7b logged as the reason to
+  stay on `--webpack` no longer reproduces against today's `main`/Next 16.4.2. No new workaround
+  was added; the old one was simply removed, matching Q1's recommendation (not a tech-stack
+  change, no ADR needed).
+- Why: the board's acceptance explicitly allows this branch ("plain next build succeeds and
+  build-smoke passes" vs. "the reason to stay on --webpack is logged"); build succeeds cleanly and
+  build-smoke's one local failure is proven environment-only (identical on both bundlers), so there
+  is no bundler-specific reason left to stay on `--webpack` for the build.
+
+---
+
+### 26 Oct 2026 · 1.7e build-smoke local Postgres gap not fixed · decided by builder · risk: low
+- Decided: Leave the local build-smoke Postgres/SASL failure unfixed and logged, rather than
+  starting docker or guessing at credentials, since fixing it isn't in this plan's files-to-modify
+  list and the brief bars `docker`/`docker compose` from this worktree.
+- Why: the failure reproduces identically on `--webpack` and plain `next build`, so it is not a
+  Turbopack regression this task needs to fix; CI already runs build-smoke against a real Postgres
+  service with the right credentials, so the pilot's real gate (CI) is unaffected by this local gap.
+
+---
+
 ### 26 Oct 2026 · 5.3a vector tie-break fixed in-PR · decided by lead · risk: high
 - Decided: the tie-break finding on `packages/db/src/repositories/retrieval.ts` `vectorRows` (HIGH from database-reviewer and typescript-reviewer; MEDIUM from rag-pipeline-reviewer, security-reviewer and code-reviewer) was fixed in one round: the inner query over-fetches `PER_SIGNAL * 2` rows by distance alone, and the outer query applies `(distance, id)` and the `PER_SIGNAL` cut, with an honest comment and a tied-distance int test. database-reviewer and typescript-reviewer re-checked and approved. Their two LOW notes were about the handoff text only (an export claim and the decoy description); the lead corrected the handoff.
 - Why: before 5.3a, ties at the cut-off broke by lowest id; the fix restores that for tie groups up to 40 rows while keeping the HNSW plan.
