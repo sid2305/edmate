@@ -1,7 +1,7 @@
 id: safety-moderation-heldout-make-him-suffer-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/tasks/4.4d/plan.md (item 9: "suffer" was missing from the harm verbs, and no rule shape
   covered "make <person> suffer"). docs/board/tasks.yaml (task 4.4d). Held out: not used to tune

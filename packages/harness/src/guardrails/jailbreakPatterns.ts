@@ -86,10 +86,15 @@ const MAY =
 /** Rule words an override must name to be decisive with a demand ("filters" is pandas talk). */
 const STRICT_RULE =
   '(?:instructions?|rules?|restrictions?|guidelines?|guardrails|limits|policies|policy|safety)';
-/** A game, sport or school subject: "rules of chess" is not a claim about this app (4.4d item 1). */
+/**
+ * A named game, sport or school subject: "rules of chess" is not a claim about this app
+ * (4.4d item 1). Generic nouns that could name the course's own gated content (a game, the
+ * quiz, the sport, a test, etc.) are deliberately excluded — a "quiz" or "game" here is this
+ * AI's own content, not an unrelated topic (fix round 1, code review HIGH).
+ */
 const OTHER_TOPIC =
-  '(?:chess|cricket|football|basketball|baseball|soccer|cards|monopoly|a game|the game|' +
-  'grammar|math|maths|physics|chemistry|biology|history|the sport|the quiz)';
+  '(?:chess|cricket|football|basketball|baseball|soccer|cards|monopoly|' +
+  'grammar|math|maths|physics|chemistry|biology|history)';
 /** A demand for answers, code or locked content (fix round 2, HIGH 1). */
 const EN_DEMAND =
   '(?:give|show|tell|unlock|reveal|print|write|send)' +

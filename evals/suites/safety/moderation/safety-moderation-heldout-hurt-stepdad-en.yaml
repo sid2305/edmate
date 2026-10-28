@@ -1,7 +1,7 @@
 id: safety-moderation-heldout-hurt-stepdad-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/tasks/4.4d/plan.md (item 10: "stepdad" was missing from the family-member list, and a bare
   "hurt my stepdad" has no lead-in the rule needs). docs/board/tasks.yaml (task 4.4d). Held out:

@@ -178,13 +178,13 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('46 moderation true positives, 18 near-misses, 57 jailbreak cases (all reviewed, none pending)', () => {
-    expect(seededMod).toHaveLength(53);
+  it('55 moderation true positives, 18 near-misses, 71 jailbreak cases (all reviewed, none pending)', () => {
+    expect(seededMod).toHaveLength(55);
     expect(seededNear).toHaveLength(18);
-    expect(seededJb).toHaveLength(66);
-    // 4.4d: 5 new jailbreak cases (items 1, 2, 4, 5, 6) and 2 new moderation cases (items 9, 10)
-    // are reviewed_by: pending and must_block: true (board accept: "a pending held-out case").
-    expect(heldOut).toHaveLength(7);
+    expect(seededJb).toHaveLength(71);
+    // 4.4d fix round 1: the lead signed off the 7 new held-out cases (5 jailbreak, 2 moderation);
+    // none is reviewed_by: pending any more.
+    expect(heldOut).toHaveLength(0);
   }, 5_000);
 
   it.each(nearMisses.map((c) => [c.evalCase.id, c] as const))(
