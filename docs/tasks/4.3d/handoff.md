@@ -67,6 +67,42 @@ the plan marked a `distressDetect.test.ts` case "nice-to-have, drop if the budge
 
 ## Decisions
 
+### 28 Oct 2026 · 4.3d distress keyword follow-ups approved · decided by lead · risk: high
+- Decided: Merge the four distress keyword fixes (more method-ready phrasings, a 2-word code-word
+  window with a shorter everyday-word list, the "for the experiment" exemption kept only for
+  rope/blade/razor, bare "hopeless" in the hopelessness family) and the fix-round-1 split of the
+  verb-less "ready" rule, with code-reviewer as the only reviewer under the pre-pilot MVP-first
+  rule (safety-reviewer runs once at the pilot gate, 13.3).
+- Why: Closes the three deferred 4.3 findings and a real under-escalation bug (the accept-line
+  sentence was soft on main). The fix round removed the one over-escalation the review found
+  ("my rope is ready for the demo" was hard). The existing distress and near-miss suites pass
+  unchanged; distressEscalate escalates 80/80.
+- Alternatives: Wait for a safety-reviewer pass (against the MVP-first rule); leave "list" and
+  the other everyday words in the code-word list (keeps the under-escalation bug).
+- Reversible: yes, one revert; the keyword lists are data inside one file.
+
+### 28 Oct 2026 · 4.3d six distress cases signed by the lead · decided by lead · risk: high
+- Decided: The lead read and signed the six new distress cases (`reviewed_by: lead`): hopeless
+  plus disappear, the list-of-reasons sentence, all my pills are ready, pills ready for the
+  experiment as a cover story, stocked up on pills, tablets kept aside.
+- Why: The human's 20 Oct 2026 rule lets the lead approve eval cases. Each is English, US-framed,
+  non-graphic, has no number or contact, and pins one newly hard phrasing.
+- Alternatives: Leave them pending (suites.test.ts fails in CI by default).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.3d code-word list over-escalation accepted · decided by lead · risk: high
+- Decided: Accept the review's MEDIUM: with "object", "field", "list", "print", "stack",
+  "queue" and "element" out of the code-word list, a coding complaint that names a variable
+  after a method item next to a hopeless phrase ("my blade object has no methods left, nothing
+  matters") now escalates hard. Wontfix.
+- Why: The board item asked for exactly this trade, and an extra care message on a coding
+  complaint is far cheaper than missing a real disclosure that mentions a list. Words that only
+  appear in code (array, null, function, variable, undefined) still excuse code talk.
+- Alternatives: Keep the everyday words (reopens the under-escalation bug); add a classifier
+  second check for hard hits (a design change, out of scope).
+- Reversible: yes; re-adding a word to the list is one line.
+
+
 ### 28 Oct 2026 · 4.3d distress keyword follow-ups · decided by builder · risk: high
 - Decided: Ship the four fixes from the board (more method-ready phrasings; `TIE_WORDS` 5→2 and
   a shorter `CODE` list; the "for the experiment" exemption scoped to rope/blade/razor only,
@@ -153,4 +189,4 @@ reported bug.
 
 ## Budget
 
-Tool calls used: build 61, fix 1 15
+Tool calls used: 96 (build 61, fix 1 35; plan 39 and review 39 not counted)

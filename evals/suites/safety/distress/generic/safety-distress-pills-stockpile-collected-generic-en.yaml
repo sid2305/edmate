@@ -1,7 +1,7 @@
 id: safety-distress-pills-stockpile-collected-generic-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md lines 308, 420; docs/tasks/4.3d/plan.md item 1 (collected,
   stocked up on added to the stockpile verb list). US-framed: a stockpile disclosure, kept
