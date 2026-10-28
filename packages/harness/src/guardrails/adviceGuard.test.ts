@@ -138,6 +138,12 @@ describe('adviceGuard: shape and fixed texts', () => {
     }
   });
 
+  it('the redirect reply does not single out an age group; still no helpline or contact (item 9)', () => {
+    expect(REDIRECT).not.toContain('adult you trust');
+    expect(REDIRECT).toContain('qualified professional');
+    expect(REDIRECT).not.toMatch(/helpline|hotline|contact|website|\.org|\.com/i);
+  });
+
   it('the built-in generic disclaimer is the frame pack’s text', () => {
     expect(DEFAULT_GENERIC_DISCLAIMER).toBe(
       'This is general education, not personal advice. For your own situation, talk to a qualified professional.',
@@ -226,6 +232,9 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     "I'm a certified financial planner, so go for SIPs.",
     "I'm not a licensed doctor, but try this.",
     'Speaking as a senior tax lawyer, settle now.',
+    // 4.8b item 2: an em/en dash is a sentence break too, same as a comma or full stop.
+    'Okay — sign it.',
+    'Yes – file the case.',
   ])('hits: %s', (text) => {
     expect(personalDirective(text)).toBe(true);
   });
@@ -250,7 +259,7 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     expect(personalDirective(text)).toBe(false);
   });
 
-  it('a hard hit rewrites without asking the judge, and the rewrite gets the disclaimer', async () => {
+  it('a hard hit makes no judge call before the rewrite, but the rewrite is judged once before it is accepted (item 1); the accepted rewrite gets the disclaimer', async () => {
     const s = setup({ rewriteTo: 'Diversification spreads money across many holdings.' });
     const r = await run('You should sell your mutual funds this month.', s.x);
     expect(r).toEqual({
@@ -258,9 +267,10 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
         `Diversification spreads money across many holdings.\n\n${GENERIC}`,
         ADVICE_REASONS.personalAdvice,
       ),
-      usage: [usageSmall],
+      usage: [usageSmall, usageSmall],
     });
-    expect(s.calls.judged).toEqual([]);
+    // No judge call decided the hard hit itself; the one call is the rewrite's own verify.
+    expect(s.calls.judged).toHaveLength(1);
     expect(s.calls.rewrites).toHaveLength(1);
   });
 });
@@ -302,6 +312,8 @@ describe('adviceGuard: the pre-filter', () => {
     'where should I park my bonus?',
     'dawai band kar du?',
     'कौन सी दवा?',
+    // 4.8b item 3: a Devanagari "क्या लूँ" (what should I take) alongside the English slang "sugar".
+    'sugar badh gaya hai, क्या लूँ?',
   ])('a decision request: %s', (text) => {
     expect(decisionRequest(text)).toBe(true);
   });
@@ -325,6 +337,10 @@ describe('adviceGuard: the pre-filter', () => {
     'bhai 10k hai',
     'mujhe bukhar hai',
     'मेरे पास पैसे हैं',
+    // 4.8b item 3: health and wage words the 4.8 fix-round-1 re-check found missing.
+    'mera BP high hai, konsi goli lu?',
+    'pet mein dard hai, kya khilaun?',
+    "they're not paying my wages, what do I do?",
   ])('a regulated topic (holds the stream, sends the reply to the judge): %s', (text) => {
     expect(regulatedTopic(text)).toBe(true);
   });
@@ -494,16 +510,19 @@ describe('adviceGuard: the judge', () => {
   });
 
   it('an advice verdict rewrites; the rewrite request is the fenced, scrubbed draft only', async () => {
+    // The first judge call flags the original reply; the second (item 1's rewrite verify) sees
+    // only the rewrite's own text and finds it clean.
+    let calls = 0;
     const s = setup({
       studentText: 'Should I buy it?',
-      answer: ADVICE,
+      answer: () => Promise.resolve({ text: calls++ === 0 ? ADVICE : CLEAN, usage: [usageSmall] }),
       rewriteTo: 'Index funds track a whole market.',
       decision: { ...explain, mustNotReveal: ['KEY-9'] },
     });
     const r = await run('Haan, abhi le lo. Mail me at someone@example.com about KEY-9.', s.x);
     expect(r).toEqual({
       result: rewriteTo(`Index funds track a whole market.\n\n${GENERIC}`, 'personal_advice'),
-      usage: [usageSmall, usageSmall],
+      usage: [usageSmall, usageSmall, usageSmall],
     });
     const req = s.calls.rewrites[0] as JudgeRequest;
     expect(req.system).toBe(ADVICE_REWRITE_SYSTEM);
@@ -512,15 +531,63 @@ describe('adviceGuard: the judge', () => {
     );
     expect(req.user.startsWith(DATA_OPEN)).toBe(true);
     expect(ADVICE_REWRITE_SYSTEM).not.toContain('KEY-9');
+    // The verify call judges the rewrite on its own merits: no studentText block of its own.
+    expect(s.calls.judged[1]?.user).toBe(
+      adviceJudgeRequest({ reply: 'Index funds track a whole market.' }).user,
+    );
   });
 
   it.each([
     ['unparsable', 'not json'],
     ['a different key', '{"grounded":true}'],
-  ])('a %s verdict counts as advice (fails closed)', async (_n, answer) => {
-    const s = setup({ studentText: 'Should I?', answer, rewriteTo: 'Concepts only.' });
+  ])(
+    'a %s verdict counts as advice (fails closed); the rewrite is still judged once before it is accepted',
+    async (_n, answer) => {
+      let calls = 0;
+      const s = setup({
+        studentText: 'Should I?',
+        answer: () =>
+          Promise.resolve({ text: calls++ === 0 ? answer : CLEAN, usage: [usageSmall] }),
+        rewriteTo: 'Concepts only.',
+      });
+      const r = await run('Haan, le lo.', s.x);
+      expect(r.result).toEqual(rewriteTo(`Concepts only.\n\n${GENERIC}`, 'personal_advice'));
+    },
+  );
+
+  it('item 1: the rewrite passes its own regex check but the judge calls it advice; the fixed fallback, never the bare rewrite', async () => {
+    const s = setup({
+      studentText: 'Should I buy it?',
+      answer: ADVICE,
+      rewriteTo: 'A common choice for someone like you is a nifty 50 index fund.',
+    });
     const r = await run('Haan, le lo.', s.x);
-    expect(r.result).toEqual(rewriteTo(`Concepts only.\n\n${GENERIC}`, 'personal_advice'));
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
+    expect(s.calls.judged).toHaveLength(2);
+  });
+
+  it('item 1: the rewrite-verify judge call itself gives no answer; the fixed fallback, never the unverified rewrite', async () => {
+    let calls = 0;
+    const s = setup({
+      studentText: 'Should I buy it?',
+      answer: () =>
+        Promise.resolve({ text: calls++ === 0 ? ADVICE : undefined, usage: [usageSmall] }),
+      rewriteTo: 'Index funds track a whole market.',
+    });
+    const r = await run('Haan, le lo.', s.x);
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
+  });
+
+  it('item 1: no judge port at all configures a rewrite that is never verified; the fixed fallback, never the unverified rewrite', async () => {
+    // A hard-rule hit (`personalDirective`) needs no judge call of its own, so this is the only
+    // way to see the rewrite-verify's own `x.adviceJudge !== undefined` check turn false.
+    const s = setup({
+      studentText: 'Should I buy it?',
+      noJudge: true,
+      rewriteTo: 'Index funds track a whole market.',
+    });
+    const r = await run('You should sell your mutual funds this month.', s.x);
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
   });
 
   it.each([
@@ -544,14 +611,24 @@ describe('adviceGuard: the judge', () => {
     expect((await run('Haan, le lo.', s.x)).usage).toEqual([usageSmall]);
   });
 
-  it('a PII scrub that cannot run is an outage too (fixed fallback, no call)', async () => {
+  it('a PII scrub that cannot run is an outage too (fixed fallback, no call), told apart from a judge outage (item 8)', async () => {
     const s = setup({
       studentText: 'Should I?',
       ctx: { ...CODING, locale: { ...CODING.locale, piiPatterns: ['('] } },
     });
     const r = await run('Haan, le lo.', s.x);
-    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.judgeUnavailable));
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.scrubFailed));
     expect(s.calls.judged).toEqual([]);
+  });
+
+  it('a judge outage on a weak-signal-only reply (no hard rule, no regulated agent, no decision request/topic, no strong signal) passes unchanged (lead answer Q1, option A)', async () => {
+    const s = setup({
+      studentText: 'How do I find the derivative of x squared?',
+      answer: undefined,
+    });
+    const r = await run('Take the derivative of x^2, which is 16.', s.x);
+    expect(r).toEqual({ result: { ok: true }, usage: [usageSmall] });
+    expect(s.calls.rewrites).toEqual([]);
   });
 
   it('an injection in the reply cannot reach the rubric or close its block', async () => {
@@ -591,10 +668,10 @@ describe('adviceGuard: the rewrite and its fallback', () => {
     expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
   });
 
-  it('a rewrite that throws: the fixed fallback', async () => {
+  it('a rewrite that throws: the fixed fallback, its own reason (item 8), not silently "personal_advice"', async () => {
     const s = setup({ rewriteTo: () => Promise.reject(new Error('down')) });
     const r = await run('You should sell your mutual funds this month.', s.x);
-    expect(r).toEqual({ result: rewriteTo(FALLBACK, 'personal_advice'), usage: [] });
+    expect(r).toEqual({ result: rewriteTo(FALLBACK, ADVICE_REASONS.rewriteFailed), usage: [] });
   });
 
   it('no rewrite function: the fixed fallback', async () => {

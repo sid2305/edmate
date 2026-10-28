@@ -80,6 +80,12 @@ describe('hasAdviceMarker / markerJudge', () => {
     }
   });
 
+  it('"band karo" alone is any instruction; only a regulated object counts (4.8b item 6)', () => {
+    expect(hasAdviceMarker('band karo')).toBe(false);
+    expect(hasAdviceMarker('case band karo')).toBe(true);
+    expect(hasAdviceMarker('loan band karo')).toBe(true);
+  });
+
   it('reads only the reply, never the student’s message', () => {
     expect(
       markerJudge({ studentText: 'you should buy', reply: 'Concepts only.' }, judgeReq('')),

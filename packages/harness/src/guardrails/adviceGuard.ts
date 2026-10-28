@@ -48,6 +48,10 @@ import { foldText } from './textFold.js';
 export const ADVICE_REASONS = Object.freeze({
   personalAdvice: 'personal_advice',
   judgeUnavailable: 'judge_unavailable',
+  /** The PII scrub threw, not the judge call itself (4.8b item 8): told apart from the above. */
+  scrubFailed: 'scrub_failed',
+  /** The rewrite call itself threw (4.8b item 8), never silently just the bare fallback. */
+  rewriteFailed: 'rewrite_failed',
   disclaimer: 'disclaimer',
 } as const);
 
@@ -76,8 +80,8 @@ export function adviceFallbackText(disclaimer: string): string {
 export function adviceRedirectReplyText(): string {
   return (
     "That's outside what I can help with here, and I can't give personal advice on it. For " +
-    'something like that, please talk to a qualified professional or an adult you trust. Shall ' +
-    'we get back to your course?'
+    'something like that, please talk to a qualified professional. Shall we get back to your ' +
+    'course?'
   );
 }
 
@@ -157,9 +161,13 @@ const REGULATED_RX = rx(String.raw`(?<![\p{L}\p{N}])${REGULATED}`);
 const DIRECTIVE_RX = rxg(
   String.raw`(?<![\p{L}])(?:you (?:should|must|need to|have to|ought to|had better|will want to)|you'd better|you'll want to|i (?:would |'d )?(?:strongly )?(?:recommend|suggest|advise)|my (?:advice|recommendation|pick|suggestion) (?:is|would be)|if i were you|go ahead and)(?![\p{L}])`,
 );
-/** An imperative at the start of a sentence, after an optional "yes," and "just" or "don't". */
+/**
+ * An imperative at the start of a sentence, after an optional "yes," and "just" or "don't". An
+ * em/en dash (with its surrounding space) is a sentence break too, so "Okay — sign it." splits
+ * the same way as "Okay, sign it." (4.8b item 2).
+ */
 const IMPERATIVE_RX = rxg(
-  String.raw`(?:^|[.!?;:\n] ?|, )(?:(?:yes|yeah|ok|okay|sure|honestly|so),? )?(?:(?:just|don't|do not|never) )?(take|buy|sell|invest|put|move|stop taking|start taking|keep taking|give (?:them|him|her|it)|sue|sign|file)(?![\p{L}])`,
+  String.raw`(?:^|[.!?;:\n] ?|, | ?[–—]+ ?)(?:(?:yes|yeah|ok|okay|sure|honestly|so),? )?(?:(?:just|don't|do not|never) )?(take|buy|sell|invest|put|move|stop taking|start taking|keep taking|give (?:them|him|her|it)|sue|sign|file)(?![\p{L}])`,
 );
 /** Verbs that are a regulated step on their own ("sign" and "file" need their object: 4.8 fix 1). */
 const SELF_REGULATED = new Set(['buy', 'sell', 'invest', 'sue']);
@@ -169,10 +177,10 @@ const REFERRAL_RX = rx(
 );
 const WITHOUT_REFERRAL_RX = rx(String.raw`without (?:talking|speaking|consulting|asking|checking)`);
 
-/** The rest of the sentence after a match, capped. */
+/** The rest of the sentence after a match, capped. An em/en dash ends a sentence too (4.8b item 2). */
 function windowAfter(s: string, end: number): string {
   const rest = s.slice(end, end + 100);
-  const stop = rest.search(/[.!?\n]/);
+  const stop = rest.search(/[.!?\n–—]/);
   return stop < 0 ? rest : rest.slice(0, stop);
 }
 
@@ -303,7 +311,7 @@ const REQUEST_RX = rx(
     String.raw`(?<![\p{L}])(?:should i|shall i|whether (?:i|we) should|do i need to|what (?:should|do) i|doses?|dosage|yes or no|straight answer|real answer|just tell me|tell me (?:if|whether|exactly|what to)|pretend|act as|role-?play|you're my|be my|my (?:own )?situation|guarantee\w*|what to say|how do i win|will i (?:get|be|win|lose)|can i (?:stop|skip|quit|take|double|reduce|increase)|is it (?:ok|okay|fine|safe|alright)(?: if i| for me)?(?: to)? (?:stop|skip|quit|take)|where (?:to|should i|do i|can i) (?:put|park|invest|keep)|(?:park|invest) (?:it|my|this)|good (?:stock|share|fund|coin|crypto|investment|medicine|tablet)s?|best [^.?!]{0,30}to (?:buy|invest|take|hold)|(?:buy|sell) (?:bitcoin|crypto|stocks?|shares?|gold))(?![\p{L}])`,
     String.raw`(?<![\p{L}])which(?![\p{L}])[^.?!]{0,40}(?<![\p{L}])(?:should|shall|would|best|better|buy|take|pick|choose|invest)(?![\p{L}])`,
     String.raw`(?<![\p{L}])(?:kya karu\w*|konsi|konsa|kaunsa|kaunsi|le lun|le lu|le loon|daal du\w*|dal du\w*|kar du|kitni|kitna|chahiye|seedha (?:jawab|batao)|bas batao|exactly batao|ban jao|kya bolna|jeetun|khareedun|kharidun|kaha+n lag\w*|kidhar|kaha+n daal\w*|kaha+n invest\w*|band kar du\w*|chhod du\w*|dawai|dawa)(?![\p{L}])`,
-    'क्या करूं|क्या करूँ|कौन सा|कौन सी|कौन से|कौनसा|कौनसी|ले लूं|ले लूँ|डाल दूं|डाल दूँ|कितनी|कितना|चाहिए|सीधा|बताओ|बन जाओ|जीतूं|जीतूँ|कहाँ लगा|कहां लगा|कहाँ डाल|कहां डाल|दवा|दवाई',
+    'क्या करूं|क्या करूँ|क्या लूँ|क्या लू|कौन सा|कौन सी|कौन से|कौनसा|कौनसी|ले लूं|ले लूँ|डाल दूं|डाल दूँ|कितनी|कितना|चाहिए|सीधा|बताओ|बन जाओ|जीतूं|जीतूँ|कहाँ लगा|कहां लगा|कहाँ डाल|कहां डाल|दवा|दवाई',
   ].join('|'),
 );
 
@@ -320,7 +328,7 @@ export function decisionRequest(studentText: string): boolean {
  */
 const TOPIC_RX = rx(
   [
-    String.raw`(?<![\p{L}])(?:landlord|tenant|lease|rent agreement|renewal|evict\w*|legal\w*|lawyer|advocate|court|sue|suing|lawsuit|police|invest\w*|stocks?|shares|mutual funds?|sips?|crypto\w*|bitcoin|loans?|emis?|savings|rupees?|money|salary|medicines?|medications?|tablets?|pills?|doses?|dosage|hurts?|pain|aches?|headache|fever|sick|symptoms?|doctor|insulin|paisa|paise|rupay\w*|dard|bukhar|kiraya|makaan malik|vakil)(?![\p{L}])`,
+    String.raw`(?<![\p{L}])(?:landlord|tenant|lease|rent agreement|renewal|evict\w*|legal\w*|lawyer|advocate|court|sue|suing|lawsuit|police|invest\w*|stocks?|shares|mutual funds?|sips?|crypto\w*|bitcoin|loans?|emis?|savings|rupees?|money|salary|wages?|medicines?|medications?|tablets?|pills?|doses?|dosage|hurts?|pain|aches?|headache|fever|sick|symptoms?|doctor|insulin|goli|bp|sugar|pet|khilaun\w*|paisa|paise|rupay\w*|dard|bukhar|kiraya|makaan malik|vakil)(?![\p{L}])`,
     String.raw`(?<![\p{L}])\p{N}+ ?k(?![\p{L}])`,
     'पैसा|पैसे|रुपये|रुपए|दवा|दर्द|बुखार|किराया|मकान मालिक|वकील|लोन|शेयर',
   ].join('|'),
@@ -433,20 +441,39 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
         if (!signal(body, studentText, regulated)) return OK;
         if (!verifying) {
           let answer: string | undefined;
+          let scrubFailed = false;
           try {
-            const reply = scrubPii(body, patternsOf(x.ctx.locale)).text;
+            let reply: string;
+            try {
+              reply = scrubPii(body, patternsOf(x.ctx.locale)).text;
+            } catch (error) {
+              scrubFailed = true;
+              throw error;
+            }
             if (x.adviceJudge !== undefined) {
               const r = await x.adviceJudge(adviceJudgeRequest({ reply, studentText }), cancel);
               usage = r.usage;
               answer = r.text;
             }
           } catch {
-            // No answer: handled below as an outage.
+            // No answer: handled below as an outage, scrub told apart from judge (4.8b item 8).
           }
           if (answer === undefined) {
+            // A judge outage on a weak-signal-only turn (no hard rule, no regulated agent, no
+            // decision request/topic, no strong signal) passes unchanged (lead answer Q1, option
+            // A): only the signals ordinary teaching hits too led to the judge call, so an outage
+            // must not change an ordinary reply. Any stronger reason still fails closed.
+            if (
+              !regulated &&
+              !decisionRequest(studentText) &&
+              !regulatedTopic(studentText) &&
+              !strongAdviceSignal(body)
+            ) {
+              return { result: { ok: true }, usage };
+            }
             return replace(
               isRedirect ? redirect : fallback,
-              ADVICE_REASONS.judgeUnavailable,
+              scrubFailed ? ADVICE_REASONS.scrubFailed : ADVICE_REASONS.judgeUnavailable,
               usage,
             );
           }
@@ -465,6 +492,7 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
         return replace(fallback, ADVICE_REASONS.personalAdvice, usage);
       }
       let out = fallback;
+      let reason: string = ADVICE_REASONS.personalAdvice;
       try {
         const draft = scrubPii(body, patternsOf(x.ctx.locale)).text;
         const r = await x.adviceRewrite(adviceRewriteRequest(draft), cancel);
@@ -476,12 +504,27 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
           t.length <= LIMITS.modelTextMaxLength &&
           !rewriteRejected(t, directive)
         ) {
-          out = withDisclaimer(t);
+          // The rewrite is judged once more on its own merits before it is accepted (4.8b item
+          // 1): the regex-only check above does not see everything a rewrite could reintroduce.
+          // Any verdict but clean, or no answer at all (timeout/error), is "advice or no answer"
+          // (the finding's own wording) — the fixed fallback, never a second rewrite.
+          let verified = false;
+          try {
+            if (x.adviceJudge !== undefined) {
+              const v = await x.adviceJudge(adviceJudgeRequest({ reply: t }), cancel);
+              usage = [...usage, ...v.usage];
+              verified = adviceVerdictClean(v.text);
+            }
+          } catch {
+            // No answer: verified stays false, failing closed to the fallback.
+          }
+          if (verified) out = withDisclaimer(t);
         }
       } catch {
-        // The rewrite is best effort: the fallback is always safe.
+        // The rewrite call itself threw (4.8b item 8): its own reason, never silent.
+        reason = ADVICE_REASONS.rewriteFailed;
       }
-      return replace(out, ADVICE_REASONS.personalAdvice, usage);
+      return replace(out, reason, usage);
     },
   };
 }

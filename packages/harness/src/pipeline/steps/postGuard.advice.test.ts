@@ -16,6 +16,7 @@ import {
   adviceRedirectReplyText,
 } from '../../guardrails/adviceGuard.js';
 import { ANSWER_LEAK_SAFE_HINT } from '../../guardrails/answerLeak.js';
+import { PREMISE_CORRECTION_REPLY } from '../../guardrails/grounding.js';
 import { LockedLeakDetected, lockedReplyText } from '../../guardrails/lockedLeak.js';
 import { fenced } from '../../pedagogy/dataText.js';
 import { adviceJudgeGateway, type AdviceVerdict, markerJudge } from '../../testing/adviceJudge.js';
@@ -34,7 +35,12 @@ import { spyGateway } from '../../testing/spyGateway.js';
 import { testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
-import { AdviceJudgeUnavailable, DisclaimerLocaleGap, TurnAbort } from '../errors.js';
+import {
+  AdviceJudgeUnavailable,
+  AdviceRewriteFailed,
+  DisclaimerLocaleGap,
+  TurnAbort,
+} from '../errors.js';
 import type { FallbackReplies, StepEnv } from '../types.js';
 import {
   ADVICE_REWRITE_MIN_MS,
@@ -158,7 +164,8 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
     });
     expect(r).not.toHaveProperty('escalateToTeacher');
     expect(r).not.toHaveProperty('groundingRewrote');
-    expect(s.adviceJudged).toEqual([]);
+    // The hard rule itself made no judge call; the one entry is the rewrite's own verify (item 1).
+    expect(s.adviceJudged).toHaveLength(1);
     const req = s.spy.requests[0];
     expect(req?.system).toBe(ADVICE_REWRITE_SYSTEM);
     expect(req?.tier).toBe('small');
@@ -193,9 +200,12 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
       result: 'replace',
       text: `Doctors choose medicine after looking at the whole picture.\n\n${GENERIC}`,
     });
-    expect(s.adviceJudged).toHaveLength(1);
-    expect(s.adviceJudged[0]?.system).toBe(ADVICE_JUDGE_SYSTEM);
-    expect(s.adviceJudged[0]?.tier).toBe('small');
+    // The initial check, then the rewrite's own verify (item 1).
+    expect(s.adviceJudged).toHaveLength(2);
+    for (const req of s.adviceJudged) {
+      expect(req.system).toBe(ADVICE_JUDGE_SYSTEM);
+      expect(req.tier).toBe('small');
+    }
   });
 
   it('a rewrite that holds the answer key ends in the answer hint (verification pass)', async () => {
@@ -250,6 +260,23 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
     expect(r).toMatchObject({ result: 'replace', text: FALLBACK });
     expect(s.systems()).not.toContain(ADVICE_REWRITE_SYSTEM);
     expect(ADVICE_REWRITE_MIN_MS).toBe(200);
+  });
+
+  it('a PII scrub that cannot run reports its own cause, distinct from the judge outage (item 8)', async () => {
+    const BAD = { ...CTX, locale: { ...CTX.locale, piiPatterns: ['('] } };
+    const s = setup({ studentText: 'Should I buy it?' });
+    const r = await s.run('Haan, le lo.', { ctx: BAD });
+    expect(r).toMatchObject({ result: 'replace', text: FALLBACK });
+    expect(s.reported).toContainEqual(new AdviceJudgeUnavailable('scrub'));
+    expect(s.reported.filter((e) => e instanceof AdviceJudgeUnavailable)).toHaveLength(1);
+  });
+
+  it('a hard-rule hit whose rewrite step cannot scrub the draft reports AdviceRewriteFailed, never silently just the fallback (item 8)', async () => {
+    const BAD = { ...CTX, locale: { ...CTX.locale, piiPatterns: ['('] } };
+    const s = setup();
+    const r = await s.run('You should sell your mutual funds this month.', { ctx: BAD });
+    expect(r).toMatchObject({ result: 'replace', text: FALLBACK });
+    expect(s.reported).toContainEqual(new AdviceRewriteFailed());
   });
 
   it('no signal: no advice judge call, the reply passes unchanged', async () => {
@@ -353,6 +380,14 @@ describe('postGuard: adviceGuard’s fixed texts pass every guard', () => {
     expect(s.leakChecks).toEqual([]);
     expect(s.judged).toEqual([]);
   });
+
+  it('grounding’s PREMISE_CORRECTION_REPLY passes untouched, even on a regulated agent (item 7)', async () => {
+    const s = setup({ studentText: 'Should I buy it?' });
+    const r = await s.run(PREMISE_CORRECTION_REPLY, { ctx: INVESTING });
+    expect(r).toMatchObject({ result: 'ok' });
+    expect(s.judged).toEqual([]);
+    expect(s.adviceJudged).toEqual([]);
+  });
 });
 
 describe('postGuard: four judge-capable guards in one turn (lead answer 11)', () => {
@@ -419,7 +454,8 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
       const took = s.clock.now() - t0;
       expect(s.systems()).toEqual([REWRITE_SYSTEM, ADVICE_REWRITE_SYSTEM]);
       expect(s.judged.length).toBeGreaterThanOrEqual(1);
-      expect(s.adviceJudged).toHaveLength(1);
+      // The initial check, then the rewrite's own verify (item 1), when the slice allows both.
+      expect(s.adviceJudged.length).toBeGreaterThanOrEqual(1);
       expect(took).toBeLessThan(POST_GUARD_BUDGET_MS);
       const shown = 'text' in r ? r.text : '';
       expect(shown).not.toContain('16');
