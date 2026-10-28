@@ -16,6 +16,7 @@ import {
   adviceRedirectReplyText,
 } from '../../guardrails/adviceGuard.js';
 import { ANSWER_LEAK_SAFE_HINT } from '../../guardrails/answerLeak.js';
+import { PREMISE_CORRECTION_REPLY } from '../../guardrails/grounding.js';
 import { LockedLeakDetected, lockedReplyText } from '../../guardrails/lockedLeak.js';
 import { fenced } from '../../pedagogy/dataText.js';
 import { adviceJudgeGateway, type AdviceVerdict, markerJudge } from '../../testing/adviceJudge.js';
@@ -348,6 +349,14 @@ describe('postGuard: adviceGuard’s fixed texts pass every guard', () => {
     expect(await s.run(REDIRECT)).toMatchObject({ result: 'ok' });
     expect(s.leakChecks).toEqual([]);
     expect(s.judged).toEqual([]);
+  });
+
+  it('grounding’s PREMISE_CORRECTION_REPLY passes untouched, even on a regulated agent (item 7)', async () => {
+    const s = setup({ studentText: 'Should I buy it?' });
+    const r = await s.run(PREMISE_CORRECTION_REPLY, { ctx: INVESTING });
+    expect(r).toMatchObject({ result: 'ok' });
+    expect(s.judged).toEqual([]);
+    expect(s.adviceJudged).toEqual([]);
   });
 });
 

@@ -72,7 +72,11 @@ import {
   runGuardChain,
 } from '../../guardrails/chain.js';
 import type { Guard, GuardRun } from '../../guardrails/guard.js';
-import { askTeacherReplyText, GROUNDING_REASONS } from '../../guardrails/grounding.js';
+import {
+  askTeacherReplyText,
+  GROUNDING_REASONS,
+  PREMISE_CORRECTION_REPLY,
+} from '../../guardrails/grounding.js';
 import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { postGuards } from '../../guardrails/postGuards.js';
 import { type CancelToken, linkCancel } from '../clock.js';
@@ -470,7 +474,16 @@ export function createPostGuard(
     const disclaimer = disclaimerFor(
       genericDisclaimer === undefined ? { ctx } : { ctx, genericDisclaimer },
     );
-    const fixedTexts = [...fixed.texts, adviceFallbackText(disclaimer), redirectReply];
+    // Grounding's premise-correction reply joins adviceGuard's fixed texts (4.8b item 7): it names
+    // no modal word, dose, promise, non-Latin letter or domain word, so it happens to pass
+    // adviceGuard's own signal check already, but a future edit to its wording must not have to
+    // rely on that happening to hold.
+    const fixedTexts = [
+      ...fixed.texts,
+      adviceFallbackText(disclaimer),
+      redirectReply,
+      PREMISE_CORRECTION_REPLY,
+    ];
     // Metric, code only: a regulated agent's market has no disclaimer for its subject.
     const subjectCode = ctx.agent.regulatedSubject;
     if (subjectCode !== undefined && disclaimerGap(subjectCode, ctx.locale)) {

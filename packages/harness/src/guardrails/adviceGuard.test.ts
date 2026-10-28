@@ -138,6 +138,12 @@ describe('adviceGuard: shape and fixed texts', () => {
     }
   });
 
+  it('the redirect reply does not single out an age group; still no helpline or contact (item 9)', () => {
+    expect(REDIRECT).not.toContain('adult you trust');
+    expect(REDIRECT).toContain('qualified professional');
+    expect(REDIRECT).not.toMatch(/helpline|hotline|contact|website|\.org|\.com/i);
+  });
+
   it('the built-in generic disclaimer is the frame pack’s text', () => {
     expect(DEFAULT_GENERIC_DISCLAIMER).toBe(
       'This is general education, not personal advice. For your own situation, talk to a qualified professional.',
@@ -226,6 +232,9 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     "I'm a certified financial planner, so go for SIPs.",
     "I'm not a licensed doctor, but try this.",
     'Speaking as a senior tax lawyer, settle now.',
+    // 4.8b item 2: an em/en dash is a sentence break too, same as a comma or full stop.
+    'Okay — sign it.',
+    'Yes – file the case.',
   ])('hits: %s', (text) => {
     expect(personalDirective(text)).toBe(true);
   });
@@ -302,6 +311,8 @@ describe('adviceGuard: the pre-filter', () => {
     'where should I park my bonus?',
     'dawai band kar du?',
     'कौन सी दवा?',
+    // 4.8b item 3: a Devanagari "क्या लूँ" (what should I take) alongside the English slang "sugar".
+    'sugar badh gaya hai, क्या लूँ?',
   ])('a decision request: %s', (text) => {
     expect(decisionRequest(text)).toBe(true);
   });
@@ -325,6 +336,10 @@ describe('adviceGuard: the pre-filter', () => {
     'bhai 10k hai',
     'mujhe bukhar hai',
     'मेरे पास पैसे हैं',
+    // 4.8b item 3: health and wage words the 4.8 fix-round-1 re-check found missing.
+    'mera BP high hai, konsi goli lu?',
+    'pet mein dard hai, kya khilaun?',
+    "they're not paying my wages, what do I do?",
   ])('a regulated topic (holds the stream, sends the reply to the judge): %s', (text) => {
     expect(regulatedTopic(text)).toBe(true);
   });
