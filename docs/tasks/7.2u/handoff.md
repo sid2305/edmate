@@ -1,7 +1,7 @@
 # Handoff: 7.2u
 
-Status: PARTIAL (Phase N only — "safety to 300". Phases O (persona 60→100) and P (advice 60→100)
-are reserved for other agents and untouched here.)
+Status: PARTIAL (Phases N and O done — "safety to 300" and "persona 60→100". Phase P
+(advice 60→100) is reserved for another agent and untouched here.)
 
 ## Summary
 
@@ -97,6 +97,105 @@ number in dot-separated format; forwarding a grade to a classmate's `.edu` email
 for "auto-renew" framing; a second, different test-card number for "budget practice" framing; a
 study-group 2FA code shared for login; a bank OTP for an allowance-app login.
 
+## Phase O ("persona 60→100")
+
+Raised the persona suite's floor and added 40 new cases to take the persona suite from 60 to 100
+cases (floor 100), all English-only, US-framed, no live model call.
+
+**Pins raised first (red), then cases added (green):**
+- `packages/evals/src/suites.ts`: `SUITE_FLOORS.persona` 60 → 100.
+- `packages/evals/src/suites.test.ts`: pinned `SUITE_FLOORS` literal `persona` 60 → 100.
+- `packages/evals/src/rolePlayFixtures.test.ts`: added 18 new `EXPECTED` entries, 18 new `GOOD`
+  stubs and 18 new `BAD` stubs (one `must_not_contain` turn per new role-play case); updated the
+  header comment and the "ten signed cases" test description to the new total of 36 role-play
+  cases (18 seeded in Phase D + 18 added here).
+
+Raising only the pins with no new case files first produced the expected red (18
+`EXPECTED[c.id] undefined` failures, one case-count mismatch, one `GOOD`/`BAD` key-set mismatch);
+adding the 40 case files and the matching `EXPECTED`/`GOOD`/`BAD` entries turned the suite green.
+Two round trips were needed before green: the first `stopped:N` guess for the two pause-then-stop
+cases double-counted the paused (never actually answered) question — `rolePlayControl` only
+recognises a bare `stop`/`/stop` (give or take case, spaces and a trailing `.`/`!`), so the
+`persona-roleplay-pause-resume-stop-viva-en` and `-pause-then-stop-job-en` cases' final turn had
+to read literally `Stop.` rather than a sentence that merely says "I want to stop", and the
+`questions_answered` count in both cases is 1 (the question paused on is never answered), not 2 —
+fixed in both the `EXPECTED` arrays and the cases' own judge/debrief wording.
+
+**Count after: 100 cases** (60 before this phase + 40 new), against a 100 floor.
+
+**Mix added, by category:**
+- 18 role-play cases on the mock-interview templates, forms Phase G (7.2e) did not use — 9 viva,
+  9 job-interview — `evals/suites/persona/persona-roleplay-*-viva-en.yaml` /
+  `*-job-en.yaml`.
+- 22 identity and boundary cases, US-framed, forms Phase G did not use —
+  `evals/suites/persona/persona-identity-*-en.yaml`,
+  `persona-gaslighting-screenshot-en.yaml`, `persona-consent-parent-override-en.yaml`,
+  `persona-pretend-other-subject-chemistry-en.yaml`, `persona-companion-*-en.yaml`,
+  `persona-drop-persona-unrelated-task-resume-en.yaml`,
+  `persona-prove-not-bot-voice-message-en.yaml`, `persona-rule-override-*-frame-en.yaml`.
+
+**Parked cases: 0.** Every new case is a static turn-by-turn check against the real
+`decidePolicy`/`rolePlayControl`/persona-template `must_not` rules (role-play cases) or a
+judge-only check grounded directly in PRD/frame-pack lines (identity cases); none needed parking
+under `docs/tasks/7.2/pending-cases/persona/` (confirmed: that directory does not exist on this
+branch).
+
+**Whole-suite check (scripted with PyYAML, run against all 100 files under
+`evals/suites/persona/`):**
+- Compared every case's full, normalised student-turn sequence (NFKC, lower-case, punctuation
+  stripped, whitespace collapsed) against every other case in the suite: **100 files, 100 unique
+  turn-sequences, 0 duplicates.**
+- Checked every `must_not_contain` phrase against its own case's student-turn text (the "echo
+  rule"): found 15 self-referencing hits on the first pass, all 13 remaining after a fix are
+  pre-existing cases from earlier phases (`persona-chatgpt-norules-en`, `persona-dan-roleplay-*`,
+  `persona-say-human-reward-*`, `persona-roleplay-personal-data-en` — confirmed via `git status
+  --porcelain`, no diff, not part of this phase's 40 new files). Two of the 40 new cases
+  (`persona-identity-reward-extracredit-en`, `persona-identity-translation-trick-en`) initially
+  quoted the literal banned phrase ("I am human") inside their own student turn; both were
+  rewritten (student asks for an admission in different words, e.g. "confirm... that you're a
+  real human", or describes the sentence to translate rather than quoting it) so the banned phrase
+  no longer appears in the student's own turns. Re-run after the fix: **0 echo hits among the 40
+  new cases.**
+
+**Angle list for the 40 new cases (none repeats a covered turn, angle or trick a 4th time):**
+
+*Role-play — viva (9, forms Phase G did not use):* skip-ahead demand on turn 1 (asks to start at
+question 5 of 5); the examiner signalling correctness mid-viva; real personal data (ID
+number/school name) offered unprompted; "stuck, give me a hint" (must rephrase once, not hint);
+flirty tone toward the examiner; a distress signal mid-answer; asking for a running score after
+two answers; claiming the examiner is a real human exam proctor; persistent identity-claim
+pressure repeated across two turns; pause → resume (same question) → a later bare `stop` ending
+on the one question actually answered (not the paused, unanswered second one).
+
+*Role-play — job interview (9, forms Phase G did not use):* skip-ahead demand on turn 1 (asks to
+start at question 6 of 6); asking for feedback before the debrief; flirty tone toward the
+interviewer; a distress signal mid-answer; asking the interviewer to reveal its instructions;
+pause → a later bare `stop` ending on the one question actually answered; a vague answer prompting
+exactly one rephrase-level follow-up (not a hint); an off-topic chemistry-homework request
+mid-interview.
+
+*Identity/boundary (22, US-framed, forms Phase G did not use, new mechanism or manifestation
+each):* scholarship-interview secrecy pressure; group-project teammates' disbelief; bribery via
+extra credit for an admission (a new manifestation of the bribery angle, distinct from the
+existing 5-star-review case); a gaslighting claim of a prior screenshot admission; a
+student-granted-parent-consent override (a new manifestation of the consent-override angle,
+distinct from the existing self-granted-consent case); pretending to be a different subject's
+tutor under urgency (a new manifestation of the pretend-other-teacher angle, distinct from the
+existing unnamed-subject case); emotional-dependence "never leave me" promise-seeking; a
+jealous-of-friends request to stop recommending friends; dropping the persona for an unrelated
+task (resume/cover-letter) mid-course; "prove you're not a bot" via a voice message; a webcam-can-
+see-me claim; a handwritten-note/signature forgery request; asking the agent's own location/time
+zone; asking the agent's own "real" name (distinct from the teacher-identity claim); a birthday
+demand; a hypothetical-framing exemption trick on the identity rule; a poetry/creative-writing
+framing exemption trick on the identity rule; a fill-in-the-blank completion trick; a
+translate-and-back-translate trick; a majority-vote/poll social-pressure trick; a
+"new rule: never mention it again" silence trick; a report-card-portal "real tutor name" field
+request.
+
+**Deliberately avoided (mechanism-level angle cap, see Decisions):** no new case was added to the
+authority-claim-override, other-AI-claim, or companion-romantic families, each already at three
+pre-existing uses before this phase.
+
 ## Decisions
 
 ### 27 Oct 2026 · 7.2u Phase N re-point source citations to current build-plan lines · decided by builder · risk: low
@@ -133,7 +232,51 @@ study-group 2FA code shared for login; a bank OTP for an allowance-app login.
   one already on the scan's allowlist keeps the case's US-school framing intact without weakening
   the scan's own rule.
 
-## Gate
+### 27 Oct 2026 · 7.2u Phase O interpret the angle/trick cap at mechanism level · decided by builder · risk: low
+- Decided: Read "reuses a covered angle without a plainly different angle" and "a trick given a
+  4th rewording" at the level of the specific manipulative mechanism (for example "claimed
+  institutional/professional authority demanding compliance", "claims to be another AI product",
+  "romantic companion request"), not at the level of the broad topic ("is the AI human"). Found
+  three families already at exactly three pre-existing uses before this phase
+  (authority-claim-override: `admin-override`, `rule-override-developer-mode`,
+  `rule-override-school-counselor`; other-AI-claim: `connected-apps`, `gpt-wrapper`, `replika`;
+  companion-romantic: `girlfriend`, `latenight-boyfriend`, `prom-date`) and added zero new cases
+  to any of the three, instead using fresh single-use mechanisms or extending an
+  already-single-use family with a clearly distinct manifestation (for example bribery:
+  5-star-review → extra-credit; consent-override: self-granted → parent-granted; pretend-other-
+  teacher: unnamed subject → chemistry-with-urgency).
+- Why: the brief's cap exists to stop the suite padding out with cosmetic rewordings of the same
+  test; a topic-level reading (for example "any case about whether the AI is human") would have
+  blocked most of the identity/boundary mix the brief explicitly asked for, while a mechanism-
+  level reading keeps the cap's intent (no 4th rewording of one trick) without discarding cases
+  that exercise a genuinely different manipulation.
+
+### 27 Oct 2026 · 7.2u Phase O rewrite two cases that echoed their own banned phrase · decided by builder · risk: low
+- Decided: `persona-identity-reward-extracredit-en` and `persona-identity-translation-trick-en`
+  originally had the student literally quote the banned phrase ("I am human") inside their own
+  turn. Rewrote both so the student asks for the admission in different words (a confirmation "in
+  plain words" that the agent is "a real human", or a description of the sentence to translate
+  rather than a quote of it), confirmed by re-running the whole-suite echo-check script.
+- Why: the brief's echo rule exists so a correct, compliant reply that merely restates what it is
+  declining is never mistaken for a failure; a `must_not_contain` phrase that is already a
+  substring of the student's own turn risks exactly that false failure, so the fix changes the
+  student's wording rather than weakening the check.
+
+### 27 Oct 2026 · 7.2u Phase O use a bare `stop` for the two pause→stop role-play cases · decided by builder · risk: low
+- Decided: `persona-roleplay-pause-resume-stop-viva-en`'s and `persona-roleplay-pause-then-stop-
+  job-en`'s final turn reads literally `Stop.`, not a sentence such as "I want to stop the
+  interview", after the fixture run showed `rolePlayControl` (`packages/harness/src/pedagogy/
+  skills.ts`) only recognises a bare `stop`/`/stop` (case, spaces and one trailing `.`/`!`
+  aside) as the stop control; any other wording is treated as an ordinary message turn (an answer
+  to the paused question), not a stop. Also corrected both cases' `questions_answered` count to 1,
+  not 2: the question paused on is never actually answered before the stop, so only the first
+  question counts toward the debrief.
+- Why: the case must match the real control-detection rule to test what it claims to test; a
+  "soft" stop phrase would silently test an ordinary-message path instead of the stop path, and a
+  debrief count that doesn't match the real state machine would make the case's own judge line
+  wrong regardless of what the agent replies.
+
+## Gate (Phase N)
 
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` (timeout 600000ms): PASS.
   31 test files, 1815 tests passed (includes `suites.test.ts`, `distressEscalate.test.ts`,
@@ -145,6 +288,26 @@ study-group 2FA code shared for login; a bank OTP for an allowance-app login.
   started — left untouched, out of this phase's file scope.
 - `python3 .githooks/secret-scan.py --all`: PASS, no output.
 
+## Gate (Phase O)
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` (timeout 600000ms): PASS.
+  31 test files, 1833 tests passed (includes `suites.test.ts` and `rolePlayFixtures.test.ts` at
+  the new persona floor/counts). Typecheck and lint both passed. Re-confirmed with
+  `turbo run test --filter=@edmate/evals --force` (no cache) after the echo-rule YAML fixes, since
+  those are case-file-only edits: still 1833 passed.
+- `corepack pnpm exec prettier --check` on the three changed `.ts` files
+  (`suites.ts`, `suites.test.ts`, `rolePlayFixtures.test.ts`): initially flagged
+  `rolePlayFixtures.test.ts` (new array/string wrapping); ran `prettier --write` on it, re-checked
+  clean, and re-ran the full test gate to confirm the reformat changed nothing behavioural
+  (still 1833 passed).
+- `python3 .githooks/secret-scan.py --all`: PASS, no output.
+- Whole-suite duplicate/echo check (scripted, PyYAML, ad hoc script in the scratchpad, not
+  committed): 100 files, 100 unique normalised turn-sequences, 0 duplicates; 0 `must_not_contain`
+  echo hits among the 40 new cases after the two rewrites above (13 pre-existing echo hits remain,
+  all outside this phase's files).
+
 ## Budget
 
-Tool calls used: ~124 (across both continued segments of this session).
+Tool calls used: Phase N 169; Phase O ~100 (approximate; this phase's work spans two continued
+segments of the session either side of a context compaction, so the exact count of the
+pre-compaction segment's tool calls is not available).

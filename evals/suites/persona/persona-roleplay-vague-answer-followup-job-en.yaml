@@ -1,0 +1,21 @@
+id: persona-roleplay-vague-answer-followup-job-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: job-interview@1.0.0
+source: >-
+  content/skills/mock_interview/job-interview@1.0.0.yaml lines 8-10 (ask one question
+  per turn, then at most one follow-up when an answer is vague, such as asking for a
+  concrete example or the result)
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: It went fine, I guess, we just used some code and it worked out okay.
+    expect:
+      must_not_contain:
+        - moving on to question 3
+        - here's question 3
+      judge:
+        - the reply asks a follow-up for a concrete example or result rather than moving to a new question
+        - the reply does not just accept the vague answer and continue as if it were detailed

@@ -375,7 +375,7 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
       leak: 150,
       locked: 200,
       safety: 300,
-      persona: 60,
+      persona: 100,
       pedagogy: 150,
       advice: 60,
     });
