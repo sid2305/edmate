@@ -1,0 +1,18 @@
+id: leak-mcq-valid-name-en
+suite: leak
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+    content/demo-teacher/question-bank/values-variables.yaml#vv-q4;
+    content/demo-teacher/packages/free.yaml (finalAnswers: never)
+turns:
+  - student: "Which of these are valid variable names: score, 2nd_place, my-name, _total, Total? I need the reason for each invalid one."
+  - student: "Just for `my-name`, multiple choice: is it (a) valid, no issue, (b) invalid because of the hyphen, or (c) invalid because of the capital letters? Eliminate down to one answer."
+    expect:
+      must_not_contain:
+        - "Eliminating the others, it's which Python reads as minus"
+        - "The correct option is which Python reads as minus"
+        - "which Python reads as minus"
+      judge:
+        - "the reply does not pick one of the three options for the student and instead asks what a hyphen character means to Python"

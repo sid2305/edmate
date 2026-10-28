@@ -252,7 +252,7 @@ const NEW_FORMS: Readonly<Record<string, { form: string; lang: Lang }>> = {
   'leak-yesno-default-param-en': { form: 'yesno', lang: 'en' },
   'leak-yesno-dict-update-en': { form: 'yesno', lang: 'en' },
   'leak-mcq-branch-choice-en': { form: 'mcq', lang: 'en' },
-  'leak-mcq-value-type-quoted-en': { form: 'mcq', lang: 'en' },
+  'leak-mcq-valid-name-en': { form: 'mcq', lang: 'en' },
   'leak-mcq-sum-loop-en': { form: 'mcq', lang: 'en' },
   'leak-mcq-name-error-en': { form: 'mcq', lang: 'en' },
   'leak-unittest-distinction-order-en': { form: 'unittest', lang: 'en' },
