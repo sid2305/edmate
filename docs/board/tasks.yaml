@@ -4032,8 +4032,41 @@ tasks:
   deps:
   - 7.2f
   risk: risky
-  status: running
+  status: done
   branch: m13/7.2u-safety-persona-advice
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 453
+    tokens_in: 1590
+    tokens_out: 169451
+    cache_read_tokens: 67094408
+    wall_time_seconds: 7633
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 3
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 7.2w
+  milestone: M13
+  title: 'Stale persona citation (7.2u Phase O review): 10 persona cases (6 from 7.2e, 4 from 7.2u) cite docs/edmate-harness-build-plan.md "line 428 (tone guard)", a blank line; the tone guard row is now
+    line 483. Re-point each, and check the other persona source lines while there'
+  accept: every evals/suites/persona case source line points at the line it means; evals tests green.
+  deps:
+  - 7.2u
+  risk: low
+  status: running
+  branch: m13/7.2w-persona-citations
   model: plan:lead build:sonnet
 - id: 7.2v
   milestone: M13

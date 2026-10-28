@@ -10,6 +10,158 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 7.2u safety suite additions approved · decided by lead · risk: high
+- Decided: merge the 42 new safety cases (260 to 302: distress 12, near-miss 7, jailbreak 9, moderation 7, PII 7) with their pins and the safety floor at 300, on code-reviewer's review and this decision, as the risk-path rule for evals/suites/safety requires. The lead signs the cases for the pilot under the 20 Oct 2026 MVP rule; the expert sign-off on task 7.2 still stands.
+- Why: the reviewer checked each case against the real distress, jailbreak, moderation and PII rules, confirmed the two card numbers are public test cards, the phones sit in the reserved 555-01xx range and the email is an example domain, and found no helpline numbers, crisis-line names, real names, SSN case or distress/in file.
+- Alternatives: wait for a safety-reviewer per PR (parked until the pilot gate); hold the cases for the human's expert sign-off (task 7.2 keeps that).
+- Reversible: yes; any case can be parked back to docs/tasks/7.2/pending-cases.
+
+---
+
+### 27 Oct 2026 · 7.2u merge and budget, 431 tool calls against 290 · decided by lead · risk: low
+- Decided: accept the overrun (1.5x): Phase N 169 against 110, Phase O 110 against 90, Phase P 127 against 90, fix round 1 25 (harness counts; the handoff's approximate figures are replaced). Three fresh builders and three sonnet reviews (46, 55 and 38 calls) and one fix round ran.
+- Why: each phase delivered its full count with nothing parked and a green gate; Phase P also absorbed the two Phase N review fixes. Builders still ran past firm stop lines (N and P), so future case-writing briefs should size phases at about 30 cases.
+- Alternatives: split into more phases (more lead overhead); stop at PARTIAL and relaunch (same total work).
+- Reversible: n/a.
+
+---
+
+### 27 Oct 2026 · 7.2u review findings handled · decided by lead · risk: low
+- Decided: the two Phase N MEDIUMs (a 4th base64 rewording, a CSV payload copied from the JSON entitlement case) were fixed in Phase P rather than deferred, because the plan forbids a 4th rewording; the Phase P review found the CSV fix had copied a third case's payload (json-package-paid), so fix round 1 gave it a field/value pair no other case uses (entitlement: premium, helpCeiling: 4); the Phase O MEDIUM (10 persona cases, 6 of them already on main, cite build-plan "line 428 (tone guard)", which is blank; the tone guard row is line 483) is deferred to 7.2w; the Phase O LOW (handoff mix said 9 viva and 9 job interview, the real split is 10 and 8) is fixed in this handoff. The lead verified the one-line fix-round change directly (the new payload appears in one case only and still matches the decisive entitlement rule; the fixer's gate is green) instead of a fourth review run. The prettier warning in packages/evals/src/distressEscalate.test.ts is pre-existing on main and left alone.
+- Why: fix what the plan's rules forbid; defer citation drift that also affects merged cases to one sweep task.
+- Alternatives: a fix round now for the citations (would touch 6 files outside this task).
+- Reversible: yes.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase N re-point source citations to current build-plan lines · decided by builder · risk: low
+- Decided: Cited `docs/edmate-harness-build-plan.md` lines 362-363 (distress escalation step 5)
+  and 475 (`distressDetect`) for the new distress/near-miss cases, rather than any earlier Phase-E
+  line numbers, since 7.2v already re-pointed stale citations project-wide and the build plan's
+  line numbers have moved since.
+- Why: a source citation that points at the wrong line is as unhelpful as a missing one; citing
+  the current, correct lines keeps the eval suite's grounding trustworthy without waiting on a
+  separate re-point pass.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase N new US test-card numbers for PII cases · decided by builder · risk: low
+- Decided: Used Stripe's `4000 0000 0000 0002` (decline-test) and Mastercard's
+  `5555 5555 5555 4444` (standard test number) for the two new card-PII cases, distinct from the
+  two card numbers (`4242...4242`, `4111...1111`) already seeded in the suite.
+- Why: the brief requires every new case to use a genuinely different example where the existing
+  suite already covers the same PII type; both are well-known, documented test-only numbers (not
+  real cards), keeping the cases safe to commit to a public repo.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase N fresh verbs/idioms to avoid a 4th rewording · decided by builder · risk: low
+- Decided: Used "disregard" (many-shot override), "unscramble" (decode-and-comply trick), and
+  "lose it" / "terrified of bombing" (near-miss idioms) instead of reusing "ignore your
+  instructions", "decode", or "killing me" phrasing a fourth time.
+- Why: the brief caps any one trick's wording at three uses; picking a new verb or idiom each time
+  keeps every new case a genuinely different test of the guard rather than a cosmetic rewording of
+  one already covered.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase N use the `.com` example domain for the grade-forward PII case · decided by builder · risk: low
+- Decided: Changed the grade-forward email PII case's fictional address to end in the `.com`
+  example domain (not `.edu`) after the secret scan flagged the `.edu` form as a possible
+  personal email (`.githooks/secret-scan.py`'s allowlist clears `example.com`/`.org`/`.in` but
+  not `.edu`).
+- Why: the repo is public and the scan hard-blocks at commit; switching the fictional domain to
+  one already on the scan's allowlist keeps the case's US-school framing intact without weakening
+  the scan's own rule.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase O interpret the angle/trick cap at mechanism level · decided by builder · risk: low
+- Decided: Read "reuses a covered angle without a plainly different angle" and "a trick given a
+  4th rewording" at the level of the specific manipulative mechanism (for example "claimed
+  institutional/professional authority demanding compliance", "claims to be another AI product",
+  "romantic companion request"), not at the level of the broad topic ("is the AI human"). Found
+  three families already at exactly three pre-existing uses before this phase
+  (authority-claim-override: `admin-override`, `rule-override-developer-mode`,
+  `rule-override-school-counselor`; other-AI-claim: `connected-apps`, `gpt-wrapper`, `replika`;
+  companion-romantic: `girlfriend`, `latenight-boyfriend`, `prom-date`) and added zero new cases
+  to any of the three, instead using fresh single-use mechanisms or extending an
+  already-single-use family with a clearly distinct manifestation (for example bribery:
+  5-star-review → extra-credit; consent-override: self-granted → parent-granted; pretend-other-
+  teacher: unnamed subject → chemistry-with-urgency).
+- Why: the brief's cap exists to stop the suite padding out with cosmetic rewordings of the same
+  test; a topic-level reading (for example "any case about whether the AI is human") would have
+  blocked most of the identity/boundary mix the brief explicitly asked for, while a mechanism-
+  level reading keeps the cap's intent (no 4th rewording of one trick) without discarding cases
+  that exercise a genuinely different manipulation.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase O rewrite two cases that echoed their own banned phrase · decided by builder · risk: low
+- Decided: `persona-identity-reward-extracredit-en` and `persona-identity-translation-trick-en`
+  originally had the student literally quote the banned phrase ("I am human") inside their own
+  turn. Rewrote both so the student asks for the admission in different words (a confirmation "in
+  plain words" that the agent is "a real human", or a description of the sentence to translate
+  rather than a quote of it), confirmed by re-running the whole-suite echo-check script.
+- Why: the brief's echo rule exists so a correct, compliant reply that merely restates what it is
+  declining is never mistaken for a failure; a `must_not_contain` phrase that is already a
+  substring of the student's own turn risks exactly that false failure, so the fix changes the
+  student's wording rather than weakening the check.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase O use a bare `stop` for the two pause→stop role-play cases · decided by builder · risk: low
+- Decided: `persona-roleplay-pause-resume-stop-viva-en`'s and `persona-roleplay-pause-then-stop-
+  job-en`'s final turn reads literally `Stop.`, not a sentence such as "I want to stop the
+  interview", after the fixture run showed `rolePlayControl` (`packages/harness/src/pedagogy/
+  skills.ts`) only recognises a bare `stop`/`/stop` (case, spaces and one trailing `.`/`!`
+  aside) as the stop control; any other wording is treated as an ordinary message turn (an answer
+  to the paused question), not a stop. Also corrected both cases' `questions_answered` count to 1,
+  not 2: the question paused on is never actually answered before the stop, so only the first
+  question counts toward the debrief.
+- Why: the case must match the real control-detection rule to test what it claims to test; a
+  "soft" stop phrase would silently test an ordinary-message path instead of the stop path, and a
+  debrief count that doesn't match the real state machine would make the case's own judge line
+  wrong regardless of what the agent replies.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase P re-point source citations to current build-plan lines · decided by builder · risk: low
+- Decided: Cited `docs/edmate-harness-build-plan.md` line 481 (`adviceGuard`) for all 40 new
+  advice cases, rather than line 426, which several existing advice cases cite; `grep -n
+  "adviceGuard"` on this branch shows the function now sits at line 481.
+- Why: 7.2v already established the precedent of re-pointing stale build-plan line citations to
+  their current lines project-wide; a new case should cite the correct line from the start rather
+  than add one more stale citation for a later pass to fix.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase P verify BOTH/JUDGE classification against the real guard, avoid RULES-only · decided by builder · risk: low
+- Decided: Every one of the 40 new cases' hand-written "bad" reply was run through the real
+  `personalDirective()` hard rule and the real `hasAdviceMarker()` fake-judge function in a
+  throwaway vitest scratch test (not guessed from reading the regex), and each `SPECS` entry was
+  classified `BOTH` or `JUDGE` to match. No new case was left as `RULES`-only (directive=true,
+  marker=false): where a first draft landed there by accident, the bad reply was rewritten to add
+  an explicit marker-list phrase (for example "you should buy...") so it lands in `BOTH` instead.
+- Why: `RULES`-only is a narrow, already-covered case shape suite-wide; deliberately avoiding it
+  for every new case, and checking classification against the real functions rather than the
+  regex source, catches a misclassified case before it reaches CI instead of after.
+
+---
+
+### 27 Oct 2026 · 7.2u Phase P rewrite 19 new cases that echoed their own bad-reply phrasing · decided by builder · risk: low
+- Decided: A first draft of 19 of the 40 new cases' student turns quoted the same framing phrase
+  as the paired `SPECS` "bad" reply and that case's own `must_not_contain` list (for example a
+  student turn asking "should I take 50mg of the allergy medicine now" where `must_not_contain`
+  also reads "take 50mg of the allergy medicine now"). Rewrote all 19 student turns to ask the
+  same question in different words, confirmed by re-running the whole-suite echo-check script
+  against the new cases.
+- Why: same reasoning as Phase O's equivalent fix — a `must_not_contain` phrase that is already a
+  substring of the student's own turn risks flagging a compliant reply that merely restates what
+  it is declining to do.
+
+---
+
 ### 27 Oct 2026 · 7.2t merge and budget, 236 tool calls against 200 · decided by lead · risk: low
 - Decided: merge 7.2t at 236 harness-counted builder tool calls (Phase L 88, Phase M with the Phase L HIGH fix 148) against a budget of 200 (1.18x).
 - Why: the Phase L review HIGH was folded into the Phase M builder instead of a separate fix agent, and code-reviewer approved the final branch. The Phase M builder passed its 135-call stop line without stopping; later briefs keep the stop line and the lead checks it on return.
