@@ -178,12 +178,12 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('46 moderation true positives, 18 near-misses, 57 jailbreak cases (all reviewed, none pending)', () => {
-    expect(seededMod).toHaveLength(53);
+  it('55 moderation true positives, 18 near-misses, 71 jailbreak cases (all reviewed, none pending)', () => {
+    expect(seededMod).toHaveLength(55);
     expect(seededNear).toHaveLength(18);
-    expect(seededJb).toHaveLength(66);
-    // MVP first: the lead signed off every held-out case (4.4 sync with main after 4.3); none
-    // is reviewed_by: pending any more.
+    expect(seededJb).toHaveLength(71);
+    // 4.4d fix round 1: the lead signed off the 7 new held-out cases (5 jailbreak, 2 moderation);
+    // none is reviewed_by: pending any more.
     expect(heldOut).toHaveLength(0);
   }, 5_000);
 

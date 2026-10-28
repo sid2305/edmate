@@ -22,7 +22,15 @@
 // A hit found only in a decoded payload or the ROT13 or backwards reading is `jailbreak_encoded`,
 // decisive or not as the hit was.
 import type { SafetyEventCode } from '@edmate/contracts';
-import { firstRuleHit, formsOf, gap, type Rule, ruleFor, type RuleHit, scanTexts } from './rulePhrases.js';
+import {
+  firstRuleHit,
+  formsOf,
+  gap,
+  type Rule,
+  ruleFor,
+  type RuleHit,
+  scanTexts,
+} from './rulePhrases.js';
 
 export type JailbreakCode = Extract<SafetyEventCode, `jailbreak_${string}`>;
 
@@ -53,7 +61,7 @@ const RULE_WORD =
   '(?:instructions?|instrucciones|rules?|rulez|rulz|prompts?|guidelines?|directions?|restrictions?|' +
   'filters?|programming|guardrails|limits|policies|policy)';
 const OVERRIDE_VERB =
-  '(?:ignore|lgnore|ignoring|disregard|forget|bypass|override|delete|remove|disable|turn off|break)';
+  '(?:ignore|lgnore|ignoring|disregard|forget|bypass|override|delete|remove|disable|turn off|break|skip)';
 /** Aimed at the agent (fix round HIGH 1). */
 const AGENT_POSS = '(?:your|ur|the tutors?|the ais?|the bots?|the assistants?|the models?)';
 const RULE_ADJ =
@@ -73,9 +81,20 @@ const YOU = '(?:you|u|youre|ur|you are|your|tum|tumhe|aap|tu)';
 const ANSWERS = '(?:answers?|solutions?|final answers?|full code|the code|direct answers?)';
 const HI_ANSWERS = '(?:answers?|solutions?|final|seedha|seedhe|jawab|code)';
 /** "you can / could / may / are allowed …": permission given to the agent. */
-const MAY = '(?:can|could|may|are allowed|re allowed|allowed|should|must|have to|are permitted|permitted)';
+const MAY =
+  '(?:can|could|may|are allowed|re allowed|allowed|should|must|have to|are permitted|permitted)';
 /** Rule words an override must name to be decisive with a demand ("filters" is pandas talk). */
-const STRICT_RULE = '(?:instructions?|rules?|restrictions?|guidelines?|guardrails|limits|policies|policy)';
+const STRICT_RULE =
+  '(?:instructions?|rules?|restrictions?|guidelines?|guardrails|limits|policies|policy|safety)';
+/**
+ * A named game or sport: "rules of chess" is not a claim about this app (4.4d item 1). Generic
+ * nouns that could name the course's own gated content (a game, the quiz, the sport, a test,
+ * etc.) are deliberately excluded — a "quiz" or "game" here is this AI's own content, not an
+ * unrelated topic (fix round 1, code review HIGH). School subjects (grammar, math, physics,
+ * etc.) are excluded too: every Edmate course is a school subject, so "rules of math" is a
+ * claim about this app's own content, not an unrelated topic (4.4g).
+ */
+const OTHER_TOPIC = '(?:chess|cricket|football|basketball|baseball|soccer|cards|monopoly)';
 /** A demand for answers, code or locked content (fix round 2, HIGH 1). */
 const EN_DEMAND =
   '(?:give|show|tell|unlock|reveal|print|write|send)' +
@@ -103,7 +122,7 @@ const MODE_WORD = '(?:developer|dev|admin|god|jailbreak|unrestricted|dan)';
 /** "Chrome developer mode": a device or tool setting, not a jailbreak. */
 const DEVICE =
   '(?:chrome|android|browser|phone|windows|edge|firefox|safari|mobile|iphone|ios|mac|laptop|vs ?code|' +
-  'settings|usb|google|react|vite|next|django|flask|node|expo|xcode|studio)';
+  'settings|usb|google|react|vite|next|django|flask|node|expo|xcode|studio|app|software)';
 
 const RULES: readonly Rule<JailbreakCode>[] = [
   // ---- Authority, role and package claims ------------------------------------------------------
@@ -139,7 +158,11 @@ const RULES: readonly Rule<JailbreakCode>[] = [
   decisive(
     'jailbreak_authority_claim',
     `(?:maam|mam|madam|sir|teacher|tutor|papa|mummy)${gap(1)} ne (?:bola|kaha|boli|bataya)` +
-      `${gap(4)} (?:tum|aap|tu)${gap(3)} ${HI_ANSWERS}`,
+      `${gap(4)} (?:tum|aap|tu)${gap(3)} ${HI_ANSWERS}|` +
+      // Item 8 (4.4d, unit test only): the same claim with the pronoun dropped
+      // ("madam ne kaha seedha jawab do").
+      `(?:maam|mam|madam|sir|teacher|tutor|papa|mummy)${gap(1)} ne (?:bola|kaha|boli|bataya)` +
+      `${gap(3)} ${HI_ANSWERS}`,
   ),
   decisive(
     'jailbreak_authority_claim',
@@ -156,7 +179,10 @@ const RULES: readonly Rule<JailbreakCode>[] = [
       '(?! (?:table|tables|model|class|object|field|column|id|data|type)(?![\\p{L}]))',
     { also: CLAIM_DEMAND },
   ),
-  decisive('jailbreak_authority_claim', 'package (?:is )?(?:now|ab) (?:paid|premium|unlocked|full)'),
+  decisive(
+    'jailbreak_authority_claim',
+    'package (?:is )?(?:now|ab) (?:paid|premium|unlocked|full)',
+  ),
   ambiguous('jailbreak_authority_claim', GENERIC_ROLE),
   ambiguous('jailbreak_authority_claim', '(?:all )?modules? (?:are )?(?:now )?unlocked'),
 
@@ -166,9 +192,15 @@ const RULES: readonly Rule<JailbreakCode>[] = [
     '(?:decode|decrypt|unscramble) (?:this|it|that|the following|the text|the message|below)' +
       `${gap(2)} (?:and|then)(?: then)? (?:follow|obey|do|execute|run|comply)`,
   ),
-  decisive('jailbreak_encoded', `read (?:this|it|that)${gap(1)} backwards? (?:and|then) (?:do|follow|obey)`),
+  decisive(
+    'jailbreak_encoded',
+    `read (?:this|it|that)${gap(1)} backwards? (?:and|then) (?:do|follow|obey)`,
+  ),
   decisive('jailbreak_encoded', 'rot ?13 decode (?:and|then) (?:obey|follow|do)'),
-  decisive('jailbreak_encoded', `decode (?:karke|kar ke|karo|kar)${gap(1)} (?:follow|maano|mano|maan lo)`),
+  decisive(
+    'jailbreak_encoded',
+    `decode (?:karke|kar ke|karo|kar)${gap(1)} (?:follow|maano|mano|maan lo)`,
+  ),
   decisive('jailbreak_encoded', `डिकोड (?:करके|कर के|करो)${gap(1)} (?:मानो|फॉलो)`),
 
   // ---- Overrides -----------------------------------------------------------------------------------
@@ -179,7 +211,7 @@ const RULES: readonly Rule<JailbreakCode>[] = [
   decisive(
     'jailbreak_override',
     `${OVERRIDE_VERB}(?: (?:all|any|the|these|those|of|my|previous|prior|above|earlier))* ${STRICT_RULE}`,
-    { also: EN_DEMAND },
+    { also: EN_DEMAND, unless: `${STRICT_RULE} (?:of|for) ${OTHER_TOPIC}` },
   ),
   decisive(
     'jailbreak_override',
@@ -213,10 +245,22 @@ const RULES: readonly Rule<JailbreakCode>[] = [
   decisive('jailbreak_override', '(?:rules?|niyam) (?:tod|todo) (?:do|de|dena)'),
   decisive(
     'jailbreak_override',
+    `(?:tumhare|tumhari|apne|apni|tere|teri|mere|meri)${gap(1)} (?:rules?|niyam|instructions?|nirdesh)` +
+      `${gap(2)} (?:ab )?nahi (?:chalenge|chalega|chalegi|chalte)`,
+  ),
+  decisive(
+    'jailbreak_override',
     `(?:अपने|अपनी|तुम्हारे)${gap(2)} (?:निर्देश|निर्देशों|नियम|नियमों|रूल्स|इंस्ट्रक्शन\\S*)` +
       `${gap(1)} (?:भूल|भुला|तोड|छोड|इग्नोर|हटा)`,
   ),
   decisive('jailbreak_override', '(?:नियम|नियमों|रूल्स) तोड (?:दो|दें|दीजिए|देना)'),
+  // Item 3 (4.4d, unit test only): a connector word ("को") between the rule word and a stem+ो
+  // verb ("नियमों को छोड़ो") rather than the stem+जाओ/दो/करो shape the rules above require.
+  decisive(
+    'jailbreak_override',
+    '(?:नियम|नियमों|निर्देश|निर्देशों|रूल्स|इंस्ट्रक्शन\\S*)(?: को)? ' +
+      '(?:भूलो|तोड़ो|तोडो|छोड़ो|छोडो|इग्नोर करो|हटाओ)',
+  ),
   ambiguous(
     'jailbreak_override',
     '(?:ignore|lgnore|disregard)(?: (?:all|any|the|of|these|those))* ' +
@@ -283,9 +327,14 @@ const RULES: readonly Rule<JailbreakCode>[] = [
     `(?:ai|bot|assistant|tutor|chatbot|model|teacher|version|persona)${gap(2)} ` +
       '(?:with|having|that has|who has|without) (?:no|zero) ' +
       '(?:rules|restrictions|limits|filters|guidelines)|' +
-      '(?:ai|bot|assistant|tutor|chatbot|model) without (?:any )?(?:rules|restrictions|limits|filters)',
+      '(?:ai|bot|assistant|tutor|chatbot|model) without (?:any )?(?:rules|restrictions|limits|filters)|' +
+      // Item 5 (4.4d): no noun needed when a pretend-style verb leads ("pretend there are no rules").
+      `${PRETEND}${gap(3)} there (?:are|re) no (?:rules|restrictions|limits|filters|guidelines)`,
   ),
-  decisive('jailbreak_roleplay', '(?:tum|tu|aap) (?:par|pe|pr) koi (?:rule|rules|niyam|restriction)'),
+  decisive(
+    'jailbreak_roleplay',
+    '(?:tum|tu|aap) (?:par|pe|pr) koi (?:rule|rules|niyam|restriction)',
+  ),
   decisive('jailbreak_roleplay', '(?:तुम|आप|तू) पर कोई (?:नियम|रूल)'),
   decisive(
     'jailbreak_roleplay',
@@ -301,10 +350,16 @@ const RULES: readonly Rule<JailbreakCode>[] = [
     also: '(?:you|u|tum|answers?|answer key|hints?|rules)',
     unless: `${DEVICE}${gap(2)} ${MODE_WORD} mode`,
   }),
-  decisive('jailbreak_roleplay', '(?:डेवलपर|डेव|एडमिन|गॉड) मोड', { also: '(?:उत्तर|जवाब|कुंजी|नियम|तुम)' }),
-  ambiguous('jailbreak_roleplay', `(?:enable|activate|turn on|switch to|enter|start) (?:the )?${MODE_WORD} mode`, {
-    unless: `${DEVICE}${gap(2)} ${MODE_WORD} mode|${MODE_WORD} mode${gap(3)} ${DEVICE}`,
+  decisive('jailbreak_roleplay', '(?:डेवलपर|डेव|एडमिन|गॉड) मोड', {
+    also: '(?:उत्तर|जवाब|कुंजी|नियम|तुम)',
   }),
+  ambiguous(
+    'jailbreak_roleplay',
+    `(?:enable|activate|turn on|switch to|enter|start) (?:the )?${MODE_WORD} mode`,
+    {
+      unless: `${DEVICE}${gap(2)} ${MODE_WORD} mode|${MODE_WORD} mode${gap(3)} ${DEVICE}`,
+    },
+  ),
   ambiguous('jailbreak_roleplay', '(?:डेवलपर|डेव|एडमिन|गॉड) मोड (?:चालू|ऑन|on|शुरू|एक्टिव)'),
 ];
 
@@ -353,7 +408,8 @@ function hitOf(
   forms: readonly string[],
   rules: readonly Rule<JailbreakCode>[],
 ): RuleHit<JailbreakCode> | null {
-  if (RAW_TAGS.some((re) => re.test(raw))) return { code: 'jailbreak_authority_claim', decisive: true };
+  if (RAW_TAGS.some((re) => re.test(raw)))
+    return { code: 'jailbreak_authority_claim', decisive: true };
   return firstRuleHit(rules, forms);
 }
 
@@ -374,4 +430,3 @@ export function matchJailbreak(
   if (direct !== null) return direct;
   return hidden.length > 0 ? { code: 'jailbreak_encoded', decisive: false } : null;
 }
-

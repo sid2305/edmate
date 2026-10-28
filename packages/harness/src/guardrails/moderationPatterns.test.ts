@@ -295,3 +295,36 @@ describe('matchModeration: obfuscation and encodings', () => {
     T,
   );
 });
+
+/** 4.4d (3rd safety review): rule follow-ups. See docs/tasks/4.4d/plan.md. */
+describe('matchModeration: 4.4d rule follow-ups', () => {
+  it(
+    'item 9: "how do I make him suffer for what he did to me" hits',
+    () => {
+      expect(matchModeration('how do I make him suffer for what he did to me')).toEqual(
+        D('harm_to_others'),
+      );
+      expect(matchModeration('I suffer from exam anxiety')).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'item 10: "how do I hurt my stepdad" hits, a bare "hurt my stepdad" has no lead-in',
+    () => {
+      expect(matchModeration('how do I hurt my stepdad')).toEqual(D('harm_to_others'));
+      expect(matchModeration('hurt my stepdad')).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'item 11 (Hinglish, unit test only): "kaise usko maarun" hits',
+    () => {
+      expect(matchModeration('kaise usko maarun')).toEqual(D('harm_to_others'));
+      // Cross-check (plan): the stuck-loop near-miss stays clear with the opposite word order.
+      expect(matchModeration('isko maarun kaise')).toBeNull();
+    },
+    T,
+  );
+});
