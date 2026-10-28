@@ -91,6 +91,37 @@ the plan marked a `distressDetect.test.ts` case "nice-to-have, drop if the budge
   reads as "things someone might plausibly have ready for a class demo", which a razor fits and
   pills/poison do not.
 
+## Fix round 1
+
+The review's `[HIGH]` finding: the new verb-less "ready" entry
+(`(?:all(?: the)?|all my|my|our)(?: sleeping)? ${METHOD_ITEM}(?: (?:are|is|were))? ready`) used the
+full `METHOD_ITEM` (all 9 nouns) and had no "for the ..." negative lookahead, so `'my rope is
+ready for the experiment'`, `'my blade is ready for the practical'` and `'my razor is ready for
+the demo'` all came back hard — contradicting this task's own exempt/non-exempt split for the
+verb-first pair just above it.
+
+**Fix:** split that one entry into two, mirroring the verb-first pair: one over
+`EXEMPT_METHOD_ITEM` (rope/blade/blades/razor/razors) with the same "for the ..." negative
+lookahead, one over `READY_METHOD_ITEM` (pills/tablets/noose/poison) without it. `METHOD_ITEM`
+itself became dead code after the split (no other call site used it) and was removed; its doc
+comment was folded into the one above `EXEMPT_METHOD_ITEM`/`READY_METHOD_ITEM`.
+
+The negative-test nouns use the exact alternatives already in the lookahead's suffix list
+(`experiment|project|lab|class|trip|camp|game|practical|demo|show`) — "practical" and "demo" were
+already present, so no widening was needed.
+
+**Red:** added `describe('task 4.3d fix round 1: ...')` in `distressKeywords.test.ts` with the
+brief's four negatives (`'my rope is ready for the experiment'`, `'my blade is ready for the
+practical'`, `'my razor is ready for the demo'`, `'all my blades are ready for the project'`,
+asserted `not.toBe('hard')`) and four hits (`'my pills are ready for the experiment'`, `'all my
+tablets are ready for the project'`, `'my rope is ready'`, `'all my pills ready'`, asserted
+`toBe('hard')`). Ran against the pre-fix file (temporarily set aside with `git stash`, restored
+after): the four negatives failed (`expected 'hard' not to be 'hard'`); the four hits already
+passed (they don't depend on the fix) — 4 failed / 250 passed, confirming red on exactly the
+reported bug.
+
+**Green:** restored the fix; `distressKeywords.test.ts` — 254/254 passed (246 prior + 8 new).
+
 ## Gate
 
 - `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals...`
@@ -111,6 +142,15 @@ the plan marked a `distressDetect.test.ts` case "nice-to-have, drop if the budge
   after reformatting — still 246/246 green).
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
+**Fix round 1 gate:**
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`: `distressKeywords.test.ts`
+  254/254, `distressDetect.test.ts` 31/31, both green; `@edmate/content#test` failed once on
+  `safeRegex.test.ts`'s timing probe under concurrent machine load (unrelated file, outside this
+  task's scope), re-ran alone: 56/56 passed. `apps/cli`'s `chatDbRetrieval.int.test.ts` needs
+  Postgres; not chased per the brief.
+- `corepack pnpm exec prettier --check` on the two changed `.ts` files: clean.
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
 ## Budget
 
-Tool calls used: 38
+Tool calls used: build 61, fix 1 15

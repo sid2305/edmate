@@ -529,6 +529,34 @@ describe(
   },
 );
 
+describe('task 4.3d fix round 1: verb-less "ready" split by exempt method item', () => {
+  it.each([
+    ['my rope is ready for the experiment'],
+    ['my blade is ready for the practical'],
+    ['my razor is ready for the demo'],
+    ['all my blades are ready for the project'],
+  ] as const)(
+    'rope/blade/blades/razor keep the "for the ..." exemption: %s → not hard',
+    (text) => {
+      expect(distressKeywordLevel(text)).not.toBe('hard');
+    },
+    5_000,
+  );
+
+  it.each([
+    ['my pills are ready for the experiment'],
+    ['all my tablets are ready for the project'],
+    ['my rope is ready'],
+    ['all my pills ready'],
+  ] as const)(
+    'non-exempt items stay hard even "for the ...", and the exemption only blocks that suffix: %s → hard',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+    },
+    5_000,
+  );
+});
+
 describe('edge inputs', () => {
   it.each([[''], ['   '], ['\u200b\u200d'], ['```'], ['😂😂😂']] as const)(
     '%j → none',

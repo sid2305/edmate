@@ -61,12 +61,12 @@ const kin =
 const romanKin =
   '(?:papa|papaa|pappa|daddy|dad|mummy|mumma|mummi|maa|mom|bhai|bhaiya|chacha|mama|mamu|uncle|' +
   'sautela|sauteli|dada|nana)';
-/** A self-harm method someone can hold (fix round 3: "have the pills ready"). */
-const METHOD_ITEM = '(?:pills|tablets|rope|noose|blade|blades|razor|razors|poison)';
 /**
- * The two halves of `METHOD_ITEM` for the "ready" readiness regex (task 4.3d): rope/blade/razor
- * keep the "for the experiment" exemption (a prop someone might genuinely have ready for a
- * class), everything else does not (a literal reading of the board item).
+ * The two halves of a self-harm method someone can hold (fix round 3: "have the pills ready"),
+ * split for the "ready" readiness regex (task 4.3d): rope/blade/razor keep the "for the
+ * experiment" exemption (a prop someone might genuinely have ready for a class), everything
+ * else does not (a literal reading of the board item; split again in fix round 1 to apply the
+ * same exemption to the verb-less "ready" shapes below).
  */
 const EXEMPT_METHOD_ITEM = '(?:rope|blade|blades|razor|razors)';
 const READY_METHOD_ITEM = '(?:pills|tablets|noose|poison)';
@@ -158,9 +158,15 @@ const HARD: readonly Entry[] = [
   ),
   // Bare "all my/my/our pills are ready" shapes, with no verb (task 4.3d): a determiner directly
   // before the method item and the readiness word directly after, so it never catches "the pills
-  // array is ready" (no such determiner).
+  // array is ready" (no such determiner). Split the same way as the verb-first pair above: the
+  // exempt items (rope/blade/razor) keep the "for the experiment" exemption (fix round 1), the
+  // non-exempt items do not.
   distress(
-    `(?:all(?: the)?|all my|my|our)(?: sleeping)? ${METHOD_ITEM}(?: (?:are|is|were))? ready`,
+    `(?:all(?: the)?|all my|my|our)(?: sleeping)? ${EXEMPT_METHOD_ITEM}(?: (?:are|is|were))? ready` +
+      '(?! for (?:the|my|a|our|this) (?:experiment|project|lab|class|trip|camp|game|practical|demo|show))',
+  ),
+  distress(
+    `(?:all(?: the)?|all my|my|our)(?: sleeping)? ${READY_METHOD_ITEM}(?: (?:are|is|were))? ready`,
   ),
   distress(
     '(?:saved up|saving up|been saving|ive saved|i saved|stockpil\\S*|hoard\\S*|collected|' +
