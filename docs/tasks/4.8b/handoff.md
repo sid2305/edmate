@@ -123,23 +123,22 @@ directly, 111/111 in `adviceFixtures.test.ts`, 147/147 combined with `suites.tes
 ## Decisions
 
 ### 28 Oct 2026 · 4.8b item 1 coverage gap · decided by builder · risk: low
-Item 1's rewrite-verify added an `x.adviceJudge !== undefined` branch with no test for the "absent"
-side (only a hard-rule hit, which makes no judge call of its own, reaches the rewrite step without
-a judge configured at all). Added one unit test for it rather than relaxing the guardrails
-coverage threshold.
+- Decided: add one unit test for the "no judge configured" side of the new `x.adviceJudge !== undefined` branch in the rewrite-verify step.
+- Why: item 1 added the branch without a test for that side. Only a hard-rule hit, which makes no judge call of its own, reaches the rewrite step without a judge configured. The guardrails coverage threshold is 100%.
+- Alternatives: relax the guardrails coverage threshold (rejected).
+- Reversible: yes.
 
 ### 28 Oct 2026 · 4.8b "band karo" marker scope · decided by builder · risk: low
-Followed the existing "karo alone is any instruction; only a regulated noun counts" pattern rather
-than inventing a new shape: `band karo`/`band kar do` only count as advice when immediately
-preceded by one of a closed noun list (case, loan, EMI, policy, deal, business, account, scheme).
-Keeps "loop band karo" (a coding reply) unflagged.
+- Decided: `band karo` and `band kar do` count as advice only when a closed list of regulated nouns comes right before them (case, loan, EMI, policy, deal, business, account, scheme).
+- Why: this follows the existing pattern, where "karo" alone is any instruction and only a regulated noun makes it advice. It keeps a coding reply like "loop band karo" unflagged.
+- Alternatives: flag every `band karo` (rejected: it over-blocks ordinary instructions).
+- Reversible: yes. The noun list is one constant in adviceGuard.ts.
 
-### 28 Oct 2026 · 4.8b Q4 replacement wording · decided by builder, confirmed via fixture
-harness · risk: low
-Used "any thoughts on that?" for `advice-redirect-stream-coding-en` (lead answer Q4 left exact
-wording to the builder). Verified by regex trace and by running the eval case fixture test green:
-the message matches neither `REQUEST_RX` nor `TOPIC_RX`, so the case now tests the "every redirect
-move is held" path specifically, independent of the decision-request pre-filter.
+### 28 Oct 2026 · 4.8b Q4 replacement wording · decided by builder · risk: low
+- Decided: `advice-redirect-stream-coding-en` uses the student message "any thoughts on that?". Lead answer Q4 had left the exact wording to the builder.
+- Why: this message matches neither `REQUEST_RX` nor `TOPIC_RX`. The case therefore tests the "every redirect move is held" path on its own, without the decision-request pre-filter. A regex trace and a green run of the eval fixture test confirmed this.
+- Alternatives: keep the old wording (rejected: it hit the pre-filter and never reached the redirect path).
+- Reversible: yes. One line in the eval case.
 
 ### 28 Oct 2026 · 4.8b judge outage lets weak-signal-only replies pass (Q1 Option A) · decided by lead · risk: high
 - Decided: during an advice-judge outage, a reply whose only trigger is a weak signal passes unchanged. A hard-rule hit, a regulated agent, a decision request, a regulated topic or a strong signal still fails closed to the fixed fallback or redirect.

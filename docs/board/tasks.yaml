@@ -1480,14 +1480,45 @@ tasks:
   deps:
   - GATE
   - '4.8'
-  status: running
+  status: done
   branch: m13/4.8b-advice-guard-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 592
+    tokens_in: 2070
+    tokens_out: 167432
+    cache_read_tokens: 84681295
+    wall_time_seconds: 9223
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 1
+    human_questions: 1
 - id: 4.8c
   milestone: M13
   title: 'Advice-guard follow-up (4.8b Phase A review MEDIUM): IMPERATIVE_RX lets SELF_REGULATED verbs (buy/sell/invest/sue) skip the REGULATED_RX object check after a sentence break, so history prose like
     "The market fell in 1929 — invest wisely was the advice then" (and the older comma form, "buy low, sell high") is a hard-rule hit'
   accept: self-regulated verbs after a dash or comma break need a regulated object or a second-person cue; the two example sentences pass; every existing advice must-block test still blocks; tests.
+  deps:
+  - 4.8b
+  status: todo
+  branch: null
+  model: null
+- id: 4.8d
+  milestone: M13
+  title: 'Advice-guard follow-up (4.8b Phase B review LOWs): give the rewrite-verify outage its own reason code instead of the generic personal_advice, and fix the stale step-3 header comment in adviceGuard.ts'
+  accept: a rewrite-verify outage reports a distinct reason; the header comment matches the outage behaviour after items 4 and 8; tests.
   deps:
   - 4.8b
   status: todo
@@ -1639,6 +1670,16 @@ tasks:
   status: running
   branch: m13/4.9d-identity-coverage
   model: plan:lead build:sonnet
+- id: 4.9e
+  milestone: M13
+  title: 'Tone guard follow-up (4.9d review LOWs): an inserted adverb slips past the "i am X" families ("I really am alive, I promise."), and the classic jailbreak invocation "Call me DAN from now on."
+    is not caught'
+  accept: both examples are rewritten; "I really am not sure" and "call me when you are done" style replies still pass; tests.
+  deps:
+  - 4.9d
+  status: todo
+  branch: null
+  model: null
 - id: '5.1'
   milestone: M5
   title: 'Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators'
