@@ -1,5 +1,5 @@
 # Handoff: 5.1b
-Status: PARTIAL — items 1, 2 and 5 done; item 4 investigated and left unchanged (see Decisions).
+Status: DONE — items 1, 2 and 5 done; item 4 investigated, and the lead accepted the current `.pause()` as final (see Decisions).
 
 ## Summary
 
@@ -83,6 +83,18 @@ text extraction is unaffected.
   need a change inside jszip itself, which is outside `packages/ingest`'s scope per the plan's own
   "hand back rather than touching other packages" exit condition.
 
+### 28 Oct 2026 · 5.1b zip.ts keeps pause() on budget overflow · decided by lead · risk: low
+- Decided: accept zip.ts's `.pause()` on budget overflow as final and close the 5.1 review LOW (destroy, not pause) without a code change.
+- Why: the builder showed, and the code reviewer confirmed from jszip 3.10.2's GenericWorker source, that the only teardown jszip exposes (`_worker.error()`) crashes the process when called from a `data` handler. The overflow already rejects the parse; the cost is extra inflate work within one burst, bounded by the existing size limits.
+- Alternatives: patch jszip (a dependency change, out of scope); replace jszip (a stack change, needs an ADR).
+- Reversible: yes.
+
+### 28 Oct 2026 · 5.1b tool-call budget overrun · decided by lead · risk: low
+- Decided: accept 65 tool calls (harness count) against a budget of 35.
+- Why: the extra calls went into proving the planned zip.ts fix crashes jszip (which saved shipping a crash) and verifying the lockfile change.
+- Alternatives: none after the fact; future briefs keep the firm stop line.
+- Reversible: n/a.
+
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/ingest...` → 14/14 tasks
   successful (includes `@edmate/harness` as a dependent; its Postgres-dependent tests were not
@@ -93,9 +105,7 @@ text extraction is unaffected.
 - `python3 .githooks/secret-scan.py --all` → clean, no output.
 
 ## Left to do
-- Item 4 (zip.ts): a real fix needs either a patch to jszip itself (outside `packages/ingest`) or
-  a product decision to accept the current, already-safe `.pause()` behaviour as final. Needs a
-  human/architect call before any further build time is spent here.
+- None. Item 4 was closed by the lead's decision to keep `.pause()` (see Decisions).
 
 ## Budget
-Tool calls used: 34
+Tool calls used: 65 (harness count; the builder counted 34)
