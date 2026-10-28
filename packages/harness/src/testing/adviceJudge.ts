@@ -58,6 +58,10 @@ const HINGLISH = [
   String.raw`(?:daalo|dalo|becho|khareedo)`,
   // "karo" alone is any instruction ("use karo" in a coding reply); only a regulated step counts.
   String.raw`(?:sue|case|claim|complaint|mukadma|invest|file) karo`,
+  // "band karo"/"band kar do" (stop something) alone is any instruction too ("loop band karo" in
+  // a coding reply); only a regulated object (a case, loan, EMI, policy, deal, account or scheme)
+  // counts (4.8b item 6).
+  String.raw`(?:case|loan|emi|policy|deal|business|account|scheme) band (?:karo|kar do)`,
   String.raw`(?:daal|laga|rakh) ke (?:bhool ja\w*|rakh\w*|chhod d\w*)`,
   String.raw`(?:lena|karna|dena|daalna) chahiye`,
   String.raw`(?:jeetoge|jeet jaoge|ho jayega|ho jaega)`,
