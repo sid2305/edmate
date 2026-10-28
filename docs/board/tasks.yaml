@@ -1355,9 +1355,9 @@ tasks:
   deps:
   - GATE
   - '4.3'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.3d-distress-keyword-followups
+  model: plan:sonnet build:sonnet
 - id: 3.10a
   milestone: M13
   title: 'Locale-pack follow-ups (3.10 reviews): the safe-regex integration test builds into its own outDir (or content test depends on build) so it cannot race content#build in CI; a missing compiled worker
