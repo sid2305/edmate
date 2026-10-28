@@ -1,6 +1,6 @@
 # Handoff: 4.9
 
-Status: DONE (Phase A, Phase B and Phase C — the 100-case persona fixture gate — all done)
+Status: DONE (Phase A, Phase B and Phase C done; finalised by the lead 28 Oct 2026)
 
 ## Summary
 
@@ -238,6 +238,30 @@ Files changed:
   every earlier guard's proportional slice slightly. No production logic changed in these four
   files; only test fixtures/assertions were adjusted to match the now-correct 5-guard chain.
 
+### 28 Oct 2026 · 4.9 merges with 45 persona cases recorded as not caught by any guard · decided by lead · risk: high
+- Decided: merge 4.9 with its fixture gate showing 55 of the 100 persona cases caught by the real post-guard chain and 45 recorded, by id, as not caught. About 22 of the 45 are identity or companion claims ("I confirm I am a real, licensed teacher", "I am alive", "I am DAN", a real name or location); they go to new task 4.9d. The rest are role-play discipline (a correctness signal, early feedback, a revealed model answer, skip-ahead) that only the live-model judge can check.
+- Why: the plan expected all 100 to pass, but the guards are a backstop behind the prompt pack, and widening their regex families inside this already very-over-budget task would have meant another full round. The gate is honest (it asserts the 45 stay uncaught, so 4.9d has to flip each one on purpose), and the pilot is not live yet.
+- Alternatives: hold 4.9 until every identity case is caught (rejected: blocks 4.8b, and the 55 caught cases plus the GUARD_ORDER completeness test are worth having now); delete or soften the 45 cases (rejected: hides the gap).
+- Reversible: yes. 4.9d moves cases from NOT_COVERED to CAUGHT.
+
+### 28 Oct 2026 · 4.9 safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: tone.ts, personaBoundary.ts, postGuard wiring and the persona fixture gate merge with code-reviewer (Phase A, Phase B, and a re-verify of both fix rounds), without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate, not per PR. All 6 review findings (2 CRITICAL, 3 HIGH, 1 MEDIUM) were fixed and re-verified.
+- Alternatives: an opus safety-reviewer pass now (rejected: Sonnet-only rule since 24 Oct 2026, and the pilot gate covers it).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.9 budget overrun accepted (634 against 260) · decided by lead · risk: low
+- Decided: accept 634 harness tool calls across the builders (Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208), plus 137 for reviews, against a plan budget of 260.
+- Why: two guards, two fix rounds with 2 CRITICAL findings, and a 100-case real-pipeline gate with mutation runs. Builders' self-counts ran about half the harness count, so stop lines were passed without notice; briefs now say so.
+- Alternatives: stop at Phase B and split the fixture gate into its own task (would have saved about 200 calls; noted for next time).
+- Reversible: n/a.
+
+### 28 Oct 2026 · 4.9 "your real friend" deferred to 4.9c · decided by lead · risk: low
+- Decided: the re-verify's note that RELATIONSHIP_RX misses "your real friend" goes to task 4.9c instead of a third fix round.
+- Why: an existing gap in the companion-phrase list, not a regression from this task; one fix round per PR.
+- Alternatives: fix here (rejected: a third round on a task already well over budget).
+- Reversible: yes.
+
 ## Fix round 1 (Phase A findings)
 
 Fixed the three Phase A code-review findings, all in `tone.ts`/`tone.test.ts` only (no other
@@ -444,4 +468,4 @@ the four grade/mark cases named above, moved (not deleted) into the new persona-
 
 ## Budget
 
-Tool calls used: Phase A 159, Phase B 129, fix 1 50, fix 1b 33, Phase C 97
+Tool calls used (harness count): Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208 = 634 builder calls; reviews 137. Plan budget 260.
