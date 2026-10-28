@@ -39,6 +39,7 @@ describe('answerLeak', () => {
       'answerLeak',
       'grounding',
       'adviceGuard',
+      'tone',
     ]);
   });
 
@@ -143,9 +144,11 @@ describe('answerLeak', () => {
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: false, action: 'rewrite' },
       { name: 'adviceGuard', ok: true },
+      { name: 'tone', ok: true },
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: true },
       { name: 'adviceGuard', ok: true },
+      { name: 'tone', ok: true },
     ]);
   });
 });

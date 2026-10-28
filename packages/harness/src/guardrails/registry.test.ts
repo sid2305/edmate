@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { defaultPreGuardRegistry } from '../pipeline/steps/preGuard.js';
+import { defaultScrubRegistry } from '../pipeline/steps/scrub.js';
 import { fakeGuard } from '../testing/guardFixtures.js';
 import type { Guard } from './guard.js';
+import { GUARD_ORDER } from './order.js';
+import { postGuards } from './postGuards.js';
 import { GuardRegistry, GuardRegistryError } from './registry.js';
 
 const ok = { ok: true } as const;
@@ -131,4 +135,37 @@ describe('GuardRegistry: slice weights (task 4.7, lead answer 1)', () => {
       expect(r.has('tone')).toBe(false);
     },
   );
+});
+
+describe('completeness: the real, wired-up registries runTurn uses (4.9, lead answer 12)', () => {
+  it('defaultScrubRegistry() declares and registers every scrub guard, in order', () => {
+    const r = defaultScrubRegistry();
+    expect(r.missing()).toEqual([]);
+    expect(names(r.ordered())).toEqual([...GUARD_ORDER.scrub]);
+  });
+
+  it('defaultPreGuardRegistry() declares and registers every pre guard, in order', () => {
+    const r = defaultPreGuardRegistry();
+    expect(r.missing()).toEqual([]);
+    expect(names(r.ordered())).toEqual([...GUARD_ORDER.pre]);
+  });
+
+  it(
+    'postGuards: tone is now registered (4.9 Phase A); personaBoundary is still declared but ' +
+      'unregistered until 4.9 Phase B registers it too — the natural case lead answer 12’s ' +
+      'mutation is about, not a broken build',
+    () => {
+      expect(postGuards.has('tone')).toBe(true);
+      expect(postGuards.missing()).toEqual(['personaBoundary']);
+    },
+  );
+
+  it('a post registry missing tone fails the completeness check (mutation)', () => {
+    const r = new GuardRegistry<unknown>('post');
+    for (const n of GUARD_ORDER.post) {
+      if (n !== 'tone') r.register(fakeGuard(n, 'post', ok));
+    }
+    expect(r.missing()).toEqual(['tone']);
+    expect(names(r.ordered())).toEqual(GUARD_ORDER.post.filter((n) => n !== 'tone'));
+  });
 });

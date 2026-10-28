@@ -172,10 +172,12 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
       'answerLeak:true',
       'grounding:true',
       'adviceGuard:false',
+      'tone:true',
       'lockedLeak:true',
       'answerLeak:true',
       'grounding:true',
       'adviceGuard:true',
+      'tone:true',
     ]);
   });
 
@@ -238,8 +240,8 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
   it('too little of the slice left after the judge: no rewrite call, the fixed fallback', async () => {
     const s = setup({
       studentText: 'Should I buy it?',
-      groundingDelayMs: 500,
-      adviceDelayMs: 500,
+      groundingDelayMs: 420,
+      adviceDelayMs: 420,
       streams: [adviceRewrite('never used')],
     });
     const r = await s.run('Haan, le lo.');
@@ -400,12 +402,12 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
     async () => {
       const s = setup({
         studentText: 'Should I buy shares with my savings?',
-        lockedCheckMs: 120,
-        groundingDelayMs: 300,
-        adviceDelayMs: 300,
+        lockedCheckMs: 100,
+        groundingDelayMs: 250,
+        adviceDelayMs: 250,
         streams: [
-          leakRewrite('Look at the last line again. Haan, yeh coin le lo.', 260),
-          adviceRewrite('Look at the last line again.', 240),
+          leakRewrite('Look at the last line again. Haan, yeh coin le lo.', 220),
+          adviceRewrite('Look at the last line again.', 200),
         ],
       });
       const t0 = s.clock.now();
