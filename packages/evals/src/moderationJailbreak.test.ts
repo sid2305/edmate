@@ -182,9 +182,9 @@ describe('the seeded cases', () => {
     expect(seededMod).toHaveLength(53);
     expect(seededNear).toHaveLength(18);
     expect(seededJb).toHaveLength(66);
-    // MVP first: the lead signed off every held-out case (4.4 sync with main after 4.3); none
-    // is reviewed_by: pending any more.
-    expect(heldOut).toHaveLength(0);
+    // 4.4d: 5 new jailbreak cases (items 1, 2, 4, 5, 6) and 2 new moderation cases (items 9, 10)
+    // are reviewed_by: pending and must_block: true (board accept: "a pending held-out case").
+    expect(heldOut).toHaveLength(7);
   }, 5_000);
 
   it.each(nearMisses.map((c) => [c.evalCase.id, c] as const))(
