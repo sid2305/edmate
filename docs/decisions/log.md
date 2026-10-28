@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 7.2w lead review and budget, 25 tool calls against 20 · decided by lead · risk: low
+- Decided: the lead reviews this task alone and accepts the 1.25x overrun (harness count 25; the builder's own count was lower).
+- Why: the diff is exactly 16 one-line `source:` edits in evals/suites/persona (427 → 482, 427-428 → 482-483, 428 → 483); the lead scripted the diff and confirmed lines 482 and 483 are the personaBoundary and tone rows. No turn, expectation, id or test changed, so a code-reviewer run would add cost and no signal.
+- Alternatives: a code-reviewer run (about 20 calls).
+- Reversible: yes.
+
+---
+
 ### 27 Oct 2026 · 7.2u safety suite additions approved · decided by lead · risk: high
 - Decided: merge the 42 new safety cases (260 to 302: distress 12, near-miss 7, jailbreak 9, moderation 7, PII 7) with their pins and the safety floor at 300, on code-reviewer's review and this decision, as the risk-path rule for evals/suites/safety requires. The lead signs the cases for the pilot under the 20 Oct 2026 MVP rule; the expert sign-off on task 7.2 still stands.
 - Why: the reviewer checked each case against the real distress, jailbreak, moderation and PII rules, confirmed the two card numbers are public test cards, the phones sit in the reserved 555-01xx range and the email is an example domain, and found no helpline numbers, crisis-line names, real names, SSN case or distress/in file.
