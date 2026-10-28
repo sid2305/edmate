@@ -107,6 +107,30 @@ targets needed `ctx.persona`.
   fixtures and keeps the ordinary-name welcome passing.
 - Reversible: yes.
 
+### 28 Oct 2026 · 4.9d safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: tone.ts, tone.test.ts, the persona fixture test and the persona eval cases merge after code-reviewer (a real-guard review and one re-verify), without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. Fix round 1 fixed every CRITICAL and HIGH from the review; the re-verify confirmed it. Fix round 2 fixed the new CRITICAL with failing-first reproducer tests. The lead checked those tests and the green gate rather than re-running a reviewer a second time.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it); a second re-verify run (rejected: the reproducers pin each case and the budget is already over).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.9d fixes the "I'm a" fold bypass that 4.9 left on main · decided by lead · risk: high
+- Decided: merge fix round 2's change to `fold()` in this task. `SPACED_LETTERS` no longer starts a run right after an apostrophe, and a standalone "ima" splits back to "im a". This closes a CRITICAL bypass that has been on main since 4.9: "I'm a human." folded to "i'ma human", so no "I'm a ..." identity claim was caught.
+- Why: the bypass defeats the guard's main identity family. Fixing it here, where the reproducers already exist, is faster than a separate task.
+- Alternatives: a separate hotfix task (rejected: same file, same reviewer context, one more PR cycle).
+- Reversible: yes. The known gap is that a standalone first name "Ima" also splits (see the builder decision above).
+
+### 28 Oct 2026 · 4.9d budget overrun · decided by lead · risk: low
+- Decided: accept 166 builder tool calls (build 56, fix 1 66, fix 2 44, harness counts) against the plan's 90, plus 75 review calls (review 44, re-verify 31).
+- Why: the overrun came from two fix rounds, and one of them fixed a CRITICAL left on main by 4.9. The task also folded in 4.9c.
+- Alternatives: stop after fix round 1 and file the fold bypass as a new task (rejected: it is a CRITICAL on a safety path).
+- Reversible: n/a.
+
+### 28 Oct 2026 · 4.9d folds in 4.9c and defers its LOWs to 4.9e · decided by lead · risk: low
+- Decided: 4.9c ("your real friend") is done inside 4.9d and closes with it. The review's two LOW under-blocks ("I really am alive", "Call me DAN") go to board task 4.9e. The webcam "I saw you wave" case stays uncaught (builder decision above); the live-model judge is the backstop.
+- Why: fix only blockers per PR; the LOWs are adverb-insertion and role-play gaps that every "I am X" family shares.
+- Alternatives: fix the LOWs here (rejected: scope and budget).
+- Reversible: yes.
+
 ## Fix round 1
 
 Code-review findings fixed, each with a failing reproducer added to `tone.test.ts` before the
@@ -316,4 +340,4 @@ fixture set.
 
 ## Budget
 
-Tool calls used: 32, fix 1 41, fix 2 24
+Tool calls used (harness counts): build 56, fix 1 66, fix 2 44 = 166; reviews 75 (review 44, re-verify 31). Plan budget 90. The builders self-reported 32, 41 and 24.
