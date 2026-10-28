@@ -1375,9 +1375,30 @@ tasks:
     jailbreak negatives.'
   deps:
   - 4.4d
-  status: running
+  status: done
   branch: m13/4.4g-jailbreak-subject-exemption
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 184
+    tokens_in: 628
+    tokens_out: 59974
+    cache_read_tokens: 19982111
+    wall_time_seconds: 1162
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 4.3d
   milestone: M13
   title: 'Distress keyword follow-ups (4.3 fix-round-3 re-check): more method-ready phrasings ("all my pills ready", "my pills are ready", "kept enough tablets aside", "collected/stocked up on pills", "the
