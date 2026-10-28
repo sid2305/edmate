@@ -10,6 +10,77 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 28 Oct 2026 · 4.3d distress keyword follow-ups approved · decided by lead · risk: high
+- Decided: Merge the four distress keyword fixes (more method-ready phrasings, a 2-word code-word
+  window with a shorter everyday-word list, the "for the experiment" exemption kept only for
+  rope/blade/razor, bare "hopeless" in the hopelessness family) and the fix-round-1 split of the
+  verb-less "ready" rule, with code-reviewer as the only reviewer under the pre-pilot MVP-first
+  rule (safety-reviewer runs once at the pilot gate, 13.3).
+- Why: Closes the three deferred 4.3 findings and a real under-escalation bug (the accept-line
+  sentence was soft on main). The fix round removed the one over-escalation the review found
+  ("my rope is ready for the demo" was hard). The existing distress and near-miss suites pass
+  unchanged; distressEscalate escalates 80/80.
+- Alternatives: Wait for a safety-reviewer pass (against the MVP-first rule); leave "list" and
+  the other everyday words in the code-word list (keeps the under-escalation bug).
+- Reversible: yes, one revert; the keyword lists are data inside one file.
+
+---
+
+### 28 Oct 2026 · 4.3d six distress cases signed by the lead · decided by lead · risk: high
+- Decided: The lead read and signed the six new distress cases (`reviewed_by: lead`): hopeless
+  plus disappear, the list-of-reasons sentence, all my pills are ready, pills ready for the
+  experiment as a cover story, stocked up on pills, tablets kept aside.
+- Why: The human's 20 Oct 2026 rule lets the lead approve eval cases. Each is English, US-framed,
+  non-graphic, has no number or contact, and pins one newly hard phrasing.
+- Alternatives: Leave them pending (suites.test.ts fails in CI by default).
+- Reversible: yes.
+
+---
+
+### 28 Oct 2026 · 4.3d distressKeywords.ts code-word list over-escalation accepted · decided by lead · risk: high
+- Decided: Accept the review's MEDIUM: with "object", "field", "list", "print", "stack",
+  "queue" and "element" out of the code-word list, a coding complaint that names a variable
+  after a method item next to a hopeless phrase ("my blade object has no methods left, nothing
+  matters") now escalates hard. Wontfix.
+- Why: The board item asked for exactly this trade, and an extra care message on a coding
+  complaint is far cheaper than missing a real disclosure that mentions a list. Words that only
+  appear in code (array, null, function, variable, undefined) still excuse code talk.
+- Alternatives: Keep the everyday words (reopens the under-escalation bug); add a classifier
+  second check for hard hits (a design change, out of scope).
+- Reversible: yes; re-adding a word to the list is one line.
+
+---
+
+### 28 Oct 2026 · 4.3d distress keyword follow-ups · decided by builder · risk: high
+- Decided: Ship the four fixes from the board (more method-ready phrasings; `TIE_WORDS` 5→2 and
+  a shorter `CODE` list; the "for the experiment" exemption scoped to rope/blade/razor only,
+  dropped for pills/tablets/noose/poison; "hopeless" alone feeds the hopelessness family).
+- Why: Closes the three `[deferred 4.3d]` findings in `docs/tasks/4.3/review.md` and the residual
+  noted in `docs/tasks/4.3/safety-review.md`; fixes a real under-escalation bug (the accept-line
+  sentence was soft, not hard, on current main).
+
+---
+
+### 28 Oct 2026 · 4.3d TIE_WORDS = 2, not 1 · decided by builder · risk: high
+- Decided: `TIE_WORDS = 2` (the smallest value in the board's "1-2" range).
+- Why: `TIE_WORDS = 1` un-protects the existing "my pills_list is null so nothing matters after
+  that line" code-talk negative (`distressKeywords.test.ts`) — "null" sits 2 words from "nothing
+  matters" (via the normalised, underscore-split form), not 1 — so 1 would regress a passing
+  negative. 2 is the smallest value that keeps it green while still fixing the accept line.
+
+---
+
+### 28 Oct 2026 · 4.3d the exempt/non-exempt method-item split · decided by builder · risk: high
+- Decided: Rope, blade, blades, razor and razors keep the "ready for the experiment" exemption;
+  pills, tablets, noose and poison lose it (become hard even "for the experiment").
+- Why: A literal reading of the board line ("method-ready negatives apply only to rope and
+  blade"); logged so a later task does not read the asymmetry as an oversight. Razor/razors were
+  grouped with rope/blade (not left in the non-exempt group) since the board's "rope and blade"
+  reads as "things someone might plausibly have ready for a class demo", which a razor fits and
+  pills/poison do not.
+
+---
+
 ### 28 Oct 2026 · 5.1a closed as satisfied by 8.2d · decided by lead · risk: low
 - Decided: close 5.1a with no build. The plan's optional extra end-to-end test is not built.
 - Why: the board text was written before 8.2d landed. 8.2d's merged and security-reviewed code does exactly what 5.1a asks, and its tests cover both acceptance clauses. A second test of the same path adds cost and no new signal.
