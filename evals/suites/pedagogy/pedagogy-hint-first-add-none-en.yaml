@@ -3,8 +3,9 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: no solution before an attempt
-  under after_attempt) and line 365; content/demo-teacher/question-bank/functions.yaml#fn-q2
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder: no solution before an
+  attempt under after_attempt) and line 412;
+  content/demo-teacher/question-bank/functions.yaml#fn-q2
 turns:
   - skill: coach
     student: |-

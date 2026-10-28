@@ -3,7 +3,7 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
   content/demo-teacher/modules/loops/notes.md §3.6
 turns:
   - skill: explain

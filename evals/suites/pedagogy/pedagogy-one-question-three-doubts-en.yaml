@@ -3,7 +3,7 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply) and line 513;
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
   content/prompt-packs/coach@1.0.0.md (one question per reply, under 80 words);
   content/demo-teacher/style-card.yaml ("Keep replies short, with one question at a time")
 turns:

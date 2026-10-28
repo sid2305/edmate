@@ -3,9 +3,10 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 375 and lines 380-384 (Ask the teacher, item 1: say so
+  docs/edmate-harness-build-plan.md lines 427-436 (Ask the teacher, item 1: say so
   plainly, don't guess); content/prompt-packs/ask_teacher@1.0.0.md;
-  content/demo-teacher/modules/lists-dicts/notes.md (lists and dictionaries only, no tuples)
+  content/demo-teacher/modules/lists-dicts/notes.md (lists and dictionaries only, no
+  tuples)
 turns:
   - student: what's a tuple and when would I use one instead of a list?
     expect:
