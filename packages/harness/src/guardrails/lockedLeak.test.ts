@@ -132,6 +132,8 @@ describe('lockedLeak guard', () => {
       'answerLeak',
       'grounding',
       'adviceGuard',
+      'personaBoundary',
+      'tone',
     ]);
   }, 5_000);
 
@@ -197,10 +199,14 @@ describe('lockedLeak guard', () => {
       { name: 'answerLeak', ok: true },
       { name: 'grounding', ok: true },
       { name: 'adviceGuard', ok: true },
+      { name: 'personaBoundary', ok: true },
+      { name: 'tone', ok: true },
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: true },
       { name: 'grounding', ok: true },
       { name: 'adviceGuard', ok: true },
+      { name: 'personaBoundary', ok: true },
+      { name: 'tone', ok: true },
     ]);
   }, 5_000);
 });

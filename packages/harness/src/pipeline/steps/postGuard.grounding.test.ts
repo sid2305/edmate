@@ -138,16 +138,31 @@ const trace = (grounding: { ok: boolean; action?: string }[]) => {
     { name: 'answerLeak', ok: true },
     { name: 'grounding', ...g },
     { name: 'adviceGuard', ok: true },
+    // personaBoundary and tone (4.9 Phase B): registered after adviceGuard; both rules-only, so
+    // they run on every pass.
+    { name: 'personaBoundary', ok: true },
+    { name: 'tone', ok: true },
   ];
   return grounding.flatMap(pass);
 };
 
 describe('the post registry (4.7)', () => {
-  it('runs lockedLeak, answerLeak, grounding, then adviceGuard (4.8), weighted 2, 3, 4 and 4', () => {
-    const names = ['lockedLeak', 'answerLeak', 'grounding', 'adviceGuard'];
-    expect(postGuards.ordered().map((g) => g.name)).toEqual(names);
-    expect(names.map((n) => postGuards.weight(n))).toEqual([2, 3, 4, 4]);
-  });
+  it(
+    'runs lockedLeak, answerLeak, grounding, adviceGuard (4.8), then personaBoundary and tone ' +
+      '(4.9), weighted 2, 3, 4, 4, 1 and 1',
+    () => {
+      const names = [
+        'lockedLeak',
+        'answerLeak',
+        'grounding',
+        'adviceGuard',
+        'personaBoundary',
+        'tone',
+      ];
+      expect(postGuards.ordered().map((g) => g.name)).toEqual(names);
+      expect(names.map((n) => postGuards.weight(n))).toEqual([2, 3, 4, 4, 1, 1]);
+    },
+  );
 });
 
 describe('postGuard: grounding', () => {
@@ -354,9 +369,9 @@ describe('postGuard: three model or port calls in one turn (lead answer 1)', () 
   // signal) every slice is a little smaller than with three guards: after a ~330 ms rewrite the
   // judge gets about 530 ms of its 600 ms timeout. postGuard.advice.test.ts stacks all four.
   it.each([
-    { locked: 100, rewrite: 300, judge: 400 },
-    { locked: 120, rewrite: 330, judge: 520 },
-    { locked: 140, rewrite: 330, judge: 530 },
+    { locked: 80, rewrite: 250, judge: 300 },
+    { locked: 85, rewrite: 230, judge: 320 },
+    { locked: 90, rewrite: 230, judge: 330 },
   ])(
     'locked $locked ms, rewrite $rewrite ms, judge $judge ms: all three used, done inside the step',
     { timeout: 20_000 },
