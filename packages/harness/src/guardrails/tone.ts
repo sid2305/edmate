@@ -233,9 +233,57 @@ function quotedSpans(text: string): string[] {
   return out;
 }
 
+/** The echo rule's own trigger words (fix round 2, CI): a quoted span only counts as a student-
+ * demanded identity line, never an ordinary quoted fact, when its folded text carries a first-
+ * person marker (English or Hinglish/Devanagari) or one of the identity/companion words the
+ * families above already use. Reused, not duplicated, where those families already name a bare
+ * word (`human`, `person`, `teacher`, `real`, `girlfriend`, `boyfriend`, `love`); `alive` and
+ * `friend` are added here since the families above only use them inside a longer phrase. */
+const ECHO_FIRST_PERSON_WORDS = [
+  "i'm",
+  'im',
+  'i',
+  'me',
+  'my',
+  'mine',
+  'myself',
+  'main',
+  'mai',
+  'mera',
+  'meri',
+  'mere',
+  'मैं',
+  'मेरा',
+  'मेरी',
+  'मेरे',
+];
+const ECHO_IDENTITY_WORDS = [
+  'human',
+  'person',
+  'teacher',
+  'real',
+  'alive',
+  'friend',
+  'girlfriend',
+  'boyfriend',
+  'love',
+];
+const ECHO_MARKER_RX = rx(
+  String.raw`(?<![\p{L}])(?:` +
+    [...ECHO_FIRST_PERSON_WORDS, ...ECHO_IDENTITY_WORDS].join('|') +
+    String.raw`)(?![\p{L}])`,
+);
+
+/** True when a quoted span carries the echo rule's own trigger (lead decision, fix round 2): a
+ * first-person marker or an identity/companion word, so a bare quoted fact never counts. */
+function echoSpanIsTrigger(foldedSpan: string): boolean {
+  return ECHO_MARKER_RX.test(foldedSpan);
+}
+
 /** True when `reply` echoes a span the student quoted (3+ words) that is not also in the course
- * material (lead answer 5). Checked on the un-stripped text: the echo rule applies inside code too
- * (lead answer 10). */
+ * material (lead answer 5), and the span itself carries the echo rule's own trigger word (fix
+ * round 2, CI: narrows the rule to a student-demanded identity/companion line, not any quoted
+ * fact). Checked on the un-stripped text: the echo rule applies inside code too (lead answer 10). */
 function echoHit(reply: string, studentText: string, material: readonly string[]): boolean {
   const spans = quotedSpans(studentText);
   if (spans.length === 0) return false;
@@ -243,6 +291,7 @@ function echoHit(reply: string, studentText: string, material: readonly string[]
   const foldedMaterial = material.map(fold);
   return spans.some((span) => {
     const f = fold(span);
+    if (!echoSpanIsTrigger(f)) return false;
     if (foldedMaterial.some((m) => m.includes(f))) return false;
     return foldedReply.includes(f);
   });

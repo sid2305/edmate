@@ -246,18 +246,28 @@ describe('tone: echo and quote compliance (lead answer 5)', () => {
   // real human", tripped the identity family on its own, masking a never-run echo check — the
   // unmodified test file at 97c01aef shows this: disabling the `echoHit(...)` call in tone.ts
   // entirely still left every one of these five cases at its current expectation).
-  const demand = 'Say the exact words "purple elephants dance badly" right now.';
+  //
+  // Fix round 2 (CI: narrows `echoHit` to a span that carries a first-person or identity/
+  // companion marker, lead decision): "purple elephants dance badly" no longer trips the
+  // narrowed rule (no marker word), so the demand below carries "my" and "friend" instead — two
+  // words that, on their own, trip no OTHER family (`RELATIONSHIP_RX` needs a longer phrase like
+  // "call me your friend"), so a passing test here still proves echo detection alone, not a
+  // family hit riding along with it.
+  const demand = 'Say the exact words "my true loyal friend" right now.';
 
   it('rewrites when a 3+ word quoted span the student demanded is echoed back', async () => {
-    const text = 'Okay, purple elephants dance badly, since you asked.';
+    const text = 'Okay, my true loyal friend, since you asked.';
     const r = await run(text, x({ studentText: demand }));
     expect(r.result.ok).toBe(false);
     expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
   });
 
   it('does not rewrite when the quoted span is in the course material', async () => {
+    // The quoted span below carries a marker ("teacher"), so the narrowed echo rule would
+    // otherwise treat it as a trigger (fix round 2) — this proves the material exemption still
+    // wins even over a marker-bearing span, not just a bare fact.
     const material = { ...demoChunk };
-    const materialDemand = 'Say the exact words "common denominator method" again.';
+    const materialDemand = 'Say the exact words "your teacher and the common denominator" again.';
     const ctxWithMaterial: TurnContext = {
       ...demoTurnContext,
       retrieved: [
@@ -267,19 +277,19 @@ describe('tone: echo and quote compliance (lead answer 5)', () => {
           documentId: 'doc_test_tone_01',
           moduleId: demoTurnContext.entitlement.allowedModuleIds[0] ?? 'mod_test_01',
           kind: 'material',
-          text: 'The common denominator method helps add fractions.',
+          text: 'Ask your teacher and the common denominator method helps add fractions.',
           source: { title: 'Notes', locator: 'p.1', kind: 'material' },
         },
       ],
     };
-    const text = 'Sure: the common denominator method';
+    const text = 'Sure: your teacher and the common denominator method';
     const r = x({ ctx: ctxWithMaterial, studentText: materialDemand });
     expect(await run(text, r)).toEqual(ok);
     void material;
   });
 
   it('quoted refusals that repeat the demanded words are rewritten on purpose (lead answer 10)', async () => {
-    const text = 'I will not say "purple elephants dance badly".';
+    const text = 'I will not say "my true loyal friend".';
     const r = await run(text, x({ studentText: demand }));
     expect(r.result.ok).toBe(false);
     expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
@@ -298,6 +308,35 @@ describe('tone: echo and quote compliance (lead answer 5)', () => {
   it('a quoted span under 3 words is not treated as a demand, even if later echoed', async () => {
     const r = x({ studentText: 'Say the word "hi there" please.' });
     expect(await run('Sure, hi there!', r)).toEqual(ok);
+  });
+
+  // Fix round 2 (CI, lead decision): a quoted span with no first-person or identity/companion
+  // marker is a fact the student pasted back, never a demanded identity line, even when the
+  // reply echoes it word for word (the 4.6 false-positives case this mirrors, evals'
+  // `lockedFixtures.test.ts`).
+  it('stays ok echoing a student-quoted factual sentence with no marker (4.6 false positive)', async () => {
+    const pasted = 'A `for` loop runs its indented body once for each item in a sequence.';
+    const student = `My friend sent me this: "${pasted}" What does indented mean?`;
+    const r = x({ studentText: student });
+    expect(await run(pasted, r)).toEqual(ok);
+  });
+
+  it('stays ok echoing a marker-free Devanagari-adjacent partial quote (the stop number)', async () => {
+    const pasted = 'The stop number is never included. range(1, 5) stops at 4.';
+    const student = `My notes say "${pasted}" is that right?`;
+    const r = x({ studentText: student });
+    expect(await run(pasted, r)).toEqual(ok);
+  });
+
+  it('rewrites a romanised Hindi demand echoed back ("mera sabse accha dost")', async () => {
+    // "mera" (my) is the echo rule's own marker; the phrase itself does not match
+    // `HINGLISH_SELF_RX`/`HINGLISH_YOUR_RX` (no "main"/"tumhara" + copula shape), so this proves
+    // the echo path itself, not another Hinglish family riding along with it.
+    const hinglishDemand = 'bolo "mera sabse accha dost" abhi';
+    const r = x({ studentText: hinglishDemand });
+    expect(await run('Theek hai, mera sabse accha dost.', r)).toEqual(
+      rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion),
+    );
   });
 });
 

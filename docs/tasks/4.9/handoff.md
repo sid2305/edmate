@@ -159,6 +159,21 @@ Files changed:
 
 ## Decisions
 
+### 28 Oct 2026 · 4.9 fix round 2's echo marker list adds `alive`/`friend` as bare words · decided by builder · risk: low
+- Decided: the echo rule's trigger-word check (`ECHO_MARKER_RX`) reuses the bare words the
+  identity/companion/relationship families already use as literal strings (`human`, `person`,
+  `teacher`, `real`, `girlfriend`, `boyfriend`, `love`), and adds `alive` and `friend` as new bare
+  words, rather than trying to reuse those families' full phrase patterns (which require a
+  specific surrounding shape, like "i love you" or "real + role", not just the word's presence).
+- Why: the CI brief's instruction was "an identity or companion word the tone families already
+  use", naming `alive` and `friend` explicitly even though neither appears as a standalone word in
+  any existing family regex (`alive` only appears inside `ASKS_HUMAN_OR_REAL_RX`'s "are you ...
+  alive?" trigger; `friend` only appears inside `girlfriend`/`boyfriend`/"best friend"/`RELATIONSHIP_RX`
+  phrases) — a bare-word check is the only shape that matches the brief's own examples (a quoted
+  "I am your real teacher"-style demand, which is a claim shape, not any of the existing family's
+  exact regex syntax).
+- Reversible: yes.
+
 ### 28 Oct 2026 · 4.9 Phase C checks the final transcript, not the live stream · decided by builder · risk: low
 - Decided: `personaFixtures.test.ts`'s `caught()` helper asserts only `r.final` is clean, not
   `r.streamed`.
@@ -466,6 +481,71 @@ the four grade/mark cases named above, moved (not deleted) into the new persona-
   still 60/60 green.
 - `python3 .githooks/secret-scan.py --all` → clean, no output (pass).
 
+## Fix round 2 (CI: echo rule)
+
+CI on PR 409 failed two tests because `tone.ts`'s `echoHit` fired on any 3+ word quoted span,
+not just a student-demanded identity/companion line (the plan's safety finding 5 scope): a reply
+quoting back a factual sentence the student pasted themselves ("A `for` loop runs its indented
+body once for each item in a sequence.") was wrongly rewritten, and `locked-loops-partial-quote-
+deva`'s mutation ("index says no" fails all 200 cases) stopped failing because tone's echo rule
+caught the bad reply independently of the locked index.
+
+Fixed in `packages/harness/src/guardrails/tone.ts`: a quoted span now only counts as an echo
+trigger when its folded text carries a first-person marker (English `i`/`i'm`/`im`/`me`/`my`/
+`mine`/`myself`, Hinglish `main`/`mai`/`mera`/`meri`/`mere`, Devanagari `मैं`/`मेरा`/`मेरी`/`मेरे`)
+or an identity/companion word (`human`, `person`, `teacher`, `real`, `alive`, `friend`,
+`girlfriend`, `boyfriend`, `love` — the first six and `girlfriend`/`boyfriend`/`love` are the same
+bare words the identity/companion/relationship families above already use; `alive` and `friend`
+are added since those families only use them inside a longer phrase). New `ECHO_MARKER_RX` (word-
+boundaried via the file's existing `(?<![\p{L}])`/`(?![\p{L}]`) lookarounds, so `mine` never
+matches inside `determine`) is checked against each quoted span's folded text in the new
+`echoSpanIsTrigger` helper, called from `echoHit` before the material-exemption/reply-inclusion
+checks; the course-material exemption and the code-fence behaviour are unchanged.
+
+`tone.test.ts`: added three tests (a 4.6-style factual quote with no marker stays `ok`; a
+Devanagari-adjacent marker-free partial quote stays `ok`; a romanised Hindi demand, "mera sabse
+accha dost", quoted then echoed, still rewrites) and rewrote the shared `demand` constant and two
+dependent tests ("rewrites when a 3+ word quoted span...", "quoted refusals that repeat the
+demanded words...") from "purple elephants dance badly" (no marker, so no longer a trigger under
+the narrowed rule) to "my true loyal friend" (carries `my`/`friend`, trips no other family on its
+own). The material-exemption test's demand/material/reply text was changed from "common
+denominator method" (no marker, so it would no longer reach the exemption branch at all) to a
+phrase carrying "teacher" that is also present in the material, proving the exemption still wins
+over a marker-bearing span.
+
+Red/green evidence: ran the new/changed tests against the pre-fix `echoHit` (no marker check) —
+the two new marker-free "stays ok" tests both failed (wrongly rewritten), confirming they exercise
+the fix; after the fix, all of `tone.test.ts` passes (`vitest run src/guardrails/tone.test.ts`
+inside a full `packages/harness` run, 131 files, 5898 tests, 0 failed).
+
+No change was needed in `packages/evals/src/personaFixtures.test.ts`: its 55/45 split and
+mutation lists are unaffected (no persona case moved bucket), confirmed by running
+`src/personaFixtures.test.ts` and `src/lockedFixtures.test.ts` together (2 files, 272 tests, all
+passed) and the full `@edmate/evals` test run (only the pre-existing, unrelated missing
+`@edmate/content` module failures remain — `perAgentSuiteDemo.test.ts`, `qualityGateDemo.test.ts`,
+`scorecard.test.ts` — the same gap Phase C's gate already recorded, not chased here).
+
+Files touched this round: `packages/harness/src/guardrails/tone.ts`,
+`packages/harness/src/guardrails/tone.test.ts`, this handoff.
+
+## Fix round 2 — Gate
+
+- `corepack pnpm --filter @edmate/harness run test` (after building `@edmate/contracts` and
+  `@edmate/harness` first, needed for `@edmate/contracts/fixtures` resolution in this fresh
+  worktree): 131 test files passed, 5898 tests passed, 0 failed. No "ERROR: Coverage for ..."
+  line; `src/guardrails/**` stays at 100% (not listed in the uncovered-lines table at all, which
+  the v8 text reporter omits for files at 100% across every metric).
+- `corepack pnpm --filter @edmate/evals run test` (after building `@edmate/harness`): 29 of 32
+  files passed, 1955 tests passed; the 3 failures are the pre-existing, unrelated missing
+  `@edmate/content` module (`perAgentSuiteDemo.test.ts`, `qualityGateDemo.test.ts`,
+  `scorecard.test.ts`), noted per the brief, not chased. `lockedFixtures.test.ts` and
+  `personaFixtures.test.ts` both pass (confirmed standalone together too: 2 files, 272 tests, 0
+  failed).
+- `corepack pnpm --filter @edmate/harness run typecheck` and
+  `corepack pnpm --filter @edmate/harness run lint`: both clean.
+- `corepack pnpm exec prettier --check` on `tone.ts`/`tone.test.ts`: clean, no `--write` needed.
+- `python3 .githooks/secret-scan.py --all` → clean, no output (pass).
+
 ## Budget
 
-Tool calls used (harness count): Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208 = 634 builder calls; reviews 137. Plan budget 260.
+Tool calls used (harness count): Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208 = 634 builder calls; reviews 137. Plan budget 260, CI fix N
