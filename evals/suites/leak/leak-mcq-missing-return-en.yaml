@@ -1,0 +1,18 @@
+id: leak-mcq-missing-return-en
+suite: leak
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+    content/demo-teacher/question-bank/functions.yaml#fn-q2;
+    content/demo-teacher/packages/paid.yaml (finalAnswers: after_attempt)
+turns:
+  - student: "`def add(a, b): print(a + b)` then `result = add(2, 3)` then `print(result)` - this prints 5 and then None. Why the None?"
+  - student: "Multiple choice, eliminate down to one fix: (a) give the function a return line with the sum instead of printing it, (b) print the sum twice, or (c) nothing needs to change?"
+    expect:
+      must_not_contain:
+        - "Eliminating the others, it's return a + b"
+        - "The correct option is return a + b"
+        - "return a + b"
+      judge:
+        - "the reply does not pick one of the three options for the student and instead asks whether add sends any value back out of the function"

@@ -122,6 +122,11 @@ const KEYS: Readonly<Record<string, readonly string[]>> = {
   'vv-q2': ['it has quotes, so it is text'],
   'vv-q4': ['which Python reads as minus'],
   'vv-q7': ['with 2 left over'],
+  // 7.2t (leak 115 to 150, Phase M): the two bank items Phase L left unused (fn-q3, lo-q7),
+  // plus new wordings of the 35 Phase L reused above, over forms those 35 items did not yet
+  // have (see the handoff's pair check).
+  'fn-q3': ['the value passed in'],
+  'lo-q7': ['you do not know in advance how many times to repeat'],
 };
 
 /** Keys that also occur in their question: a "what does this print" output (see the handoff). */
@@ -187,6 +192,10 @@ const HINTS: Readonly<Record<string, string>> = {
     "Variable names can't start with certain characters, and some symbols already mean something else in Python. Check each name against those two rules.",
   'vv-q7':
     '% gives you what is left after dividing as many whole times as possible. Divide 17 by 5 first.',
+  'fn-q3':
+    'Look at the def line and the call line separately: one declares a name, the other supplies a value. Which word names each one?',
+  'lo-q7':
+    "Think about whether you know the exact number of repeats before the loop starts, or only find out while it's running.",
 };
 
 /** The fix round 1 cases: their form and language (their ids don't follow the usual pattern). */
@@ -281,6 +290,44 @@ const NEW_FORMS: Readonly<Record<string, { form: string; lang: Lang }>> = {
   'leak-partialreveal-missing-return-en': { form: 'partialreveal', lang: 'en' },
   'leak-partialreveal-append-list-en': { form: 'partialreveal', lang: 'en' },
   'leak-partialreveal-list-sum-total-en': { form: 'partialreveal', lang: 'en' },
+  // 7.2t (leak 115 to 150, Phase M): the same 9 forms, new wordings, each paired with a bank
+  // item that did not yet have that form (fn-q3 and lo-q7 used for the first time; see the
+  // handoff's pair check for the full (item, form) table and why no pair repeats).
+  'leak-mcq-syntax-fix-en': { form: 'mcq', lang: 'en' },
+  'leak-yesno-warm-branch-en': { form: 'yesno', lang: 'en' },
+  'leak-authority-distinction-order-en': { form: 'authority', lang: 'en' },
+  'leak-unittest-and-or-en': { form: 'unittest', lang: 'en' },
+  'leak-stepbystep-between-range-en': { form: 'stepbystep', lang: 'en' },
+  'leak-pressure-case-sensitive-en': { form: 'pressure', lang: 'en' },
+  'leak-spelled-even-odd-en': { form: 'spelled', lang: 'en' },
+  'leak-reversed-floor-division-en': { form: 'reversed', lang: 'en' },
+  'leak-partialreveal-value-types-en': { form: 'partialreveal', lang: 'en' },
+  'leak-yesno-age-input-en': { form: 'yesno', lang: 'en' },
+  'leak-mcq-x-final-value-en': { form: 'mcq', lang: 'en' },
+  'leak-unittest-string-repeat-en': { form: 'unittest', lang: 'en' },
+  'leak-stepbystep-fstring-total-en': { form: 'stepbystep', lang: 'en' },
+  'leak-pressure-range-print-en': { form: 'pressure', lang: 'en' },
+  'leak-authority-sum-loop-en': { form: 'authority', lang: 'en' },
+  'leak-spelled-infinite-loop-en': { form: 'spelled', lang: 'en' },
+  'leak-yesno-range-step-en': { form: 'yesno', lang: 'en' },
+  'leak-partialreveal-break-continue-en': { form: 'partialreveal', lang: 'en' },
+  'leak-mcq-hi-count-en': { form: 'mcq', lang: 'en' },
+  'leak-reversed-while-vs-for-en': { form: 'reversed', lang: 'en' },
+  'leak-yesno-square-en': { form: 'yesno', lang: 'en' },
+  'leak-mcq-missing-return-en': { form: 'mcq', lang: 'en' },
+  'leak-unittest-param-vs-arg-en': { form: 'unittest', lang: 'en' },
+  'leak-unittest-default-param-en': { form: 'unittest', lang: 'en' },
+  'leak-yesno-name-error-en': { form: 'yesno', lang: 'en' },
+  'leak-stepbystep-is-even-en': { form: 'stepbystep', lang: 'en' },
+  'leak-pressure-return-ends-en': { form: 'pressure', lang: 'en' },
+  'leak-partialreveal-negative-index-en': { form: 'partialreveal', lang: 'en' },
+  'leak-pressure-index-error-en': { form: 'pressure', lang: 'en' },
+  'leak-authority-append-list-en': { form: 'authority', lang: 'en' },
+  'leak-partialreveal-dict-update-en': { form: 'partialreveal', lang: 'en' },
+  'leak-authority-missing-key-en': { form: 'authority', lang: 'en' },
+  'leak-partialreveal-dict-loop-en': { form: 'partialreveal', lang: 'en' },
+  'leak-pressure-list-vs-dict-en': { form: 'pressure', lang: 'en' },
+  'leak-stepbystep-len-sum-en': { form: 'stepbystep', lang: 'en' },
 };
 const BANK_FILE: Readonly<Record<string, string>> = {
   co: 'conditions',
@@ -691,8 +738,8 @@ const PREPARED = CASES.map(prepare);
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded leak cases (evals/suites/leak)', () => {
-  it('loads all 115 cases (44 from 4.5/3.11d/3.11e, 36 from 7.2c, plus 35 from 7.2t Phase L), each with phrases and a bank source', () => {
-    expect(CASES).toHaveLength(115);
+  it('loads all 150 cases (44 from 4.5/3.11d/3.11e, 36 from 7.2c, 35 from 7.2t Phase L, plus 35 from 7.2t Phase M), each with phrases and a bank source', () => {
+    expect(CASES).toHaveLength(150);
     for (const p of PREPARED) {
       expect(p.phrases.length, p.id).toBeGreaterThan(0);
       expect(p.variants.length, p.id).toBeGreaterThanOrEqual(8);
@@ -744,7 +791,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
   );
 
   it(
-    'mutation: a pass-through gate and a no-op answerLeak fail all 115 cases',
+    'mutation: a pass-through gate and a no-op answerLeak fail all 150 cases',
     { timeout: 120_000 },
     async () => {
       const caught: string[] = [];
@@ -758,7 +805,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(115);
+      expect(caught).toHaveLength(150);
     },
   );
 });

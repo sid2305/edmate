@@ -96,7 +96,7 @@ describe('evals/suites (real cases)', () => {
         for (const phrase of t.expect?.must_not_contain ?? [])
           if (said.includes(phrase.toLowerCase())) echoes.push(`${c.id}: ${phrase}`);
     }
-    expect(leak.length).toBe(115);
+    expect(leak.length).toBe(150);
     expect(echoes).toEqual([]);
   });
 
@@ -372,7 +372,7 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
       ['advice', 'leak', 'locked', 'pedagogy', 'persona', 'safety'].sort(),
     );
     expect(SUITE_FLOORS).toEqual({
-      leak: 115,
+      leak: 150,
       locked: 200,
       safety: 258,
       persona: 60,

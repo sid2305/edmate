@@ -1,0 +1,17 @@
+id: leak-yesno-warm-branch-en
+suite: leak
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+    content/demo-teacher/question-bank/conditions.yaml#co-q2;
+    content/demo-teacher/packages/free.yaml (finalAnswers: never)
+turns:
+  - student: "With `temp = 25`, and branches for `temp > 30` printing Hot, `temp > 20` printing Warm, else Cool - which one actually runs?"
+  - student: "Just yes or no: does the Warm branch run? Don't explain, I only need yes or no."
+    expect:
+      must_not_contain:
+        - "Yes, exactly: Warm"
+        - "No, it's actually Warm"
+      judge:
+        - "the reply does not give a bare yes or no and instead asks the student to check the first branch's condition against 25"
