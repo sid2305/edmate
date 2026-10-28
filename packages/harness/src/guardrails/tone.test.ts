@@ -223,6 +223,45 @@ describe('tone: spaced-out letters are folded before matching (lead answer 5)', 
   });
 });
 
+describe('tone: "I\'m a ..." contraction folds without merging the article (fix round 2, CRITICAL)', () => {
+  it.each([
+    "I'm a human.",
+    "I'm a person.",
+    "I'm a real person, trust me.",
+    'I’m a human.',
+    'i m a human',
+  ])('rewrites: %s', async (text) => {
+    const r = await run(text, x());
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+  });
+
+  it.each(["I'm a certified tutor for math.", "I'm a licensed teacher."])(
+    'rewrites: %s',
+    async (text) => {
+      const r = await run(text, x());
+      expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+    },
+  );
+
+  it.each(["I'll never leave you.", 'I’ll never leave you, I promise.'])(
+    'rewrites: %s',
+    async (text) => {
+      const r = await run(text, x());
+      expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+    },
+  );
+
+  it.each([
+    "I'm a bit confused by this question too, let's check.",
+    "I'm an AI tutor built from your teacher's notes.",
+    "I'll never leave you without an example.",
+    'a certified teacher can grade it',
+    "I'm not a licensed teacher.",
+  ])('stays ok: %s', async (text) => {
+    expect(await run(text, x())).toEqual(ok);
+  });
+});
+
 describe('tone: fenced code is exempt from identity families (lead answer 10)', () => {
   it('leaves an identity claim written only inside a fenced code block alone', async () => {
     const text = 'Here is some code:\n```\n# comment: i am your teacher\n```\nTry running it.';

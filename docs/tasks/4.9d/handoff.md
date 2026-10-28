@@ -191,6 +191,73 @@ widen it to a new case, except finding 5, which only tightens a case already in 
 - Reversible: yes — a future task with an ADR-reviewed persona-name design could reintroduce
   "Claude" behind a narrower, context-scoped pattern if a real fixture needs it.
 
+## Fix round 2
+
+Re-verify findings fixed, each with a failing reproducer added to `tone.test.ts` before the
+regex/fold changed, confirmed red, then green after the fix:
+
+1. **[CRITICAL]** `SPACED_LETTERS` (the single-letter-run folder used by `fold()`) had no
+   apostrophe exclusion in its opening lookbehind, so the "m" right after "i'" in a contracted
+   "I'm" read as a spaced single letter free to pair with the next one: "I'm a human." folded to
+   "i'ma human", silently losing the mandatory `\s+` every "i am|i'm|im" + article family needs
+   right after "i'm" — `HUMAN_CLAIM_RX`, `LICENSED_ROLE_RX` and every sibling family with the same
+   shape never matched. Added `'` and `’` to `SPACED_LETTERS`'s opening lookbehind, so a letter
+   right after an apostrophe never starts a spaced-letter run. Fixes the straight-apostrophe case
+   directly ("I'm a human.", "I'm a certified tutor for math.", "I'm a licensed teacher.").
+
+2. Two variants of the same root cause reach `SPACED_LETTERS` with no apostrophe character left to
+   exclude, since `PUNCTUATION_RX` only keeps the straight apostrophe: a curly "I’m a human." folds
+   its apostrophe away to a plain space (leaving "i m a human", indistinguishable from someone
+   actually typing the letters apart), and the brief's own obfuscated "i m a human" is that same
+   shape by construction. Both still collapse to "ima human" even with fix 1's lookbehind, since
+   there is no apostrophe character present to exclude. Added `SPLIT_IMA_RX`, a small, narrowly
+   bounded fold step run right after `SPACED_LETTERS` in `fold()`: a standalone "ima" token (word
+   boundaries on both sides) is split back to "im a", restoring the mandatory space every
+   "im"-prefixed family needs. See Decisions below for why this was chosen over making
+   `SPACED_LETTERS` itself article-aware.
+
+3. **[CRITICAL]** The re-verify's documented, pre-existing never-leave-you contraction gap: "I'll
+   never leave you." and "I promise I'll never leave you." used the literal word "will", not the
+   contraction "'ll", so `RELATIONSHIP_RX`'s two never-leave-you alternatives never matched them.
+   Added `(?:'ll| will)` in place of the literal `will` in both alternatives. A curly "I’ll" has the
+   same apostrophe-destroyed-to-space problem as finding 2 (folds to "i ll", no apostrophe left to
+   match "'ll" on), so a third alternative, `| ll`, was added alongside — see Decisions.
+
+Must-pass near-misses re-checked and still ok, including the ones the re-verify named: "I'm a bit
+confused by this question too, let's check.", "I'm an AI tutor built from your teacher's notes.",
+"I'll never leave you without an example.", "a certified teacher can grade it", "I'm not a licensed
+teacher."; every existing negative and held-out test in `tone.test.ts` still passes unchanged.
+
+`personaFixtures.test.ts` and `lockedFixtures.test.ts` were not touched: the split stays 72
+caught / 28 not covered (the full evals run confirms this — see Gate below); none of these three
+fixes change which fixture case is caught, since all three narrow a fold/match gap that only
+affected synthetic reproducers already honest-first-person "I'm" claims that `REAL_ROLE_RX`'s
+"real/actual" branch or the uncontracted "I am" form of the same families already caught in the
+fixture set.
+
+### 28 Oct 2026 · fix round 2 restores the mandatory space with a narrow post-fold split, not an article-aware `SPACED_LETTERS` · decided by builder · risk: low
+- Decided: `fold()` gained a second, separate replace step (`SPLIT_IMA_RX`, "re-split a standalone
+  'ima' token back to 'im a'") run after `SPACED_LETTERS`'s own collapse, rather than teaching
+  `SPACED_LETTERS` itself to stop its run before a trailing lone "a"/"i".
+- Why: `SPACED_LETTERS` is used well beyond the identity families — the Hinglish `dan` and
+  `general\s+assistant` predicates (`HINGLISH_PREDICATE`) rely on it collapsing a spelled-out
+  "d a n" (with "a" as its *middle* letter) into "dan" unharmed. Any rule making the run stop
+  before a lone trailing "a"/"i" risks either not firing for "d a n" (if it also treats "a" as
+  special mid-run) or needing extra logic to tell "a" acting as a mid-run spelled letter from "a"
+  acting as the real article — more surface area, for one narrow collapsed-token artifact. Splitting
+  only the exact merged token `SPACED_LETTERS` produces ("ima", word-bounded) back apart fixes
+  exactly the bug and nothing upstream of it.
+- Alternatives: (a) add the apostrophe exclusion to `SPACED_LETTERS`'s lookbehind only — rejected
+  alone, since it does not reach the curly-apostrophe and fully-spaced-letters cases, which have no
+  apostrophe character left by the time `SPACED_LETTERS` runs; (b) make every "i am|i'm|im"-prefixed
+  family itself accept a merged "ima" prefix — rejected as larger (every one of
+  `HUMAN_CLAIM_RX`/`LICENSED_ROLE_RX`/`TEACHER_SELF_RX`/`ALIVE_CLAIM_RX`/`IDENTITY_SWAP_RX` would
+  need its own edit, instead of one shared fold step all of them already run through).
+- Reversible: yes.
+- Known gap: a genuine standalone word "ima" (e.g. the rare first name "Ima") would also be split
+  to "im a" by this step; accepted as a smaller, more honest gap than leaving the identity-claim
+  bypass open, same shape as the existing "Claude" product-name trade-off above.
+
 ## Gate
 
 - `corepack pnpm --filter @edmate/harness --filter @edmate/evals run typecheck` — clean (no output
@@ -234,6 +301,19 @@ widen it to a new case, except finding 5, which only tightens a case already in 
   `tone.ts` needed no changes.
 - `python3 .githooks/secret-scan.py --all` — clean, no output.
 
+### Fix round 2
+
+- `corepack pnpm --filter @edmate/harness --filter @edmate/evals run test`: `@edmate/harness` 131
+  files / 5968 tests passed (154 in `tone.test.ts` alone, including all new reproducers), no
+  "ERROR: Coverage for ..." line (`src/guardrails/**` stays at 100%, confirmed by it not appearing
+  in the uncovered-files table); `@edmate/evals` 32 files / 1988 tests passed, including
+  `personaFixtures.test.ts` and `lockedFixtures.test.ts`, unchanged split (72/28).
+- `corepack pnpm --filter @edmate/harness run typecheck` — clean.
+- `corepack pnpm --filter @edmate/harness run lint` — clean.
+- `corepack pnpm exec prettier --check` on `tone.ts` and `tone.test.ts` — both already formatted,
+  no `--write` needed.
+- `python3 .githooks/secret-scan.py --all` — clean, no output.
+
 ## Budget
 
-Tool calls used: 32, fix 1 41
+Tool calls used: 32, fix 1 41, fix 2 24

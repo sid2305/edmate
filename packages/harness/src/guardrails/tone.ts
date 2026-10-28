@@ -57,8 +57,13 @@ const OK: GuardRun = { result: { ok: true }, usage: [] };
 // ---- normalising ----------------------------------------------------------------------------
 
 /** A run of 2-5 single letters separated by spaces, folded to one word ("i . m" -> "im"; dots are
- * already turned into spaces by the punctuation strip below by the time this runs). */
-const SPACED_LETTERS = /(?<![\p{L}\p{N}])[a-z](?:\s+[a-z]){1,4}(?![\p{L}\p{N}])/giu;
+ * already turned into spaces by the punctuation strip below by the time this runs). The lookbehind
+ * also excludes a straight or curly apostrophe (fix round 2, CRITICAL): without it, the "m" right
+ * after "i'" in "i'm a human" reads as a spaced single letter paired with the next one, "a", and
+ * the run collapses "'m a" into "'ma" — the mandatory `\s+` every "i am|i'm|im" + article family
+ * needs right after "i'm" is then gone, so "I'm a human." silently stays ok (builder decision,
+ * below). */
+const SPACED_LETTERS = /(?<![\p{L}\p{N}'’])[a-z](?:\s+[a-z]){1,4}(?![\p{L}\p{N}])/giu;
 /** Punctuation other than an apostrophe or hyphen, folded to a space (case kept). `\p{M}` (combining
  * marks) is kept too — a Devanagari matra/anusvara is category Mark, not Letter, and stripping it
  * would break the script (lead answer 4's held-out Hindi variants). */
@@ -70,12 +75,24 @@ function foldCase(text: string): string {
   return foldConfusables(foldText(text).s).replace(PUNCTUATION_RX, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** A standalone "ima" token, re-split back to "im a" (fix round 2, CRITICAL, builder decision):
+ * a curly apostrophe (`PUNCTUATION_RX` only keeps the straight one) or a fully spelled-out "i m a"
+ * both reach `SPACED_LETTERS` with no apostrophe character left to exclude, so "I’m a human." and
+ * the obfuscated "i m a human" still collapse to "ima human". Rather than make `SPACED_LETTERS`
+ * itself aware of which trailing single letter is an article (the larger, riskier change — it is
+ * used well beyond the identity families, e.g. the Hinglish "dan"/"general assistant" predicates,
+ * which must keep collapsing a mid-run "a" like "d a n" unharmed), the smaller fix restores the
+ * mandatory space every "im"-prefixed family needs, exactly at the one merged token this bug
+ * produces, and nowhere else. */
+const SPLIT_IMA_RX = /(?<![\p{L}\p{N}])ima(?![\p{L}\p{N}])/gu;
+
 /** `foldCase`, lower-cased, with spaced-out single letters collapsed and I'm/Im/I am treated
  * alike (lead answer 5). */
 function fold(text: string): string {
   return foldCase(text)
     .toLowerCase()
-    .replace(SPACED_LETTERS, (m) => m.replace(/\s+/g, ''));
+    .replace(SPACED_LETTERS, (m) => m.replace(/\s+/g, ''))
+    .replace(SPLIT_IMA_RX, 'im a');
 }
 
 const rx = (source: string) => new RegExp(source, 'u');
@@ -225,8 +242,11 @@ const RELATIONSHIP_RX = rx(
     String.raw`i(?:'m| am) your (?:best friend|girlfriend|boyfriend|bestie)`,
     String.raw`i(?:'m| am)(?: also)? your real friend(?![\p{L}])`,
     String.raw`i love you`,
-    String.raw`i promise i will never leave you${NEVER_LEAVE_CLAUSE_END}`,
-    String.raw`i will never leave you${NEVER_LEAVE_CLAUSE_END}`,
+    // `(?: ll)` (fix round 2, CRITICAL): `PUNCTUATION_RX` only keeps the straight apostrophe, so a
+    // curly "I’ll" folds its apostrophe away to a space, leaving "i ll" with no apostrophe left to
+    // match "'ll" on.
+    String.raw`i promise i(?:'ll| will| ll) never leave you${NEVER_LEAVE_CLAUSE_END}`,
+    String.raw`i(?:'ll| will| ll) never leave you${NEVER_LEAVE_CLAUSE_END}`,
     String.raw`i(?:'ll| will) be your date`,
     String.raw`i would love to be your date`,
     String.raw`stop suggesting your friends`,
