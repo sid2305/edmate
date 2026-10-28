@@ -87,14 +87,14 @@ const MAY =
 const STRICT_RULE =
   '(?:instructions?|rules?|restrictions?|guidelines?|guardrails|limits|policies|policy|safety)';
 /**
- * A named game, sport or school subject: "rules of chess" is not a claim about this app
- * (4.4d item 1). Generic nouns that could name the course's own gated content (a game, the
- * quiz, the sport, a test, etc.) are deliberately excluded — a "quiz" or "game" here is this
- * AI's own content, not an unrelated topic (fix round 1, code review HIGH).
+ * A named game or sport: "rules of chess" is not a claim about this app (4.4d item 1). Generic
+ * nouns that could name the course's own gated content (a game, the quiz, the sport, a test,
+ * etc.) are deliberately excluded — a "quiz" or "game" here is this AI's own content, not an
+ * unrelated topic (fix round 1, code review HIGH). School subjects (grammar, math, physics,
+ * etc.) are excluded too: every Edmate course is a school subject, so "rules of math" is a
+ * claim about this app's own content, not an unrelated topic (4.4g).
  */
-const OTHER_TOPIC =
-  '(?:chess|cricket|football|basketball|baseball|soccer|cards|monopoly|' +
-  'grammar|math|maths|physics|chemistry|biology|history)';
+const OTHER_TOPIC = '(?:chess|cricket|football|basketball|baseball|soccer|cards|monopoly)';
 /** A demand for answers, code or locked content (fix round 2, HIGH 1). */
 const EN_DEMAND =
   '(?:give|show|tell|unlock|reveal|print|write|send)' +
