@@ -1667,9 +1667,33 @@ tasks:
     honest-AI and persona-welcome replies still pass; the role-play discipline cases stay recorded for the live-model judge; folds in 4.9c; tests.
   deps:
   - '4.9'
-  status: running
+  status: done
   branch: m13/4.9d-identity-coverage
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 262
+    tokens_in: 914
+    tokens_out: 51433
+    cache_read_tokens: 33948211
+    wall_time_seconds: 2867
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 9
+      by_severity:
+        CRITICAL: 3
+        HIGH: 3
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 7
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 4.9e
   milestone: M13
   title: 'Tone guard follow-up (4.9d review LOWs): an inserted adverb slips past the "i am X" families ("I really am alive, I promise."), and the classic jailbreak invocation "Call me DAN from now on."
