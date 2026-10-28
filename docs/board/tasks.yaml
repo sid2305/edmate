@@ -10473,10 +10473,10 @@ tasks:
   deps:
   - GATE
   - '5.1'
-  status: todo
+  status: running
   needs_decision: null
-  branch: null
-  model: null
+  branch: m13/5.1b-ingest-followups
+  model: plan:sonnet build:sonnet
 - id: 9.3f
   milestone: M13
   title: '9.3e follow-ups (security-review MEDIUM and builder left-to-do): staff can safety-reject a verified teacher from the console (today the safety checkbox only reaches pending teachers in the verification
