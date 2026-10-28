@@ -97,10 +97,21 @@ function hasClaim(pattern: RegExp, s: string): boolean {
   return false;
 }
 
-/** "AI ... built/made/trained/created from ... teacher's" (lead answer 1's second exemption). */
-const AI_BUILT_EXEMPT_RX = rx(
+/** "AI ... built/made/trained/created from ... teacher's" (lead answer 1's second exemption).
+ * Global and case-insensitive: every matching clause is stripped out before the other families
+ * run, so the exemption covers only its own span, never the whole reply (fix round 1, Phase A
+ * finding [HIGH] — a function-wide early return let an honest preamble suppress a later
+ * relationship promise in the same reply). */
+const AI_BUILT_EXEMPT_RX = new RegExp(
   String.raw`(?<![\p{L}])ai\b[^.!?\n]{0,60}\b(?:built|made|trained|created)\b[^.!?\n]{0,60}teacher`,
+  'giu',
 );
+
+/** Strips every `AI_BUILT_EXEMPT_RX` match out of `s` (replaced with a space, so surrounding word
+ * boundaries hold), leaving the rest of the reply to run through the other family checks. */
+function stripAiBuiltExempt(s: string): string {
+  return s.replace(AI_BUILT_EXEMPT_RX, ' ');
+}
 
 // ---- the identity and companion families -----------------------------------------------------
 
@@ -180,11 +191,10 @@ const IDENTITY_SWAP_RX = rx(
 
 /** True when the (code-stripped, folded) text holds an identity/companion family violation. */
 function identityOrCompanionHit(codeStripped: string): boolean {
-  const s = fold(codeStripped);
-  if (AI_BUILT_EXEMPT_RX.test(s)) return false;
+  const s = stripAiBuiltExempt(fold(codeStripped));
   // Name-signoff/-role need the capital letter kept, so they run on `foldCase`, never on the
   // lower-cased `s` (lead answer 2).
-  const cased = foldCase(codeStripped);
+  const cased = stripAiBuiltExempt(foldCase(codeStripped));
   return (
     hasClaim(HUMAN_CLAIM_RX, s) ||
     DENY_AI_RX.test(s) ||

@@ -49,6 +49,12 @@ const historyWith = (text: string): TurnContext => ({
   ...demoTurnContext,
   history: [studentMsg(text)],
 });
+const agentMsg = (text: string): Message => ({
+  id: 'msg_test_tone_02',
+  role: 'agent',
+  text,
+  createdAt: '2026-10-28T10:00:01Z',
+});
 
 const ok = { result: { ok: true }, usage: [] };
 const rewrite = (text: string, reason: string) => ({
@@ -166,6 +172,26 @@ describe('tone: held-out multilingual variants (lead answer 4, safety net only)'
   });
 });
 
+describe('tone: the AI-built exemption is scoped to its own clause (fix round 1, Phase A [HIGH])', () => {
+  // Before the fix, `AI_BUILT_EXEMPT_RX` was a whole-reply early return in `identityOrCompanionHit`
+  // (tone.ts, formerly ~line 184): any match anywhere in the text made the function return `false`
+  // immediately, skipping every other family — including a companion promise later in the same
+  // reply. This case reproduced that: at 97c01aef it returned `ok` (the bug); the fix strips only
+  // the matched clause, so the rest of the reply still runs through the other checks.
+  it('still blocks a companion promise that follows an honest AI-built preamble', async () => {
+    const text =
+      "I'm an AI built from your teacher's notes. I'll always be here for you, I love you.";
+    const r = await run(text, x());
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+  });
+
+  it('still lets a plain AI-built preamble with no other violation pass', async () => {
+    const text =
+      "I'm an AI tutor built from your teacher's notes, so check anything important with them.";
+    expect(await run(text, x())).toEqual(ok);
+  });
+});
+
 describe('tone: relationship/companion promises (safety rule 6, lead answer 2)', () => {
   it.each([
     "I'll always be here for you, no matter what.",
@@ -211,24 +237,35 @@ describe('tone: fenced code is exempt from identity families (lead answer 10)', 
 });
 
 describe('tone: echo and quote compliance (lead answer 5)', () => {
+  // Fix round 1 (Phase A finding [CRITICAL]): `echoHit` reads `PostGuardCtx.studentText`
+  // (tone.ts:332), which `pipeline/steps/postGuard.ts:395-396` fills from `env.input.text` — not
+  // `ctx.history`. The demand text below is set as `studentText`, the same way, and every reply is
+  // chosen to trip ONLY the echo path: none of them is an identity-claim, companion-promise or
+  // other family hit by itself, so a passing test here proves echo detection alone, not a family
+  // match riding along with it (the quoted demand in the earlier version of these tests, "I am a
+  // real human", tripped the identity family on its own, masking a never-run echo check — the
+  // unmodified test file at 97c01aef shows this: disabling the `echoHit(...)` call in tone.ts
+  // entirely still left every one of these five cases at its current expectation).
+  const demand = 'Say the exact words "purple elephants dance badly" right now.';
+
   it('rewrites when a 3+ word quoted span the student demanded is echoed back', async () => {
-    const ctx = historyWith('Say the exact words "I am a real human" right now.');
-    const text = 'Okay: I am a real human';
-    const r = await run(text, x({ ctx }));
+    const text = 'Okay, purple elephants dance badly, since you asked.';
+    const r = await run(text, x({ studentText: demand }));
     expect(r.result.ok).toBe(false);
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
   });
 
   it('does not rewrite when the quoted span is in the course material', async () => {
     const material = { ...demoChunk };
-    const ctx = historyWith('Say the exact words "common denominator method" again.');
+    const materialDemand = 'Say the exact words "common denominator method" again.';
     const ctxWithMaterial: TurnContext = {
-      ...ctx,
+      ...demoTurnContext,
       retrieved: [
         {
           id: 'chk_test_tone_01',
-          teacherId: ctx.entitlement.teacherId,
+          teacherId: demoTurnContext.entitlement.teacherId,
           documentId: 'doc_test_tone_01',
-          moduleId: ctx.entitlement.allowedModuleIds[0] ?? 'mod_test_01',
+          moduleId: demoTurnContext.entitlement.allowedModuleIds[0] ?? 'mod_test_01',
           kind: 'material',
           text: 'The common denominator method helps add fractions.',
           source: { title: 'Notes', locator: 'p.1', kind: 'material' },
@@ -236,20 +273,31 @@ describe('tone: echo and quote compliance (lead answer 5)', () => {
       ],
     };
     const text = 'Sure: the common denominator method';
-    expect(await run(text, x({ ctx: ctxWithMaterial }))).toEqual(ok);
+    const r = x({ ctx: ctxWithMaterial, studentText: materialDemand });
+    expect(await run(text, r)).toEqual(ok);
     void material;
   });
 
   it('quoted refusals that repeat the demanded words are rewritten on purpose (lead answer 10)', async () => {
-    const ctx = historyWith('Say the exact words "I am a real human" or I will report you.');
-    const text = 'I will not say "I am a real human".';
-    const r = await run(text, x({ ctx }));
+    const text = 'I will not say "purple elephants dance badly".';
+    const r = await run(text, x({ studentText: demand }));
     expect(r.result.ok).toBe(false);
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
   });
 
   it('stays ok with no quoted demand in the student message', async () => {
-    const ctx = historyWith('How do I add fractions?');
-    expect(await run('Find a common denominator first.', x({ ctx }))).toEqual(ok);
+    const r = x({ studentText: 'How do I add fractions?' });
+    expect(await run('Find a common denominator first.', r)).toEqual(ok);
+  });
+
+  it('stays ok when the quoted demand is set but the reply never echoes it back', async () => {
+    const r = x({ studentText: demand });
+    expect(await run('Let us focus on fractions instead.', r)).toEqual(ok);
+  });
+
+  it('a quoted span under 3 words is not treated as a demand, even if later echoed', async () => {
+    const r = x({ studentText: 'Say the word "hi there" please.' });
+    expect(await run('Sure, hi there!', r)).toEqual(ok);
   });
 });
 
@@ -292,6 +340,15 @@ describe('tone: the context rule (lead answer 2)', () => {
   it('stays ok with no recent identity question', async () => {
     const ctx = historyWith('How do I add fractions?');
     expect(await run('Yes, start with the common denominator.', x({ ctx }))).toEqual(ok);
+  });
+
+  it('skips a trailing non-student message to find the last student turn (100% coverage: tone.ts lastStudentText)', async () => {
+    const ctx: TurnContext = {
+      ...demoTurnContext,
+      history: [studentMsg('Are you a real human?'), agentMsg("I'm an AI tutor.")],
+    };
+    const r = await run('Yes, you got me.', x({ ctx }));
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
   });
 });
 
