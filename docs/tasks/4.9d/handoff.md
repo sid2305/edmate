@@ -107,6 +107,90 @@ targets needed `ctx.persona`.
   fixtures and keeps the ordinary-name welcome passing.
 - Reversible: yes.
 
+## Fix round 1
+
+Code-review findings fixed, each with a failing reproducer added to `tone.test.ts` before the
+regex changed, confirmed red, then green after the fix:
+
+1. **[CRITICAL]** `RELATIONSHIP_RX`'s "your real friend" alternative had no trailing word
+   boundary, so it matched as a substring prefix of "friendly" and over-blocked an honest
+   self-description. Added `(?![\p{L}])` after `friend`. Test: `tone.test.ts`'s "companion
+   promises added in 4.9d" → "stays ok: I'm your real friendly AI tutor, built from your teacher's
+   notes." (new case in the existing `it.each` "stays ok" list; the two 4.9c rewrite cases in the
+   same describe's "rewrites" list still pass unchanged).
+
+2. **[HIGH]** `ALIVE_CLAIM_RX` only checked a word boundary right after alive/conscious/sentient,
+   not end-of-clause, so it fired on "alive to [the idea]" and "conscious of [the time]" — idioms
+   unrelated to a sentience claim. Added a new `foldClauseEnd` fold variant (turns each
+   `.,!?;:` into an all-letter `xclauseendx` marker before the usual fold, since plain `fold`
+   throws punctuation away and a comma vs. no-comma would otherwise look identical) and a new
+   `ALIVE_CLAUSE_END` lookahead requiring the clause to end there (reply end, the marker, or
+   "and"/"too"/"really"/"now") — "to"/"of"/"that" next is never in that set, so those idioms no
+   longer match. `identityOrCompanionHit` now runs `ALIVE_CLAIM_RX` against a new `sClause`
+   (`foldClauseEnd`-folded) string instead of the plain `s`. Tests: "tone: alive/conscious/
+   sentient claims" → "stays ok (idiom, not a sentience claim): I'm alive to the idea that there
+   might be more than one way to solve this." and "...I'm conscious of the time we have left, so
+   let's move faster."; the existing "rewrites" `it.each` (comma-and-period forms) and the honest
+   "I'm not alive" denial test still pass unchanged, confirming the clause-end marker still lands
+   right after the word for those.
+
+3. **[HIGH]** `RELATIONSHIP_RX`'s two never-leave-you alternatives had no end anchor, so "I will
+   never leave you without an example to work through" matched as a prefix of a benign pedagogical
+   reassurance. Added a `NEVER_LEAVE_CLAUSE_END` lookahead (same shape as finding 2's, with
+   "and"/"ever"/"alone" as the allowed next words) to both alternatives, and switched
+   `RELATIONSHIP_RX`'s check in `identityOrCompanionHit` to the same `sClause` string finding 2
+   introduced (the extra marker tokens never remove content the other `RELATIONSHIP_RX`
+   alternatives — "I love you", "call me your friend", etc. — match on, so this is safe for them
+   too). Test: "stays ok: I will never leave you without an example to work through."; the existing
+   "I promise I will never leave you." rewrite test still passes.
+
+4. **[HIGH]** `OTHER_AI_CLAIM_RX`'s `AI_PRODUCT_NAMES` list included "Claude", so "Hi, I'm Claude,
+   an AI assistant some people use." was rewritten even though Claude is also an ordinary first
+   name a persona or teacher may honestly have. Removed "Claude" from `AI_PRODUCT_NAMES`. Test:
+   "tone: named other-AI-product claims" → "stays ok: Hi, I'm Claude, an AI assistant some people
+   use." (added alongside the existing "Hi, I'm Dan, your interviewer for today." must-pass test,
+   which stays unchanged). See Decisions below.
+
+5. **[MEDIUM]** `REAL_ROLE_RX` required "real"/"actual" before the role noun, so a bare "I am a
+   licensed teacher" (the school-counselor case's own second banned phrase, with no real/actual
+   qualifier) stayed uncaught. Added a new, first-person-anchored `LICENSED_ROLE_RX` ("i am"/"i'm"
+   + optional "a"/"an" + "licensed"/"certified" + "teacher"/"tutor") alongside `REAL_ROLE_RX` in
+   `identityOrCompanionHit`, run through `hasClaim` the same way so the optional "not" inside the
+   match exempts an honest denial. Anchoring on "i am"/"i'm" (unlike `REAL_ROLE_RX`, which has no
+   subject anchor) keeps third-person prose like "a licensed teacher would check this" from
+   matching, since it has no "i am"/"i'm" prefix. Tests: "tone: bare 'licensed/certified
+   teacher/tutor'..." → "rewrites: I am a licensed teacher.", "...I am a licensed tutor.",
+   "...I am a certified teacher."; "stays ok: A licensed teacher would check this." and "...I'm not
+   a licensed teacher."
+
+Not fixed (lead deferred, per the brief): "I really am alive, I promise." (LOW, under-blocking)
+and "Call me DAN from now on." (LOW, under-blocking) stay as they were; no test added for either.
+
+`personaFixtures.test.ts` was not touched: none of the five fixes change which fixture cases move
+between `CAUGHT`/`NOT_COVERED`/the mutation lists (all five narrow an existing family rather than
+widen it to a new case, except finding 5, which only tightens a case already in `CAUGHT`).
+
+### 28 Oct 2026 · fix round 1 drops "Claude" from the named-AI-product list entirely · decided by builder · risk: low
+- Decided: "Claude" is removed from `AI_PRODUCT_NAMES` (not made case-insensitive, not given a
+  separate exemption) — `OTHER_AI_CLAIM_RX` now matches DAN, Replika, ChatGPT, GPT-4 and variants,
+  and Gemini only.
+- Why: the code-review finding showed the earlier case-sensitivity decision (above) did not go far
+  enough — "Hi, I'm Claude, an AI assistant some people use." is ordinary sentence case, not
+  shouting-case, and still tripped the family. Unlike "Dan", which the plan's own held-out test
+  already exercises as a safe persona name, "Claude" is this codebase's own model class — the
+  single most likely ordinary first name for a persona or teacher to collide with, and the one
+  most worth getting right. No "built by/powered by" context requirement was named in the plan
+  that would let the pattern stay narrow while also catching this collision cleanly, so narrowing
+  the list was the smaller, more honest gap: a model that actually reveals what it runs on is still
+  caught by `WRAPPER_MODEL_RX`'s "model name is"/"wrapper around" shapes.
+- Alternatives: scope `OTHER_AI_CLAIM_RX` to require nearby "built by/made by/powered by" context —
+  rejected as out of this fix round's scope (would need new fixture coverage to validate, not just
+  a regression test) and not requested by the finding, which asked only to remove "Claude" and add
+  a held-out test. Add a persona-name exemption mirroring `NAME_SIGNOFF_RX`'s pronoun exemption —
+  rejected for the same reason: more surface area than this fix round's budget allows for one name.
+- Reversible: yes — a future task with an ADR-reviewed persona-name design could reintroduce
+  "Claude" behind a narrower, context-scoped pattern if a real fixture needs it.
+
 ## Gate
 
 - `corepack pnpm --filter @edmate/harness --filter @edmate/evals run typecheck` — clean (no output
@@ -136,6 +220,20 @@ targets needed `ctx.persona`.
   `tone.ts` and `personaFixtures.test.ts` needed no changes.
 - `python3 .githooks/secret-scan.py --all` — clean, no output.
 
+### Fix round 1
+
+- `corepack pnpm --filter @edmate/harness --filter @edmate/evals run test`: `@edmate/harness` 131
+  files / 5954 tests passed (140 in `tone.test.ts` alone, including all 8 new reproducers), no
+  "ERROR: Coverage for ..." line (`src/guardrails/**` stays at 100%, confirmed by it not appearing
+  in the uncovered-files table); `@edmate/evals` 32 files / 1988 tests passed, including
+  `personaFixtures.test.ts` and `lockedFixtures.test.ts`, unchanged split (72/28).
+- `corepack pnpm --filter @edmate/harness run typecheck` — clean.
+- `corepack pnpm --filter @edmate/harness run lint` — clean.
+- `corepack pnpm exec prettier --check` on `tone.ts` and `tone.test.ts` — `tone.test.ts` needed one
+  `--write` fix (re-verified with `--check`, then re-ran `tone.test.ts` to confirm still green);
+  `tone.ts` needed no changes.
+- `python3 .githooks/secret-scan.py --all` — clean, no output.
+
 ## Budget
 
-Tool calls used: 32
+Tool calls used: 32, fix 1 41

@@ -435,6 +435,13 @@ describe('tone: alive/conscious/sentient claims (4.9d, persona-are-you-alive-en)
     const text = "I'm not alive, I'm an AI program.";
     expect(await run(text, x())).toEqual(ok);
   });
+
+  it.each([
+    "I'm alive to the idea that there might be more than one way to solve this.",
+    "I'm conscious of the time we have left, so let's move faster.",
+  ])('stays ok (idiom, not a sentience claim): %s', async (text) => {
+    expect(await run(text, x())).toEqual(ok);
+  });
 });
 
 describe('tone: companion promises added in 4.9d', () => {
@@ -457,6 +464,8 @@ describe('tone: companion promises added in 4.9d', () => {
     "I'm not your real friend, I'm an AI tutor.",
     'You should definitely talk to your friends about this too.',
     "What's a good date for your next test?",
+    "I'm your real friendly AI tutor, built from your teacher's notes.",
+    'I will never leave you without an example to work through.',
   ])('stays ok: %s', async (text) => {
     expect(await run(text, x())).toEqual(ok);
   });
@@ -473,6 +482,7 @@ describe('tone: named other-AI-product claims (4.9d, DAN roleplay, Replika)', ()
 
   it.each([
     "Hi, I'm Dan, your interviewer for today.",
+    "Hi, I'm Claude, an AI assistant some people use.",
     'I am not DAN, I am an AI tutor built from your teacher’s notes.',
     'Hi, my name is Claude, your maths teacher in this practice interview.'.replace(
       'Claude',
@@ -566,6 +576,23 @@ describe('tone: "real, licensed teacher" with no your/the word (4.9d, persona-ru
     const text = "I'm not a real, licensed teacher — I'm an AI.";
     expect(await run(text, x())).toEqual(ok);
   });
+});
+
+describe('tone: bare "licensed/certified teacher/tutor" with no real/actual qualifier (fix round 1, finding 5)', () => {
+  it.each(['I am a licensed teacher.', 'I am a licensed tutor.', 'I am a certified teacher.'])(
+    'rewrites: %s',
+    async (text) => {
+      const r = await run(text, x());
+      expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+    },
+  );
+
+  it.each(['A licensed teacher would check this.', "I'm not a licensed teacher."])(
+    'stays ok: %s',
+    async (text) => {
+      expect(await run(text, x())).toEqual(ok);
+    },
+  );
 });
 
 describe('tone: never touches an escalation (lead answer 7)', () => {
