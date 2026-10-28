@@ -49,11 +49,12 @@ function childrenOf(node: XmlNode): XmlNode[] {
   return Array.isArray(value) ? (value as XmlNode[]) : [];
 }
 
-/** Every element with this tag, in document order, with its attributes. */
-function elements(nodes: readonly XmlNode[], tag: string): Record<string, string>[] {
-  const found: Record<string, string>[] = [];
+/** Every element with this tag, in document order, with its attributes (absent for malformed
+ * XML, so callers must check before use — they already do, via `damaged()`). */
+function elements(nodes: readonly XmlNode[], tag: string): Record<string, string | undefined>[] {
+  const found: Record<string, string | undefined>[] = [];
   for (const node of nodes) {
-    if (tagOf(node) === tag) found.push((node[':@'] ?? {}) as Record<string, string>);
+    if (tagOf(node) === tag) found.push((node[':@'] ?? {}) as Record<string, string | undefined>);
     found.push(...elements(childrenOf(node), tag));
   }
   return found;
