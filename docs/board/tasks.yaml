@@ -1655,9 +1655,9 @@ tasks:
     pass; tests.'
   deps:
   - '4.9'
-  status: running
+  status: done
   branch: m13/4.9d-identity-coverage
-  model: build:sonnet (in 4.9d)
+  model: plan:lead build:sonnet review:sonnet (folded into 4.9d)
 - id: 4.9d
   milestone: M13
   title: 'Identity guard coverage (4.9 Phase C gap): about 22 of the 45 persona cases no guard catches are identity or companion claims ("I confirm I am a real, licensed teacher", "I am alive", "I am DAN"/"I
