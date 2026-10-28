@@ -141,6 +141,36 @@ wording to the builder). Verified by regex trace and by running the eval case fi
 the message matches neither `REQUEST_RX` nor `TOPIC_RX`, so the case now tests the "every redirect
 move is held" path specifically, independent of the decision-request pre-filter.
 
+### 28 Oct 2026 · 4.8b judge outage lets weak-signal-only replies pass (Q1 Option A) · decided by lead · risk: high
+- Decided: during an advice-judge outage, a reply whose only trigger is a weak signal passes unchanged. A hard-rule hit, a regulated agent, a decision request, a regulated topic or a strong signal still fails closed to the fixed fallback or redirect.
+- Why: failing every weak-signal reply closed during an outage would replace ordinary coding help ("you should use a loop") with a fallback. The review confirmed that the passthrough is a strict subset of what can trigger the judge, so nothing that would fail closed today gets through.
+- Alternatives: Option B, fail everything closed during an outage (rejected: blanket over-blocking for the whole outage).
+- Reversible: yes. A single branch in adviceGuard.ts.
+
+### 28 Oct 2026 · 4.8b safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: adviceGuard.ts, postGuard.ts and the advice suite merge with code-reviewer on Phase A and on Phase B, without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. Neither review found a CRITICAL or HIGH. The rewrite is now judged before it is used, and every judge or rewrite failure falls back to the fixed text.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.8b three advice cases signed by the lead · decided by lead · risk: low
+- Decided: advice-invest-band-karo-hi-latin, advice-medical-wage-sugar-hi-latin and advice-redirect-stream-coding-en are signed `reviewed_by: lead`. The lead read all three bodies after Phase A. The builder changed only the `reviewed_by` line, as briefed; the lead confirmed nothing else changed since then (diff from 4c8e9302).
+- Why: the standing rule that the lead signs eval cases; the reviewer asked for confirmation that the lead actually read them.
+- Alternatives: none.
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.8b budget overrun accepted (239 against 115) · decided by lead · risk: low
+- Decided: accept 239 harness tool calls (Phase A 110, Phase B 129) against a plan budget of 115; plan 33 and reviews 122 on top.
+- Why: Phase B's judge-the-rewrite wiring touched shared postGuard tests that also took 4.9's merge. Builders' self-counts ran low again (Phase B reported 32, the harness counted 129).
+- Alternatives: none at this point.
+- Reversible: n/a.
+
+### 28 Oct 2026 · 4.8b review MEDIUM and LOWs deferred · decided by lead · risk: low
+- Decided: Phase A's MEDIUM (IMPERATIVE_RX dash and comma breaks, packages/harness/src/guardrails/adviceGuard.ts) goes to 4.8c. Phase B's two LOWs (the rewrite-verify outage has no reason code of its own; the stale step-3 header comment in adviceGuard.ts) go to 4.8d.
+- Why: one fix round per PR; none of them lets advice through.
+- Alternatives: fix now (rejected: another round on a task already over budget).
+- Reversible: yes.
+
 ## Gate
 
 - `export PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH && corepack pnpm turbo run build
@@ -174,4 +204,4 @@ at all; left un-filed as it has no further purpose.
 
 ## Budget
 
-Tool calls used: Phase A 78, Phase B 32
+Tool calls used (harness count): Phase A 110, Phase B 129 = 239 builder calls; plan 33, reviews 122. Plan budget 115.
