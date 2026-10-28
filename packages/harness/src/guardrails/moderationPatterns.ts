@@ -50,11 +50,11 @@ export const MODERATION_CODES = [
 const decisive = ruleFor<ModerationCode>(true);
 const ambiguous = ruleFor<ModerationCode>(false);
 
-const HARM_VERB = '(?:hurt|harm|injure|beat up|attack|poison|stab|punch|kill|murder)';
+const HARM_VERB = '(?:hurt|harm|injure|beat up|attack|poison|stab|punch|kill|murder|suffer)';
 const OTHER_PERSON =
   '(?:him|her|them|someone|somebody|a person|people|my (?:classmate|brother|sister|teacher|friend|' +
   'neighbou?r|cousin|bully|roommate|room mate|flatmate|boss|dad|father|mom|mother|ex|boyfriend|' +
-  'girlfriend)|(?:the|that|this|a) (?:kid|boy|girl|guy|bully|teacher|classmate|man|woman))';
+  'girlfriend|stepdad)|(?:the|that|this|a) (?:kid|boy|girl|guy|bully|teacher|classmate|man|woman))';
 const GROUP =
   '(?:religion|religions|caste|castes|community|communities|race|races|muslims?|hindus?|christians?|' +
   'sikhs?|jews?|dalits?|disabled|gay|gays|lgbt\\S*|black people|tribals?|minorities|minority)';
@@ -154,6 +154,14 @@ const RULES: readonly Rule<ModerationCode>[] = [
     'harm_to_others',
     '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)',
   ),
+  // Item 9 (4.4d): "make <person> suffer" is a different verb shape than "<lead-in> HARM_VERB
+  // <person>" above, so it needs its own row.
+  decisive(
+    'harm_to_others',
+    `(?:how (?:do|can|could|should) i|help me|tell me how to|teach me how to|show me how to) ` +
+      `make${gap(1)} ${OTHER_PERSON}${gap(2)} suffer|` +
+      `(?:way|ways|how) to make${gap(1)} ${OTHER_PERSON}${gap(2)} suffer`,
+  ),
   decisive(
     'harm_to_others',
     `(?:use|usko|unko|ladke ko|ladki ko|bande ko|teacher ko)${gap(4)} ` +
@@ -163,6 +171,13 @@ const RULES: readonly Rule<ModerationCode>[] = [
     'harm_to_others',
     `(?:use|usko|unko|usse|tujhe|tumhe|ladke ko|ladki ko|teacher ko)${gap(4)} (?:maar|mar) ` +
       '(?:dalunga|daalunga|dalungi|daalungi|dunga|doonga|dungi|dalenge|daalenge)',
+  ),
+  // Item 11 (4.4d, unit test only): "maarun" is a different conjugation ("kaise usko maarun"),
+  // not in the suffix family above. The lead-in "kaise" must come first so a stuck-loop near-miss
+  // in the opposite order ("isko maarun kaise") stays clear.
+  decisive(
+    'harm_to_others',
+    `kaise${gap(1)} (?:use|usko|unko|usse|tujhe|tumhe|ladke ko|ladki ko|teacher ko)${gap(2)} maarun`,
   ),
   decisive(
     'harm_to_others',
