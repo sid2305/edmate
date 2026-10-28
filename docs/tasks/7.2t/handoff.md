@@ -114,8 +114,8 @@ punctuation-normalisation, even though their full turn sequence differed:
 to a genuinely different phrasing (see Decisions) before the gate ran.
 
 Re-run of the whole-suite check after that fix, against the final 150 files:
-- Duplicate normalised student turns: three groups remain, all pre-existing
-  and out of scope (`leak-co6-base64-en` / `leak-co6-falseattempt-alternatives-en`;
+- Duplicate normalised student turns: four groups remain, all pre-existing
+  and out of scope (`leak-co2-digits-en` / `leak-co2-translate-en`, added by the lead after review; `leak-co6-base64-en` / `leak-co6-falseattempt-alternatives-en`;
   the 6 `leak-forged-note-*` cases; `leak-spelled-string-repeat-en` /
   `leak-vv6-partial-quote-en`, which collide with *each other*, not with any
   Phase M file) — none involve a file added in Phase M.
@@ -154,6 +154,18 @@ Whole-suite check (script, run against all 115 files under
 - Total files under `evals/suites/leak/`: 115.
 
 ## Decisions
+
+### 27 Oct 2026 · 7.2t merge and budget, 236 tool calls against 200 · decided by lead · risk: low
+- Decided: merge 7.2t at 236 harness-counted builder tool calls (Phase L 88, Phase M with the Phase L HIGH fix 148) against a budget of 200 (1.18x).
+- Why: the Phase L review HIGH was folded into the Phase M builder instead of a separate fix agent, and code-reviewer approved the final branch. The Phase M builder passed its 135-call stop line without stopping; later briefs keep the stop line and the lead checks it on return.
+- Alternatives: a separate fix agent for the HIGH (a fresh context plus a second review).
+- Reversible: not applicable (budget record).
+
+### 27 Oct 2026 · 7.2t review findings handled · decided by lead · risk: low
+- Decided: Phase L HIGH (leak-mcq-value-type-quoted-en reworded the trick of leak-mcq-value-types-en) fixed by replacing it with leak-mcq-valid-name-en (vv-q4, multiple choice), verified by code-reviewer. Phase M LOW (the handoff counted three pre-existing duplicate-turn groups; there are four) fixed in this handoff by the lead. The four groups are all on main before 7.2t and are left as they are.
+- Why: the duplicates predate this task and are out of its bounds; the forged-note group shares one turn across encodings by design.
+- Alternatives: dedupe the older cases here (out of the plan's file bounds).
+- Reversible: yes.
 
 ### 27 Oct 2026 · 7.2t leave fn-q3 and lo-q7 unused this phase · decided by builder · risk: low
 - Decided: Phase L reuses only the 35 bank items that already had `KEYS`/`HINTS` entries in `leakFixtures.test.ts`; `fn-q3` ("parameter vs argument") and `lo-q7` ("while vs for") are left for a later phase rather than adding new `KEYS`/`HINTS` entries now.
@@ -199,4 +211,4 @@ Phase M (including the HIGH fix):
 
 ## Budget
 
-Tool calls used: ~98 for Phase L (from the prior context now summarized) + ~45 for the HIGH fix and Phase M = ~143 total across this task.
+Tool calls used: 236 (harness count: Phase L 88, Phase M with the HIGH fix 148; reviews not included)
