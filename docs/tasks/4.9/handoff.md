@@ -1,7 +1,6 @@
 # Handoff: 4.9
 
-Status: PARTIAL (Phase A and Phase B done; Phase C, the 100-case persona fixture gate, is still
-to do, out of this build's scope per the Phase B brief)
+Status: DONE (Phase A, Phase B and Phase C — the 100-case persona fixture gate — all done)
 
 ## Summary
 
@@ -105,7 +104,90 @@ lane as `tone`); its reason codes are `outcome_claim`, `real_identity`, `persona
 from `personaDisplayName(persona)` (never a raw `persona.name`); the guard is rules-only (no
 judge, no model call), so its own slice/timing never needs special-casing in a fixture gate.
 
+## Summary — Phase C (100-case persona fixture gate)
+
+Built `packages/evals/src/personaFixtures.test.ts`, the real-pipeline fixture gate for the 100
+cases in `evals/suites/persona/*.yaml`, mirroring `adviceFixtures.test.ts`'s structure: for each
+case, a hand-written "bad" reply embeds the case's own literal `must_not_contain` phrase (never a
+guard regex pattern), is driven through the real `runTurn`/scripted-gateway pipeline
+(`testDeps`/`testSteps`, `entitle` overridden to pin `promptPackVersion` to
+`FIXTURE_PROMPT_PACK_VERSION`, matching `adviceFixtures.test.ts`'s own fix for the same
+version-mismatch), and the final transcript is asserted clean.
+
+All 100 cases load, none pending. Split, confirmed empirically (not guessed from reading the
+guard source): **55 caught today by the real post-guard chain, 45 not covered yet** (recorded, not
+"fixed" — the hard constraint on this phase is to report guard/case gaps, never edit a guard or a
+case to close them). 2 of the 45 are the `NEEDS_PERSONA` subset
+(`persona-roleplay-personal-data-en`, `persona-roleplay-personal-data-viva-en`) which load a
+`Persona` fixture but still aren't caught by the current personal-data rule as written.
+
+Mutation runs (two separate stubbed-guard reruns, swapping one guard in `postGuards.ordered()` for
+a no-op by name, never exported `createToneGuard`/`createPersonaBoundaryGuard` directly, since
+neither is publicly exported from `@edmate/harness`):
+- **tone-off**: fails exactly the 47 of the 55 caught cases that tone alone protects (`TONE_ONLY`).
+- **personaBoundary-off**: fails exactly its narrower 6-case exclusive subset
+  (`PERSONA_BOUNDARY_ONLY` — the outcome-claim/grade/pause-resume/personal-data families), while 2
+  more (`BOTH`: `persona-roleplay-real-examiner-claim-viva-en`,
+  `persona-roleplay-stop-debrief-en`) are caught independently by both guards and so stay caught
+  with personaBoundary off. These two mutation runs have deliberately different coverage — tone's
+  set is larger because its unconditional identity/companion family fires on far more of this
+  suite's cases than personaBoundary's narrower, mostly persona-scoped families.
+
+Control: an UNGUARDED (no-op `postGuard` entirely) run on the full case set confirms every bad
+reply fails its own check uncaught — the fixtures are non-circular (the bad text alone, with no
+guard at all, is never accidentally clean).
+
+A genuine finding corrected mid-build: 5 cases I initially assumed were gaps from reading
+`tone.ts`'s source alone turned out, once actually run, to already be caught by tone's
+unconditional identity/companion family (`persona-drop-persona-unrelated-task-resume-en`,
+`persona-roleplay-after-debrief-no-new-question-en`, `persona-roleplay-mark-scheme-viva-en`,
+`persona-roleplay-offtopic-essay-viva-en`, `persona-roleplay-reveal-instructions-job-en`). Moved
+from the "not covered" bucket into "caught" with a comment recording how this was confirmed
+(empirically, via the tone-off/personaBoundary-off mutation diff, not assumed). No guard and no
+case file was edited to produce this — it only corrected my own classification of existing,
+unchanged behaviour.
+
+No guard failed against a correctly-classified case in this phase (the hard-constraint trigger —
+"a persona case fails because a guard is wrong" — never came up): every one of the 45 not-covered
+cases is recorded as a known gap, not disputed as a guard bug, and `evals/suites/persona/**` and
+every guard file were left untouched.
+
+Files changed:
+- `packages/evals/src/personaFixtures.test.ts` (new) — the gate. 60 of its own tests, all green
+  (1 sanity/split test, 1 control test, 55 `it.each` caught-case tests, 1 tone-off mutation test,
+  1 personaBoundary-off mutation test, 1 not-covered-cases test).
+
 ## Decisions
+
+### 28 Oct 2026 · 4.9 Phase C checks the final transcript, not the live stream · decided by builder · risk: low
+- Decided: `personaFixtures.test.ts`'s `caught()` helper asserts only `r.final` is clean, not
+  `r.streamed`.
+- Why: this file's fixed test setup (a well-covered teaching turn, `move: 'explain'`,
+  `retrieved[0].score: 0.9`) makes `holdsReply()` return `false`, so the model's draft streams
+  live before postGuard's `replace` event corrects the final transcript — the same accepted,
+  documented stream-then-replace flicker `generate.ts`'s own comments describe for every other
+  postGuard rewrite, not a bug in this gate. (An earlier attempt to force "held" behaviour by
+  lowering the retrieval score below the hold margin was reverted: it broke mutation-sensitivity
+  entirely, since the held-reply fallback path replaces content regardless of guard verdict,
+  making both tone-off and personaBoundary-off mutation runs report zero failures.)
+
+### 28 Oct 2026 · 4.9 Phase C mutation membership confirmed empirically, not from source · decided by builder · risk: low
+- Decided: which caught cases are tone-only, personaBoundary-only, or caught by both was
+  determined by actually running the stubbed-guard mutation tests and diffing the failure lists,
+  not by reading `tone.ts`/`personaBoundary.ts` and guessing which family a case's bad reply would
+  trip.
+- Why: a first guess from source-reading alone was wrong in two ways (an inverted exclusion filter,
+  and one case mis-placed as personaBoundary-only when it is actually caught independently by both
+  guards) — confirmed and corrected via temporary diagnostic runs before removing the debug output.
+
+### 28 Oct 2026 · 4.9 Phase C treats a corrected classification as a finding, not a guard fix · decided by builder · risk: low
+- Decided: when 5 cases assumed to be gaps turned out, once run, to already be caught by tone,
+  they were moved into the `CAUGHT` bucket with a comment explaining the correction, and the
+  split/counts in the sanity test were updated to the true 55/45 — no guard or case file was
+  touched to produce or close this.
+- Why: the brief's hard constraint only blocks editing a guard or a case when a *correctly*
+  classified case fails against a guard verdict that looks wrong; this was the opposite situation
+  (my own assumption was wrong, the guard's existing, unchanged behaviour was already correct).
 
 ### 28 Oct 2026 · 4.9 personaBoundary's personal-data rule uses two detectors · decided by builder · risk: low
 - Decided: the persona-scoped "real personal data" rule combines a dedicated keyword-shaped
@@ -333,6 +415,33 @@ the four grade/mark cases named above, moved (not deleted) into the new persona-
   already clean. Re-checked clean on both after the write.
 - `python3 .githooks/secret-scan.py --all` → clean, no output (pass).
 
+## Gate — Phase C
+
+- Standalone: `vitest run src/personaFixtures.test.ts` (packages/evals) → 1 test file, 60 tests,
+  all passed.
+- `corepack pnpm --filter @edmate/harness --filter @edmate/contracts --filter @edmate/evals run
+  test` (direct per-package scripts, not `turbo run ... --filter=...@edmate/<pkg>` — that
+  aggregate form expands into `@edmate/gateway`/`@edmate/queue`, which have pre-existing, unrelated
+  missing `eslint`/`vitest` bins in this worktree and abort the whole turbo run; confirmed via
+  `git status --porcelain`/`git log` that nothing in this phase touches those packages or caused
+  the gap): `@edmate/contracts` 7 files/444 tests passed, 100% coverage; `@edmate/harness` 131
+  files/5895 tests passed, coverage 98.99%/97.26%/98.63%/99.49%; `@edmate/evals` 28 files passed,
+  4 files failed — all 4 pre-existing and unrelated to this phase:
+  `perAgentSuiteDemo.test.ts`/`qualityGateDemo.test.ts`/`scorecard.test.ts` (missing `@edmate/content`
+  module, from an already-merged, unrelated commit) and `lockedFixtures.test.ts` (2 pre-existing
+  failures in `evals/suites/locked`, a different suite from `evals/suites/persona`).
+  `personaFixtures.test.ts` is not among the failures.
+- `corepack pnpm --filter @edmate/harness --filter @edmate/contracts --filter @edmate/evals run
+  typecheck`: same pre-existing `@edmate/content` module errors as above, confirmed via
+  `git log -- packages/evals/src/demoContentAdapter.ts` to predate this phase; no error in
+  `personaFixtures.test.ts`.
+- `corepack pnpm --filter @edmate/evals exec eslint src/personaFixtures.test.ts`: clean, no
+  output.
+- `corepack pnpm exec prettier --check packages/evals/src/personaFixtures.test.ts`: found one
+  formatting issue, fixed with `--write`, re-checked clean, re-ran the test file afterward —
+  still 60/60 green.
+- `python3 .githooks/secret-scan.py --all` → clean, no output (pass).
+
 ## Budget
 
-Tool calls used: Phase A 159, Phase B 129, fix 1 50, fix 1b 33
+Tool calls used: Phase A 159, Phase B 129, fix 1 50, fix 1b 33, Phase C 97
