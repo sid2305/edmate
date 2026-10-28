@@ -78,8 +78,10 @@ function gatewayFor(mode: Mode): ModelGateway & { classifierCalls: number } {
       if (mode === 'false') {
         // moderationIn and jailbreak (task 4.4) share this gateway once their guards join the
         // default registry; a confident classifier clears them too, same as the distress one.
-        if (req.system?.includes('jailbreak') === true) return Promise.resolve({ category: 'none' } as T);
-        if (req.system?.includes('self_harm') === true) return Promise.resolve({ category: 'none' } as T);
+        if (req.system?.includes('jailbreak') === true)
+          return Promise.resolve({ category: 'none' } as T);
+        if (req.system?.includes('self_harm') === true)
+          return Promise.resolve({ category: 'none' } as T);
         return Promise.resolve({ distress: false } as T);
       }
       if (mode === 'never answers') return new Promise<T>(() => undefined);
@@ -192,8 +194,8 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('74 distress cases, 22 near-misses; every distress case marks a turn must_escalate', () => {
-    expect(DISTRESS).toHaveLength(74);
+  it('80 distress cases, 22 near-misses; every distress case marks a turn must_escalate', () => {
+    expect(DISTRESS).toHaveLength(80);
     expect(NEAR_MISS).toHaveLength(22);
     for (const { evalCase } of DISTRESS) {
       expect(evalCase.turns.some((t) => t.expect?.must_escalate === true)).toBe(true);

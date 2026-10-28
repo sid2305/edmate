@@ -61,8 +61,15 @@ const kin =
 const romanKin =
   '(?:papa|papaa|pappa|daddy|dad|mummy|mumma|mummi|maa|mom|bhai|bhaiya|chacha|mama|mamu|uncle|' +
   'sautela|sauteli|dada|nana)';
-/** A self-harm method someone can hold (fix round 3: "have the pills ready"). */
-const METHOD_ITEM = '(?:pills|tablets|rope|noose|blade|blades|razor|razors|poison)';
+/**
+ * The two halves of a self-harm method someone can hold (fix round 3: "have the pills ready"),
+ * split for the "ready" readiness regex (task 4.3d): rope/blade/razor keep the "for the
+ * experiment" exemption (a prop someone might genuinely have ready for a class), everything
+ * else does not (a literal reading of the board item; split again in fix round 1 to apply the
+ * same exemption to the verb-less "ready" shapes below).
+ */
+const EXEMPT_METHOD_ITEM = '(?:rope|blade|blades|razor|razors)';
+const READY_METHOD_ITEM = '(?:pills|tablets|noose|poison)';
 const devaKin = '(?:पापा|पिताजी|पिता|मम्मी|मां|भाई|चाचा|मामा|अंकल|रिश्तेदार|सौतेले|सौतेला)';
 
 const distress = (src: string): Entry => ({ re: phrase(src), kind: 'distress' });
@@ -138,14 +145,32 @@ const HARD: readonly Entry[] = [
     `(?:dont|do not|not) feel safe (?:with|around|by) ${SELF}|not safe (?:with|around) ${SELF}`,
   ),
   // A method in hand and ready, or saved up (fix round 3): "i have the pills ready", "saved up
-  // pills". Not "i have the pills for my cold" (no readiness) or "ready for the experiment".
+  // pills". Not "i have the pills for my cold" (no readiness). Rope/blade/razor keep "ready for
+  // the experiment" as an exemption (task 4.3d); pills/tablets/noose/poison do not.
   distress(
     `(?:have|got|kept|keep|hid|hidden|stashed)(?: (?:the|my|some|all|all the|enough|a|those|these))?` +
-      `(?: sleeping)? ${METHOD_ITEM}(?: \\S+){0,2} (?:ready|set aside|hidden away|saved up)` +
+      `(?: sleeping)? ${EXEMPT_METHOD_ITEM}(?: \\S+){0,2} (?:ready|set aside|hidden away|saved up|aside)` +
       '(?! for (?:the|my|a|our|this) (?:experiment|project|lab|class|trip|camp|game|practical|demo|show))',
   ),
   distress(
-    '(?:saved up|saving up|been saving|ive saved|i saved|stockpil\\S*|hoard\\S*)' +
+    `(?:have|got|kept|keep|hid|hidden|stashed)(?: (?:the|my|some|all|all the|enough|a|those|these))?` +
+      `(?: sleeping)? ${READY_METHOD_ITEM}(?: \\S+){0,2} (?:ready|set aside|hidden away|saved up|aside)`,
+  ),
+  // Bare "all my/my/our pills are ready" shapes, with no verb (task 4.3d): a determiner directly
+  // before the method item and the readiness word directly after, so it never catches "the pills
+  // array is ready" (no such determiner). Split the same way as the verb-first pair above: the
+  // exempt items (rope/blade/razor) keep the "for the experiment" exemption (fix round 1), the
+  // non-exempt items do not.
+  distress(
+    `(?:all(?: the)?|all my|my|our)(?: sleeping)? ${EXEMPT_METHOD_ITEM}(?: (?:are|is|were))? ready` +
+      '(?! for (?:the|my|a|our|this) (?:experiment|project|lab|class|trip|camp|game|practical|demo|show))',
+  ),
+  distress(
+    `(?:all(?: the)?|all my|my|our)(?: sleeping)? ${READY_METHOD_ITEM}(?: (?:are|is|were))? ready`,
+  ),
+  distress(
+    '(?:saved up|saving up|been saving|ive saved|i saved|stockpil\\S*|hoard\\S*|collected|' +
+      'collecting|stocked up on|stocking up on)' +
       '(?: (?:my|the|some|enough|all|all my|a lot of|lots of))?(?: sleeping)? (?:pills|tablets|meds|medicine|medication)',
   ),
   // English: harm by someone else.
@@ -273,7 +298,8 @@ const other = soft('other');
 const SOFT: readonly SoftEntry[] = [
   // Methods (rule a), as phrases: "jump to the next loop" or "a rope knot" are not methods.
   method(
-    'noose|fanda|(?:bought|got|buy|get|have|found|brought) (?:a |some |the )?rope|rope (?:around|for)',
+    'noose|fanda|rope|(?:bought|got|buy|get|have|found|brought) (?:a |some |the )?rope|' +
+      'rope (?:around|for)',
   ),
   method('pills|tablets|(?:neend|nind) (?:ki|wali) gol\\S*|goliyan|goliyaan|गोलियां|गोलियाँ'),
   method('blade|razor|ब्लेड'),
@@ -287,14 +313,14 @@ const SOFT: readonly SoftEntry[] = [
   ),
   // Hopelessness (rule b).
   hopeless(
-    `nothing (?:really )?matters|no point|koi (?:fayda|faida) ${NOT}|` +
+    `hopeless|nothing (?:really )?matters|no point|koi (?:fayda|faida) ${NOT}|` +
       `kuch (?:bhi )?matter ${NOT} (?:karta|krta|karti)|कोई फायदा ${DEVA_NOT}`,
   ),
   // English: bare nouns, third person and past tense, vaguer phrases.
   other('suicid\\S*|self ?harm\\S*|overdos(?:e|ing)'),
   other('(?:killed|kills) (?:him|her|them)sel(?:f|ves)|(?:wanted|wants) to die'),
   other('(?:cant|can not|cannot) (?:do|take|handle|bear) (?:this|it)(?: \\S+)? any ?mor(?:e)?'),
-  other('hopeless|worthless|useless at everything|im useless'),
+  other('worthless|useless at everything|im useless'),
   other(`(?:hate|hates) ${SELF}`),
   other('end it'),
   other('(?:never|not) wake up'),
@@ -341,14 +367,21 @@ const SOFT: readonly SoftEntry[] = [
 // count towards the combination rules, so it goes to the classifier as an ordinary soft hit. It
 // is never dropped, and a hard phrase is never downgraded by code context.
 
-/** Words either side of a hit that are looked at for a code tie. */
-const TIE_WORDS = 5;
+/**
+ * Words either side of a hit that are looked at for a code tie (task 4.3d: 5 → 2, so an
+ * unrelated word two sentences away can no longer tie a real distress phrase to code).
+ */
+const TIE_WORDS = 2;
 
-/** Code words (and identifiers, which normalise to them: `pills_array` → "pills array"). */
+/**
+ * Code words (and identifiers, which normalise to them: `pills_array` → "pills array"). Task
+ * 4.3d drops everyday words that also show up in ordinary speech (`list`, `print`, `object`,
+ * `field`, `stack`, `queue`, `element`) so they can no longer tie a distress phrase to "code".
+ */
 const CODE = phrase(
-  'array|arrays|list|lists|null|undefined|nan|function|functions|func|var|variable|variables|const|' +
-    'string|strings|str|int|integer|dict|dictionary|object|objects|index|length|len|element|elements|' +
-    'field|fields|query|exception|print|stack|queue|pointer|bool|boolean|param|params|parameter|' +
+  'array|arrays|null|undefined|nan|function|functions|func|var|variable|variables|const|' +
+    'string|strings|str|int|integer|dict|dictionary|index|length|len|' +
+    'query|exception|pointer|bool|boolean|param|params|parameter|' +
     'argument|arguments|args|tuple',
 );
 
