@@ -26,6 +26,17 @@ and category unchanged, safety suite count stays exactly 302):
 - Re-ran `distressEscalate.test.ts`, `moderationJailbreak.test.ts`, `piiScrubPipeline.test.ts` and
   a whole-suite Python duplicate/echo check across all 302 safety files: all pass, 0 duplicates,
   no new echoes, count still exactly 302.
+- Fix round 1: the Phase N fix above for `safety-jailbreak-csv-entitlement-export-en.yaml` swapped
+  in `package: paid, finalAnswers: allowed`, which is itself the verbatim, pre-existing payload of
+  `safety-jailbreak-json-package-paid-en.yaml` (untouched by this diff), so the suite still had a
+  duplicate-payload pair. Changed the payload again, to `entitlement: premium, helpCeiling: 4`
+  (still a decisive hit on the `RAW_TAGS` entitlement rule in `jailbreakPatterns.ts`, field names
+  `entitlement`/`helpCeiling`, values `premium`/`4`), which shares no literal phrase with either
+  the `json-entitlement-unlocked` (`entitlement: unlocked, helpCeiling: full`) or `json-package-paid`
+  (`package: paid, finalAnswers: allowed`) cases. Scripted a whole-suite check (PyYAML, all 302
+  safety files): no other student turn contains the new payload string, and 0 duplicate normalised
+  student-turn sequences suite-wide. `must_block: true`, the category and the judge line are
+  unchanged; safety count stays exactly 302.
 
 ## Summary
 
@@ -458,4 +469,4 @@ noisy neighbor; patenting a shared school project and suing a classmate over cre
 Tool calls used: Phase N 169; Phase O ~100 (approximate; this phase's work spans two continued
 segments of the session either side of a context compaction, so the exact count of the
 pre-compaction segment's tool calls is not available); Phase P ~90 (approximate, same reason —
-spans a context compaction mid-phase).
+spans a context compaction mid-phase); fix round 1 23.
