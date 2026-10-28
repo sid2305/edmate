@@ -10473,7 +10473,7 @@ tasks:
   deps:
   - GATE
   - '5.1'
-  status: todo
+  status: planning
   needs_decision: null
   branch: null
   model: null
