@@ -151,12 +151,13 @@ describe('completeness: the real, wired-up registries runTurn uses (4.9, lead an
   });
 
   it(
-    'postGuards: tone is now registered (4.9 Phase A); personaBoundary is still declared but ' +
-      'unregistered until 4.9 Phase B registers it too — the natural case lead answer 12’s ' +
-      'mutation is about, not a broken build',
+    'postGuards: tone and personaBoundary are both registered now (4.9 Phase B) — missing() is ' +
+      'empty and ordered() matches GUARD_ORDER.post exactly',
     () => {
       expect(postGuards.has('tone')).toBe(true);
-      expect(postGuards.missing()).toEqual(['personaBoundary']);
+      expect(postGuards.has('personaBoundary')).toBe(true);
+      expect(postGuards.missing()).toEqual([]);
+      expect(names(postGuards.ordered())).toEqual([...GUARD_ORDER.post]);
     },
   );
 

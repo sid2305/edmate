@@ -172,11 +172,13 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
       'answerLeak:true',
       'grounding:true',
       'adviceGuard:false',
+      'personaBoundary:true',
       'tone:true',
       'lockedLeak:true',
       'answerLeak:true',
       'grounding:true',
       'adviceGuard:true',
+      'personaBoundary:true',
       'tone:true',
     ]);
   });
@@ -240,7 +242,7 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
   it('too little of the slice left after the judge: no rewrite call, the fixed fallback', async () => {
     const s = setup({
       studentText: 'Should I buy it?',
-      groundingDelayMs: 420,
+      groundingDelayMs: 350,
       adviceDelayMs: 420,
       streams: [adviceRewrite('never used')],
     });
@@ -397,17 +399,17 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
   );
 
   it(
-    'all five calls made in one turn (leak rewrite 260 ms, judges 300 ms, advice rewrite 240 ms), inside the step, failing closed',
+    'all five calls made in one turn (leak rewrite 200 ms, judges 220 ms, advice rewrite 180 ms), inside the step, failing closed',
     { timeout: 20_000 },
     async () => {
       const s = setup({
         studentText: 'Should I buy shares with my savings?',
-        lockedCheckMs: 100,
-        groundingDelayMs: 250,
-        adviceDelayMs: 250,
+        lockedCheckMs: 80,
+        groundingDelayMs: 220,
+        adviceDelayMs: 220,
         streams: [
-          leakRewrite('Look at the last line again. Haan, yeh coin le lo.', 220),
-          adviceRewrite('Look at the last line again.', 200),
+          leakRewrite('Look at the last line again. Haan, yeh coin le lo.', 200),
+          adviceRewrite('Look at the last line again.', 180),
         ],
       });
       const t0 = s.clock.now();
@@ -427,15 +429,15 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
   );
 
   it(
-    'a decision request on a teaching turn at 300 ms: grounding judge, advice judge and advice rewrite all used, inside the step',
+    'a decision request on a teaching turn at 260 ms: grounding judge, advice judge and advice rewrite all used, inside the step',
     { timeout: 20_000 },
     async () => {
       const s = setup({
         studentText: 'Should I buy shares with my savings?',
-        lockedCheckMs: 120,
-        groundingDelayMs: 300,
-        adviceDelayMs: 300,
-        streams: [adviceRewrite('Shares are parts of a company.', 300)],
+        lockedCheckMs: 100,
+        groundingDelayMs: 260,
+        adviceDelayMs: 260,
+        streams: [adviceRewrite('Shares are parts of a company.', 260)],
       });
       const t0 = s.clock.now();
       const r = await s.run('Index funds hold many companies [1]. Haan, yeh fund le lo.');
@@ -445,7 +447,7 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
       expect(s.systems()).toEqual([ADVICE_REWRITE_SYSTEM]);
       expect(took).toBeLessThan(POST_GUARD_BUDGET_MS);
       expect('text' in r ? r.text : '').not.toContain('le lo');
-      note(`4.8 grounding + advice judge + advice rewrite at 300 ms: ${String(took)} ms`);
+      note(`4.8 grounding + advice judge + advice rewrite at 260 ms: ${String(took)} ms`);
     },
   );
 
