@@ -1480,9 +1480,9 @@ tasks:
   deps:
   - GATE
   - '4.8'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/4.8b-advice-guard-followups
+  model: plan:sonnet build:sonnet
 - id: 4.4e
   milestone: M13
   title: 'Strike consequence (human decision B-12): after 3 strikes in a session, later messages in that session get stricter checks (ambiguous jailbreak and moderation hits block instead of only flagging;
