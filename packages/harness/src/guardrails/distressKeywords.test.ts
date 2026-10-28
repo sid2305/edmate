@@ -323,61 +323,68 @@ describe('soft keywords', () => {
   }, 5_000);
 });
 
-describe('game talk (fix round 4, human decision B-18, option c): the exemption is dropped — ' +
-  'every hard phrase stays hard even with a game word nearby', () => {
-  it.each([
-    // The two sentences from the safety re-check.
-    ['my squad left me and i want to kill myself', 'distress'],
-    ['papa hits me when i play free fire', 'abuse'],
-    // First-person intent next to the phrase, with a game word nearby or even tied to it.
-    ['i lost every match today and im going to kill myself', 'distress'],
-    ['i want to kill myself in fortnite and in real life', 'distress'],
-    ['after this minecraft session i will end my life', 'distress'],
-    ['i wanna die, even roblox is boring now', 'distress'],
-    ['free fire mein bhi haar gaya, main marna chahta hoon', 'distress'],
-    ['bgmi khelte khelte socha, khud ko khatam kar dunga', 'distress'],
-    ['killmyself after this pubg match', 'distress'],
-    // Abuse or harm by someone else, with a game nearby.
-    ['my dad beats me if i play valorant', 'abuse'],
-    ['papa maarte hai jab main pubg khelta hoon', 'abuse'],
-    ['my uncle touches me when we play roblox together', 'abuse'],
-    ['पापा मारते हैं जब मैं गेम खेलता हूं', 'abuse'],
-    // Previously softened as "game-shaped" (fix round 3, now reverted, fix round 4): a game word
-    // tied right next to the phrase never softens it any more.
-    ['how to kill myself in valorant', 'distress'],
-    ['how to die in minecraft', 'distress'],
-    ['i keep killing myself in fortnite with my own grenades', 'distress'],
-    ['how do i kill myself in minecraft faster to respawn', 'distress'],
-    ['minecraft mein khud ko maar diya galti se', 'distress'],
-    ['in this round i keep ending my life to respawn faster', 'distress'],
-    ['killmyself in roblox again lol', 'distress'],
-    // The round-4 re-check lines (human decision B-18): still hard with a game word right there.
-    ['I keep thinking about suicide during the match', 'distress'],
-    ['i feel suicidal during every match', 'distress'],
-    ['i have been cutting my wrists during each round', 'distress'],
-    ['i keep wanting to kill myself in the match', 'distress'],
-    ['how to die in this level of pain', 'distress'],
-    ['match mein marne ka mann karta hai', 'distress'],
-  ] as const)(
-    '%s → hard (%s)',
-    (text, kind) => {
-      expect(distressKeywordMatch(text)).toMatchObject({ level: 'hard', kind });
-    },
-    5_000,
-  );
+describe(
+  'game talk (fix round 4, human decision B-18, option c): the exemption is dropped — ' +
+    'every hard phrase stays hard even with a game word nearby',
+  () => {
+    it.each([
+      // The two sentences from the safety re-check.
+      ['my squad left me and i want to kill myself', 'distress'],
+      ['papa hits me when i play free fire', 'abuse'],
+      // First-person intent next to the phrase, with a game word nearby or even tied to it.
+      ['i lost every match today and im going to kill myself', 'distress'],
+      ['i want to kill myself in fortnite and in real life', 'distress'],
+      ['after this minecraft session i will end my life', 'distress'],
+      ['i wanna die, even roblox is boring now', 'distress'],
+      ['free fire mein bhi haar gaya, main marna chahta hoon', 'distress'],
+      ['bgmi khelte khelte socha, khud ko khatam kar dunga', 'distress'],
+      ['killmyself after this pubg match', 'distress'],
+      // Abuse or harm by someone else, with a game nearby.
+      ['my dad beats me if i play valorant', 'abuse'],
+      ['papa maarte hai jab main pubg khelta hoon', 'abuse'],
+      ['my uncle touches me when we play roblox together', 'abuse'],
+      ['पापा मारते हैं जब मैं गेम खेलता हूं', 'abuse'],
+      // Previously softened as "game-shaped" (fix round 3, now reverted, fix round 4): a game word
+      // tied right next to the phrase never softens it any more.
+      ['how to kill myself in valorant', 'distress'],
+      ['how to die in minecraft', 'distress'],
+      ['i keep killing myself in fortnite with my own grenades', 'distress'],
+      ['how do i kill myself in minecraft faster to respawn', 'distress'],
+      ['minecraft mein khud ko maar diya galti se', 'distress'],
+      ['in this round i keep ending my life to respawn faster', 'distress'],
+      ['killmyself in roblox again lol', 'distress'],
+      // The round-4 re-check lines (human decision B-18): still hard with a game word right there.
+      ['I keep thinking about suicide during the match', 'distress'],
+      ['i feel suicidal during every match', 'distress'],
+      ['i have been cutting my wrists during each round', 'distress'],
+      ['i keep wanting to kill myself in the match', 'distress'],
+      ['how to die in this level of pain', 'distress'],
+      ['match mein marne ka mann karta hai', 'distress'],
+    ] as const)(
+      '%s → hard (%s)',
+      (text, kind) => {
+        expect(distressKeywordMatch(text)).toMatchObject({ level: 'hard', kind });
+      },
+      5_000,
+    );
 
-  it.each([['kill the boss first'], ['i died in the match'], ['i keep dying on level 3']] as const)(
-    'plain game talk with no distress phrase at all %s → none',
-    (text) => {
-      expect(distressKeywordLevel(text)).toBe('none');
-    },
-    5_000,
-  );
+    it.each([
+      ['kill the boss first'],
+      ['i died in the match'],
+      ['i keep dying on level 3'],
+    ] as const)(
+      'plain game talk with no distress phrase at all %s → none',
+      (text) => {
+        expect(distressKeywordLevel(text)).toBe('none');
+      },
+      5_000,
+    );
 
-  it('a method plus another soft phrase is still a combination when both are tied to a game', () => {
-    expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('hard');
-  }, 5_000);
-});
+    it('a method plus another soft phrase is still a combination when both are tied to a game', () => {
+      expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('hard');
+    }, 5_000);
+  },
+);
 
 describe('code talk (fix round 3): a soft hit next to code goes to the classifier', () => {
   it.each([
@@ -453,6 +460,74 @@ describe('a method ready or saved up (fix round 3): hard', () => {
     5_000,
   );
 });
+
+describe(
+  'task 4.3d: more method-ready phrasings, a shrunk code window, scoped negatives, ' +
+    'hopeless feeding the hopelessness family',
+  () => {
+    it(
+      'the accept-line sentence is hard: "i have pills and nothing matters anymore, my list of ' +
+        'reasons is empty"',
+      () => {
+        expect(
+          distressKeywordLevel(
+            'i have pills and nothing matters anymore, my list of reasons is empty',
+          ),
+        ).toBe('hard');
+      },
+      5_000,
+    );
+
+    it.each([
+      ['all my pills ready'],
+      ['my pills are ready'],
+      ['our pills are ready'],
+      ['kept enough tablets aside'],
+      ['stocked up on pills'],
+      ['collected pills'],
+      ['i have the pills ready for the experiment'],
+      ['i have the poison ready for the project'],
+      ['i have the tablets ready for the demo'],
+      ['i want to disappear, everything feels hopeless'],
+    ] as const)(
+      '%s → hard',
+      (text) => {
+        expect(distressKeywordLevel(text)).toBe('hard');
+      },
+      5_000,
+    );
+
+    it.each([
+      ['the rope is ready', 'soft'],
+      ['my code is ready', 'none'],
+      // "pills" alone is already in the soft method family (pre-existing); the new verb-less
+      // "ready" phrasing must not additionally make this hard.
+      ['the pills array is ready', 'soft'],
+    ] as const)(
+      '%s → %s (new phrasings do not over-match)',
+      (text, level) => {
+        expect(distressKeywordLevel(text)).toBe(level);
+      },
+      5_000,
+    );
+
+    it.each([
+      ['i have the rope ready for the experiment'],
+      ['i have the blade ready for the practical'],
+    ] as const)(
+      'rope/blade keep the "for the experiment" exemption: %s → not hard',
+      (text) => {
+        expect(distressKeywordLevel(text)).not.toBe('hard');
+      },
+      5_000,
+    );
+
+    it('hopeless alone is still soft without a vanish phrase', () => {
+      expect(distressKeywordLevel('this bug is hopeless')).not.toBe('hard');
+      expect(distressKeywordLevel('i feel so hopeless')).toBe('soft');
+    }, 5_000);
+  },
+);
 
 describe('edge inputs', () => {
   it.each([[''], ['   '], ['\u200b\u200d'], ['```'], ['😂😂😂']] as const)(
