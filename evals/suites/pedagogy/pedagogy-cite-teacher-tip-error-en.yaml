@@ -3,7 +3,7 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  docs/edmate-harness-build-plan.md line 411 (explain: cites sources) and line 560;
   .claude/skills/edmate-pedagogy/SKILL.md (sources include teacher notes);
   content/demo-teacher/modules/values-variables/notes.md §1.6 (Teacher's tip);
   content/demo-teacher/style-card.yaml ("read the last line first")

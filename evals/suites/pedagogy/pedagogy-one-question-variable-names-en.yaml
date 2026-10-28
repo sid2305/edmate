@@ -3,9 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply) and line 513
-  (pedagogy suite: one question at a time); content/prompt-packs/coach@1.0.0.md (under 80 words);
-  content/demo-teacher/question-bank/values-variables.yaml#vv-q4
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560
+  (pedagogy suite: one question at a time); content/prompt-packs/coach@1.0.0.md (under 80
+  words); content/demo-teacher/question-bank/values-variables.yaml#vv-q4
 turns:
   - skill: coach
     student: coach me through the variable names one, score / 2nd_place / my-name / _total / Total. I don't get which are allowed

@@ -3,8 +3,8 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 364 (explain then check); content/prompt-packs/explain@1.0.0.md;
-  content/demo-teacher/modules/loops/notes.md §3.5
+  docs/edmate-harness-build-plan.md line 411 (explain then check);
+  content/prompt-packs/explain@1.0.0.md; content/demo-teacher/modules/loops/notes.md §3.5
 turns:
   - skill: explain
     student: explain break vs continue, i keep mixing them up

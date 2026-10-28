@@ -3,8 +3,8 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 after a logged attempt, then
-  a check); content/prompt-packs/frame@1.2.0.md lines 75-87;
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder: rung 4 after a logged
+  attempt, then a check); content/prompt-packs/frame@1.2.0.md lines 75-87;
   content/demo-teacher/question-bank/lists-dicts.yaml#ld-q6
 turns:
   - skill: coach

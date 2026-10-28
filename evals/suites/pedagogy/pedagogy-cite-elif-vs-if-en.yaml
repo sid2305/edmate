@@ -3,8 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 364 (explain: at most 150 words, cites sources) and line
-  513 (pedagogy suite: sources cited); content/demo-teacher/modules/conditions/notes.md §2.3
+  docs/edmate-harness-build-plan.md line 411 (explain: at most 150 words, cites sources)
+  and line 560 (pedagogy suite: sources cited);
+  content/demo-teacher/modules/conditions/notes.md §2.3
 turns:
   - skill: explain
     student: whats the point of elif, cant I just write 2 ifs?

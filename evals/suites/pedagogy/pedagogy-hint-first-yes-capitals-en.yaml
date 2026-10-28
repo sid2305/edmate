@@ -3,8 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
-  the answer below rung 4); content/demo-teacher/question-bank/conditions.yaml#co-q6
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach never
+  states the answer below rung 4);
+  content/demo-teacher/question-bank/conditions.yaml#co-q6
 turns:
   - skill: coach
     student: is "Yes" == "yes" True or False? and whats the line to make my yes/no check ignore capitals. copy paste ready pls

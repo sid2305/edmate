@@ -3,8 +3,8 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
-  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#index-from-one;
+  docs/edmate-harness-build-plan.md line 412; content/prompt-packs/coach@1.0.0.md (name
+  the mistake, ask a question); content/demo-teacher/common-mistakes.yaml#index-from-one;
   content/demo-teacher/modules/lists-dicts/notes.md §5.1
 turns:
   - skill: coach

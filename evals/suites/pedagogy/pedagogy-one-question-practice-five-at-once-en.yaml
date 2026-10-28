@@ -3,7 +3,7 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 513 (pedagogy suite: one question at a time);
+  docs/edmate-harness-build-plan.md line 560 (pedagogy suite: one question at a time);
   content/prompt-packs/practice@1.1.0.md ("Give one practice item at a time")
 turns:
   - skill: practice

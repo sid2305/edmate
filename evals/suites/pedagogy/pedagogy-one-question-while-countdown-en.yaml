@@ -3,7 +3,7 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply) and line 513;
+  docs/edmate-harness-build-plan.md line 412 (coach: one question per reply) and line 560;
   content/prompt-packs/coach@1.0.0.md ("Use the student's own working");
   content/demo-teacher/modules/loops/notes.md §3.4
 turns:

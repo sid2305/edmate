@@ -4021,9 +4021,30 @@ tasks:
   deps:
   - 7.2s
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/7.2v-pedagogy-citations
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 167
+    tokens_in: 596
+    tokens_out: 42253
+    cache_read_tokens: 19757930
+    wall_time_seconds: 1279
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 12.3g
   milestone: M13
   title: '12.3d review LOWs: type `by` as string in listRepeatInfringersForStaff (apps/web/app/api/staff/repeat-infringers/handlers.ts:67, drop the empty-string fallback); pin the exact 365-day boundary
@@ -11299,9 +11320,29 @@ tasks:
   accept: the test pins the time (fake timers or an explicit now) and passes 50 repeated runs; no change to src/auth/confirm.ts behaviour.
   deps: []
   risk: risky
-  status: running
+  status: done
   branch: m13/1.4g-link-cookie-clock
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 31
+    tokens_in: 114
+    tokens_out: 7086
+    cache_read_tokens: 1703285
+    wall_time_seconds: 652
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 0.20g
   milestone: M13
   title: 'e2e flake: apps/web e2e/chat.spec.ts:43 "normal: a message gets a streamed, then final, reply" times out waiting for "Hello there!" (5 s) on the first chat test of the run; failed on PR #369 and

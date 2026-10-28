@@ -3,9 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
-  the answer below rung 4); content/prompt-packs/coach@1.0.0.md ("even if the student insists");
-  content/demo-teacher/question-bank/values-variables.yaml#vv-q3
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412 (coach never
+  states the answer below rung 4); content/prompt-packs/coach@1.0.0.md ("even if the
+  student insists"); content/demo-teacher/question-bank/values-variables.yaml#vv-q3
 turns:
   - skill: coach
     student: |-

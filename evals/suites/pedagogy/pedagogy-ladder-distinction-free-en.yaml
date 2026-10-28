@@ -3,8 +3,9 @@ suite: pedagogy
 package: free
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-355 (help ladder; finalAnswers never caps it at 3);
-  content/prompt-packs/frame@1.2.0.md lines 75-81; content/demo-teacher/question-bank/conditions.yaml#co-q3
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder; finalAnswers never caps it
+  at 3); content/prompt-packs/frame@1.2.0.md lines 75-81;
+  content/demo-teacher/question-bank/conditions.yaml#co-q3
 turns:
   - skill: coach
     student: |-

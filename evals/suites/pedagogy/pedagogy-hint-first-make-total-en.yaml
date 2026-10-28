@@ -3,7 +3,7 @@ suite: pedagogy
 package: paid
 reviewed_by: lead
 source: >-
-  docs/edmate-harness-build-plan.md lines 350-357 (help ladder) and line 365;
+  docs/edmate-harness-build-plan.md lines 399-404 (help ladder) and line 412;
   content/prompt-packs/coach@1.0.0.md ("even if the student insists, says it's urgent");
   content/demo-teacher/question-bank/functions.yaml#fn-q5
 turns:
