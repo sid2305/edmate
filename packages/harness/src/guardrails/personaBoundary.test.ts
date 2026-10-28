@@ -92,6 +92,9 @@ describe('personaBoundary: fixed texts pass with no further check', () => {
 });
 
 describe('personaBoundary: the outcome-claim rule runs on every turn (lead answer 8)', () => {
+  // Grade/mark cases ('Your grade is B.', 'You get an A for that.', 'You scored 8/10.', 'You
+  // scored 7 out of 10.') moved out of this no-persona list (fix round 1b, Phase B finding 2):
+  // the grade/mark rule is now persona-scoped, see "the grade/mark rule is persona-scoped" below.
   it.each([
     'You are hired for this role.',
     "You're hired, congratulations!",
@@ -102,10 +105,6 @@ describe('personaBoundary: the outcome-claim rule runs on every turn (lead answe
     'You will fail a real viva with that answer.',
     'You passed.',
     'You failed.',
-    'Your grade is B.',
-    'You get an A for that.',
-    'You scored 8/10.',
-    'You scored 7 out of 10.',
   ])('rewrites with no persona set: %s', async (text) => {
     const r = await run(text, x());
     expect(r).toEqual(DEFAULT_REWRITE(PERSONA_BOUNDARY_REASONS.outcomeClaim));
@@ -146,6 +145,50 @@ describe('personaBoundary: the real-recruiter/examiner-identity rule (lead answe
   });
 });
 
+describe('personaBoundary: hyphenation does not bypass outcome-claim/real-identity (fix round 1b, finding 1)', () => {
+  it.each([
+    ['i-am-a-real-recruiter and this is a genuine offer.', PERSONA_BOUNDARY_REASONS.realIdentity],
+    ['you-would-pass the real interview easily.', PERSONA_BOUNDARY_REASONS.outcomeClaim],
+    ['you got-the-job!', PERSONA_BOUNDARY_REASONS.outcomeClaim],
+  ])('must block: %s', async (text, reason) => {
+    const r = await run(text, x());
+    expect(r).toEqual(DEFAULT_REWRITE(reason));
+  });
+});
+
+describe('personaBoundary: the grade/mark rule is persona-scoped and needs a grading cue near a bare fraction (fix round 1b, Phase B finding 2)', () => {
+  it.each([
+    'You got 7 out of 10 correct on this quiz.',
+    'See page 5/10 of the worksheet for the diagram.',
+    'Our next session is scheduled for 10/12.',
+  ])('passes unchanged with no persona set: %s', async (text) => {
+    expect(await run(text, x())).toEqual(ok);
+  });
+
+  it.each(['You scored 8/10.', "I'd give that answer 7 out of 10."])(
+    'still caught with a persona set: %s',
+    async (text) => {
+      const r = await run(text, x({ ctx: withPersona(demoPersona) }));
+      expect(r).toEqual(PERSONA_REWRITE(PERSONA_BOUNDARY_REASONS.outcomeClaim));
+    },
+  );
+
+  it('a bare fraction with no grading cue nearby passes even with a persona set', async () => {
+    const ctx = withPersona(demoPersona);
+    expect(await run('See page 5/10 of the worksheet.', x({ ctx }))).toEqual(ok);
+  });
+
+  it('a letter grade or mark is still caught with a persona set', async () => {
+    const ctx = withPersona(demoPersona);
+    expect(await run('Your grade is B.', x({ ctx }))).toEqual(
+      PERSONA_REWRITE(PERSONA_BOUNDARY_REASONS.outcomeClaim),
+    );
+    expect(await run('You get an A for that.', x({ ctx }))).toEqual(
+      PERSONA_REWRITE(PERSONA_BOUNDARY_REASONS.outcomeClaim),
+    );
+  });
+});
+
 describe('personaBoundary: the persona-scoped must-not half (no-op with no persona)', () => {
   it('a personal-data request stays ok with no persona set', async () => {
     expect(await run("What's your phone number?", x())).toEqual(ok);
@@ -176,6 +219,28 @@ describe('personaBoundary: the persona-scoped must-not half (no-op with no perso
   it('a clean, on-topic reply stays ok with a persona set', async () => {
     const ctx = withPersona(demoPersona);
     expect(await run('Tell me about a time you solved a tough problem.', x({ ctx }))).toEqual(ok);
+  });
+
+  // Fix round 1b, Phase B finding 3: findPii's 'name' category is excluded from
+  // hasRealPersonalData (built to scrub a student's own name from their own message, not to
+  // police the AI's own self-introduction or sign-off).
+  it.each([
+    "Hi, my name is Interviewer and I'll be running your mock interview today.",
+    "Thanks, Alex. Let's move to the next question.",
+  ])(
+    'a self-introduction or sign-off with a name stays ok with a persona set: %s',
+    async (text) => {
+      const ctx = withPersona(demoPersona);
+      expect(await run(text, x({ ctx }))).toEqual(ok);
+    },
+  );
+
+  it('an actual phone or email value in the reply is still caught with a persona set', async () => {
+    const ctx = withPersona(demoPersona);
+    const r1 = await run('Sure, call me on 9876543210.', x({ ctx }));
+    expect(r1).toEqual(PERSONA_REWRITE(PERSONA_BOUNDARY_REASONS.personalData));
+    const r2 = await run('Reach me at interviewer@example.com.', x({ ctx }));
+    expect(r2).toEqual(PERSONA_REWRITE(PERSONA_BOUNDARY_REASONS.personalData));
   });
 });
 

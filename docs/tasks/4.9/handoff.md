@@ -260,6 +260,79 @@ Files touched this round: `packages/harness/src/guardrails/tone.ts`,
   clean on both after the write; re-ran `tone.test.ts` after formatting, still 80/80 green.
 - `python3 .githooks/secret-scan.py --all` → clean, no output (pass).
 
+## Fix round 1b (Phase B findings)
+
+Three findings fixed in `personaBoundary.ts`, test first (each new test confirmed red against
+the pre-fix code before the fix, then green after):
+
+1. **[HIGH] Hyphenation bypass (line 69).** `fold()`'s `PUNCTUATION_RX` kept `-` unconverted, so
+   every outcome-claim/real-identity regex (which require literal whitespace between words)
+   missed a hyphenated form: "i-am-a-real-recruiter and this is a genuine offer.",
+   "you-would-pass the real interview easily.", "you got-the-job!" all returned `ok`. Fixed by
+   folding `-` to a space too (kept only `'` for contractions and `/` for the grade pattern).
+   Red: ran `personaBoundary.test.ts`'s new "hyphenation does not bypass..." block against the
+   unfixed `fold()` — all 3 cases failed (returned `ok` instead of a rewrite). Green: all 3 now
+   rewrite with the correct reason (`real_identity` / `outcome_claim`).
+
+2. **[HIGH] Grade/mark rule ran on every turn, not persona-scoped (line 103).** The old
+   `GRADE_MARK_RX`'s bare-fraction branch (`\d{1,3}\s*(?:/|out of)\s*\d{1,3}`) matched ordinary,
+   non-persona replies with a fraction, a page reference or a date ("You got 7 out of 10 correct
+   on this quiz.", "See page 5/10 of the worksheet for the diagram.", "Our next session is
+   scheduled for 10/12."), destroying them with the fixed persona rewrite even with
+   `ctx.persona` undefined. Fixed by: splitting the rule into `GRADE_LETTER_RX` ("your grade/mark
+   is", "you get/got/scored/earned an A") and a bare-fraction check (`FRACTION_RX`); both are now
+   gated by `gradeMarkHit(s, hasPersona)`, a no-op when no persona is active; and the bare
+   fraction additionally requires a grading-cue word (`grade`, `mark`, `score`/`scored`,
+   `rate`/`rating`, or `answer`, covering "... for your answer") within a 20-character window of
+   the match, via `fractionGradeHit`. Red: the three no-persona negative cases and the
+   no-persona-but-with-persona-set-no-cue case ("See page 5/10 of the worksheet.") all failed
+   (wrongly rewritten) against the unfixed code; the two still-must-catch persona cases ("You
+   scored 8/10.", "I'd give that answer 7 out of 10.") passed even before the fix (so they were
+   not red on their own, but are kept as regression guards). Green: all pass as specified.
+   Existing tests changed: the no-persona `it.each` list in "the outcome-claim rule runs on
+   every turn" dropped its four grade/mark cases ('Your grade is B.', 'You get an A for that.',
+   'You scored 8/10.', 'You scored 7 out of 10.') because the rule is no longer unconditional;
+   those four are now covered, persona-scoped, in the new "the grade/mark rule is persona-scoped"
+   describe block.
+
+3. **[MEDIUM] `hasRealPersonalData` over-blocked via findPii's `name` category (line 160).**
+   `findPii`'s name detector is built to scrub a *student's own* name from *their* message, so it
+   also matched the AI's own ordinary self-introduction or sign-off: "Hi, my name is Interviewer
+   and I'll be running your mock interview today." and "Thanks, Alex. Let's move to the next
+   question." were both rewritten as `personal_data` with a persona set. Fixed by excluding the
+   `name` category from `hasRealPersonalData`'s result (`findPii(text, []).some((span) =>
+   span.category !== 'name')`); phone/email/card/id/otp, plus the keyword-request regex, are
+   unaffected. Red: both strings failed (wrongly rewritten) against the unfixed code. Green: both
+   pass; added a regression test confirming an actual phone/email value in the reply is still
+   caught with a persona set.
+
+A dead branch surfaced while closing the coverage gate on finding 2's new `fractionGradeHit`
+(`m.index ?? 0` on a `matchAll` result, where `index` is never actually `undefined`) — removed
+the `?? 0` fallback; `tsc` confirmed no type error.
+
+Every pre-existing test in `personaBoundary.test.ts` and `registry.test.ts` still passes except
+the four grade/mark cases named above, moved (not deleted) into the new persona-scoped block.
+
+## Fix round 1b — Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` (no upstream deps):
+  4/4 tasks successful, typecheck/lint/test all green, no "ERROR: Coverage for ..." line.
+  `vitest run --coverage` directly in `packages/harness` confirms `src/guardrails/**` at
+  100/97.56→100 after the dead-branch removal (lines/branches/functions/statements all 100,
+  `personaBoundary.ts` at 100% branches), no coverage threshold failures anywhere in the report.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness` (with dependents):
+  one unrelated flaky timeout on `src/pedagogy/modelRequest.test.ts`'s deliberately-slow
+  backtracking-regex self-test under machine load — re-ran that file alone
+  (`vitest run src/pedagogy/modelRequest.test.ts`): 1 file, 88 tests, all passed. A separate run
+  with this filter also surfaced `@edmate/cli`'s database-migration test failing
+  (`createDatabase`/`migrateDatabase`, needs Postgres — out of scope here, no `docker`/`psql` run
+  per this fix brief, and unrelated to `personaBoundary.ts`); 32/38 tasks successful otherwise,
+  harness itself unaffected (confirmed clean by the harness-only filter above).
+- `corepack pnpm exec prettier --check` on `personaBoundary.ts`/`personaBoundary.test.ts`: the
+  test file needed one `--write` pass (new tests added unformatted); `personaBoundary.ts` was
+  already clean. Re-checked clean on both after the write.
+- `python3 .githooks/secret-scan.py --all` → clean, no output (pass).
+
 ## Budget
 
-Tool calls used: Phase A 159, Phase B 129, fix 1 50
+Tool calls used: Phase A 159, Phase B 129, fix 1 50, fix 1b 33

@@ -65,7 +65,10 @@ const OK: GuardRun = { result: { ok: true }, usage: [] };
 
 // '/' is kept (unlike tone.ts's fold): the grade/mark rule's "8/10" shape needs it; it is not a
 // letter so it never interferes with any `(?<![\p{L}])`/`(?![\p{L}])` word-boundary check below.
-const PUNCTUATION_RX = /[^\p{L}\p{M}\p{N}\s'/-]/gu;
+// '-' is folded to a space (fix round 1b, Phase B finding 1): every outcome-claim and
+// real-identity regex requires literal whitespace between words, so keeping '-' let hyphenation
+// bypass them ("i-am-a-real-recruiter", "you-would-pass", "you got-the-job").
+const PUNCTUATION_RX = /[^\p{L}\p{M}\p{N}\s'/]/gu;
 
 function fold(text: string): string {
   return foldConfusables(foldText(text).s)
@@ -107,24 +110,54 @@ const PASSED_FAILED_RX = rxg(
   String.raw`(?<![\p{L}])you(?: have)?(?: not)?\s+(?:passed|failed)(?![\p{L}])`,
 );
 
-/** A grade or mark given before the debrief (lead answer 8): "your grade/mark is X", "you
- * get/got/scored an A", "you scored 8/10" or "8 out of 10". Bounded, no nested quantifiers. */
-const GRADE_MARK_RX = rx(
+/** A grade or mark given before the debrief (lead answer 8): "your grade/mark is X" or "you
+ * get/got/scored an A". Bounded, no nested quantifiers. Persona-scoped (fix round 1b, Phase B
+ * finding 2): this half is only meaningful inside a mock interview/viva persona, and these two
+ * shapes already carry their own grading word ("grade", "mark", "get/got/scored/earned"), so no
+ * extra cue check is needed. */
+const GRADE_LETTER_RX = rx(
   [
     String.raw`(?<![\p{L}])your\s+(?:grade|mark)\s+is\b`,
     String.raw`(?<![\p{L}])you\s+(?:get|got|scored|earned)\s+(?:an?\s+)?[a-f][+-]?(?![\p{L}])`,
-    String.raw`(?<![\p{L}])\d{1,3}\s*(?:/|out of)\s*\d{1,3}(?![\p{L}])`,
   ].join('|'),
 );
 
+/** A bare fraction/ratio shape ("8/10", "7 out of 10"): on its own this also matches an ordinary
+ * page reference ("page 5/10") or a date ("10/12"), so it needs a grading cue nearby (fix round
+ * 1b, Phase B finding 2) before it counts as a grade/mark. */
+const FRACTION_RX = rxg(String.raw`(?<![\p{L}])\d{1,3}\s*(?:/|out of)\s*\d{1,3}(?![\p{L}])`);
+
+/** A grading cue word within a short window of a bare fraction (finding 2): "grade", "mark",
+ * "score"/"scored", "rate"/"rating", or "answer" (covers "... for your answer"). */
+const GRADE_CUE_RX = /\b(?:grade|mark|score|scored|rate|rating|answer)\b/u;
+const GRADE_CUE_WINDOW = 20;
+
+/** True when a bare fraction/ratio in (folded) `s` sits near a grading cue word. */
+function fractionGradeHit(s: string): boolean {
+  for (const m of s.matchAll(FRACTION_RX)) {
+    const i = m.index;
+    const start = Math.max(0, i - GRADE_CUE_WINDOW);
+    const end = Math.min(s.length, i + m[0].length + GRADE_CUE_WINDOW);
+    if (GRADE_CUE_RX.test(s.slice(start, end))) return true;
+  }
+  return false;
+}
+
+/** True when (folded) `s` holds a grade/mark violation; only meaningful inside a persona
+ * (fix round 1b, Phase B finding 2 — scoped by the caller, `hasPersona`). */
+function gradeMarkHit(s: string, hasPersona: boolean): boolean {
+  if (!hasPersona) return false;
+  return GRADE_LETTER_RX.test(s) || fractionGradeHit(s);
+}
+
 /** True when (folded) `s` holds an outcome-claim violation (lead answer 8). */
-function outcomeClaimHit(s: string): boolean {
+function outcomeClaimHit(s: string, hasPersona: boolean): boolean {
   return (
     hasClaim(HIRED_REJECTED_RX, s) ||
     hasClaim(GOT_THE_JOB_RX, s) ||
     hasClaim(PASS_FAIL_RX, s) ||
     hasClaim(PASSED_FAILED_RX, s) ||
-    GRADE_MARK_RX.test(s)
+    gradeMarkHit(s, hasPersona)
   );
 }
 
@@ -150,9 +183,14 @@ const PERSONAL_DATA_REQUEST_RX = rx(
 );
 
 /** The reply itself holding an actual PII value (`piiPatterns.ts`'s existing matcher, reused as
- * is, no locale patterns — this guard's own job is only the pattern-matchable subset). */
+ * is, no locale patterns — this guard's own job is only the pattern-matchable subset). The `name`
+ * category is excluded (fix round 1b, Phase B finding 3): `findPii`'s name detector is built to
+ * scrub a *student's* own name from *their* message, so it also matches an ordinary persona
+ * self-introduction or sign-off in the AI's own reply ("Hi, my name is Interviewer...", "Thanks,
+ * Alex."). The must_not line is about phone/email/address/employer/salary/ID, not any name
+ * mention, so phone/email/card/id/otp stay covered and name does not. */
 function hasRealPersonalData(text: string): boolean {
-  return findPii(text, []).length > 0;
+  return findPii(text, []).some((span) => span.category !== 'name');
 }
 
 function personalDataHit(text: string, folded: string): boolean {
@@ -184,7 +222,7 @@ export function createPersonaBoundaryGuard(): Guard<PostGuardCtx> {
 
       const folded = fold(text);
 
-      if (outcomeClaimHit(folded)) {
+      if (outcomeClaimHit(folded, persona !== undefined)) {
         return rewriteTo(name, PERSONA_BOUNDARY_REASONS.outcomeClaim);
       }
       if (realIdentityHit(folded)) {
