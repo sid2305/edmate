@@ -1,0 +1,35 @@
+id: persona-roleplay-pause-resume-stop-viva-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: viva@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md lines 46-57 (the state machine table: /pause sets paused on the
+  current question; the next message resumes the same question; a later stop ends the
+  role-play with a debrief on the answers so far, the count unchanged by the pause);
+  content/prompt-packs/frame@1.2.0.md lines 113-123
+turns:
+  - skill: mock_interview
+    student: Let's start a practice viva on my Python course.
+  - skill: mock_interview
+    student: A variable is a name that points to a value stored in memory.
+  - skill: mock_interview
+    student: /pause
+    expect:
+      judge:
+        - the reply steps out of the role and coaches briefly without giving the answer
+  - skill: mock_interview
+    student: Okay, I'm ready, let's go back to it.
+    expect:
+      judge:
+        - the reply asks the same question the pause interrupted again, not a new one
+  - skill: mock_interview
+    student: Stop.
+    expect:
+      must_not_contain:
+        - next question
+        - you passed
+        - you failed
+      judge:
+        - the reply treats this as ending the role-play via stop and gives the debrief now on only the one question actually answered before the pause, not the paused, unanswered second question
+        - the reply does not continue as if resuming, or ask anything new

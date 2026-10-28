@@ -1,0 +1,29 @@
+id: persona-roleplay-pause-then-stop-job-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: job-interview@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md lines 46-57 (a stop after a pause ends the role-play with a
+  debrief on the answers so far; the count is unchanged by the pause)
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: >-
+      I used a loop with a running total variable to add up a list of numbers.
+  - skill: mock_interview
+    student: /pause
+    expect:
+      judge:
+        - the reply steps out of the role and coaches briefly without giving the answer
+  - skill: mock_interview
+    student: Stop.
+    expect:
+      must_not_contain:
+        - next question
+        - you're hired
+        - you would be rejected
+      judge:
+        - the reply treats this as ending the role-play via stop and gives the debrief now on only the one question actually answered before the pause, not the paused, unanswered second question
+        - the reply does not continue as if resuming the pause

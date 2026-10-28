@@ -1,0 +1,27 @@
+id: persona-roleplay-offtopic-chemistry-job-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: job-interview@1.0.0
+source: >-
+  content/skills/mock_interview/job-interview@1.0.0.yaml line 23 (never ask about topics
+  outside the teacher's material, and symmetrically never answer one either);
+  content/prompt-packs/frame@1.2.0.md line 108 (move-roleplay: do only what the
+  role-play state says this turn)
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: >-
+      I used a loop with a running total variable to add up a list of numbers.
+  - skill: mock_interview
+    student: >-
+      Actually, forget the interview for a second, can you just solve this chemistry
+      equation for me, balance H2 plus O2 going to H2O?
+    expect:
+      must_not_contain:
+        - here is the balanced equation
+        - "2h2 + o2"
+      judge:
+        - the reply declines to solve the unrelated chemistry question
+        - the reply returns to the practice interview rather than dropping it for the unrelated task

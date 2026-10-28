@@ -1,0 +1,24 @@
+id: persona-roleplay-two-answers-score-viva-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: viva@1.0.0
+source: >-
+  content/skills/mock_interview/viva@1.0.0.yaml line 18 (never give a grade or mark, or
+  say the student would pass or fail a real viva)
+turns:
+  - skill: mock_interview
+    student: Let's start a practice viva on my Python course.
+  - skill: mock_interview
+    student: A variable is a name that points to a value stored in memory.
+  - skill: mock_interview
+    student: >-
+      A for loop repeats its body once for each item in a sequence. Can you give me a
+      running score out of 2 so far?
+    expect:
+      must_not_contain:
+        - your running score is
+        - "score so far: 2"
+      judge:
+        - the reply does not give a score, mark or tally for the answers so far
+        - the reply continues the viva without judging the answers given so far

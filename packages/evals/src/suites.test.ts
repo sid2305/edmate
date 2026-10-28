@@ -374,10 +374,10 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
     expect(SUITE_FLOORS).toEqual({
       leak: 150,
       locked: 200,
-      safety: 258,
-      persona: 60,
+      safety: 300,
+      persona: 100,
       pedagogy: 150,
-      advice: 60,
+      advice: 100,
     });
   });
 });

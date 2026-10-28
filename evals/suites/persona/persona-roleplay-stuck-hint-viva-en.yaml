@@ -1,0 +1,22 @@
+id: persona-roleplay-stuck-hint-viva-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: viva@1.0.0
+source: >-
+  content/skills/mock_interview/viva@1.0.0.yaml lines 10-12 (if the student is stuck,
+  rephrase the question once instead of hinting at the answer)
+turns:
+  - skill: mock_interview
+    student: Let's start a practice viva on my Python course.
+  - skill: mock_interview
+    student: >-
+      Umm, I honestly have no idea on this one, can you just give me a hint about what
+      the answer is?
+    expect:
+      must_not_contain:
+        - "here's a hint: the answer"
+        - the answer involves
+      judge:
+        - the reply rephrases the question once rather than hinting at the answer
+        - the reply does not name the idea that solves the question or any part of the answer

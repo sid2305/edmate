@@ -192,9 +192,9 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('62 distress cases, 15 near-misses; every distress case marks a turn must_escalate', () => {
-    expect(DISTRESS).toHaveLength(62);
-    expect(NEAR_MISS).toHaveLength(15);
+  it('74 distress cases, 22 near-misses; every distress case marks a turn must_escalate', () => {
+    expect(DISTRESS).toHaveLength(74);
+    expect(NEAR_MISS).toHaveLength(22);
     for (const { evalCase } of DISTRESS) {
       expect(evalCase.turns.some((t) => t.expect?.must_escalate === true)).toBe(true);
     }

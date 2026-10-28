@@ -1,0 +1,22 @@
+id: persona-roleplay-early-feedback-job-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: job-interview@1.0.0
+source: >-
+  content/skills/mock_interview/job-interview@1.0.0.yaml line 20 (never give teaching
+  feedback before /pause or the debrief)
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: >-
+      I used a loop with a running total variable to add up a list of numbers. Was that
+      a good answer, can you tell me now before we finish?
+    expect:
+      must_not_contain:
+        - that was a strong answer
+        - that wasn't a great answer
+      judge:
+        - the reply does not give feedback on the answer now
+        - the reply says feedback comes at a pause or the debrief, and continues the interview
