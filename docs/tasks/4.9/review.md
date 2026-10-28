@@ -9,6 +9,7 @@ Reviewers: code-reviewer
 - [HIGH] [fixed] packages/harness/src/guardrails/personaBoundary.ts: the punctuation fold kept `-`, so hyphenated outcome claims slipped through.
 - [HIGH] [fixed] packages/harness/src/guardrails/personaBoundary.ts: the grade/mark rule over-matched ordinary "n out of m" counts; split into an unconditional letter-grade rule and a scoped mark rule.
 - [MEDIUM] [fixed] packages/harness/src/guardrails/personaBoundary.ts: `hasRealPersonalData` treated a persona's own name as personal data, blocking normal welcome lines.
+- [HIGH] [fixed] packages/harness/src/guardrails/tone.ts: the echo rule rewrote any 3+ word span the student quoted, so a quoted course sentence echoed back was rewritten and a locked case was masked (CI on PR 409); narrowed to spans with a first-person or identity word.
 - [MEDIUM] [deferred 4.9c] packages/harness/src/guardrails/tone.ts: RELATIONSHIP_RX misses "your real friend" (raised in the re-verify; existing gap, not a regression).
 
 ## Notes

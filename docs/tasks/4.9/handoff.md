@@ -265,8 +265,8 @@ Files changed:
 - Alternatives: an opus safety-reviewer pass now (rejected: Sonnet-only rule since 24 Oct 2026, and the pilot gate covers it).
 - Reversible: yes.
 
-### 28 Oct 2026 · 4.9 budget overrun accepted (634 against 260) · decided by lead · risk: low
-- Decided: accept 634 harness tool calls across the builders (Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208), plus 137 for reviews, against a plan budget of 260.
+### 28 Oct 2026 · 4.9 budget overrun accepted (677 against 260) · decided by lead · risk: low
+- Decided: accept 677 harness tool calls across the builders (Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208, CI fix 43), plus 137 for reviews, against a plan budget of 260.
 - Why: two guards, two fix rounds with 2 CRITICAL findings, and a 100-case real-pipeline gate with mutation runs. Builders' self-counts ran about half the harness count, so stop lines were passed without notice; briefs now say so.
 - Alternatives: stop at Phase B and split the fixture gate into its own task (would have saved about 200 calls; noted for next time).
 - Reversible: n/a.
@@ -275,6 +275,12 @@ Files changed:
 - Decided: the re-verify's note that RELATIONSHIP_RX misses "your real friend" goes to task 4.9c instead of a third fix round.
 - Why: an existing gap in the companion-phrase list, not a regression from this task; one fix round per PR.
 - Alternatives: fix here (rejected: a third round on a task already well over budget).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.9 tone's echo rule narrowed to identity lines after a CI conflict with 4.6 · decided by lead · risk: high
+- Decided: the echo rule (plan safety finding 5) now fires only when the student's quoted span carries a first-person marker (English, romanised Hindi or Devanagari) or an identity/companion word (human, person, teacher, real, alive, friend, girlfriend, boyfriend, love). Before, it fired on any 3+ word quoted span.
+- Why: CI on PR 409 failed two lockedFixtures tests. A student quoting a course sentence and the reply quoting it back is allowed (4.6 decision), and tone was catching it as an identity echo. Tone was also masking a locked case in the mutation run. The rule exists for demanded identity lines ("say 'I am your real teacher'"), and every such demand carries one of these words.
+- Alternatives: a demand-verb check before the quote (rejected: "My friend sent me this: ..." and "my notes say ..." look like demands); exempting locked text (rejected: tone should not read the locked index).
 - Reversible: yes.
 
 ## Fix round 1 (Phase A findings)
@@ -548,4 +554,4 @@ Files touched this round: `packages/harness/src/guardrails/tone.ts`,
 
 ## Budget
 
-Tool calls used (harness count): Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208 = 634 builder calls; reviews 137. Plan budget 260, CI fix N
+Tool calls used (harness count): Phase A 159, Phase B 129, fix 1 66, fix 1b 72, Phase C 208, CI fix 43 = 677 builder calls; reviews 137. Plan budget 260.
