@@ -1355,7 +1355,7 @@ tasks:
   deps:
   - GATE
   - '4.3'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 3.10a
@@ -1492,10 +1492,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m13/4.9-persona-tone
+  model: plan:sonnet build:sonnet
 - id: 4.9b
   milestone: M13
   title: 'Name-aware persona and tone checks (4.9 plan review): give the post guards the teacher''s display name (a TurnContext field, ADR) so "I am <teacher name>" and its variants are caught without a
@@ -9822,10 +9822,10 @@ tasks:
   deps:
   - GATE
   - '5.1'
-  status: todo
+  status: done
   needs_decision: null
   branch: null
-  model: null
+  model: plan:sonnet build:none review:lead
 - id: 4.3a
   milestone: M4
   title: 'CI flake from 4.3: preGuard.test.ts sets a 1_000 ms per-test timeout and "classifier false → ok" took 1142 ms on a CI runner (PR #60, run 39440391131). Raise these per-test timeouts to the package

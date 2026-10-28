@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 28 Oct 2026 · 5.1a closed as satisfied by 8.2d · decided by lead · risk: low
+- Decided: close 5.1a with no build. The plan's optional extra end-to-end test is not built.
+- Why: the board text was written before 8.2d landed. 8.2d's merged and security-reviewed code does exactly what 5.1a asks, and its tests cover both acceptance clauses. A second test of the same path adds cost and no new signal.
+- Alternatives: build the planner's one additive test (about 35 tool calls); an independent design audit.
+- Reversible: yes; reopen if a review of the web-link path finds a gap.
+
+---
+
 ### 27 Oct 2026 · 7.2w lead review and budget, 25 tool calls against 20 · decided by lead · risk: low
 - Decided: the lead reviews this task alone and accepts the 1.25x overrun (harness count 25; the builder's own count was lower).
 - Why: the diff is exactly 16 one-line `source:` edits in evals/suites/persona (427 → 482, 427-428 → 482-483, 428 → 483); the lead scripted the diff and confirmed lines 482 and 483 are the personaBoundary and tone rows. No turn, expectation, id or test changed, so a code-reviewer run would add cost and no signal.
