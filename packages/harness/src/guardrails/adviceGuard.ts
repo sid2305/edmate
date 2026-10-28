@@ -48,6 +48,10 @@ import { foldText } from './textFold.js';
 export const ADVICE_REASONS = Object.freeze({
   personalAdvice: 'personal_advice',
   judgeUnavailable: 'judge_unavailable',
+  /** The PII scrub threw, not the judge call itself (4.8b item 8): told apart from the above. */
+  scrubFailed: 'scrub_failed',
+  /** The rewrite call itself threw (4.8b item 8), never silently just the bare fallback. */
+  rewriteFailed: 'rewrite_failed',
   disclaimer: 'disclaimer',
 } as const);
 
@@ -437,20 +441,39 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
         if (!signal(body, studentText, regulated)) return OK;
         if (!verifying) {
           let answer: string | undefined;
+          let scrubFailed = false;
           try {
-            const reply = scrubPii(body, patternsOf(x.ctx.locale)).text;
+            let reply: string;
+            try {
+              reply = scrubPii(body, patternsOf(x.ctx.locale)).text;
+            } catch (error) {
+              scrubFailed = true;
+              throw error;
+            }
             if (x.adviceJudge !== undefined) {
               const r = await x.adviceJudge(adviceJudgeRequest({ reply, studentText }), cancel);
               usage = r.usage;
               answer = r.text;
             }
           } catch {
-            // No answer: handled below as an outage.
+            // No answer: handled below as an outage, scrub told apart from judge (4.8b item 8).
           }
           if (answer === undefined) {
+            // A judge outage on a weak-signal-only turn (no hard rule, no regulated agent, no
+            // decision request/topic, no strong signal) passes unchanged (lead answer Q1, option
+            // A): only the signals ordinary teaching hits too led to the judge call, so an outage
+            // must not change an ordinary reply. Any stronger reason still fails closed.
+            if (
+              !regulated &&
+              !decisionRequest(studentText) &&
+              !regulatedTopic(studentText) &&
+              !strongAdviceSignal(body)
+            ) {
+              return { result: { ok: true }, usage };
+            }
             return replace(
               isRedirect ? redirect : fallback,
-              ADVICE_REASONS.judgeUnavailable,
+              scrubFailed ? ADVICE_REASONS.scrubFailed : ADVICE_REASONS.judgeUnavailable,
               usage,
             );
           }
@@ -469,6 +492,7 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
         return replace(fallback, ADVICE_REASONS.personalAdvice, usage);
       }
       let out = fallback;
+      let reason: string = ADVICE_REASONS.personalAdvice;
       try {
         const draft = scrubPii(body, patternsOf(x.ctx.locale)).text;
         const r = await x.adviceRewrite(adviceRewriteRequest(draft), cancel);
@@ -480,12 +504,27 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
           t.length <= LIMITS.modelTextMaxLength &&
           !rewriteRejected(t, directive)
         ) {
-          out = withDisclaimer(t);
+          // The rewrite is judged once more on its own merits before it is accepted (4.8b item
+          // 1): the regex-only check above does not see everything a rewrite could reintroduce.
+          // Any verdict but clean, or no answer at all (timeout/error), is "advice or no answer"
+          // (the finding's own wording) — the fixed fallback, never a second rewrite.
+          let verified = false;
+          try {
+            if (x.adviceJudge !== undefined) {
+              const v = await x.adviceJudge(adviceJudgeRequest({ reply: t }), cancel);
+              usage = [...usage, ...v.usage];
+              verified = adviceVerdictClean(v.text);
+            }
+          } catch {
+            // No answer: verified stays false, failing closed to the fallback.
+          }
+          if (verified) out = withDisclaimer(t);
         }
       } catch {
-        // The rewrite is best effort: the fallback is always safe.
+        // The rewrite call itself threw (4.8b item 8): its own reason, never silent.
+        reason = ADVICE_REASONS.rewriteFailed;
       }
-      return replace(out, ADVICE_REASONS.personalAdvice, usage);
+      return replace(out, reason, usage);
     },
   };
 }

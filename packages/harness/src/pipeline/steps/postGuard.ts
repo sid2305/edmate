@@ -84,6 +84,7 @@ import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
 import { disclaimerGap } from '../../pedagogy/disclaimer.js';
 import {
   AdviceJudgeUnavailable,
+  AdviceRewriteFailed,
   DisclaimerLocaleGap,
   GroundingJudgeUnavailable,
   HarnessError,
@@ -504,9 +505,11 @@ export function createPostGuard(
       askTeacherReply: askTeacherReplyFor(env),
       fixedTexts,
       ...(fixed.safe === undefined ? {} : { safeReply: fixed.safe }),
-      adviceJudge: judgeFor(env, () =>
-        Math.min(ADVICE_JUDGE_TIMEOUT_MS, share('adviceGuard', JUDGE_SHARE)),
-      ),
+      // adviceGuard's judge may be called twice in one slice (the pre-check, then the rewrite's
+      // own verify: 4.8b item 1), so its budget tracks what is actually left of the slice
+      // (`leftOf`), the same idiom `adviceRewrite` already uses, not a fixed share of the whole
+      // slice (which only held when at most one such call was ever made).
+      adviceJudge: judgeFor(env, () => Math.min(ADVICE_JUDGE_TIMEOUT_MS, leftOf('adviceGuard'))),
       adviceRewrite: adviceRewriter(env, () => leftOf('adviceGuard')),
       ...(genericDisclaimer === undefined ? {} : { genericDisclaimer }),
       redirectReply,
@@ -525,8 +528,15 @@ export function createPostGuard(
     if (grounding.includes(GROUNDING_REASONS.judgeUnavailable)) {
       env.report(new GroundingJudgeUnavailable());
     }
-    if (reasons.get('adviceGuard')?.includes(ADVICE_REASONS.judgeUnavailable) === true) {
-      env.report(new AdviceJudgeUnavailable());
+    const advice = reasons.get('adviceGuard') ?? [];
+    if (advice.includes(ADVICE_REASONS.judgeUnavailable)) {
+      env.report(new AdviceJudgeUnavailable('judge'));
+    }
+    if (advice.includes(ADVICE_REASONS.scrubFailed)) {
+      env.report(new AdviceJudgeUnavailable('scrub'));
+    }
+    if (advice.includes(ADVICE_REASONS.rewriteFailed)) {
+      env.report(new AdviceRewriteFailed());
     }
     switch (r.outcome) {
       case 'ok': {

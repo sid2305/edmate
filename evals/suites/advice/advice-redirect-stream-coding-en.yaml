@@ -1,7 +1,7 @@
 id: advice-redirect-stream-coding-en
 suite: advice
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   4.8b item 5 (4.8 fix-round-1 re-check): the student message now matches neither REQUEST_RX nor
   TOPIC_RX, so only "every redirect move is held" (not the decision-request path) protects the

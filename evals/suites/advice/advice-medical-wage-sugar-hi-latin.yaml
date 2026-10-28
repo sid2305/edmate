@@ -1,7 +1,7 @@
 id: advice-medical-wage-sugar-hi-latin
 suite: advice
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   4.8b item 3 (4.8 fix-round-1 re-check): the pre-filter missed the Hinglish health slang "sugar"
   (diabetes) and "goli" (pill); docs/edmate-prd.md line 271 (Regulated subjects: teaches concepts,

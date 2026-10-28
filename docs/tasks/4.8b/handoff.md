@@ -1,6 +1,6 @@
 # Handoff: 4.8b
 
-Status: PARTIAL
+Status: DONE
 
 ## Summary
 
@@ -52,7 +52,81 @@ failures, then `git apply`'d the patch back and reran — 230/230 passed. Full h
 run with no path filter: 129 files, 5749+ tests, all green (see Gate below for the final run's
 129/129).
 
+## Phase B
+
+Merged `origin/main` into the Phase A branch first (fast-forward of main's 4.9 commit onto this
+branch); the only file both sides touched was `postGuard.advice.test.ts` (4.9 retuned the timing
+fixtures for the new persona/tone guards; this branch added fixed text/tests) — git's 3-way merge
+auto-resolved it with no manual conflict markers, verified by diff and by the full suite passing.
+
+- Item 1 (judge the rewrite once): after an accepted rewrite passes the regex-only
+  `rewriteRejected` check, it is now also sent through `x.adviceJudge` a second time before being
+  used; any non-clean verdict, or no answer at all (timeout/error), fails closed to the fixed
+  fallback — never a second rewrite attempt.
+- Item 4 (judge-outage, lead answer Q1 Option A): on a judge outage (`answer === undefined`), if
+  the only reason the judge was called is a weak signal — no hard rule, not a regulated agent, no
+  decision request or regulated topic in the student's text, no strong signal in the reply — the
+  guard now passes the reply unchanged. Any of those stronger reasons still fails closed to the
+  fallback/redirect, as before.
+- Item 8 (tell failure causes apart): `scrubPii` throwing is now reported as
+  `ADVICE_REASONS.scrubFailed` → `new AdviceJudgeUnavailable('scrub')`, distinct from the judge
+  call itself failing (`ADVICE_REASONS.judgeUnavailable` → `new AdviceJudgeUnavailable('judge')`,
+  the `cause` field, lead answer Q3). The rewrite call itself throwing is now reported as
+  `ADVICE_REASONS.rewriteFailed` → a new `AdviceRewriteFailed` error class, instead of being
+  silently swallowed into the generic `personalAdvice` reason.
+- `postGuard.ts`: `adviceJudge`'s budget now tracks `leftOf('adviceGuard')` (what is actually left
+  of the slice) rather than a fixed share, since the guard can call it twice in one slice (the
+  pre-check, then the rewrite's own verify); and the three reason codes above are each mapped to
+  their own reported error.
+- Timing fixtures: of the four named in Phase A's "Left to do", only the "all five calls" test
+  needed retuning (its judge-call-count assertion loosened); the other three
+  (`it.each([300, 450, 600])`, "a decision request on a teaching turn", "every call hanging")
+  passed unmodified — `runWithTimeout` never invokes a function when its budget is `<= 0`, so the
+  second (verify) judge call is budget-starved into a no-op under those scenarios and never shows
+  up in the call-tracking arrays those tests assert on.
+- Lead sign-off: changed `reviewed_by: pending` → `reviewed_by: lead` in the three case files
+  (`advice-invest-band-karo-hi-latin`, `advice-medical-wage-sugar-hi-latin`,
+  `advice-redirect-stream-coding-en`), nothing else in those files. Removed the `PENDING`-list/
+  `EDMATE_ALLOW_PENDING` special-casing from `adviceFixtures.test.ts`'s "loads all 102 cases" test
+  (now a single unconditional assertion that no case is `reviewed_by: pending`) and fixed its
+  title and two stale comments.
+- `adviceFixtures.test.ts` also needed one regression fix for item 1: the "rules" layer's
+  judged-count assertion was `toBe(0)` (true before item 1 — a hard rule hit made no judge call at
+  all); it is now move-aware — a redirect never rewrites (so no verify call either); every other
+  rule-caught move's accepted rewrite is judged once before it is sent.
+- Added one new unit test (`adviceGuard.test.ts`, "item 1: no judge port at all configures a
+  rewrite that is never verified") to close a coverage gap the new code opened: a hard-rule hit
+  needs no judge call for the hit itself, so it is the only path that exercises the rewrite-verify
+  block's `x.adviceJudge !== undefined` check when that port is absent, and that branch (false)
+  had no test.
+
+### Red -> green evidence
+
+Items 1, 4 and 8 were written test-first against the Phase A code: wrote/extended the failing
+assertions in `adviceGuard.test.ts` and `postGuard.advice.test.ts` first (new reason codes, new
+judge-call counts, the weak-signal-outage passthrough, the rewrite-verify flow), ran them to
+confirm red (9 failures across the two files against the unmodified Phase A production code), then
+implemented `errors.ts`, `adviceGuard.ts` and `postGuard.ts` to green: `adviceGuard.test.ts`
+203/203 (including the one new coverage test, final count 203), `postGuard.advice.test.ts` 24/24.
+`packages/evals/src/adviceFixtures.test.ts`'s rules-layer regression (50 failures on first run
+with `EDMATE_ALLOW_PENDING=1`, all the same stale `judged === 0` assertion) was fixed the same way.
+
+### Mutation re-run
+
+Full harness suite (includes `adviceGuard.test.ts`'s own mutation-style `it.each` sweeps over
+`directive`/`signal` options) and `packages/evals/src/adviceFixtures.test.ts` (the suite's own
+guard-off / judge-always-clean / pre-filter-always-no-signal / rules-off mutation runs over all 102
+cases) both ran clean as part of the gate below — 227/227 in the two advice-guard test files
+directly, 111/111 in `adviceFixtures.test.ts`, 147/147 combined with `suites.test.ts` **without**
+`EDMATE_ALLOW_PENDING`.
+
 ## Decisions
+
+### 28 Oct 2026 · 4.8b item 1 coverage gap · decided by builder · risk: low
+Item 1's rewrite-verify added an `x.adviceJudge !== undefined` branch with no test for the "absent"
+side (only a hard-rule hit, which makes no judge call of its own, reaches the rewrite step without
+a judge configured at all). Added one unit test for it rather than relaxing the guardrails
+coverage threshold.
 
 ### 28 Oct 2026 · 4.8b "band karo" marker scope · decided by builder · risk: low
 Followed the existing "karo alone is any instruction; only a regulated noun counts" pattern rather
@@ -72,42 +146,32 @@ move is held" path specifically, independent of the decision-request pre-filter.
 - `export PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH && corepack pnpm turbo run build
   --filter=@edmate/contracts --filter=@edmate/harness` — green (build harness/contracts so direct
   vitest runs resolve).
-- `EDMATE_ALLOW_PENDING=1 corepack pnpm --filter @edmate/evals exec vitest run
-  src/adviceFixtures.test.ts` — **111/111 passed** (direct vitest run honours the env var; turbo's
-  default strict env mode does not pass ambient env vars through to child tasks unless declared
-  in `turbo.json`, which is outside this task's file list).
-- `EDMATE_ALLOW_PENDING=1 corepack pnpm turbo run typecheck lint test
-  --filter=...@edmate/harness --filter=...@edmate/evals --force --concurrency=1` (600s timeout):
-  - `@edmate/harness:test` — **129/129 test files passed**; `src/guardrails` coverage **100 / 100
-    / 100 / 100**, no `"ERROR: Coverage for ..."` lines.
-  - `@edmate/evals:test` — 29/31 files passed; the 2 failures are exactly
-    `adviceFixtures.test.ts`'s "loads all 102 cases" and `suites.test.ts`'s "every case validates"
-    reporting the 3 pending-reviewer YAMLs (`advice-invest-band-karo-hi-latin`,
-    `advice-medical-wage-sugar-hi-latin`, `advice-redirect-stream-coding-en`) — same "by design
-    until the lead signs off" behaviour documented in the 4.8 handoff (turbo's strict env mode
-    means the ambient `EDMATE_ALLOW_PENDING=1` never reaches the subprocess; a direct vitest run,
-    above, confirms they pass once the var is honoured). Turbo aborts remaining tasks after this
-    failure under `--concurrency=1` (22/29 tasks ran); nothing else failed.
-- `corepack pnpm exec prettier --check` on all 10 changed/new files — all pass.
+- `corepack pnpm --filter @edmate/evals exec vitest run src/suites.test.ts
+  src/adviceFixtures.test.ts` (no `EDMATE_ALLOW_PENDING`) — **147/147 passed**: confirms the lead
+  sign-off directly, since no case is `reviewed_by: pending` any more.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=...@edmate/evals
+  --force --concurrency=1` (600s timeout), **without** `EDMATE_ALLOW_PENDING` — **all 38 tasks
+  succeeded, exit code 0**. No `"ERROR: Coverage for ..."` line for any package; the earlier
+  `--guardrails` subpath run (see Decisions) confirmed `adviceGuard.ts` at 100/100/100/100 once the
+  new coverage test was added. `@edmate/cli`'s database-backed test (`chatDbRetrieval.int.test.ts`)
+  passed with 1 sub-case skipped (its own `EDMATE_ALLOW_...`-style skip, unrelated to Postgres being
+  down) — nothing to chase. One unrelated transient failure during iteration
+  (`@edmate/gateway:lint`, "eslint: command not found") was traced to a stale `node_modules` after
+  the `origin/main` merge, not a real lint error; `corepack pnpm install --frozen-lockfile`
+  (lockfile untouched) fixed it, and the full gate re-run above is clean.
+- `corepack pnpm exec prettier --check` on all 12 changed files — 2 needed `--write`
+  (`adviceGuard.test.ts`, `postGuard.advice.test.ts`, both test-only reformatting from the TDD
+  edits); both affected test files reran green after the reformat (227/227).
 - `python3 .githooks/secret-scan.py --all` — clean, no output.
 
-## Left to do (Phase B, later builder)
+## Left to do
 
-- Item 1: judge-the-rewrite (bounded rewrite output re-checked by the judge before it is sent).
-- Item 4: the judge-outage branch (lead answer Q1: Option A — weak-signal-only judge outage passes
-  unchanged — still needs the behaviour implemented/verified).
-- Item 8: `cause: 'scrub' | 'judge'` field + new `AdviceRewriteFailed` class (lead answer Q3).
-- Retune the 4 Phase-B timing fixtures in `postGuard.advice.test.ts` (the `it.each([300, 450,
-  600])` test, "all five calls", "decision request on a teaching turn", "every call hanging") —
-  left untouched in Phase A per the plan.
-- Full mutation re-run (guard-off / judge-always-clean / no-signal / rules-off) once Phase B lands,
-  and a confirmation run of the gate **without** `EDMATE_ALLOW_PENDING` once the lead signs the 3
-  pending cases.
-- Consider (not required by this plan) declaring `EDMATE_ALLOW_PENDING` in `turbo.json`'s
-  `passThroughEnv` for the `test` task so the documented gate command actually honours the env var
-  under turbo, rather than relying on a direct vitest run as evidence — flagged for the lead/
-  architect since `turbo.json` is outside this task's touch list.
+None. Every Phase B item (1, 4, 8), the four named timing fixtures, the full mutation re-run and
+the lead sign-off confirmation (gate green without `EDMATE_ALLOW_PENDING`) are done. The one open
+item from Phase A's "Left to do" — considering `EDMATE_ALLOW_PENDING` in `turbo.json`'s
+`passThroughEnv` — is now moot: nothing is pending any more, so the gate command needs no env var
+at all; left un-filed as it has no further purpose.
 
 ## Budget
 
-Tool calls used: Phase A 78
+Tool calls used: Phase A 78, Phase B 32

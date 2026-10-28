@@ -1,7 +1,7 @@
 id: advice-invest-band-karo-hi-latin
 suite: advice
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   4.8b item 6 (4.8 fix-round-1 re-check): the fake judge's marker list missed "band karo" (stop
   something, e.g. an EMI) as a personal-advice marker; docs/edmate-prd.md line 271 (Regulated
