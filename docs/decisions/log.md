@@ -10,6 +10,64 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 27 Oct 2026 · 7.2t merge and budget, 236 tool calls against 200 · decided by lead · risk: low
+- Decided: merge 7.2t at 236 harness-counted builder tool calls (Phase L 88, Phase M with the Phase L HIGH fix 148) against a budget of 200 (1.18x).
+- Why: the Phase L review HIGH was folded into the Phase M builder instead of a separate fix agent, and code-reviewer approved the final branch. The Phase M builder passed its 135-call stop line without stopping; later briefs keep the stop line and the lead checks it on return.
+- Alternatives: a separate fix agent for the HIGH (a fresh context plus a second review).
+- Reversible: not applicable (budget record).
+
+---
+
+### 27 Oct 2026 · 7.2t review findings handled · decided by lead · risk: low
+- Decided: Phase L HIGH (leak-mcq-value-type-quoted-en reworded the trick of leak-mcq-value-types-en) fixed by replacing it with leak-mcq-valid-name-en (vv-q4, multiple choice), verified by code-reviewer. Phase M LOW (the handoff counted three pre-existing duplicate-turn groups; there are four) fixed in this handoff by the lead. The four groups are all on main before 7.2t and are left as they are.
+- Why: the duplicates predate this task and are out of its bounds; the forged-note group shares one turn across encodings by design.
+- Alternatives: dedupe the older cases here (out of the plan's file bounds).
+- Reversible: yes.
+
+---
+
+### 27 Oct 2026 · 7.2t leave fn-q3 and lo-q7 unused this phase · decided by builder · risk: low
+- Decided: Phase L reuses only the 35 bank items that already had `KEYS`/`HINTS` entries in `leakFixtures.test.ts`; `fn-q3` ("parameter vs argument") and `lo-q7` ("while vs for") are left for a later phase rather than adding new `KEYS`/`HINTS` entries now.
+- Why: this gives a clean 1:1 mapping of bank item to form at the exact counts the plan calls for (35 cases over 9 forms), with no new fixture plumbing; Phase M's +35 can pick these two up alongside new wordings of the already-used items.
+
+---
+
+### 27 Oct 2026 · 7.2t vary pressure/authority framings beyond the deadline pattern · decided by builder · risk: low
+- Decided: the 5 new `pressure` cases and 4 new `authority` cases use varied angles (scholarship fear, falling behind peers, losing phone privileges, an older sibling TA, a school counselor, a family friend who teaches CS elsewhere, a stepdad who used to teach programming) instead of repeating the "deadline in N minutes" framing already used 5 times in the original 80 cases.
+- Why: the brief requires no trick get a fourth rewording; reusing the same emotional lever a sixth time would have made the new cases weaker tests of the guard than a fresh angle.
+
+---
+
+### 27 Oct 2026 · 7.2t fix the Phase L HIGH-finding duplicate · decided by builder · risk: low
+- Decided: deleted `leak-mcq-value-type-quoted-en.yaml` and replaced it with `leak-mcq-valid-name-en.yaml` (`vv-q4`/mcq, a pair unused until now), as its own commit before starting Phase M; corrected the Phase L "forms used" table to flag that `vv-q2`/mcq already existed before Phase L (in `leak-mcq-value-types-en.yaml`, part of the original 80) rather than being a new Phase L pairing.
+- Why: the review found the deleted case was a near-duplicate of a pre-existing case (same bank item, same MCQ-elimination trick, same quoted `"42"` angle); `vv-q4` already had `KEYS`/`HINTS` plumbing from Phase L's `stepbystep` case, so reusing it for `mcq` needed no new fixture code.
+
+---
+
+### 27 Oct 2026 · 7.2t first use of fn-q3 and lo-q7 · decided by builder · risk: low
+- Decided: added `KEYS`/`HINTS` entries for `fn-q3` ("parameter vs argument") and `lo-q7` ("while vs for") in `leakFixtures.test.ts`, used for `unittest` and `reversed` respectively, closing out the two bank items Phase L left unused.
+- Why: this completes a clean 1:1 mapping of all 37 bank items to a form at least once across Phases L and M, with every (item, form) pair in the plan's required mix satisfied by a distinct case.
+
+---
+
+### 27 Oct 2026 · 7.2t avoid two pre-existing (item, form) duplicate pairs · decided by builder · risk: low
+- Decided: Phase M does not pair `co-q5` with `pressure` or `ld-q8` with `partialreveal`, even though neither appears in the corrected Phase L table, because a pair-check script found both pairs already used twice in the pre-7.2t corpus (`leak-pressure-between-range-en`/`leak-pressure-range-condition-en`; `leak-partialreveal-len-sum-en`/`leak-partialreveal-list-sum-total-en`).
+- Why: those four files predate this task and are out of bounds to edit or remove per the plan; adding a third occurrence of either pair would have compounded a gap the review didn't ask this phase to fix, so the safer call is to route `co-q5` to `stepbystep` and `ld-q8` to `stepbystep` instead (see the Phase M forms list) and simply flag both pre-existing pairs here for a later phase.
+
+---
+
+### 27 Oct 2026 · 7.2t fn-q3 key shortened to stay on one line of the bank YAML · decided by builder · risk: low
+- Decided: `KEYS['fn-q3']` is `'the value passed in'`, not the longer `'the value passed in when the function is called'`.
+- Why: `functions.yaml#fn-q3`'s answer is a `|` block scalar that line-breaks between "in" and "when", so the longer phrase is not a literal substring of the loaded answer string (`item.answer.includes(k)` was failing); the shorter phrase sits on one physical line and is still specific enough to be a real do-not-say key.
+
+---
+
+### 27 Oct 2026 · 7.2t reword two Phase M turns that repeated an existing single turn · decided by builder · risk: low
+- Decided: reworded turn 1 of `leak-partialreveal-dict-loop-en` (now "I want to iterate over stock so it prints each fruit together with its count...") and turn 1 of `leak-unittest-string-repeat-en` (now "If I type `print("ha" * 3)` into Python, what will I see printed?"), away from phrasing that normalised identically to `leak-authority-dict-loop-en`'s and `leak-spelled-string-repeat-en`'s/`leak-vv6-partial-quote-en`'s turn 1s respectively.
+- Why: the brief's whole-suite check requires no new case repeat any single existing turn (case-insensitive), a stricter rule than the automated `duplicateTurnProblems()` check in `suites.test.ts` (which only flags a duplicate when a case's *entire* turn sequence matches); these two turns matched only turn 1, not turn 2, so the automated check would not have caught them, but the brief's rule still applied.
+
+---
+
 ### 27 Oct 2026 · 7.2v merge and budget, 56 tool calls against 40 · decided by lead · risk: low
 - Decided: merge 7.2v at 56 harness-counted tool calls against a budget of 40 (1.4x).
 - Why: 53 case files needed each distinct citation checked against the build plan and the folded source blocks re-wrapped; code-reviewer approved with no blocking findings, and the work is done in one pass with no fix round.
