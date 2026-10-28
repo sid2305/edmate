@@ -235,12 +235,24 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     // 4.8b item 2: an em/en dash is a sentence break too, same as a comma or full stop.
     'Okay — sign it.',
     'Yes – file the case.',
+    // 4.8c: a self-regulated verb after a weak break (comma/dash) is still a hit with a
+    // direct-object or second-person cue.
+    'Okay — buy it now.',
+    'Honestly, sell everything today.',
+    'Yes, invest in index funds.',
+    'Okay, sue them.',
+    'So — sue your landlord.',
   ])('hits: %s', (text) => {
     expect(personalDirective(text)).toBe(true);
   });
 
   it.each([
     'Compound interest means you earn interest on earlier interest.',
+    // 4.8c (the 4.8b Phase A review MEDIUM): a self-regulated verb after a weak break
+    // (comma/dash) with no regulated object or direct-object cue is history prose, not advice.
+    'The stock market fell sharply in 1929 — invest wisely was the advice given then, in hindsight.',
+    'Their motto was to buy low, sell high.',
+    'Prices rose for a decade, sell-offs came later.',
     'You should talk to a doctor about which medicine is right for you.',
     'You should consult a lawyer before you sign anything.',
     'You should see a qualified financial adviser about your savings.',
@@ -566,7 +578,7 @@ describe('adviceGuard: the judge', () => {
     expect(s.calls.judged).toHaveLength(2);
   });
 
-  it('item 1: the rewrite-verify judge call itself gives no answer; the fixed fallback, never the unverified rewrite', async () => {
+  it('item 1: the rewrite-verify judge call itself gives no answer; the fixed fallback, reason rewrite_unverified (4.8d item a)', async () => {
     let calls = 0;
     const s = setup({
       studentText: 'Should I buy it?',
@@ -575,10 +587,10 @@ describe('adviceGuard: the judge', () => {
       rewriteTo: 'Index funds track a whole market.',
     });
     const r = await run('Haan, le lo.', s.x);
-    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.rewriteUnverified));
   });
 
-  it('item 1: no judge port at all configures a rewrite that is never verified; the fixed fallback, never the unverified rewrite', async () => {
+  it('item 1: no judge port at all configures a rewrite that is never verified; the fixed fallback, reason rewrite_unverified (4.8d item a)', async () => {
     // A hard-rule hit (`personalDirective`) needs no judge call of its own, so this is the only
     // way to see the rewrite-verify's own `x.adviceJudge !== undefined` check turn false.
     const s = setup({
@@ -587,7 +599,7 @@ describe('adviceGuard: the judge', () => {
       rewriteTo: 'Index funds track a whole market.',
     });
     const r = await run('You should sell your mutual funds this month.', s.x);
-    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.rewriteUnverified));
   });
 
   it.each([
@@ -678,6 +690,36 @@ describe('adviceGuard: the rewrite and its fallback', () => {
     const s = setup({ noRewrite: true });
     const r = await run('You should sell your mutual funds this month.', s.x);
     expect(r.result).toEqual(rewriteTo(FALLBACK, 'personal_advice'));
+  });
+
+  // 4.8d (a): a rewrite the rules accept is judged once more; no answer at all (the verify
+  // judge throws, or no judge is configured there) is told apart from a judge that did answer
+  // but called it advice.
+  it('an accepted rewrite whose verify judge throws: the fixed fallback, reason rewrite_unverified', async () => {
+    const s = setup({
+      rewriteTo: 'Index funds spread risk across many companies.',
+      answer: () => Promise.reject(new Error('down')),
+    });
+    const r = await run('You should sell your mutual funds this month.', s.x);
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.rewriteUnverified));
+  });
+
+  it('an accepted rewrite with no judge configured on the verify call: rewrite_unverified', async () => {
+    const s = setup({
+      rewriteTo: 'Index funds spread risk across many companies.',
+      noJudge: true,
+    });
+    const r = await run('You should sell your mutual funds this month.', s.x);
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.rewriteUnverified));
+  });
+
+  it('an accepted rewrite whose verify judge says advice: the fixed fallback, reason personal_advice', async () => {
+    const s = setup({
+      rewriteTo: 'Index funds spread risk across many companies.',
+      answer: ADVICE,
+    });
+    const r = await run('You should sell your mutual funds this month.', s.x);
+    expect(r.result).toEqual(rewriteTo(FALLBACK, ADVICE_REASONS.personalAdvice));
   });
 
   it('a rewrite that already carries the disclaimer is not given it twice', async () => {

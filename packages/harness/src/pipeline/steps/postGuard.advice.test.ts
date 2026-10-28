@@ -279,6 +279,16 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
     expect(s.reported).toContainEqual(new AdviceRewriteFailed());
   });
 
+  it('a hard-rule hit whose rewrite is accepted, but its own verify call gives no answer: the fixed fallback, cause verify (4.8d item a)', async () => {
+    const s = setup({
+      advice: 'script',
+      streams: [adviceRewrite('Index funds spread money across many companies.')],
+    });
+    const r = await s.run('You should sell your mutual funds this month.');
+    expect(r).toMatchObject({ result: 'replace', text: FALLBACK });
+    expect(s.reported).toContainEqual(new AdviceJudgeUnavailable('verify'));
+  });
+
   it('no signal: no advice judge call, the reply passes unchanged', async () => {
     const s = setup();
     // No number either: a bare number is a signal (4.8 fix round 1).

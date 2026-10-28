@@ -174,14 +174,15 @@ export class GroundingJudgeUnavailable extends HarnessError {
 
 /**
  * adviceGuard's judge gave no answer (outage, timeout, cost ceiling) and the turn got its fixed
- * fallback (task 4.8). `cause` tells apart a PII-scrub failure from the judge call itself failing
- * (4.8b item 8; mirrors `GroundingEscalationLost`'s `causeName`). A metric, not a failure: fixed
- * text, no turn text.
+ * fallback or an unverified rewrite's fixed fallback (task 4.8). `cause` tells apart a PII-scrub
+ * failure, the pre-check judge call itself failing, and the rewrite's own verify call giving no
+ * answer (4.8b item 8, 4.8d item a; mirrors `GroundingEscalationLost`'s `causeName`). A metric,
+ * not a failure: fixed text, no turn text.
  */
 export class AdviceJudgeUnavailable extends HarnessError {
   override readonly name = 'AdviceJudgeUnavailable';
 
-  constructor(override readonly cause: 'scrub' | 'judge' = 'judge') {
+  constructor(override readonly cause: 'scrub' | 'judge' | 'verify' = 'judge') {
     super(`advice judge unavailable: sent the fixed advice fallback (${cause})`);
   }
 }
