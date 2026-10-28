@@ -11,9 +11,15 @@ import { collapse, SectionBuilder } from './sections.js';
 interface DomNode {
   readonly type: string;
   readonly name?: string;
-  /** Set on text and comment nodes; only read for text. */
-  readonly data: string;
+  /** Set on text and comment nodes; absent on element nodes and directives. */
+  readonly data?: string;
   readonly children?: readonly DomNode[];
+}
+
+/** A checked narrowing in place of an unchecked double cast: any object with a `type` tag
+ * structurally satisfies the walker's needs (every domhandler node has one). */
+function isDomNode(node: unknown): node is DomNode {
+  return typeof node === 'object' && node !== null && 'type' in node;
 }
 
 const SKIP = new Set([
@@ -64,7 +70,7 @@ const BLOCK = new Set([
 const HEADING = /^h([1-6])$/;
 
 function textOf(node: DomNode): string {
-  if (node.type === 'text') return node.data;
+  if (node.type === 'text') return node.data ?? '';
   if (node.name !== undefined && SKIP.has(node.name)) return '';
   return (node.children ?? []).map(textOf).join('');
 }
@@ -76,7 +82,7 @@ class Walker {
 
   walk(node: DomNode): void {
     if (node.type === 'text') {
-      this.#buffer += node.data;
+      this.#buffer += node.data ?? '';
       return;
     }
     const name = node.name;
@@ -129,8 +135,9 @@ export function parseHtml(html: string, sourceTitle: string): ParsedDocument {
   const sections = new SectionBuilder(sourceTitle);
   const $ = load(html);
   const body = $('body')[0] ?? $.root()[0];
+  if (!isDomNode(body)) throw new Error('cheerio produced no document node');
   const walker = new Walker(sections);
-  walker.walk(body as unknown as DomNode);
+  walker.walk(body);
   walker.flush();
   return sections.finish();
 }

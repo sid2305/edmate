@@ -24,8 +24,15 @@ export const SCRUB_GUARD_TIMEOUT_MS = 100;
 /** Deeper payloads fail closed rather than risk the stack. */
 const MAX_PAYLOAD_DEPTH = 64;
 
-const registry = new GuardRegistry<PiiScrubCtx>('scrub');
-registry.register(createPiiScrubGuard());
+/** The scrub-phase registry (piiScrub): exported (4.9, Refresh item 7) so a completeness test can
+ * read the registry this step really uses, matching `preGuard.ts`'s `defaultPreGuardRegistry()`. */
+export function defaultScrubRegistry(): GuardRegistry<PiiScrubCtx> {
+  const r = new GuardRegistry<PiiScrubCtx>('scrub');
+  r.register(createPiiScrubGuard());
+  return r;
+}
+
+const registry = defaultScrubRegistry();
 
 const payloadShape = (): ScrubFailedError => new ScrubFailedError({ guardCause: 'payload_shape' });
 

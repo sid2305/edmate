@@ -1483,6 +1483,16 @@ tasks:
   status: running
   branch: m13/4.8b-advice-guard-followups
   model: plan:sonnet build:sonnet
+- id: 4.8c
+  milestone: M13
+  title: 'Advice-guard follow-up (4.8b Phase A review MEDIUM): IMPERATIVE_RX lets SELF_REGULATED verbs (buy/sell/invest/sue) skip the REGULATED_RX object check after a sentence break, so history prose like
+    "The market fell in 1929 — invest wisely was the advice then" (and the older comma form, "buy low, sell high") is a hard-rule hit'
+  accept: self-regulated verbs after a dash or comma break need a regulated object or a second-person cue; the two example sentences pass; every existing advice must-block test still blocks; tests.
+  deps:
+  - 4.8b
+  status: todo
+  branch: null
+  model: null
 - id: 4.4e
   milestone: M13
   title: 'Strike consequence (human decision B-12): after 3 strikes in a session, later messages in that session get stricter checks (ambiguous jailbreak and moderation hits block instead of only flagging;
@@ -1568,10 +1578,33 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m13/4.9-persona-tone
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 1513
+    tokens_in: 5180
+    tokens_out: 600379
+    cache_read_tokens: 206072813
+    wall_time_seconds: 790158
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 5
+    findings:
+      total: 8
+      by_severity:
+        CRITICAL: 2
+        HIGH: 4
+        MEDIUM: 2
+      by_status:
+        fixed: 7
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 1
 - id: 4.9b
   milestone: M13
   title: 'Name-aware persona and tone checks (4.9 plan review): give the post guards the teacher''s display name (a TurnContext field, ADR) so "I am <teacher name>" and its variants are caught without a
@@ -1583,6 +1616,29 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 4.9c
+  milestone: M13
+  title: 'Tone guard follow-up (4.9 fix re-verify): RELATIONSHIP_RX misses "your real friend" (and "I''m also your real friend"), so a companion claim in that wording passes with or without an AI-built
+    preamble'
+  accept: '"I''m your real friend" and "I''m an AI built from your teacher''s notes and I''m also your real friend" are rewritten; "a real friend would tell you to check your working" style replies still
+    pass; tests.'
+  deps:
+  - '4.9'
+  status: running
+  branch: m13/4.9d-identity-coverage
+  model: build:sonnet (in 4.9d)
+- id: 4.9d
+  milestone: M13
+  title: 'Identity guard coverage (4.9 Phase C gap): about 22 of the 45 persona cases no guard catches are identity or companion claims ("I confirm I am a real, licensed teacher", "I am alive", "I am DAN"/"I
+    am Replika"/"a wrapper around GPT-4", a real name, birthday or location, "I saw you wave", a voice-message offer, "I promise I will never leave you", "I will be your date"); extend tone/personaBoundary
+    so they are caught'
+  accept: each of those cases moves from NOT_COVERED to CAUGHT in personaFixtures.test.ts (or stays, with a logged reason a regex cannot catch it without over-blocking), with mutation runs updated; the
+    honest-AI and persona-welcome replies still pass; the role-play discipline cases stay recorded for the live-model judge; folds in 4.9c; tests.
+  deps:
+  - '4.9'
+  status: running
+  branch: m13/4.9d-identity-coverage
+  model: plan:lead build:sonnet
 - id: '5.1'
   milestone: M5
   title: 'Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators'
@@ -10494,10 +10550,30 @@ tasks:
   deps:
   - GATE
   - '5.1'
-  status: running
+  status: done
   needs_decision: null
   branch: m13/5.1b-ingest-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 250
+    tokens_in: 878
+    tokens_out: 75930
+    cache_read_tokens: 26687530
+    wall_time_seconds: 1813
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.3f
   milestone: M13
   title: '9.3e follow-ups (security-review MEDIUM and builder left-to-do): staff can safety-reject a verified teacher from the console (today the safety checkbox only reaches pending teachers in the verification

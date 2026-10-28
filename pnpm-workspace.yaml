@@ -12,6 +12,12 @@ packages:
 allowBuilds:
   esbuild: false
   msgpackr-extract: false
-  "@swc/core": false
-  "@parcel/watcher": false
+  '@swc/core': false
+  '@parcel/watcher': false
   pnpm: true
+
+# @napi-rs/canvas is pdfjs-dist's optional native rendering backend (task 5.1b, review LOW).
+# Ingest only extracts text (docs/decisions/log.md's pdfjs-dist pin decision), so it is never
+# used; this stops its platform binaries from being downloaded at all.
+ignoredOptionalDependencies:
+  - '@napi-rs/canvas'
