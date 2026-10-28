@@ -38,7 +38,7 @@ export const SUITE_FLOORS: Readonly<Record<FlooredSuite, number>> = {
   safety: 300,
   persona: 100,
   pedagogy: 150,
-  advice: 60,
+  advice: 100,
 };
 
 export interface SuiteRules {
