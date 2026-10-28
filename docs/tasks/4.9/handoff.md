@@ -262,4 +262,4 @@ Files touched this round: `packages/harness/src/guardrails/tone.ts`,
 
 ## Budget
 
-Tool calls used: Phase A 159, Phase B 129, fix 1 36
+Tool calls used: Phase A 159, Phase B 129, fix 1 50
