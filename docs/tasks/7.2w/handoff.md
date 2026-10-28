@@ -35,11 +35,16 @@ All citations verified against docs/edmate-harness-build-plan.md.
 No other citation failed or needed re-pointing — the 16 files above are the only persona cases citing `docs/edmate-harness-build-plan.md` with a `line N` guard reference.
 
 ## Decisions
-None.
+
+### 27 Oct 2026 · 7.2w lead review and budget, 25 tool calls against 20 · decided by lead · risk: low
+- Decided: the lead reviews this task alone and accepts the 1.25x overrun (harness count 25; the builder's own count was lower).
+- Why: the diff is exactly 16 one-line `source:` edits in evals/suites/persona (427 → 482, 427-428 → 482-483, 428 → 483); the lead scripted the diff and confirmed lines 482 and 483 are the personaBoundary and tone rows. No turn, expectation, id or test changed, so a code-reviewer run would add cost and no signal.
+- Alternatives: a code-reviewer run (about 20 calls).
+- Reversible: yes.
 
 ## Gate
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals` → 6/6 tasks successful (typecheck, lint, test for 2 packages), 1873 tests passed, 31 test files passed.
 - `python3 .githooks/secret-scan.py --all` → clean, no output, exit 0.
 
 ## Budget
-Tool calls used: 14
+Tool calls used: 25
