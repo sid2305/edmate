@@ -1701,9 +1701,9 @@ tasks:
   accept: both examples are rewritten; "I really am not sure" and "call me when you are done" style replies still pass; tests.
   deps:
   - 4.9d
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.9e-tone-adverbs
+  model: plan:lead build:sonnet
 - id: '5.1'
   milestone: M5
   title: 'Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators'
