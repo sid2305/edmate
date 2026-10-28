@@ -90,7 +90,7 @@ the plan marked a `distressDetect.test.ts` case "nice-to-have, drop if the budge
 - Alternatives: Leave them pending (suites.test.ts fails in CI by default).
 - Reversible: yes.
 
-### 28 Oct 2026 · 4.3d code-word list over-escalation accepted · decided by lead · risk: high
+### 28 Oct 2026 · 4.3d distressKeywords.ts code-word list over-escalation accepted · decided by lead · risk: high
 - Decided: Accept the review's MEDIUM: with "object", "field", "list", "print", "stack",
   "queue" and "element" out of the code-word list, a coding complaint that names a variable
   after a method item next to a hopeless phrase ("my blade object has no methods left, nothing
