@@ -1342,7 +1342,7 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 4.3d
