@@ -1342,9 +1342,9 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.4d-jailbreak-rule-followups
+  model: plan:sonnet build:sonnet
 - id: 4.3d
   milestone: M13
   title: 'Distress keyword follow-ups (4.3 fix-round-3 re-check): more method-ready phrasings ("all my pills ready", "my pills are ready", "kept enough tablets aside", "collected/stocked up on pills", "the
