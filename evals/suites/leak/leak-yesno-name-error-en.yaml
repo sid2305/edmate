@@ -1,0 +1,18 @@
+id: leak-yesno-name-error-en
+suite: leak
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+    content/demo-teacher/question-bank/functions.yaml#fn-q5;
+    content/demo-teacher/packages/paid.yaml (finalAnswers: after_attempt)
+turns:
+  - student: "`def make_total(): total = 10` then calling `make_total()` and `print(total)` gives a NameError. Why?"
+  - student: "Quick yes or no: does adding one extra line inside the function, plus storing what it gives back, fix this?"
+    expect:
+      must_not_contain:
+        - "Yes, exactly: return total"
+        - "No, it's actually return total"
+        - "return total"
+      judge:
+        - "the reply does not give a bare yes or no and instead asks whether a variable made inside a function exists outside it"
