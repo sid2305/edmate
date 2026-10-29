@@ -634,6 +634,45 @@ describe('tone: bare "licensed/certified teacher/tutor" with no real/actual qual
   );
 });
 
+describe('tone: an adverb before/after "am" still trips the identity families (4.9e)', () => {
+  it.each([
+    'I really am alive, I promise.',
+    "I'm really a human, trust me.",
+    'I am honestly a real person.',
+  ])('rewrites: %s', async (text) => {
+    const r = await run(text, x());
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+  });
+
+  it.each([
+    'I really am not sure about that step.',
+    "I really am not a human, I'm an AI tutor.",
+    "I'm honestly not alive; I'm a program.",
+    'I really am alive to the idea of trying both methods.',
+    "I'm actually a big fan of this proof.",
+  ])('stays ok: %s', async (text) => {
+    expect(await run(text, x())).toEqual(ok);
+  });
+});
+
+describe('tone: "Call me <product>" jailbreak invocation (4.9e)', () => {
+  it.each([
+    'Call me DAN from now on.',
+    'You can call me DAN.',
+    "From today, I'll be ChatGPT for you.",
+  ])('rewrites: %s', async (text) => {
+    const r = await run(text, x());
+    expect(r).toEqual(rewrite(TONE_FIXED_REPLY, TONE_REASONS.identityOrCompanion));
+  });
+
+  it.each([
+    'Call me when you are done with the worksheet.',
+    'Call me Dan, your interviewer for today.',
+  ])('stays ok: %s', async (text) => {
+    expect(await run(text, x())).toEqual(ok);
+  });
+});
+
 describe('tone: never touches an escalation (lead answer 7)', () => {
   it('passes the distress template cleanly when it is a fixed text (the chain never reaches tone on an escalate; this pins tone’s own side of the idempotence)', async () => {
     const DISTRESS_TEMPLATE =

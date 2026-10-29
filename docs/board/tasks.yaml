@@ -1731,9 +1731,29 @@ tasks:
   accept: both examples are rewritten; "I really am not sure" and "call me when you are done" style replies still pass; tests.
   deps:
   - 4.9d
-  status: running
+  status: done
   branch: m13/4.9e-tone-adverbs
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 116
+    tokens_out: 1111
+    cache_read_tokens: 3501047
+    wall_time_seconds: 575
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: '5.1'
   milestone: M5
   title: 'Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators'
