@@ -1542,9 +1542,28 @@ tasks:
   accept: the cue must sit right after the verb (or its object); the 4.8c review example and two new maxim variants pass; every 4.8c must-block sentence still blocks; tests.
   deps:
   - 4.8c
-  status: running
+  status: done
   branch: m13/4.8e-advice-cue-window
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 29
+    tokens_in: 98
+    tokens_out: 489
+    cache_read_tokens: 1925949
+    wall_time_seconds: 429
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 4.8d
   milestone: M13
   title: 'Advice-guard follow-up (4.8b Phase B review LOWs): give the rewrite-verify outage its own reason code instead of the generic personal_advice, and fix the stale step-3 header comment in adviceGuard.ts'

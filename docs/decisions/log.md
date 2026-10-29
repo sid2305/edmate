@@ -10,6 +10,39 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 28 Oct 2026 · 4.8e cue anchor width · decided by builder · risk: low
+- Decided: `CUE_RX` is anchored `^ ?(?:\S+ )?` + the cue alternation — the cue must be the first or
+  second word of the window right after the verb.
+- Why: the plan's four must-block examples ("buy it now", "sell everything today", "sue them",
+  "sue your landlord") all have the cue as the first word of the window; allowing one filler word
+  before it keeps a small margin without reopening the clause-wide match the review flagged, and
+  every 4.8c must-block case (including the two new ones in this task, "Okay — buy them before
+  Friday." and "Honestly, sell it all.") and every new must-pass maxim sentence check out as
+  expected.
+- Alternatives: anchor to exactly the first word (no filler) — rejected, not required by any test
+  case and narrower than the plan's wording ("first word or two"); leave the window-wide match and
+  instead widen `REGULATED_RX` — rejected, the review's point is specifically that a bare cue word
+  (not a regulated object) should not count from anywhere in the clause.
+- Reversible: yes — a regex constant, no contract or schema change.
+
+---
+
+### 28 Oct 2026 · 4.8e safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: adviceGuard.ts and its test merge after a code-reviewer pass against the real `personalDirective`, without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. The review found nothing. Every must-block sentence and five new advice probes still block, and the test diff only adds lines.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it).
+- Reversible: yes.
+
+---
+
+### 28 Oct 2026 · 4.8e budget · decided by lead · risk: low
+- Decided: accept 55 builder tool calls (harness count) against the plan's 35, plus 29 review calls.
+- Why: within the 60 stop line. Part of the overrun was waiting out orphaned vitest coverage workers that collided with the gate run. The builder self-reported about 35 to 45.
+- Alternatives: none needed.
+- Reversible: n/a.
+
+---
+
 ### 28 Oct 2026 · 4.9e adverb slot shared via a parameterised builder, not six separate edits · decided by builder · risk: low
 - Decided: added one `amPrefixSrc(lead, extraAdverb?)` function (not six independently-edited
   regex literals) that every affected family calls, with `lead` swapping in `OTHER_AI_CLAIM_RX`'s
