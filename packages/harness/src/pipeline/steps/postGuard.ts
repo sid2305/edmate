@@ -535,6 +535,9 @@ export function createPostGuard(
     if (advice.includes(ADVICE_REASONS.scrubFailed)) {
       env.report(new AdviceJudgeUnavailable('scrub'));
     }
+    if (advice.includes(ADVICE_REASONS.rewriteUnverified)) {
+      env.report(new AdviceJudgeUnavailable('verify'));
+    }
     if (advice.includes(ADVICE_REASONS.rewriteFailed)) {
       env.report(new AdviceRewriteFailed());
     }

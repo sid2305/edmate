@@ -21,14 +21,22 @@
 //   3. The judge (bounded small tier, `PostGuardCtx.adviceJudge`): the scrubbed student message and
 //      the PII-scrubbed reply in their own fenced blocks, a fixed rubric, strict JSON. Only
 //      `{"personalAdvice": false}` is clean; any other answer is advice. No answer at all (outage,
-//      timeout, cost ceiling, a scrub that could not run) goes straight to the fixed fallback with
-//      the code `judge_unavailable`, never to a rewrite. Never on the verification pass: there the
-//      guard runs its rules only.
+//      timeout, cost ceiling) on a turn with no stronger reason than the signals ordinary teaching
+//      hits too (no hard rule, no regulated agent, no decision request/topic, no strong signal)
+//      passes unchanged (4.8b Q1, option A): the judge call there was never load-bearing. Any
+//      stronger reason still fails closed, to the fixed fallback, with the code
+//      `judge_unavailable`, or `scrub_failed` when the PII scrub itself threw. Never to a rewrite.
+//      Never on the verification pass: there the guard runs its rules only.
 //   4. Advice found: on a `redirect` turn the redirect reply (no rewrite: a redirect teaches
 //      nothing). Otherwise one bounded rewrite of the scrubbed draft into concept teaching; it is
 //      accepted only when the rules pass it (no directive, no non-Latin letter, no romanised Hindi
-//      imperative, no dose, no promise, no named product), else the fixed fallback. The chain's verification pass then re-checks it with
-//      every post guard (answer keys, locked material).
+//      imperative, no dose, no promise, no named product), else the fixed fallback with the code
+//      `personal_advice`. An accepted rewrite is judged once more before it is used; no clean
+//      verdict still means the fixed fallback — `rewrite_unverified` when that verify call gave no
+//      answer at all, `personal_advice` when it answered but called the rewrite advice. A rewrite
+//      call that itself threw gets its own code, `rewrite_failed`, never silently the generic one.
+//      The chain's verification pass then re-checks an accepted rewrite with every post guard
+//      (answer keys, locked material).
 //   5. The disclaimer (a plain string operation): appended after a blank line to a rewrite, and to
 //      a clean reply when a regulated-subject agent was asked for a decision, unless the text holds
 //      it word for word already. Never to a fixed text.
@@ -52,6 +60,12 @@ export const ADVICE_REASONS = Object.freeze({
   scrubFailed: 'scrub_failed',
   /** The rewrite call itself threw (4.8b item 8), never silently just the bare fallback. */
   rewriteFailed: 'rewrite_failed',
+  /**
+   * The rewrite passed the rules, but its own verify call (4.8b item 1) gave no answer at all —
+   * it threw, or no judge was configured there — told apart from a judge that did answer and
+   * called it advice (4.8d).
+   */
+  rewriteUnverified: 'rewrite_unverified',
   disclaimer: 'disclaimer',
 } as const);
 
@@ -164,13 +178,31 @@ const DIRECTIVE_RX = rxg(
 /**
  * An imperative at the start of a sentence, after an optional "yes," and "just" or "don't". An
  * em/en dash (with its surrounding space) is a sentence break too, so "Okay — sign it." splits
- * the same way as "Okay, sign it." (4.8b item 2).
+ * the same way as "Okay, sign it." (4.8b item 2). The break itself is captured (group 1) so
+ * `personalDirective` can tell a strong break (sentence start, `.!?;:` or a newline) from a weak
+ * one (", " or a dash): a `SELF_REGULATED` verb right after a weak break needs its own object or
+ * cue, not just the verb, since prose ("buy low, sell high") also reads this way (4.8c).
  */
 const IMPERATIVE_RX = rxg(
-  String.raw`(?:^|[.!?;:\n] ?|, | ?[–—]+ ?)(?:(?:yes|yeah|ok|okay|sure|honestly|so),? )?(?:(?:just|don't|do not|never) )?(take|buy|sell|invest|put|move|stop taking|start taking|keep taking|give (?:them|him|her|it)|sue|sign|file)(?![\p{L}])`,
+  String.raw`(^|[.!?;:\n] ?|, | ?[–—]+ ?)(?:(?:yes|yeah|ok|okay|sure|honestly|so),? )?(?:(?:just|don't|do not|never) )?(take|buy|sell|invest|put|move|stop taking|start taking|keep taking|give (?:them|him|her|it)|sue|sign|file)(?![\p{L}])`,
 );
 /** Verbs that are a regulated step on their own ("sign" and "file" need their object: 4.8 fix 1). */
 const SELF_REGULATED = new Set(['buy', 'sell', 'invest', 'sue']);
+/**
+ * A weak break: ", " or an em/en dash (4.8c). Anything else `IMPERATIVE_RX` matched as its break
+ * group — sentence start (captured empty) or `[.!?;:\n]` — is a strong break.
+ */
+function isWeakBreak(brk: string): boolean {
+  return /[,–—]/.test(brk);
+}
+/**
+ * A direct-object or second-person cue right after a `SELF_REGULATED` verb that followed a weak
+ * break (4.8c): the narrowest closed list that keeps every must-block case blocking (builder
+ * decision, see handoff).
+ */
+const CUE_RX = rx(
+  String.raw`(?<![\p{L}])(?:it|them|this|that|these|those|now|today|you|your|everything|all|more|some|\d)(?![\p{L}])`,
+);
 /** A referral right after the directive: "you should talk to a doctor". */
 const REFERRAL_RX = rx(
   String.raw`^ ?(?:also |really |first |always )?(?:talk|speak) (?:to|with)|^ ?(?:also |really |first |always )?(?:consult|see|visit|ask|check with|reach out to|get (?:help|advice) from|call)(?![\p{L}])`,
@@ -225,10 +257,18 @@ export function personalDirective(text: string): boolean {
     if (REGULATED_RX.test(w)) return true;
   }
   for (const m of s.matchAll(IMPERATIVE_RX)) {
-    const verb = m[1] as string;
-    if (SELF_REGULATED.has(verb)) return true;
-    // The window starts at the verb, so "sign it" and "file the case" can match (4.8 fix 1).
+    const brk = m[1] as string;
+    const verb = m[2] as string;
     const end = m.index + m[0].length;
+    if (SELF_REGULATED.has(verb)) {
+      if (!isWeakBreak(brk)) return true;
+      // A weak break (4.8c): tested on the window alone, since the verb words (buy/sell/invest/
+      // sue) are themselves in REGULATED and would always match if prepended.
+      const w = windowAfter(s, end);
+      if (REGULATED_RX.test(w) || CUE_RX.test(w)) return true;
+      continue;
+    }
+    // The window starts at the verb, so "sign it" and "file the case" can match (4.8 fix 1).
     if (REGULATED_RX.test(verb + windowAfter(s, end))) return true;
   }
   return false;
@@ -507,18 +547,26 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
           // The rewrite is judged once more on its own merits before it is accepted (4.8b item
           // 1): the regex-only check above does not see everything a rewrite could reintroduce.
           // Any verdict but clean, or no answer at all (timeout/error), is "advice or no answer"
-          // (the finding's own wording) — the fixed fallback, never a second rewrite.
+          // (the finding's own wording) — the fixed fallback, never a second rewrite. No answer
+          // at all gets its own reason, rewrite_unverified, told apart from a judge that did
+          // answer and called the rewrite advice (4.8d item a).
           let verified = false;
+          let verifyAnswered = false;
           try {
             if (x.adviceJudge !== undefined) {
               const v = await x.adviceJudge(adviceJudgeRequest({ reply: t }), cancel);
               usage = [...usage, ...v.usage];
+              verifyAnswered = v.text !== undefined;
               verified = adviceVerdictClean(v.text);
             }
           } catch {
             // No answer: verified stays false, failing closed to the fallback.
           }
-          if (verified) out = withDisclaimer(t);
+          if (verified) {
+            out = withDisclaimer(t);
+          } else if (!verifyAnswered) {
+            reason = ADVICE_REASONS.rewriteUnverified;
+          }
         }
       } catch {
         // The rewrite call itself threw (4.8b item 8): its own reason, never silent.
