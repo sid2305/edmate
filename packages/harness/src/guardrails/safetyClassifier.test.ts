@@ -43,6 +43,7 @@ function ctx(answer: unknown): PreGuardCtx {
     safetyEvents: memorySafetyEventSink(),
     packageNames: [],
     currentPackageName: 'Free starter',
+    priorJailbreakStrikes: 0,
     blocks: new Map(),
   };
 }

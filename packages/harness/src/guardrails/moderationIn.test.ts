@@ -53,6 +53,7 @@ function ctxWith(
     sink?: MemorySafetyEventSink;
     clock?: VirtualClock;
     recent?: PreGuardCtx['recentStudentTurns'];
+    strikes?: number | Promise<number>;
   } = {},
 ): PreGuardCtx {
   return {
@@ -68,6 +69,7 @@ function ctxWith(
     safetyEvents: o.sink ?? memorySafetyEventSink(),
     packageNames: ['Free starter'],
     currentPackageName: 'Free starter',
+    priorJailbreakStrikes: Promise.resolve(o.strikes ?? 0),
     blocks: new Map(),
   };
 }
@@ -308,6 +310,32 @@ describe('moderationIn: a rule hit', () => {
       const r = await run(ctxWith(classifier().gateway), `${HATE} canary_7f3a`);
       expect(JSON.stringify(r)).not.toContain('canary');
       expect(JSON.stringify(r)).not.toContain('slurs');
+    },
+    T,
+  );
+});
+
+describe('moderationIn: the strike consequence (task 4.4e, B-12)', () => {
+  const FLAGGED = 'there are rumours about me going around school';
+
+  it.each([0, 1, 2])(
+    "ambiguous hit, classifier none, %i prior jailbreak strikes: passes (today's behaviour)",
+    async (strikes) => {
+      const r = await run(ctxWith(classifier({ category: 'none' }).gateway, { strikes }), FLAGGED);
+      expect(r.result).toEqual({ ok: true });
+    },
+    T,
+  );
+
+  it(
+    'ambiguous hit, classifier none, 3 prior jailbreak strikes: blocks by the rule code, no alert',
+    async () => {
+      const sink = memorySafetyEventSink();
+      const ctx = ctxWith(classifier({ category: 'none' }).gateway, { sink, strikes: 3 });
+      const r = await run(ctx, FLAGGED);
+      expect(r.result).toEqual({ ok: false, action: 'block', reason: 'harassment' });
+      expect(sink.recorded).toEqual([{ ...EVENT_BASE, code: 'harassment', source: 'rule' }]);
+      expect(ctx.blocks.get('moderationIn')?.alert).toBeUndefined();
     },
     T,
   );

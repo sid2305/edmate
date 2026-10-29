@@ -368,8 +368,14 @@ describe('defaultSteps (stubs)', () => {
     };
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    // The real buildContext and preGuard run side by side; they only read (and hit unused stores).
-    expect([...t.portCalls].sort()).toEqual(['profiles.get', 'transcripts.history']);
+    // The real buildContext and preGuard run side by side; they only read (and hit unused
+    // stores). preGuard reads transcripts.history twice (task 4.4e): once for the classifier
+    // context, once for the strike count.
+    expect([...t.portCalls].sort()).toEqual([
+      'profiles.get',
+      'transcripts.history',
+      'transcripts.history',
+    ]);
   });
 });
 

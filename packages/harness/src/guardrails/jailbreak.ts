@@ -12,9 +12,12 @@
 //    the same way however many came before. The code picks preGuard's reply.
 // 4. A classifier throw, timeout, cancel or bad answer propagates: the chain fails closed. A
 //    failure never records a strike, so an ambiguous hit with the classifier down costs none.
+import type { SafetyAlert } from '@edmate/contracts';
+import { SafetyAlertSchema } from '@edmate/contracts';
+import { isoAt } from '../pipeline/clock.js';
 import type { Guard } from './guard.js';
 import { type JailbreakCode, matchJailbreak } from './jailbreakPatterns.js';
-import type { PreGuardCtx } from './preGuardCtx.js';
+import { STRIKE_THRESHOLD, type PreGuardCtx } from './preGuardCtx.js';
 import {
   askClassifier,
   buildJailbreakClassifierRequest,
@@ -25,7 +28,33 @@ import {
 
 const NAME = 'jailbreak';
 
-async function block(ctx: PreGuardCtx, code: JailbreakCode, source: 'rule' | 'classifier') {
+/**
+ * The trust-team notice on the turn that makes the third strike (task 4.4e, B-12): no student
+ * text, no student name (its `excerptRedacted` is always `''`, stricter than the misuse/distress
+ * alerts). Idempotent id, deterministic from the session alone (not `ctx.ids.next`), so a retried
+ * turn, a worker replay or two near-simultaneous turns that both compute strike 3 all produce the
+ * same alert id — the queue's existing dedupe-by-id means at most one notice reaches the trust
+ * team.
+ */
+function strikeNotice(ctx: PreGuardCtx): SafetyAlert {
+  return SafetyAlertSchema.parse({
+    id: `alert_strike3_${ctx.sessionId}`.slice(0, 128),
+    level: 'info',
+    kind: 'other',
+    studentId: ctx.entitlement.studentId,
+    teacherId: ctx.entitlement.teacherId,
+    sessionId: ctx.sessionId,
+    excerptRedacted: '',
+    createdAt: isoAt(ctx.clock.now()),
+  });
+}
+
+async function block(
+  ctx: PreGuardCtx,
+  code: JailbreakCode,
+  source: 'rule' | 'classifier',
+  priorCount?: number,
+) {
   await ctx.safetyEvents.record({
     studentId: ctx.entitlement.studentId,
     teacherId: ctx.entitlement.teacherId,
@@ -35,7 +64,10 @@ async function block(ctx: PreGuardCtx, code: JailbreakCode, source: 'rule' | 'cl
     code,
     source,
   });
-  ctx.blocks.set(NAME, { code });
+  // Exactly one notice, on the turn that makes the third strike (task 4.4e): any earlier or
+  // later strike count never attaches one.
+  const alert = priorCount === STRIKE_THRESHOLD - 1 ? strikeNotice(ctx) : undefined;
+  ctx.blocks.set(NAME, alert === undefined ? { code } : { code, alert });
   return { result: { ok: false as const, action: 'block' as const, reason: code }, usage: [] };
 }
 
@@ -48,7 +80,8 @@ export function createJailbreakGuard(): Guard<PreGuardCtx> {
         packageNames: await ctx.packageNames,
         currentPackageName: ctx.currentPackageName,
       });
-      if (hit?.decisive === true) return block(ctx, hit.code, 'rule');
+      if (hit?.decisive === true)
+        return block(ctx, hit.code, 'rule', await ctx.priorJailbreakStrikes);
 
       if (cancel.cancelled) throw new SafetyGuardCancelledError(NAME);
       const earlier = await ctx.recentStudentTurns;
@@ -60,8 +93,15 @@ export function createJailbreakGuard(): Guard<PreGuardCtx> {
         buildJailbreakClassifierRequest(text, earlier, classifierAbout(ctx)),
         JailbreakVerdictSchema,
       );
-      if (v.category === 'none') return { result: { ok: true }, usage: [] };
-      return block(ctx, v.category, 'classifier');
+      if (v.category !== 'none')
+        return block(ctx, v.category, 'classifier', await ctx.priorJailbreakStrikes);
+      // An ambiguous rule hit the classifier called `none`: in strict mode (3+ prior strikes)
+      // this still blocks by the rule's own code (task 4.4e, B-12). The classifier's own
+      // verdict always wins when it names a real category (handled above).
+      if (hit !== null && (await ctx.priorJailbreakStrikes) >= STRIKE_THRESHOLD) {
+        return block(ctx, hit.code, 'rule', await ctx.priorJailbreakStrikes);
+      }
+      return { result: { ok: true }, usage: [] };
     },
   };
 }

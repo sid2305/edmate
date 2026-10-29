@@ -138,6 +138,7 @@ describe('a cold-process preGuard chain under simulated CPU load', () => {
       safetyEvents,
       packageNames: [demoPackagePaid.name],
       currentPackageName: demoPackagePaid.name,
+      priorJailbreakStrikes: 0,
       blocks: new Map(),
     };
 

@@ -12,7 +12,7 @@ import { createModerationInGuard } from '../../guardrails/moderationIn.js';
 import type { PreGuardBlock, PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
 import { errorName, HarnessError } from '../errors.js';
-import { blockedTurnNote, isWithheld } from '../policies.js';
+import { blockedTurnNote, isWithheld, withheldCode } from '../policies.js';
 import { runWithTimeout } from '../timeout.js';
 import type { Entitled, PreGuardResult, StepEnv, Steps } from '../types.js';
 
@@ -21,6 +21,12 @@ export const PRE_GUARD_SLICE_MS = 300;
 /** The earlier-messages read for the classifier must not eat the guards' budget. */
 export const HISTORY_TIMEOUT_MS = 50;
 const HISTORY_LIMIT = 12;
+/**
+ * The strike-count read's own window (task 4.4e, B-12): mirrors `packages/db`'s
+ * `HISTORY_MAX_LIMIT` by value, not by import (harness can't import `packages/db`). Strikes
+ * older than this window fall out of the count; see the task handoff for the decision.
+ */
+export const STRIKE_HISTORY_LIMIT = 200;
 
 /** The chain could not give a trustworthy verdict. Holds the guard name and cause, never text. */
 export class PreGuardChainFailedError extends Error {
@@ -57,17 +63,19 @@ export async function recentStudentTurns(env: StepEnv): Promise<string[]> {
     env.report(new HarnessError(`preGuard: earlier student messages unavailable (${cause})`));
     return [];
   }
-  return (r.value as unknown[])
-    .filter(
-      (m): m is Message =>
-        typeof m === 'object' &&
-        m !== null &&
-        (m as Message).role === 'student' &&
-        typeof (m as Message).text === 'string',
-    )
-    // A blocked message reads as a note with its code, never its text (fix round 2, LOW 5).
-    .map((m) => (isWithheld(m) ? blockedTurnNote(m.text) : m.text))
-    .slice(-DISTRESS_CONTEXT_TURNS);
+  return (
+    (r.value as unknown[])
+      .filter(
+        (m): m is Message =>
+          typeof m === 'object' &&
+          m !== null &&
+          (m as Message).role === 'student' &&
+          typeof (m as Message).text === 'string',
+      )
+      // A blocked message reads as a note with its code, never its text (fix round 2, LOW 5).
+      .map((m) => (isWithheld(m) ? blockedTurnNote(m.text) : m.text))
+      .slice(-DISTRESS_CONTEXT_TURNS)
+  );
 }
 
 /**
@@ -95,6 +103,35 @@ export async function teacherPackageNames(env: StepEnv, s: Entitled): Promise<st
   return [...new Set([own, ...names])];
 }
 
+/**
+ * How many prior jailbreak-coded withheld student messages are in this session's history (task
+ * 4.4e, B-12): the strike count. Best effort within HISTORY_TIMEOUT_MS: a failed, slow or
+ * malformed read gives 0 (fail open on the consequence only; the guards themselves still run as
+ * today) and is reported (cause and error name only).
+ */
+export async function priorJailbreakStrikes(env: StepEnv): Promise<number> {
+  const r = await runWithTimeout(
+    () => env.deps.transcripts.history(env.input.sessionId, STRIKE_HISTORY_LIMIT),
+    HISTORY_TIMEOUT_MS,
+    env.deps.clock,
+  );
+  if (r.status !== 'ok' || !Array.isArray(r.value)) {
+    const cause =
+      r.status === 'ok' ? 'malformed' : r.status === 'timeout' ? 'timeout' : errorName(r.error);
+    env.report(new HarnessError(`preGuard: prior jailbreak strikes unavailable (${cause})`));
+    return 0;
+  }
+  return (r.value as unknown[]).filter(
+    (m): boolean =>
+      typeof m === 'object' &&
+      m !== null &&
+      (m as Message).role === 'student' &&
+      typeof (m as Message).text === 'string' &&
+      isWithheld(m as Message) &&
+      (withheldCode((m as Message).text) ?? '').startsWith('jailbreak_'),
+  ).length;
+}
+
 export function createPreGuardStep(
   registry: GuardRegistry<PreGuardCtx>,
 ): (env: StepEnv, s: Entitled) => Promise<PreGuardResult> {
@@ -113,6 +150,7 @@ export function createPreGuardStep(
       safetyEvents: env.deps.safetyEvents,
       packageNames: teacherPackageNames(env, s),
       currentPackageName: s.pkg.name,
+      priorJailbreakStrikes: priorJailbreakStrikes(env),
       blocks: new Map<string, PreGuardBlock>(),
     };
     const chain = await runGuardChain(registry.ordered(), env.input.text ?? '', ctx, {
