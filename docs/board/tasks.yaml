@@ -1583,9 +1583,9 @@ tasks:
   - GATE
   - '4.4'
   - '4.3'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.4e-strike-consequence
+  model: plan:sonnet build:sonnet
 - id: 4.6c
   milestone: M4
   title: 'lockedLeak follow-ups (4.6b fix-round re-review): markdown emphasis inside words (l**o**op, ~~, backticks) padded in the rendered reading; known-miss notes for <a<b>, a < inside a quoted value,
