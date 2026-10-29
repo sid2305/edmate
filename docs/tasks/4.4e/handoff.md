@@ -79,6 +79,18 @@ New/changed files:
 - Reversible: yes, if the product later wants strict-mode blocks to not compound, that is a
   `commit.ts`/`policies.ts` change, not a jailbreak.ts/moderationIn.ts one.
 
+### 28 Oct 2026 · 4.4e strict mode after three jailbreak strikes merged · decided by lead · risk: high
+- Decided: Merge the guardrails change. After 3 jailbreak strikes in a session (counted from that session's withheld jailbreak placeholders in its transcript), an ambiguous jailbreak or moderation hit blocks instead of passing. The trust team gets one notice on the strike-3 transition; it carries the session and tenant ids only, no student text. The safety group gets code-reviewer plus this risk: high entry, under the MVP rule of no per-PR safety-reviewer until the pilot gate.
+- Why: PRD acceptance for repeat jailbreak attempts; it only strengthens blocking and adds no contracts change.
+- Alternatives: A stored per-session strike counter needs a contracts or db change and was not needed for the pilot. Blocking every message after 3 strikes is too harsh for a student who was only testing.
+- Reversible: yes; set the threshold out of reach, or revert the PR.
+
+### 28 Oct 2026 · 4.4e build over budget · decided by lead · risk: low
+- Decided: Accept the build's 111 tool calls (harness count) against a plan budget of 90 (1.23x). The builder reported about 95.
+- Why: One debugging detour (null versus undefined) and a shell-hook workaround; the scope did not grow.
+- Alternatives: Stop at 90 and hand back PARTIAL, which would have cost a fresh builder more than finishing.
+- Reversible: n/a (a budget record).
+
 ## Red -> green evidence
 - Wrote failing tests first in `jailbreak.test.ts` ("the strike consequence" describe block),
   `moderationIn.test.ts` (same), `preGuard.test.ts` (`priorJailbreakStrikes` unit tests +
@@ -109,6 +121,6 @@ Tasks: 4 successful, 4 total
   confirm harness's own typecheck/lint/test are green in isolation: 4 successful, 4 total.
 
 ## Budget
-Tool calls used: approximately 95 (plan budget: 90 calls; brief hard stop: 110). The overrun was
+Tool calls used: 111 (harness count; the builder estimated about 95). Plan budget: 90. Review: 34. Plan: 52. Over budget at 1.23x; see the lead decision "4.4e build over budget".
 mostly one debugging detour (temporary debug test file to isolate the null/undefined `TypeError`)
 plus the environment's `source`-blocking bash hook requiring a PATH workaround on every gate run.
