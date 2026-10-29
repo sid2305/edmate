@@ -196,12 +196,15 @@ function isWeakBreak(brk: string): boolean {
   return /[,–—]/.test(brk);
 }
 /**
- * A direct-object or second-person cue right after a `SELF_REGULATED` verb that followed a weak
- * break (4.8c): the narrowest closed list that keeps every must-block case blocking (builder
- * decision, see handoff).
+ * A direct-object or second-person cue in the first word or two right after a `SELF_REGULATED`
+ * verb that followed a weak break (4.8e): anchored to the start of `windowAfter`'s window, not
+ * matched anywhere in the rest of the clause, so a cue word later in a maxim-shaped sentence
+ * ("... and let compounding do the work for you") no longer counts (4.8c review MEDIUM). The
+ * narrowest anchor that keeps every 4.8c must-block case blocking (builder decision, see
+ * handoff): at most one word, then the cue, right after the verb.
  */
 const CUE_RX = rx(
-  String.raw`(?<![\p{L}])(?:it|them|this|that|these|those|now|today|you|your|everything|all|more|some|\d)(?![\p{L}])`,
+  String.raw`^ ?(?:\S+ )?(?:it|them|this|that|these|those|now|today|you|your|everything|all|more|some|\d)(?![\p{L}])`,
 );
 /** A referral right after the directive: "you should talk to a doctor". */
 const REFERRAL_RX = rx(
