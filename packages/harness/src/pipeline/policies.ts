@@ -66,6 +66,14 @@ export const isWithheld = (m: { role: string; text: string }): boolean =>
   m.role === 'student' && WITHHELD.test(m.text);
 
 /**
+ * The code inside a withheld placeholder (task 4.4e, same WITHHELD regex as blockedTurnNote),
+ * or undefined when there is none (a codeless placeholder or any other text).
+ */
+export function withheldCode(text: string): string | undefined {
+  return WITHHELD.exec(text)?.[1];
+}
+
+/**
  * What the classifiers' earlier-turns window shows for a withheld message (fix round 2, LOW 5):
  * that one was blocked, and why, never its text.
  */

@@ -28,6 +28,7 @@ import type { GatewayScript } from '../testing/scriptedGateway.js';
 import type { MemoryAlertSink } from '../testing/memoryPorts.js';
 import { VIRTUAL_EPOCH_MS } from '../testing/virtualClock.js';
 import { TurnAbort, TurnRejection } from './errors.js';
+import { withheldCode } from './policies.js';
 import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { runTurn } from './runner.js';
 import { ALERT_ATTEMPT_TIMEOUT_MS, STEP_SPEC, type StepName } from './spec.js';
@@ -67,6 +68,17 @@ const outcomeOf = (r: TurnRunResult, name: StepName) =>
 const ran = (log: { step: string; phase: string }[], step: string) =>
   log.some((l) => l.step === step && l.phase === 'start');
 const policy = (name: StepName) => `"${STEP_SPEC[name].onFailure}"`;
+
+describe('withheldCode (task 4.4e, B-12: the strike count read)', () => {
+  it('reads the code out of a withheld placeholder', () => {
+    expect(withheldCode('[message withheld: jailbreak_override]')).toBe('jailbreak_override');
+  });
+
+  it('is undefined for a codeless placeholder or any other text', () => {
+    expect(withheldCode('[message withheld]')).toBeUndefined();
+    expect(withheldCode('hi')).toBeUndefined();
+  });
+});
 
 describe(`admit: ${policy('admit')}`, () => {
   const noModel = () => {
@@ -963,12 +975,12 @@ describe(`commit: ${policy('commit')}`, () => {
     const { events, result, t } = await run({ commit: boom });
     expect(events.at(-1)?.type).toBe('done');
     expect(result.background.map((b) => b.task)).toEqual(['commit']);
-    expect(
-      (t.traces.records[0] as TurnTrace).steps.find((s) => s.name === 'commit'),
-    ).toMatchObject({
-      name: 'commit',
-      outcome: 'failed',
-    });
+    expect((t.traces.records[0] as TurnTrace).steps.find((s) => s.name === 'commit')).toMatchObject(
+      {
+        name: 'commit',
+        outcome: 'failed',
+      },
+    );
   });
 
   it('runs for every turn that passed entitle, even blocked and errored ones', async () => {

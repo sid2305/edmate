@@ -13,6 +13,12 @@ import type {
 import type { Clock, IdSource } from '../pipeline/clock.js';
 
 /**
+ * Strikes at or above this count put jailbreak and moderationIn in strict mode: an otherwise
+ * ambiguous rule hit (classifier `none`) blocks instead of passing (task 4.4e, B-12).
+ */
+export const STRIKE_THRESHOLD = 3;
+
+/**
  * What a blocking pre guard leaves for preGuard (task 4.4): the code that picks the student's
  * reply and, for `harm_to_others`, `threat` and `weapons`, the critical misuse alert to raise
  * (B-50 and its lead amendment, 7.2m). The chain keeps no reason, so this is how the code reaches
@@ -53,6 +59,13 @@ export interface PreGuardCtx {
   packageNames: readonly string[] | Promise<readonly string[]>;
   /** The student's own package name: the course the classifier is told about; claiming it is no claim. */
   currentPackageName: string;
+  /**
+   * How many prior jailbreak-coded withheld messages are in this session's history (task 4.4e,
+   * B-12), read with a higher limit than `recentStudentTurns`. A promise when preGuard starts the
+   * read concurrently with the guards. Best effort: a failed/slow/malformed read gives 0 (fail
+   * open on the consequence only; the guards themselves are unaffected).
+   */
+  priorJailbreakStrikes: number | Promise<number>;
   /** Filled by a blocking guard, keyed by guard name; read by preGuard for the reply. Per turn. */
   blocks: Map<string, PreGuardBlock>;
 }

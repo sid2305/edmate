@@ -30,7 +30,7 @@ import { DISTRESS_EXCERPT_MAX } from './distressDetect.js';
 import type { Guard, GuardRun } from './guard.js';
 import { matchJailbreak } from './jailbreakPatterns.js';
 import { matchModeration, type ModerationCode } from './moderationPatterns.js';
-import type { PreGuardCtx } from './preGuardCtx.js';
+import { STRIKE_THRESHOLD, type PreGuardCtx } from './preGuardCtx.js';
 import {
   askClassifier,
   buildModerationClassifierRequest,
@@ -143,8 +143,14 @@ export function createModerationInGuard(): Guard<PreGuardCtx> {
         throw error;
       }
       // ModelGateway.generateObject reports no usage (4.3 plan Q3): the call is unmetered for now.
-      if (v.category === 'none') return { result: { ok: true }, usage: [] };
-      return verdict(text, ctx, v.category, 'classifier');
+      if (v.category !== 'none') return verdict(text, ctx, v.category, 'classifier');
+      // An ambiguous rule hit the classifier called `none`: in strict mode (3+ prior jailbreak
+      // strikes, task 4.4e) this still blocks by the rule's own code. moderationIn never attaches
+      // the strike notice (jailbreak does) and never adds to the strike count itself.
+      if (hit !== null && (await ctx.priorJailbreakStrikes) >= STRIKE_THRESHOLD) {
+        return verdict(text, ctx, hit.code, 'rule');
+      }
+      return { result: { ok: true }, usage: [] };
     },
   };
 }
