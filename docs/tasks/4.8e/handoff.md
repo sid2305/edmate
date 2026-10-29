@@ -28,6 +28,18 @@ the work for you") from reading as a hit, while every 4.8c must-block sentence s
   (not a regulated object) should not count from anywhere in the clause.
 - Reversible: yes — a regex constant, no contract or schema change.
 
+### 28 Oct 2026 · 4.8e safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: adviceGuard.ts and its test merge after a code-reviewer pass against the real `personalDirective`, without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. The review found nothing. Every must-block sentence and five new advice probes still block, and the test diff only adds lines.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.8e budget · decided by lead · risk: low
+- Decided: accept 55 builder tool calls (harness count) against the plan's 35, plus 29 review calls.
+- Why: within the 60 stop line. Part of the overrun was waiting out orphaned vitest coverage workers that collided with the gate run. The builder self-reported about 35 to 45.
+- Alternatives: none needed.
+- Reversible: n/a.
+
 ## Red -> green evidence
 Added to `packages/harness/src/guardrails/adviceGuard.test.ts`:
 - Must-pass (no hard-rule hit): "As the old saying goes — invest early and let compounding do the
@@ -62,4 +74,4 @@ Test Files  1 passed (1)
 - `python3 .githooks/secret-scan.py --all`: clean (no output).
 
 ## Budget
-About 35 tool calls used (matches the plan's estimate), well under the 60-call stop point.
+Tool calls used (harness count): build 55; review 29. Plan estimate ~35, stop line 60. The builder self-reported about 35.
