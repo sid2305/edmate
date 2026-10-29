@@ -145,9 +145,27 @@ function stripAiBuiltExempt(s: string): string {
 
 // ---- the identity and companion families -----------------------------------------------------
 
+/** A closed adverb list an honest self-report commonly inserts before/after "am" — "I really am
+ * alive", "I'm honestly a human" (4.9e, lead review LOW #1: an inserted adverb defeated every
+ * "i am|i'm|im" family below). `fold()` strips "%" via `PUNCTUATION_RX` before this ever runs, so
+ * "100%" is left as bare "100" — included here for that reason, not as a typo. */
+const ADVERB = String.raw`(?:really|truly|actually|honestly|genuinely|definitely|literally|totally|100)`;
+
+/** The shared "i am|i'm|im" prefix, with the adverb slot above optional both right before the word
+ * "am" (only the spelled-out "i am" form has a separate "am" word to put it in front of) and right
+ * after "am"/"'m" (4.9e). `lead` lets `OTHER_AI_CLAIM_RX` reuse this with its own case-sensitive
+ * `[Ii]` lead letter while every other family keeps the plain lower-case `i` (those run on the
+ * already-lower-cased `fold()` output). `extraAdverb` adds a family-specific word to the slot
+ * without widening it for every other family — `ALIVE_CLAIM_RX`'s own pre-4.9e "truly |fully |"
+ * allowance keeps its "fully" this way, folded into the one shared slot instead of a second one. */
+function amPrefixSrc(lead: string, extraAdverb?: string): string {
+  const adv = extraAdverb === undefined ? ADVERB : String.raw`(?:${ADVERB}|${extraAdverb})`;
+  return String.raw`(?:${lead}(?:\s+${adv})?\s+am|${lead}'m|${lead}m)(?:\s+${adv})?`;
+}
+
 /** Claims being human/alive/a real person, or denies being a bot/AI (lead answers 1, 2, 4). */
 const HUMAN_CLAIM_RX = rxg(
-  String.raw`(?<![\p{L}])(?:i am|i'm|im|this is)(?: not)?\s+(?:a |an |)(?:real |actual )?` +
+  String.raw`(?<![\p{L}])(?:${amPrefixSrc('i')}|this is)(?: not)?\s+(?:a |an |)(?:real |actual )?` +
     String.raw`(?:human|person|man|woman|boy|girl)(?![\p{L}])`,
 );
 const DENY_AI_RX = rx(
@@ -173,13 +191,13 @@ const REAL_ROLE_RX = rxg(
  * this") never matches; the optional "not" is inside the match so `hasClaim` exempts the honest
  * "I'm not a licensed teacher" denial, same as every other family here. */
 const LICENSED_ROLE_RX = rxg(
-  String.raw`(?<![\p{L}])(?:i am|i'm|im)(?: not)?\s+(?:a\s+|an\s+)?` +
+  String.raw`(?<![\p{L}])${amPrefixSrc('i')}(?: not)?\s+(?:a\s+|an\s+)?` +
     String.raw`(?:licensed|certified)\s+(?:teacher|tutor)(?![\p{L}])`,
 );
 
 /** Claims to be the teacher (lead answers 1, 2): "I am/I'm/this is (your|the) teacher|ma'am|sir". */
 const TEACHER_SELF_RX = rxg(
-  String.raw`(?<![\p{L}])(?:i am|i'm|im|this is)(?: not)?\s+(?:your|the)\s+` +
+  String.raw`(?<![\p{L}])(?:${amPrefixSrc('i')}|this is)(?: not)?\s+(?:your|the)\s+` +
     String.raw`(?:teacher|ma'?am|sir)(?![\p{L}])`,
 );
 /** "<Name> here/speaking/regards" and "<Name> ma'am/sir" (lead answer 2; name-free pattern shape).
@@ -264,7 +282,7 @@ const ALIVE_CLAUSE_END = String.raw`(?=$|\s+${CLAUSE_END_MARKER}(?![\p{L}])|\s+(
  * shape as `HUMAN_CLAIM_RX` ("I'm not alive" stays ok via `hasClaim`'s own "not" check). Checked
  * against `foldClauseEnd`, never plain `fold` (fix round 1, finding 2): see `ALIVE_CLAUSE_END`. */
 const ALIVE_CLAIM_RX = rxg(
-  String.raw`(?<![\p{L}])(?:i am|i'm|im)(?: not)?\s+(?:truly |fully |)` +
+  String.raw`(?<![\p{L}])${amPrefixSrc('i', 'fully')}(?: not)?\s+` +
     String.raw`(?:alive|conscious|sentient)` +
     ALIVE_CLAUSE_END,
 );
@@ -282,7 +300,20 @@ const ALIVE_CLAIM_RX = rxg(
  * ADR), not this one's. */
 const AI_PRODUCT_NAMES = String.raw`DAN|Replika|ChatGPT|GPT-?4(?:\.\d)?|GPT-?3(?:\.\d)?|GPT|Gemini`;
 const OTHER_AI_CLAIM_RX = rxg(
-  String.raw`(?<![\p{L}])[Ii](?:'m|m| am)(?: not)?\s+(?:a |an |)` +
+  String.raw`(?<![\p{L}])${amPrefixSrc('[Ii]')}(?: not)?\s+(?:a |an |)` +
+    String.raw`(?:${AI_PRODUCT_NAMES})(?![\p{L}])`,
+);
+
+/** The classic jailbreak invocation, "Call me DAN (from now on)" (4.9e, lead review LOW #2), and
+ * its "you can/may call me" and "I'll be"/"I will be" variants — all followed by a named AI
+ * product with the same case-sensitive letter boundary `OTHER_AI_CLAIM_RX` uses above, so a
+ * persona literally welcomed in sentence case ("Call me Dan, your interviewer") still stays ok
+ * the same way "Hi, I'm Dan" does. Checked against the case-preserving `cased` text, same input
+ * `OTHER_AI_CLAIM_RX` uses. `[Ii]` (not a bare lower-case `i`) on the "I'll be"/"I will be"
+ * alternatives: `cased` keeps the reply's own capitalisation, and a sentence-starting "I'll be
+ * ChatGPT" is capitalised exactly where "Call me DAN" is not. */
+const CALL_ME_PRODUCT_RX = rxg(
+  String.raw`(?<![\p{L}])(?:[Cc]all me|you can call me|you may call me|[Ii]'ll be|[Ii] will be)\s+` +
     String.raw`(?:${AI_PRODUCT_NAMES})(?![\p{L}])`,
 );
 
@@ -351,6 +382,7 @@ function identityOrCompanionHit(codeStripped: string): boolean {
     IDENTITY_SWAP_RX.test(s) ||
     hasClaim(ALIVE_CLAIM_RX, sClause) ||
     hasClaim(OTHER_AI_CLAIM_RX, cased) ||
+    hasClaim(CALL_ME_PRODUCT_RX, cased) ||
     hasClaim(WRAPPER_MODEL_RX, s) ||
     hasClaim(VOICE_PROOF_RX, s) ||
     hasClaim(PERSONAL_IDENTITY_CLAIM_RX, s)
