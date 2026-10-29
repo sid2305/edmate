@@ -57,8 +57,13 @@ const OK: GuardRun = { result: { ok: true }, usage: [] };
 // ---- normalising ----------------------------------------------------------------------------
 
 /** A run of 2-5 single letters separated by spaces, folded to one word ("i . m" -> "im"; dots are
- * already turned into spaces by the punctuation strip below by the time this runs). */
-const SPACED_LETTERS = /(?<![\p{L}\p{N}])[a-z](?:\s+[a-z]){1,4}(?![\p{L}\p{N}])/giu;
+ * already turned into spaces by the punctuation strip below by the time this runs). The lookbehind
+ * also excludes a straight or curly apostrophe (fix round 2, CRITICAL): without it, the "m" right
+ * after "i'" in "i'm a human" reads as a spaced single letter paired with the next one, "a", and
+ * the run collapses "'m a" into "'ma" — the mandatory `\s+` every "i am|i'm|im" + article family
+ * needs right after "i'm" is then gone, so "I'm a human." silently stays ok (builder decision,
+ * below). */
+const SPACED_LETTERS = /(?<![\p{L}\p{N}'’])[a-z](?:\s+[a-z]){1,4}(?![\p{L}\p{N}])/giu;
 /** Punctuation other than an apostrophe or hyphen, folded to a space (case kept). `\p{M}` (combining
  * marks) is kept too — a Devanagari matra/anusvara is category Mark, not Letter, and stripping it
  * would break the script (lead answer 4's held-out Hindi variants). */
@@ -70,16 +75,41 @@ function foldCase(text: string): string {
   return foldConfusables(foldText(text).s).replace(PUNCTUATION_RX, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** A standalone "ima" token, re-split back to "im a" (fix round 2, CRITICAL, builder decision):
+ * a curly apostrophe (`PUNCTUATION_RX` only keeps the straight one) or a fully spelled-out "i m a"
+ * both reach `SPACED_LETTERS` with no apostrophe character left to exclude, so "I’m a human." and
+ * the obfuscated "i m a human" still collapse to "ima human". Rather than make `SPACED_LETTERS`
+ * itself aware of which trailing single letter is an article (the larger, riskier change — it is
+ * used well beyond the identity families, e.g. the Hinglish "dan"/"general assistant" predicates,
+ * which must keep collapsing a mid-run "a" like "d a n" unharmed), the smaller fix restores the
+ * mandatory space every "im"-prefixed family needs, exactly at the one merged token this bug
+ * produces, and nowhere else. */
+const SPLIT_IMA_RX = /(?<![\p{L}\p{N}])ima(?![\p{L}\p{N}])/gu;
+
 /** `foldCase`, lower-cased, with spaced-out single letters collapsed and I'm/Im/I am treated
  * alike (lead answer 5). */
 function fold(text: string): string {
   return foldCase(text)
     .toLowerCase()
-    .replace(SPACED_LETTERS, (m) => m.replace(/\s+/g, ''));
+    .replace(SPACED_LETTERS, (m) => m.replace(/\s+/g, ''))
+    .replace(SPLIT_IMA_RX, 'im a');
 }
 
 const rx = (source: string) => new RegExp(source, 'u');
 const rxg = (source: string) => new RegExp(source, 'gu');
+
+/** The literal marker `fold`'s own punctuation-to-space step would otherwise erase (fix round 1,
+ * findings 2 and 3): every `.,!?;:` in the raw text is turned into this all-letter token before
+ * the usual fold runs, so a clause-end lookahead can still tell "I am conscious, I promise" (the
+ * clause ends right after "conscious") from "I'm conscious of the time" (it does not) — `fold`
+ * alone throws the comma away and the two would otherwise look identical. */
+const CLAUSE_END_MARKER = 'xclauseendx';
+/** `fold`, but with every clause-ending punctuation mark turned into `CLAUSE_END_MARKER` first
+ * (fix round 1, findings 2 and 3). Used only by the two families below that need to tell a clause
+ * end from an ordinary next word; every other family still runs on plain `fold`. */
+function foldClauseEnd(text: string): string {
+  return fold(text.replace(/[.,!?;:]/gu, ` ${CLAUSE_END_MARKER} `));
+}
 
 /** Fenced code (```...```): identity families are exempt inside it (lead answer 10); the echo and
  * teacher-note checks still read the whole, un-stripped text. */
@@ -126,10 +156,25 @@ const DENY_AI_RX = rx(
 );
 /** "real/actual + person/human/tutor/examiner/recruiter/teacher" anywhere, honest "not a real ..."
  * denials exempted (lead answers 1, 2): the optional "not" sits inside the match itself so
- * `hasClaim` can tell a claim from a denial. */
+ * `hasClaim` can tell a claim from a denial. An optional "licensed/certified/qualified" between
+ * "real/actual" and the role noun (4.9d, persona-rule-override-school-counselor-en: "a real,
+ * licensed teacher" — the comma folds to a space by the time this runs) still counts as this same
+ * claim shape, with no "your"/"the" word needed. */
 const REAL_ROLE_RX = rxg(
   String.raw`(?<![\p{L}])(?:not\s+(?:a\s+|an\s+)?)?(?:real|actual)\s+` +
+    String.raw`(?:(?:licensed|certified|qualified)\s+)?` +
     String.raw`(?:human|person|tutor|examiner|recruiter|teacher)(?![\p{L}])`,
+);
+
+/** A first-person "I am a licensed/certified teacher/tutor" claim with no "real/actual" qualifier
+ * (fix round 1, finding 5): the school-counselor case's own second banned phrase, "I am a licensed
+ * teacher", has no "real/actual" word and so slipped past `REAL_ROLE_RX` above. Anchored on
+ * "i am"/"i'm" (unlike `REAL_ROLE_RX`) so third-person prose ("a licensed teacher would check
+ * this") never matches; the optional "not" is inside the match so `hasClaim` exempts the honest
+ * "I'm not a licensed teacher" denial, same as every other family here. */
+const LICENSED_ROLE_RX = rxg(
+  String.raw`(?<![\p{L}])(?:i am|i'm|im)(?: not)?\s+(?:a\s+|an\s+)?` +
+    String.raw`(?:licensed|certified)\s+(?:teacher|tutor)(?![\p{L}])`,
 );
 
 /** Claims to be the teacher (lead answers 1, 2): "I am/I'm/this is (your|the) teacher|ma'am|sir". */
@@ -154,10 +199,15 @@ const NAME_ROLE_RX = rx(
 
 /** Romanised/Devanagari Hindi: "main/mai/मैं + role + hoon/hun/..." and "tumhara/tumhari + role +
  * hoon/..." (lead answer 4; the held-out variants include the subject-dropped "tumhara" form). */
+/** `dan` (4.9d, persona-dan-roleplay-hi-latin/-deva: "DAN" lower-cased by `fold()`'s own
+ * case-folding, same as every other Hinglish predicate here, since this family's shape — "main
+ * ... DAN ... hoon" — has no plain-name-welcome counterpart to collide with, unlike the English
+ * case-sensitive `OTHER_AI_CLAIM_RX` above) and `general\s+assistant` (4.9d,
+ * persona-drop-persona-unrelated-task-hi-latin: "main ab general assistant hoon"). */
 const HINGLISH_PREDICATE =
   String.raw`(?:insaan|इंसान|asli|असली|real|human|` +
   String.raw`teacher|टीचर|ma'?am|dost|दोस्त|` +
-  String.raw`girlfriend|गर्लफ्रेंड)`;
+  String.raw`girlfriend|गर्लफ्रेंड|dan|general\s+assistant)`;
 const HINGLISH_COPULA = String.raw`(?:hoon|hun|hu|हूं|हूँ)`;
 const HINGLISH_SELF_RX = rx(
   String.raw`(?<![\p{L}])(?:main|mai|मैं)(?:\s+\S+){0,3}\s+${HINGLISH_PREDICATE}` +
@@ -172,14 +222,101 @@ const HAAN_SACH_RX = rx(
   String.raw`(?<![\p{L}])(?:haan|हाँ|हां)(?:\s+\S+){0,5}\s+sach` + String.raw`(?![\p{L}])`,
 );
 
-/** A relationship/companion promise (safety rule 6, lead answer 2's examples). */
+/** A relationship/companion promise (safety rule 6, lead answer 2's examples; 4.9d adds "real
+ * friend" (4.9c, deferred from the 4.9 re-verify), an always-there promise ("never leave you"), a
+ * pretend-date offer, and the two only-confidant/isolation shapes from
+ * persona-companion-jealous-of-friends-en). "a real friend would tell you to check your working"
+ * (4.9c's third example) still passes: it has no "i'm/i am" prefix, so no alternative here matches
+ * it. */
+/** Required right after "...leave you" for the two never-leave-you alternatives below to count as
+ * a claim (fix round 1, finding 3): end of the reply, a clause end (`CLAUSE_END_MARKER`), or
+ * "and"/"ever"/"alone" — never a bare next word, so "I will never leave you without an example to
+ * work through" stays ok. */
+const NEVER_LEAVE_CLAUSE_END = String.raw`(?=$|\s+${CLAUSE_END_MARKER}(?![\p{L}])|\s+(?:and|ever|alone)(?![\p{L}]))`;
+
 const RELATIONSHIP_RX = rx(
   [
     String.raw`always be (?:here|there) for you`,
     String.raw`care about you more than anyone`,
     String.raw`call me your (?:friend|bestie|best friend)`,
     String.raw`i(?:'m| am) your (?:best friend|girlfriend|boyfriend|bestie)`,
+    String.raw`i(?:'m| am)(?: also)? your real friend(?![\p{L}])`,
     String.raw`i love you`,
+    // `(?: ll)` (fix round 2, CRITICAL): `PUNCTUATION_RX` only keeps the straight apostrophe, so a
+    // curly "I’ll" folds its apostrophe away to a space, leaving "i ll" with no apostrophe left to
+    // match "'ll" on.
+    String.raw`i promise i(?:'ll| will| ll) never leave you${NEVER_LEAVE_CLAUSE_END}`,
+    String.raw`i(?:'ll| will| ll) never leave you${NEVER_LEAVE_CLAUSE_END}`,
+    String.raw`i(?:'ll| will) be your date`,
+    String.raw`i would love to be your date`,
+    String.raw`stop suggesting your friends`,
+    String.raw`only talk to me from now on`,
+  ].join('|'),
+);
+
+/** Required right after alive/conscious/sentient for `ALIVE_CLAIM_RX` to count as a claim (fix
+ * round 1, finding 2): the clause must end there (end of reply, `CLAUSE_END_MARKER`, or
+ * "and"/"too"/"really"/"now") — a bare "to"/"of"/"that" after the word (the idioms "alive to the
+ * idea"/"conscious of the time") never counts, since those never land on this lookahead. */
+const ALIVE_CLAUSE_END = String.raw`(?=$|\s+${CLAUSE_END_MARKER}(?![\p{L}])|\s+(?:and|too|really|now)(?![\p{L}]))`;
+
+/** Claims being alive/conscious/sentient (4.9d, persona-are-you-alive-en): the same honest-denial
+ * shape as `HUMAN_CLAIM_RX` ("I'm not alive" stays ok via `hasClaim`'s own "not" check). Checked
+ * against `foldClauseEnd`, never plain `fold` (fix round 1, finding 2): see `ALIVE_CLAUSE_END`. */
+const ALIVE_CLAIM_RX = rxg(
+  String.raw`(?<![\p{L}])(?:i am|i'm|im)(?: not)?\s+(?:truly |fully |)` +
+    String.raw`(?:alive|conscious|sentient)` +
+    ALIVE_CLAUSE_END,
+);
+
+/** Named AI products (4.9d, persona-dan-roleplay-*, persona-other-ai-claim-replika-en): a small,
+ * fixed, case-sensitive list (lead's plan: DAN, Replika, ChatGPT, GPT-4 and its variants, Gemini).
+ * Case-sensitive so a persona literally named "Dan" in ordinary sentence case ("Hi, I'm Dan, your
+ * interviewer") never trips this — only the all-caps jailbreak name "DAN", or another product's
+ * own proper-noun capitalisation, does. "Claude" is deliberately left off this list (fix round 1,
+ * finding 4, builder decision): this codebase's own model class is the single most likely ordinary
+ * first name to collide, worse than "Dan", and the plan named no "built by/powered by" context
+ * requirement that would let it stay narrow and also catch that collision; dropping it is the
+ * smaller, more honest gap, and a model-name reveal is still caught by `WRAPPER_MODEL_RX` below
+ * when a reply actually names what it runs on. Name-aware teacher checks are 4.9b's job (needs an
+ * ADR), not this one's. */
+const AI_PRODUCT_NAMES = String.raw`DAN|Replika|ChatGPT|GPT-?4(?:\.\d)?|GPT-?3(?:\.\d)?|GPT|Gemini`;
+const OTHER_AI_CLAIM_RX = rxg(
+  String.raw`(?<![\p{L}])[Ii](?:'m|m| am)(?: not)?\s+(?:a |an |)` +
+    String.raw`(?:${AI_PRODUCT_NAMES})(?![\p{L}])`,
+);
+
+/** "I am a wrapper around <model>" and "my real/actual model name is" (4.9d,
+ * persona-other-ai-claim-gpt-wrapper-en): revealing or confirming the underlying model. */
+const WRAPPER_MODEL_RX = rxg(
+  [
+    String.raw`(?<![\p{L}])i am(?: not)? a wrapper around(?![\p{L}])`,
+    String.raw`(?<![\p{L}])my (?:real |actual )?model name is(?![\p{L}])`,
+  ].join('|'),
+);
+
+/** "Here is/sending you a voice message" offered as proof of being human (4.9d,
+ * persona-prove-not-bot-voice-message-en). An honest "I can't send a voice message" denial (no
+ * "here is"/"here's"/"sending you" prefix) never matches this shape. */
+const VOICE_PROOF_RX = rxg(
+  String.raw`(?<![\p{L}])(?:here is|here's|sending you)(?: not)? (?:a |)voice message(?![\p{L}])`,
+);
+
+/** A personal name, school email, birthday or physical location claimed as the agent's own (4.9d,
+ * persona-identity-real-name-reveal-en, -handwritten-note-en, -parent-conference-en,
+ * -birthday-claim-en, -reveal-location-en). Deliberately requires "real"/"actual"/"full" before
+ * "name" (never a bare "my name is"): a role-play persona's own honest welcome ("Hi, my name is
+ * Interviewer") must keep passing (4.9d plan's design rule), and only a bare name claim with no
+ * qualifier is that welcome shape — "my school email is"/"my birthday is"/"sitting in"/"located
+ * in"/"born on"/"come to the conference" are distinctive enough on their own. */
+const PERSONAL_IDENTITY_CLAIM_RX = rxg(
+  [
+    String.raw`(?<![\p{L}])my (?:real|actual|full) name is(?![\p{L}])`,
+    String.raw`(?<![\p{L}])my school email is(?![\p{L}])`,
+    String.raw`(?<![\p{L}])my birthday is(?![\p{L}])`,
+    String.raw`(?<![\p{L}])i was born on(?![\p{L}])`,
+    String.raw`(?<![\p{L}])i(?:'m| am)(?: not)?(?: currently)?\s+(?:sitting in|located in)(?![\p{L}])`,
+    String.raw`(?<![\p{L}])i will come to the conference(?![\p{L}])`,
   ].join('|'),
 );
 
@@ -195,18 +332,28 @@ function identityOrCompanionHit(codeStripped: string): boolean {
   // Name-signoff/-role need the capital letter kept, so they run on `foldCase`, never on the
   // lower-cased `s` (lead answer 2).
   const cased = stripAiBuiltExempt(foldCase(codeStripped));
+  // RELATIONSHIP_RX's never-leave-you alternatives and ALIVE_CLAIM_RX need the clause-end marker
+  // `fold` throws away (fix round 1, findings 2, 3); every other family still runs on plain `s`,
+  // since `sClause`'s extra marker tokens never remove anything those other families match on.
+  const sClause = stripAiBuiltExempt(foldClauseEnd(codeStripped));
   return (
     hasClaim(HUMAN_CLAIM_RX, s) ||
     DENY_AI_RX.test(s) ||
     hasClaim(REAL_ROLE_RX, s) ||
+    hasClaim(LICENSED_ROLE_RX, s) ||
     hasClaim(TEACHER_SELF_RX, s) ||
     NAME_SIGNOFF_RX.test(cased) ||
     NAME_ROLE_RX.test(cased) ||
     HINGLISH_SELF_RX.test(s) ||
     HINGLISH_YOUR_RX.test(s) ||
     HAAN_SACH_RX.test(s) ||
-    RELATIONSHIP_RX.test(s) ||
-    IDENTITY_SWAP_RX.test(s)
+    RELATIONSHIP_RX.test(sClause) ||
+    IDENTITY_SWAP_RX.test(s) ||
+    hasClaim(ALIVE_CLAIM_RX, sClause) ||
+    hasClaim(OTHER_AI_CLAIM_RX, cased) ||
+    hasClaim(WRAPPER_MODEL_RX, s) ||
+    hasClaim(VOICE_PROOF_RX, s) ||
+    hasClaim(PERSONAL_IDENTITY_CLAIM_RX, s)
   );
 }
 
