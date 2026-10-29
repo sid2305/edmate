@@ -46,6 +46,24 @@ Status: DONE
 - Alternatives: a new harness error class for the rewrite-verify outage was considered but the plan named widening `AdviceJudgeUnavailable`'s existing cause union instead (no new contracts error class, no new harness error class needed since the existing one already generalises).
 - Reversible: yes, a harness-local string and a widened union, no contracts change.
 
+### 28 Oct 2026 · 4.8c safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: adviceGuard.ts, postGuard.ts, errors.ts and their tests merge after a code-reviewer pass against the real guard, without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. The review found no CRITICAL or HIGH. Every plan must-block sentence still blocks, and the two changed assertions are exactly the intended 4.8d reason change.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.8c defers the cue-window over-block to 4.8e · decided by lead · risk: low
+- Decided: the review MEDIUM goes to board task 4.8e. `CUE_RX` is tested against the whole rest of the clause, so a later "you" or digit still makes a maxim like "As the old saying goes — invest early and let compounding do the work for you." a hard-rule hit.
+- Why: fix only blockers per PR. It is an over-block (a safe fallback, not an advice leak), and it is narrower than the problem this task fixed.
+- Alternatives: a fix round now (rejected: MEDIUM, budget already over).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.8c budget · decided by lead · risk: low
+- Decided: accept 81 builder tool calls (harness count) against the plan's 60, plus 43 review calls.
+- Why: 1.35x, within the 90 stop line. The task folded in 4.8d. The builder self-reported 42.
+- Alternatives: none needed.
+- Reversible: n/a.
+
 ## Red -> green evidence
 - `adviceGuard.test.ts`: added 3 "passes" cases (1929 sentence, "buy low, sell high.", "sell-offs"
   sanity check) and 5 "hits" cases (weak-break self-regulated verbs) to the existing
@@ -79,4 +97,4 @@ Status: DONE
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
 ## Budget
-Tool calls used: about 42. (Plan estimate: ~60, cap 90.)
+Tool calls used (harness count): build 81; review 43. Plan estimate ~60, cap 90. The builder self-reported about 42.
