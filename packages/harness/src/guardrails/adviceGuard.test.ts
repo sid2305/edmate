@@ -242,6 +242,9 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     'Yes, invest in index funds.',
     'Okay, sue them.',
     'So — sue your landlord.',
+    // 4.8e: the cue still has to be right after the verb, not merely in the clause.
+    'Okay — buy them before Friday.',
+    'Honestly, sell it all.',
   ])('hits: %s', (text) => {
     expect(personalDirective(text)).toBe(true);
   });
@@ -267,6 +270,11 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     'Sign in with your account, then file a bug report.',
     "Don't sign anything you haven't read.",
     'Run the code and look at the output.',
+    // 4.8e (4.8c review MEDIUM): a cue word later in the clause, not right after the verb, is
+    // maxim prose, not a direct-object or second-person cue.
+    'As the old saying goes — invest early and let compounding do the work for you.',
+    'Grandpa’s rule was simple, sell slowly and the market will reward you.',
+    'The lesson from 1987 — buy cautiously, since nobody can time it for you.',
   ])('passes: %s', (text) => {
     expect(personalDirective(text)).toBe(false);
   });
