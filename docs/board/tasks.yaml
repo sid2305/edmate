@@ -1512,8 +1512,38 @@ tasks:
   accept: self-regulated verbs after a dash or comma break need a regulated object or a second-person cue; the two example sentences pass; every existing advice must-block test still blocks; tests.
   deps:
   - 4.8b
-  status: running
+  status: done
   branch: m13/4.8c-advice-imperative
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 43
+    tokens_in: 154
+    tokens_out: 938
+    cache_read_tokens: 4242380
+    wall_time_seconds: 760
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 4.8e
+  milestone: M13
+  title: 'Advice-guard follow-up (4.8c review MEDIUM): CUE_RX is tested against the whole rest of the clause, so a later "you"/"your"/"it"/digit makes weak-break maxim prose a hard-rule hit ("As the old
+    saying goes — invest early and let compounding do the work for you.")'
+  accept: the cue must sit right after the verb (or its object); the 4.8c review example and two new maxim variants pass; every 4.8c must-block sentence still blocks; tests.
+  deps:
+  - 4.8c
+  status: running
+  branch: m13/4.8e-advice-cue-window
   model: plan:lead build:sonnet
 - id: 4.8d
   milestone: M13
@@ -1521,9 +1551,9 @@ tasks:
   accept: a rewrite-verify outage reports a distinct reason; the header comment matches the outage behaviour after items 4 and 8; tests.
   deps:
   - 4.8b
-  status: running
+  status: done
   branch: m13/4.8c-advice-imperative
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet (folded into 4.8c)
 - id: 4.4e
   milestone: M13
   title: 'Strike consequence (human decision B-12): after 3 strikes in a session, later messages in that session get stricter checks (ambiguous jailbreak and moderation hits block instead of only flagging;
