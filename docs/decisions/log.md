@@ -10,6 +10,77 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 28 Oct 2026 · 4.4e strike window uses a value-mirrored constant, not an import · decided by builder · risk: low
+- Decided: `STRIKE_HISTORY_LIMIT = 200` is a new local constant in `preGuard.ts`, set to the same
+  value as `packages/db`'s `HISTORY_MAX_LIMIT`, by comment reference, not by import.
+- Why: `packages/harness` may only import `@edmate/contracts`, zod, mathjs and its own modules
+  (non-negotiable 3); importing from `packages/db` would violate that boundary and trip the
+  import-purity hook.
+- Alternatives: add the cap to `packages/contracts` so both packages could import it — rejected,
+  that would need an ADR and reviewer sign-off for a one-line constant; put the limit behind a new
+  port method — rejected, `TranscriptStore.history(sessionId, limit)` already supports an
+  arbitrary limit, no new port needed.
+- Reversible: yes — swap the local constant for a shared one later with a one-line change if the
+  two values ever need to be kept in lockstep by more than a comment.
+
+---
+
+### 28 Oct 2026 · 4.4e fail-open on a bad strike-count read · decided by builder · risk: low
+- Decided: a failed, timed-out or malformed `transcripts.history` read for the strike count
+  returns 0 (same shape as `recentStudentTurns`/`teacherPackageNames`), reported via `env.report`,
+  never thrown.
+- Why: the strike count only ever strengthens today's guard behaviour (adds strict mode on top of
+  the existing rule/classifier verdict); failing open means a transient history glitch costs one
+  turn of stricter handling, not a wrongly blocked turn. The guards themselves are otherwise
+  unaffected by this read failing.
+- Alternatives: fail closed (treat a bad read as "assume 3+ strikes") — rejected, that would make
+  a transient infra blip itself start blocking ambiguous turns for students with no real strikes,
+  which is worse than losing one turn of the consequence.
+- Reversible: yes, a one-line change if the product ever wants fail-closed here.
+
+---
+
+### 28 Oct 2026 · 4.4e a strict-mode jailbreak block does count toward future strikes · decided by builder · risk: low
+- Decided: when `jailbreak.ts`'s strict-mode branch blocks an ambiguous hit, it blocks with the
+  rule's own `jailbreak_*` code (e.g. `jailbreak_authority_claim`) via `block(ctx, hit.code, ...)`.
+  `commit.ts` (untouched, out of scope for this task) saves every blocked turn as
+  `[message withheld: <code>]`, and `priorJailbreakStrikes` counts any withheld student message
+  whose code starts with `jailbreak_`. So yes: a strict-mode jailbreak block is itself a strike,
+  and a 4th, 5th, ... ambiguous hit in the same session keeps blocking (never resets below the
+  threshold) until a new session starts. Verified directly: `preGuard.test.ts`'s "the strike
+  consequence, end to end" describe block seeds 3 prior strikes, drives one more ambiguous turn,
+  and gets `{result:'block'}` back with the rule's jailbreak code — the same artifact
+  `priorJailbreakStrikes` would count on the *next* turn, confirmed by code-path inspection since
+  `commit.ts` is out of scope for this task's test surface (it is exercised and covered elsewhere).
+  By contrast, `moderationIn.ts`'s strict-mode block uses a moderation code (e.g. `harassment`),
+  which does **not** start with `jailbreak_`, so a strict-mode moderationIn block never itself
+  counts as a strike — only jailbreak hits grow the count, as the plan specifies.
+- Why: this follows directly from the existing `commit.ts`/`blockedTurnNote` design (any block,
+  strict-mode or not, is saved with its code) — no special-casing was added, and none was needed.
+- Alternatives: special-case strict-mode blocks to save under a different marker so they don't
+  compound — rejected, out of scope (the plan doesn't ask for this) and would need a `commit.ts`
+  change, which is outside this task's files-to-modify list.
+- Reversible: yes, if the product later wants strict-mode blocks to not compound, that is a
+  `commit.ts`/`policies.ts` change, not a jailbreak.ts/moderationIn.ts one.
+
+---
+
+### 28 Oct 2026 · 4.4e strict mode after three jailbreak strikes merged · decided by lead · risk: high
+- Decided: Merge the guardrails change. After 3 jailbreak strikes in a session (counted from that session's withheld jailbreak placeholders in its transcript), an ambiguous jailbreak or moderation hit blocks instead of passing. The trust team gets one notice on the strike-3 transition; it carries the session and tenant ids only, no student text. The safety group gets code-reviewer plus this risk: high entry, under the MVP rule of no per-PR safety-reviewer until the pilot gate.
+- Why: PRD acceptance for repeat jailbreak attempts; it only strengthens blocking and adds no contracts change.
+- Alternatives: A stored per-session strike counter needs a contracts or db change and was not needed for the pilot. Blocking every message after 3 strikes is too harsh for a student who was only testing.
+- Reversible: yes; set the threshold out of reach, or revert the PR.
+
+---
+
+### 28 Oct 2026 · 4.4e build over budget · decided by lead · risk: low
+- Decided: Accept the build's 111 tool calls (harness count) against a plan budget of 90 (1.23x). The builder reported about 95.
+- Why: One debugging detour (null versus undefined) and a shell-hook workaround; the scope did not grow.
+- Alternatives: Stop at 90 and hand back PARTIAL, which would have cost a fresh builder more than finishing.
+- Reversible: n/a (a budget record).
+
+---
+
 ### 28 Oct 2026 · 4.8e cue anchor width · decided by builder · risk: low
 - Decided: `CUE_RX` is anchored `^ ?(?:\S+ )?` + the cue alternation — the cue must be the first or
   second word of the window right after the verb.

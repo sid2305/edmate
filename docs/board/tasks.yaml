@@ -1583,9 +1583,28 @@ tasks:
   - GATE
   - '4.4'
   - '4.3'
-  status: running
+  status: done
   branch: m13/4.4e-strike-consequence
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 52
+    tokens_in: 158
+    tokens_out: 40833
+    cache_read_tokens: 3631925
+    wall_time_seconds: 481
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 4.6c
   milestone: M4
   title: 'lockedLeak follow-ups (4.6b fix-round re-review): markdown emphasis inside words (l**o**op, ~~, backticks) padded in the rendered reading; known-miss notes for <a<b>, a < inside a quoted value,
