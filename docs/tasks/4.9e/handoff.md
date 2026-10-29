@@ -55,6 +55,24 @@ confirmed by reading the file's `NOT_COVERED` map (no plan-required edit there).
   "chatgpt" would then match), which the plan explicitly says must stay case-sensitive.
 - Reversible: yes — a regex-source change with no stored-data or contract impact.
 
+### 28 Oct 2026 · 4.9e safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: tone.ts and tone.test.ts merge after a code-reviewer pass against the real guard, without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. The review found no CRITICAL, HIGH or MEDIUM. Every under-block and over-block variant behaves as planned, and the shared adverb helper is a strict superset of each family's earlier pattern.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.9e keeps the unreachable "you can/may call me" alternatives · decided by lead · risk: low
+- Decided: wontfix the review LOW. `CALL_ME_PRODUCT_RX`'s "you can call me" and "you may call me" alternatives can never match on their own, because "[Cc]all me" already matches inside them.
+- Why: there is no functional effect, and the alternatives name the phrases the rule is meant to catch. Removing them would cost a PR cycle on a safety path for no behaviour change.
+- Alternatives: remove them now, or defer them to a board task (rejected: no behaviour change).
+- Reversible: yes.
+
+### 28 Oct 2026 · 4.9e budget · decided by lead · risk: low
+- Decided: accept 65 builder tool calls (harness count) against the plan's 50, plus 33 review calls.
+- Why: 1.3x, within the 80 stop line. The builder self-reported about 45.
+- Alternatives: none needed.
+- Reversible: n/a.
+
 ## Red -> green evidence
 Added the two new `describe` blocks to `tone.test.ts` first (plan's "Tests" list, both the
 "rewrites" and "stays ok" cases) and ran them against the unmodified `tone.ts`:
@@ -99,4 +117,4 @@ $ corepack pnpm vitest run src/guardrails/tone.test.ts
 - `python3 .githooks/secret-scan.py --all`: clean, exit 0.
 
 ## Budget
-Tool calls used: approximately 45 (plan's own estimate: ~50, cap 80).
+Tool calls used (harness count): build 65; review 33. Plan estimate ~50, cap 80. The builder self-reported about 45.
