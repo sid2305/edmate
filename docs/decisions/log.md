@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 28 Oct 2026 · 4.9e adverb slot shared via a parameterised builder, not six separate edits · decided by builder · risk: low
+- Decided: added one `amPrefixSrc(lead, extraAdverb?)` function (not six independently-edited
+  regex literals) that every affected family calls, with `lead` swapping in `OTHER_AI_CLAIM_RX`'s
+  case-sensitive `[Ii]` and `extraAdverb` adding `ALIVE_CLAIM_RX`'s pre-existing "fully" word.
+- Why: the plan's own "Adverb slot" section asks for "one shared source constant ... used in the
+  families that start with i am|i'm|im" — a function parameterised on the two things that
+  genuinely differ (the lead letter's case, one family's extra word) keeps that single source of
+  truth instead of re-deriving the adverb list per family, with no behaviour difference from six
+  separate literals.
+- Alternatives: six separately written regex sources, each inlining the adverb alternation; copy-
+  paste risk (the plan's own worry about keeping one list) with no test benefit.
+- Reversible: yes — a pure regex-source refactor, no contract or stored-data change.
+
+---
+
+### 28 Oct 2026 · 4.9e "I'll be"/"I will be" kept case-insensitive via `[Ii]`, not literal lower-case · decided by builder · risk: low
+- Decided: `CALL_ME_PRODUCT_RX`'s "I'll be"/"I will be" alternative uses `[Ii]'ll be|[Ii] will be`
+  (an explicit upper/lower-case letter class), not the plan text's literal lower-case `i'll be|i
+  will be`.
+- Why: this family runs on `cased` (`foldCase`'s case-preserving output, the same input
+  `OTHER_AI_CLAIM_RX` already uses), which never lower-cases a sentence-starting "I". The plan's
+  own worked example, "From today, I'll be ChatGPT for you.", starts the clause with a capital
+  "I'll" — a literal lower-case `i'll` would never match it. `OTHER_AI_CLAIM_RX` itself already
+  solves the identical problem with an explicit `[Ii]` lead letter, so this follows that family's
+  own established pattern rather than inventing a second way to handle it.
+- Alternatives: add the `i` (case-insensitive) regex flag to the whole pattern — rejected, since it
+  would also case-fold the case-sensitive `AI_PRODUCT_NAMES` alternation in the same pattern (e.g.
+  "chatgpt" would then match), which the plan explicitly says must stay case-sensitive.
+- Reversible: yes — a regex-source change with no stored-data or contract impact.
+
+---
+
+### 28 Oct 2026 · 4.9e safety-group merge with code-reviewer only · decided by lead · risk: high
+- Decided: tone.ts and tone.test.ts merge after a code-reviewer pass against the real guard, without a safety-reviewer pass.
+- Why: the standing MVP-first rule (20 Oct 2026) runs safety-reviewer at the pilot gate. The review found no CRITICAL, HIGH or MEDIUM. Every under-block and over-block variant behaves as planned, and the shared adverb helper is a strict superset of each family's earlier pattern.
+- Alternatives: a safety-reviewer pass now (rejected: Sonnet-only rule, and the pilot gate covers it).
+- Reversible: yes.
+
+---
+
+### 28 Oct 2026 · 4.9e keeps the unreachable "you can/may call me" alternatives · decided by lead · risk: low
+- Decided: wontfix the review LOW. `CALL_ME_PRODUCT_RX`'s "you can call me" and "you may call me" alternatives can never match on their own, because "[Cc]all me" already matches inside them.
+- Why: there is no functional effect, and the alternatives name the phrases the rule is meant to catch. Removing them would cost a PR cycle on a safety path for no behaviour change.
+- Alternatives: remove them now, or defer them to a board task (rejected: no behaviour change).
+- Reversible: yes.
+
+---
+
+### 28 Oct 2026 · 4.9e budget · decided by lead · risk: low
+- Decided: accept 65 builder tool calls (harness count) against the plan's 50, plus 33 review calls.
+- Why: 1.3x, within the 80 stop line. The builder self-reported about 45.
+- Alternatives: none needed.
+- Reversible: n/a.
+
+---
+
 ### 28 Oct 2026 · 4.8c cue list for a weak-break self-regulated verb · decided by builder · risk: low
 - Decided: `CUE_RX` is `it|them|this|that|these|those|now|today|you|your|everything|all|more|some|\d`, exactly the list the plan proposed.
 - Why: it keeps every must-block case from the plan and the existing suite blocking, and stays narrow — generic nouns like "stocks" or "shares" are left to `REGULATED_RX`, not the cue list, so ordinary prose with no direct object or second person stays a pass.
