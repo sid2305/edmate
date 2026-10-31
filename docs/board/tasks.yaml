@@ -1625,8 +1625,9 @@ tasks:
   - 4.6c
   - GATE
   risky: true
-  status: planning
-  model: plan:sonnet
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/4.6d-locked-invisible-marks
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
