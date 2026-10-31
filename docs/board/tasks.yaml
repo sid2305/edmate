@@ -1272,9 +1272,9 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.4c-failed-chain-alerts
+  model: plan:sonnet build:sonnet
 - id: '4.5'
   milestone: M4
   title: '`answerLeak` (incremental + final) and the rewrite loop'
@@ -1443,9 +1443,9 @@ tasks:
   deps:
   - GATE
   - '3.10'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 3.10b
   milestone: M13
   title: 'Pre-pilot: a named person verifies the India locale pack (Tele-MANAS number, grievance contact, pack reviewedBy/reviewedOn) and fills the pending values; `edmate content validate content/locales`
@@ -1625,7 +1625,8 @@ tasks:
   - 4.6c
   - GATE
   risky: true
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
