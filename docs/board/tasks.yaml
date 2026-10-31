@@ -1443,9 +1443,9 @@ tasks:
   deps:
   - GATE
   - '3.10'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/3.10a-locale-followups
+  model: plan:sonnet build:sonnet
 - id: 3.10b
   milestone: M13
   title: 'Pre-pilot: a named person verifies the India locale pack (Tele-MANAS number, grievance contact, pack reviewedBy/reviewedOn) and fills the pending values; `edmate content validate content/locales`
@@ -1465,6 +1465,17 @@ tasks:
   deps:
   - GATE
   - 1.7f
+  status: todo
+  branch: null
+  model: null
+- id: 3.10d
+  milestone: M13
+  title: 'Contracts signer() email check (3.10a plan Q1): packages/contracts/src/formats.ts signer() folds fullwidth dots and a spelled-out "at" the way packages/content''s copies do after 3.10a; needs
+    an ADR-0008 amendment (architect, security-reviewer, typescript-reviewer)'
+  accept: a reviewedBy of "name＠example．com" or "name at example dot com" is refused by the contracts schema; the ADR amendment is merged.
+  deps:
+  - GATE
+  - 3.10a
   status: todo
   branch: null
   model: null
