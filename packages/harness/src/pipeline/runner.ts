@@ -30,8 +30,12 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import type { z } from 'zod';
+import { type BlockCode, blockReplyFor } from '../guardrails/blockReplies.js';
 import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
+import { matchJailbreak } from '../guardrails/jailbreakPatterns.js';
 import { classifyMistakeTags } from '../memory/mistakeTags.js';
+import { MISUSE_CODES, preGuardAlert } from '../guardrails/moderationIn.js';
+import { matchModeration } from '../guardrails/moderationPatterns.js';
 import {
   copyHelp,
   type HelpState,
