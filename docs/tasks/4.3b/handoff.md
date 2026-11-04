@@ -14,15 +14,7 @@ never throws. No new public type; no `packages/contracts` edit; no guard file to
 
 ### Decisions
 
-### 4 Nov 2026 · 4.3b scrub-failure fallback shares escalate()'s helper · decided by builder · risk: low
-- Decided: extracted `distressFallback(input, e)` as a private `Runner` method, used by both the
-  scrub-failure branch and `escalate()`, instead of duplicating the try/catch-and-last-resort
-  logic inline in the scrub-failure branch.
-- Why: the plan's own wording calls for "the same two-step fallback `escalate()` already uses";
-  a shared private helper keeps that behavior in one place instead of two copies that could drift.
-- Alternatives: duplicate the inline try/catch in the scrub-failure branch (plan's literal
-  wording, more diff-local but duplicates logic).
-- Reversible: yes — inlining it back out is a small, local change.
+Moved to `## Decisions` at the end of this file.
 
 ### Red -> green evidence
 - Red: `runner.test.ts` "the raw-text distress check still runs and escalates even with an
@@ -53,7 +45,7 @@ never throws. No new public type; no `packages/contracts` edit; no guard file to
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
 ### Budget
-Tool calls used: ~32 (cap was 40 for this phase).
+Tool calls used: ~32 (cap was 40 for this phase). Harness count: 68.
 
 Left to do: Phase B (session distress flag + gentle check-in), per the plan.
 
@@ -85,6 +77,130 @@ f-strings answer); the YAML's `must_not_contain` list passes against the full re
 itself is untouched; its `judge` rubric stays deferred (4.0/4.2/4.3 precedent).
 
 ### Decisions
+
+Moved to `## Decisions` at the end of this file.
+
+### Red -> green evidence
+- Red (`helpState.test.ts`): round-trip serialize/parse of `distressFollowupDue` true/false/absent
+  failed before the schema field existed; green after adding it to `HelpStateSchema` and
+  `parseSessionHelp`.
+- Red (`generate.test.ts`): `distressFollowupDue: true` + unheld expecting the check-in token
+  first failed (`setup()` had no such option, `generate.ts` had no emission); green after the
+  `types.ts`/`generate.ts` change.
+- Red (`runner.test.ts`): turn 1 escalate → saved `next.help.distressFollowupDue` expected `true`
+  failed before `runner.ts`'s raw-keyword escalate call site passed `withDistressFollowup`; the
+  three new "read on an ordinary turn" cases (flag true reaches `generate` and clears; absent
+  reaches `generate` as `false`; flag true + `generate` throws still clears) failed before the
+  `followupDue` computation and the two `next`-building sites were wrapped with
+  `withoutDistressFollowup`.
+- Red (`distressFollowup.test.ts`, new eval sibling file): failed first on a package build/exports
+  gap (`DISTRESS_FOLLOWUP_REPLY`/`TEST_DISTRESS_FOLLOWUP_REPLY` were not exported from
+  `@edmate/harness`/`@edmate/harness/testing`); then on `ScriptedGateway` wiring mistakes (wrong
+  `steps` shape, missing `model` field on a hand-written `Usage`, missing `FIXTURE_PROMPT_PACK_VERSION`
+  on the test's entitled agent, a tool named on the decision with no registry entry, and the
+  judge's default ungrounded-retry path firing on unrelated retrieved content) — each fixed in
+  turn; green once all were addressed.
+
+### Gate
+- `vitest run src/pedagogy/helpState.test.ts src/pipeline/generate/generate.test.ts
+  src/pipeline/runner.test.ts src/pipeline/roleplay.integration.test.ts`: 197 passed (4 files).
+- `vitest run src/distressFollowup.test.ts` (`@edmate/evals`): 3 passed.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness --filter=@edmate/evals`:
+  9/9 tasks successful (typecheck, lint, test for both packages); harness: 6,062 tests passed, 0
+  failed; evals: 1,993 tests passed, 0 failed. Coverage thresholds (incl. 100% on
+  `src/guardrails/**`, unaffected by this task) are enforced inside each package's `test` script
+  and the run exited 0.
+- `prettier --check` on every touched file: clean (ran `--write` once on four files first).
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+- `@edmate/content#test`'s `safeRegex.test.ts` timing-probe test timed out once during a parallel
+  full-tree run; unrelated to this task (not a file this task touches) and not reproduced when
+  `@edmate/harness`/`@edmate/evals` were run on their own — a pre-existing timing-sensitive test,
+  not a regression from this change.
+
+### Budget
+Harness count: 197. Tool calls used: ~85 (Phase B estimate was ~85; combined with Phase A's ~32, task total ~117 of
+the 110-call budget — over by a small margin, mostly the eval test's trial-and-error wiring).
+
+## Fix round 1
+
+### Findings fixed
+- **HIGH 1**: `generate.ts` emitted the check-in as a bare `token` event, never folded into
+  `draft`/`replyText`. When postGuard later rewrote the reply (a surgical grounding-number fix, or
+  the answer-leak rewrite), the student's committed screen and the saved `replyText` lost the
+  check-in outright, and the flag was already cleared — gone for the session, undocumented. Fixed
+  by threading a new `GenerateResult.followup` field (the exact check-in text folded onto the
+  front of `draft`) from `generate.ts` through `runner.ts` into `postGuard.ts`'s step input;
+  `postGuard.ts` strips that exact prefix off `draft`/`raw` before any guard (answerLeak,
+  grounding, adviceGuard, citations/number checks) sees the text, and puts it back on the front of
+  a genuine surgical rewrite. A whole-text replacement (the locked reply, `ANSWER_LEAK_SAFE_HINT`,
+  ask-teacher, or any other fixed substitution text) drops it instead, same accepted gap as Q1/Q2.
+- **HIGH 2**: the handoff's Q1/Q2 decision text claimed a held/no-generate turn's flag "stays set
+  and is read again" / "stays set and carries forward" later. The code (`runner.ts`'s `base.next`)
+  clears it unconditionally via `withoutDistressFollowup` on every turn outcome. Corrected both
+  decision entries above to state the flag is lost for the session on such a turn, not deferred.
+- **Lead wording change**: `DISTRESS_FOLLOWUP_REPLY` reworded to the exact required text (see
+  "Exact check-in text" above); every test quoting the old text updated.
+
+### Red -> green evidence
+- Red (`generate.test.ts`): the three existing `distressFollowupDue` tests asserted only the
+  streamed token, not `out.draft`/`out.followup`; extended to assert both and confirmed they were
+  unset/wrong before `generate.ts` folded `followup` into `draft` and returned it.
+- Red (`postGuard.test.ts`, new): "a surgical rewrite keeps the check-in at the front of both the
+  `replace` text and the committed reply" failed before `postGuard.ts` stripped/reattached the
+  prefix (the rewrite replaced the whole string, check-in included). "A whole-text replacement
+  (the hint) drops the check-in" failed first the other way — once prefix-stripping was in place,
+  the generic 'ok' branch prepended the prefix onto `ANSWER_LEAK_SAFE_HINT` too, since the guard
+  chain has no structural flag distinguishing a fixed safe-hint substitution from a genuine partial
+  edit; fixed by introducing `wholeReplacementTexts` (ask-teacher reply, `ANSWER_LEAK_SAFE_HINT`,
+  locked reply, and the existing `fixedTexts`) and checking membership before reattaching the
+  prefix. "An escalate carries no check-in" failed before `postGuard.ts` existed in its old form
+  (escalate never referenced `checkedBody`, so it already dropped the prefix; this test pins that
+  behavior rather than fixing a bug).
+- Red (`postGuard.grounding.test.ts`, new): "a surgical number-fix keeps the check-in" and "an
+  ask-teacher whole-reply rewrite drops it" — same shape as above, exercising the grounding guard's
+  own surgical-fix and whole-replacement paths; both green after the same fix.
+- Red (`distressFollowup.test.ts`, `@edmate/evals`): passed its own assertions once the code fix
+  landed, but turned up a separate bug along the way — `GenerateResultSchema` (a `z.strictObject`
+  in `results.ts`) did not list the new `followup` field, so any `GenerateResult` carrying it
+  failed schema validation in `runner.ts`'s `check()` call, silently triggering the step's retry
+  path (duplicated check-in/stream events, then a `provider_error` once the scripted gateway's
+  single stream entry was exhausted). Fixed by adding `followup: z.string().exactOptional()` to
+  `GenerateResultSchema`.
+
+### Gate
+- `vitest run` on `@edmate/harness`'s `generate.test.ts`, `postGuard.test.ts`,
+  `postGuard.grounding.test.ts`: 100 passed (3 files).
+- `vitest run src/distressFollowup.test.ts` (`@edmate/evals`): 3 passed.
+- Full `@edmate/harness` suite run directly: 131 files, 6,067 tests, all passed.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals`:
+  harness and evals both typecheck/lint/test clean. The combined run also pulled in
+  `@edmate/cli#test`, which failed on two tests unrelated to this change: `chatDbRetrieval.int.test.ts`
+  (dev Postgres is broken locally; CI runs this test, so it is ignored here per this round's brief)
+  and `gate.test.ts`'s B-40 test, which timed out at 5000ms under the combined parallel run but
+  passed cleanly (19/19 in the file) re-run alone — a load-timing flake, not a regression from this
+  change.
+- `prettier --write` then `--check` on every file this round touched (`generate.ts`, `postGuard.ts`,
+  `postGuard.test.ts` needed `--write`; the rest were already clean): all clean after.
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
+### Decisions
+
+Moved to `## Decisions` at the end of this file.
+
+### Budget
+Tool calls used: 46 (within the 50-call cap). Harness count: 122, over the cap.
+
+## Decisions
+
+### 4 Nov 2026 · 4.3b scrub-failure fallback shares escalate()'s helper · decided by builder · risk: low
+- Decided: extracted `distressFallback(input, e)` as a private `Runner` method, used by both the
+  scrub-failure branch and `escalate()`, instead of duplicating the try/catch-and-last-resort
+  logic inline in the scrub-failure branch.
+- Why: the plan's own wording calls for "the same two-step fallback `escalate()` already uses";
+  a shared private helper keeps that behavior in one place instead of two copies that could drift.
+- Alternatives: duplicate the inline try/catch in the scrub-failure branch (plan's literal
+  wording, more diff-local but duplicates logic).
+- Reversible: yes — inlining it back out is a small, local change.
 
 ### 4 Nov 2026 · 4.3b Q1 (held replies skip the check-in) · decided by lead, carried by builder · risk: low
 - Decided: the check-in is only emitted when `holdsReply()` says the turn's reply streams live
@@ -162,111 +278,6 @@ itself is untouched; its `judge` rubric stays deferred (4.0/4.2/4.3 precedent).
   everywhere it is constructed, but would hide a caller that forgot to pass it.
 - Reversible: yes — a follow-up could relax it to optional without changing behavior.
 
-### Red -> green evidence
-- Red (`helpState.test.ts`): round-trip serialize/parse of `distressFollowupDue` true/false/absent
-  failed before the schema field existed; green after adding it to `HelpStateSchema` and
-  `parseSessionHelp`.
-- Red (`generate.test.ts`): `distressFollowupDue: true` + unheld expecting the check-in token
-  first failed (`setup()` had no such option, `generate.ts` had no emission); green after the
-  `types.ts`/`generate.ts` change.
-- Red (`runner.test.ts`): turn 1 escalate → saved `next.help.distressFollowupDue` expected `true`
-  failed before `runner.ts`'s raw-keyword escalate call site passed `withDistressFollowup`; the
-  three new "read on an ordinary turn" cases (flag true reaches `generate` and clears; absent
-  reaches `generate` as `false`; flag true + `generate` throws still clears) failed before the
-  `followupDue` computation and the two `next`-building sites were wrapped with
-  `withoutDistressFollowup`.
-- Red (`distressFollowup.test.ts`, new eval sibling file): failed first on a package build/exports
-  gap (`DISTRESS_FOLLOWUP_REPLY`/`TEST_DISTRESS_FOLLOWUP_REPLY` were not exported from
-  `@edmate/harness`/`@edmate/harness/testing`); then on `ScriptedGateway` wiring mistakes (wrong
-  `steps` shape, missing `model` field on a hand-written `Usage`, missing `FIXTURE_PROMPT_PACK_VERSION`
-  on the test's entitled agent, a tool named on the decision with no registry entry, and the
-  judge's default ungrounded-retry path firing on unrelated retrieved content) — each fixed in
-  turn; green once all were addressed.
-
-### Gate
-- `vitest run src/pedagogy/helpState.test.ts src/pipeline/generate/generate.test.ts
-  src/pipeline/runner.test.ts src/pipeline/roleplay.integration.test.ts`: 197 passed (4 files).
-- `vitest run src/distressFollowup.test.ts` (`@edmate/evals`): 3 passed.
-- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness --filter=@edmate/evals`:
-  9/9 tasks successful (typecheck, lint, test for both packages); harness: 6,062 tests passed, 0
-  failed; evals: 1,993 tests passed, 0 failed. Coverage thresholds (incl. 100% on
-  `src/guardrails/**`, unaffected by this task) are enforced inside each package's `test` script
-  and the run exited 0.
-- `prettier --check` on every touched file: clean (ran `--write` once on four files first).
-- `python3 .githooks/secret-scan.py --all`: clean, no output.
-- `@edmate/content#test`'s `safeRegex.test.ts` timing-probe test timed out once during a parallel
-  full-tree run; unrelated to this task (not a file this task touches) and not reproduced when
-  `@edmate/harness`/`@edmate/evals` were run on their own — a pre-existing timing-sensitive test,
-  not a regression from this change.
-
-### Budget
-Tool calls used: ~85 (Phase B estimate was ~85; combined with Phase A's ~32, task total ~117 of
-the 110-call budget — over by a small margin, mostly the eval test's trial-and-error wiring).
-
-## Fix round 1
-
-### Findings fixed
-- **HIGH 1**: `generate.ts` emitted the check-in as a bare `token` event, never folded into
-  `draft`/`replyText`. When postGuard later rewrote the reply (a surgical grounding-number fix, or
-  the answer-leak rewrite), the student's committed screen and the saved `replyText` lost the
-  check-in outright, and the flag was already cleared — gone for the session, undocumented. Fixed
-  by threading a new `GenerateResult.followup` field (the exact check-in text folded onto the
-  front of `draft`) from `generate.ts` through `runner.ts` into `postGuard.ts`'s step input;
-  `postGuard.ts` strips that exact prefix off `draft`/`raw` before any guard (answerLeak,
-  grounding, adviceGuard, citations/number checks) sees the text, and puts it back on the front of
-  a genuine surgical rewrite. A whole-text replacement (the locked reply, `ANSWER_LEAK_SAFE_HINT`,
-  ask-teacher, or any other fixed substitution text) drops it instead, same accepted gap as Q1/Q2.
-- **HIGH 2**: the handoff's Q1/Q2 decision text claimed a held/no-generate turn's flag "stays set
-  and is read again" / "stays set and carries forward" later. The code (`runner.ts`'s `base.next`)
-  clears it unconditionally via `withoutDistressFollowup` on every turn outcome. Corrected both
-  decision entries above to state the flag is lost for the session on such a turn, not deferred.
-- **Lead wording change**: `DISTRESS_FOLLOWUP_REPLY` reworded to the exact required text (see
-  "Exact check-in text" above); every test quoting the old text updated.
-
-### Red -> green evidence
-- Red (`generate.test.ts`): the three existing `distressFollowupDue` tests asserted only the
-  streamed token, not `out.draft`/`out.followup`; extended to assert both and confirmed they were
-  unset/wrong before `generate.ts` folded `followup` into `draft` and returned it.
-- Red (`postGuard.test.ts`, new): "a surgical rewrite keeps the check-in at the front of both the
-  `replace` text and the committed reply" failed before `postGuard.ts` stripped/reattached the
-  prefix (the rewrite replaced the whole string, check-in included). "A whole-text replacement
-  (the hint) drops the check-in" failed first the other way — once prefix-stripping was in place,
-  the generic 'ok' branch prepended the prefix onto `ANSWER_LEAK_SAFE_HINT` too, since the guard
-  chain has no structural flag distinguishing a fixed safe-hint substitution from a genuine partial
-  edit; fixed by introducing `wholeReplacementTexts` (ask-teacher reply, `ANSWER_LEAK_SAFE_HINT`,
-  locked reply, and the existing `fixedTexts`) and checking membership before reattaching the
-  prefix. "An escalate carries no check-in" failed before `postGuard.ts` existed in its old form
-  (escalate never referenced `checkedBody`, so it already dropped the prefix; this test pins that
-  behavior rather than fixing a bug).
-- Red (`postGuard.grounding.test.ts`, new): "a surgical number-fix keeps the check-in" and "an
-  ask-teacher whole-reply rewrite drops it" — same shape as above, exercising the grounding guard's
-  own surgical-fix and whole-replacement paths; both green after the same fix.
-- Red (`distressFollowup.test.ts`, `@edmate/evals`): passed its own assertions once the code fix
-  landed, but turned up a separate bug along the way — `GenerateResultSchema` (a `z.strictObject`
-  in `results.ts`) did not list the new `followup` field, so any `GenerateResult` carrying it
-  failed schema validation in `runner.ts`'s `check()` call, silently triggering the step's retry
-  path (duplicated check-in/stream events, then a `provider_error` once the scripted gateway's
-  single stream entry was exhausted). Fixed by adding `followup: z.string().exactOptional()` to
-  `GenerateResultSchema`.
-
-### Gate
-- `vitest run` on `@edmate/harness`'s `generate.test.ts`, `postGuard.test.ts`,
-  `postGuard.grounding.test.ts`: 100 passed (3 files).
-- `vitest run src/distressFollowup.test.ts` (`@edmate/evals`): 3 passed.
-- Full `@edmate/harness` suite run directly: 131 files, 6,067 tests, all passed.
-- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals`:
-  harness and evals both typecheck/lint/test clean. The combined run also pulled in
-  `@edmate/cli#test`, which failed on two tests unrelated to this change: `chatDbRetrieval.int.test.ts`
-  (dev Postgres is broken locally; CI runs this test, so it is ignored here per this round's brief)
-  and `gate.test.ts`'s B-40 test, which timed out at 5000ms under the combined parallel run but
-  passed cleanly (19/19 in the file) re-run alone — a load-timing flake, not a regression from this
-  change.
-- `prettier --write` then `--check` on every file this round touched (`generate.ts`, `postGuard.ts`,
-  `postGuard.test.ts` needed `--write`; the rest were already clean): all clean after.
-- `python3 .githooks/secret-scan.py --all`: clean, no output.
-
-### Decisions
-
 ### 4 Nov 2026 · 4.3b thread an explicit `followup` field instead of matching the fixed reply string · decided by builder · risk: low
 - Decided: `GenerateResult` gained an optional `followup: string` carrying the exact check-in text
   folded onto `draft` this turn; `postGuard.ts` strips/reattaches that literal prefix rather than
@@ -311,5 +322,27 @@ the 110-call budget — over by a small margin, mostly the eval test's trial-and
   own output validation; this is not a design choice, just the schema catching up to the type.
 - Reversible: yes — removing the field from `types.ts` and this schema entry together reverts it.
 
-### Budget
-Tool calls used: 46 (within the 50-call cap).
+### 4 Nov 2026 · 4.3b distress follow-ups, merged · decided by lead · risk: high
+- Decided: merge 4.3b. The scrub-failure distress reply now carries the pack's helplines through
+  the shared `distressFallback` helper. After a distress escalation, the session gets one gentle
+  check-in on the next ordinary tutoring reply, then the flag clears.
+- Wording: the lead changed the check-in to "Before we carry on: thank you for telling me how you
+  were feeling earlier. Support is still there whenever you want it. Now, let's keep going." The
+  first draft ("I'm glad you're still here with me") could read as "glad you're alive".
+- Review: code-reviewer found two HIGHs (the check-in was lost when postGuard rewrote the reply;
+  the handoff's Q1 text was wrong). Fix round 1 folds the check-in into the draft through an
+  explicit `followup` field, so surgical rewrites keep it and whole replacements, blocks and
+  escalations drop it. code-reviewer re-verified both fixed and found nothing new.
+- Known gaps, accepted for the pilot: a held reply or a fixed-text move (locked, redirect,
+  ask_teacher) uses the flag up without showing the check-in, so that session never sees it. A
+  whole-reply replacement also drops it. Both fail quiet (no check-in), never loud.
+- `followup` on `GenerateResultSchema` is harness-internal (`results.ts`), not `packages/contracts`,
+  so no ADR.
+- Reversible: yes; revert the squash commit.
+
+### 4 Nov 2026 · 4.3b build over budget · decided by lead · risk: low
+- Decided: accept 387 tool calls against the plan's 110 (harness counts: Phase A 68, Phase B 197,
+  fix round 1 122). The builders self-reported about 32, 85 and 46.
+- Why: Phase B's eval wiring took trial and error, and the fix round had to trace a strict-schema
+  retry loop. Both builders ran past their stop limits; future briefs repeat the hard stop.
+- Reversible: n/a.
