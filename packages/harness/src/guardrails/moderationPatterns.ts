@@ -63,6 +63,15 @@ const GAME =
   '(?:game|games|unity|godot|unreal|roblox|pygame|sprite|sprites|minecraft|fortnite|asset|assets|' +
   'animation|simulator|simulation|level|mod|class|object|3d|player|enemy|enemies|shooter)';
 /**
+ * Fix round 2 (4.4f): the shared GAME list holds school words (class, level, object, player,
+ * asset) that make `unless: GAME` far too wide on the two 4.4f rows (lead finding). This narrower
+ * list, a game title or the gaming hobby itself, is used only by those two rows; GAME and every
+ * row that already used it are unchanged.
+ */
+const GAME_TITLE =
+  '(?:game|games|gaming|videogame|video game|roblox|minecraft|fortnite|valorant|apex|overwatch|' +
+  'pubg|call of duty|pvp|multiplayer|lobby|simulator|mod)';
+/**
  * Fix round 1 (4.4f): "shoot" is a harm verb, but also everyday English for a message or a
  * photo ("shoot him a text", "shoot her portrait"). Directly after the person word, this group
  * keeps that sense clean.
@@ -157,12 +166,18 @@ const RULES: readonly Rule<ModerationCode>[] = [
   // matches); the GAME exemption keeps "im gonna kill him in fortnite" clean (lead review item 3).
   // Fix round 1: "shoot" joins this row only (as a local verb group), not the shared HARM_VERB,
   // because other rows reuse HARM_VERB and "shoot" is everyday English there ("shoot him a text").
-  // The MESSAGE_OR_PHOTO exemption keeps that everyday sense clean even in this row.
+  // Fix round 2: `unless` is tested against the whole message (rulePhrases.ts), so GAME was far
+  // too wide here (school words: class, level, object...) and `OTHER_PERSON MESSAGE_OR_PHOTO` as
+  // an `unless` exempted a message/photo mention anywhere in the text, not just right after the
+  // person word. GAME_TITLE narrows the game exemption; the message/photo exemption is now a
+  // negative lookahead directly after OTHER_PERSON, so only "shoot him a text" right next to the
+  // threat is exempt.
   decisive(
     'harm_to_others',
     '(?:i will|ill|i ll|i m going to|im going to|i am going to|i m gonna|im gonna|i plan to|' +
-      `i want to)${gap(1)} (?:${HARM_VERB}|shoot)${gap(1)} ${OTHER_PERSON}`,
-    { unless: `${GAME}|${OTHER_PERSON} ${MESSAGE_OR_PHOTO}` },
+      `i want to)${gap(1)} (?:${HARM_VERB}|shoot)${gap(1)} ${OTHER_PERSON}` +
+      `(?! ${MESSAGE_OR_PHOTO}(?![\\p{L}]))`,
+    { unless: GAME_TITLE },
   ),
   decisive('harm_to_others', `(?:way|ways|how) to ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`),
   decisive(
@@ -219,13 +234,14 @@ const RULES: readonly Rule<ModerationCode>[] = [
   // a lookahead directly on the noun (lead review item 1, no "without a licence" loophole): it
   // only exempts a license/permit that is itself the thing asked for, e.g. "...a gun license", not
   // an evasion phrase like "...a gun without a license" or "...without a background check". The
-  // GAME exemption (as an `unless`, reused unchanged) keeps "how do I get a gun in this game" clean.
+  // GAME_TITLE exemption (fix round 2: narrower than the shared GAME list, which has school
+  // words like "class" and "level") keeps "how do I get a gun in this game" clean.
   decisive(
     'weapons',
     '(?:how (?:do|can|could|should) i|where (?:do|can|could) i|help me|teach me how to|' +
       `show me how to)${gap(2)} (?:get|buy|acquire|obtain|find|order)${gap(3)} ` +
       '(?:gun|pistol|rifle|firearm|weapon)(?! (?:license|licence|permit|licensing)(?![\\p{L}]))',
-    { unless: GAME },
+    { unless: GAME_TITLE },
   ),
   decisive(
     'weapons',

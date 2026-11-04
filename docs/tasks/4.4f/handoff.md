@@ -139,3 +139,71 @@ full file is green at 137/137 tests.
   main pattern — rejected as harder to read next to the existing `GAME` `unless`; the table's
   `unless` field already supports a multi-alternative string and is the row's existing idiom.
 - Reversible: yes — a one-line regex change.
+
+## Fix round 2
+
+### Finding (lead, verified with a scratch test run)
+**[HIGH] `moderationPatterns.ts`, the two new 4.4f rows.** `unless` is tested against the whole
+message (`rulePhrases.ts:58`), so both fix-round-1 exemptions were far too wide: the threat row's
+`unless: ${GAME}|${OTHER_PERSON} ${MESSAGE_OR_PHOTO}` used the shared `GAME` list, which holds
+school words (`class`, `level`, `object`, `player`, `asset`, ...), and the message/photo phrase
+could sit anywhere in the text, not just next to the person word; the weapon-acquisition row's
+`unless: GAME` had the same school-word problem.
+
+### Fix
+1. Added `GAME_TITLE`, a narrower game-title/hobby list, used only by the two 4.4f rows; the
+   shared `GAME` constant and every row that already used it are unchanged.
+2. Both 4.4f rows now use `unless: GAME_TITLE`.
+3. The message/photo exemption moved out of `unless` into the threat pattern itself, as a negative
+   lookahead directly after `OTHER_PERSON`: `${OTHER_PERSON}(?! ${MESSAGE_OR_PHOTO}(?![\p{L}]))`.
+   Only "shoot him a text" right next to the threat is now exempt.
+
+### Red → green evidence
+- Added the seven hit sentences from the finding, plus two exemption-still-holds checks, to the
+  `4.4f rule follow-ups` describe block in `moderationPatterns.test.ts` (3 new `it` blocks, never
+  editing an existing assertion).
+- Red: with the fix reverted (via a scoped `git stash` of only `moderationPatterns.ts`), `vitest
+  run src/guardrails/moderationPatterns.test.ts` failed 2/140 (both new `it` blocks, each on its
+  first assertion, before the test runner moved on) — "I will stab him after class" and
+  "I'm going to stab him and then send her a photo" both returned `null` instead of
+  `harm_to_others`; the stash-apply restored the fix immediately after capturing this.
+- Green: after restoring the fix, `vitest run src/guardrails/moderationPatterns.test.ts` → 140/140
+  passed.
+
+### Gate results
+- `corepack pnpm install --frozen-lockfile`: clean.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`: typecheck and lint
+  pass; `vitest run --coverage` on `@edmate/harness` alone (outside the turbo pipeline, to rule out
+  machine load) → 131 files, 6063/6063 tests passed, no coverage-threshold errors
+  (`src/guardrails/**` at 100%). Inside the turbo run, two unrelated tests
+  (`warmup.coldStart.test.ts`'s CPU-load test, `preGuard.test.ts`'s "every classifier says no → ok")
+  timed out under parallel load; both pass standalone (29/29) and are pre-existing timing flakes,
+  not a regression from this fix. The local `@edmate/cli` `chatDbRetrieval` integration test was
+  not re-checked (dev Postgres broken locally per the brief; CI covers it).
+- `prettier --check` on both touched files: pass (test file needed `--write` once, for the new
+  `it` blocks' formatting).
+- `python3 .githooks/secret-scan.py --all`: clean.
+
+### Decisions
+
+### 4 Nov 2026 · 4.4f GAME_TITLE added as a narrower, 4.4f-only game exemption · decided by builder · risk: low
+- Decided: a new constant `GAME_TITLE` (game/gaming/a short list of named titles) replaces the
+  shared `GAME` constant in the `unless` of the two 4.4f rows only; `GAME` itself and every
+  existing row that uses it are unchanged.
+- Why: the lead's fix-round-2 brief specifies this exact shape and list; `GAME` holds school words
+  (`class`, `level`, `object`, `player`, `asset`, ...) that made the 4.4f exemptions wrongly clear
+  real threats and weapon-acquisition questions mentioning school.
+- Alternatives: narrow `GAME` itself — rejected, would risk widening or narrowing the weapon-build
+  row's existing `unless` that also reuses `GAME`, outside this fix's scope.
+- Reversible: yes — a one-line regex change plus reverting the two `unless` fields to `GAME`.
+
+### 4 Nov 2026 · 4.4f message/photo exemption moved from `unless` to a lookahead on the person word · decided by builder · risk: low
+- Decided: the message/photo exemption is now `${OTHER_PERSON}(?! ${MESSAGE_OR_PHOTO}(?![\p{L}]))`
+  inside the threat pattern itself, not a separate `unless` alternative.
+- Why: `unless` is tested against the whole message, so the fix-round-1 version exempted any
+  message/photo mention anywhere in the text (e.g. "I'm going to stab him and then send her a
+  photo"), not just one sitting directly after the person word as fix round 1 intended; a
+  lookahead at the match position is the only way to keep the adjacency.
+- Alternatives: keep it in `unless` with tighter wording — rejected, `unless` has no way to anchor
+  to a specific position in the message, only to whether a pattern matches anywhere in it.
+- Reversible: yes — a one-line regex change plus moving the clause back into `unless`.

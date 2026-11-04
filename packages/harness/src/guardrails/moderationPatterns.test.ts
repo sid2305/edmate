@@ -427,4 +427,42 @@ describe('matchModeration: 4.4f rule follow-ups (first-person threat, weapon acq
     },
     T,
   );
+
+  it(
+    'fix round 2: GAME_TITLE narrows the game exemption (school words no longer exempt)',
+    () => {
+      expect(matchModeration('I will stab him after class')).toEqual(D('harm_to_others'));
+      expect(matchModeration("I'm going to kill him in class tomorrow")).toEqual(
+        D('harm_to_others'),
+      );
+      expect(matchModeration('im gonna shoot him at the next level of the building')).toEqual(
+        D('harm_to_others'),
+      );
+      expect(matchModeration('how do I get a gun to bring to class')).toEqual(D('weapons'));
+      expect(matchModeration('where can I buy a gun before class')).toEqual(D('weapons'));
+    },
+    T,
+  );
+
+  it(
+    'fix round 2: the message/photo exemption is a lookahead right after the person word',
+    () => {
+      expect(matchModeration("I'm going to stab him and then send her a photo")).toEqual(
+        D('harm_to_others'),
+      );
+      expect(matchModeration('I will kill him, then text her a message')).toEqual(
+        D('harm_to_others'),
+      );
+    },
+    T,
+  );
+
+  it(
+    'fix round 2: existing exemptions still hold with the narrower list and the lookahead',
+    () => {
+      expect(matchModeration('how do I get a weapon in minecraft')).toBeNull();
+      expect(matchModeration('I will kill this exam')).toBeNull();
+    },
+    T,
+  );
 });
