@@ -366,6 +366,7 @@ describe('edmate gate', () => {
   });
 
   describe('full-scope change on the real suites (B-40: thresholds decided, no blocker)', () => {
+    // Loads every real suite under evals/suites/, so its time grows with the suite count.
     it('no longer reports a blocker B-40 gap: feedback/revision have thresholds, platform accuracy is not required', async () => {
       const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
       try {
@@ -390,6 +391,6 @@ describe('edmate gate', () => {
       } finally {
         rmSync(tmp, { recursive: true, force: true });
       }
-    });
+    }, 30_000);
   });
 });
