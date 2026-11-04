@@ -10,6 +10,112 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.4b call-volume trade-off on the classifier-short-circuit path · decided by builder · risk: low
+- Decided: accept the extra, discarded classifier calls when an earlier guard short-circuits the
+  chain by a classifier verdict (not a rule hit) — e.g. distressDetect escalates on
+  `distress: true` from the model, after moderationIn's and jailbreak's prefetches already
+  fired. Those calls complete (or fail) with nobody consuming the result.
+- Why: the alternative (threading a shared "stop now" signal through all three prefetches so a
+  short-circuit aborts the others mid-flight) adds real complexity for a rare path; the plan's
+  Q1 named this trade-off and recommended accepting it.
+- Alternatives: cancel unused prefetches on short-circuit via a shared abort signal — rejected as
+  unneeded complexity for a rare path.
+- Reversible: yes — a later task could add a shared cancel signal without touching the public
+  shape of `classifierCalls`.
+
+---
+
+### 4 Nov 2026 · 4.4b prefetch helper placement · decided by builder · risk: low
+- Decided: `prefetchClassifier` lives in `safetyClassifier.ts` beside `askClassifier`, per the
+  plan's Q2 answer. `preGuard.ts`'s moderation/jailbreak prefetch functions call it; distress's
+  prefetch calls `runWithTimeout` directly (as `distressDetect.ts` always has — it never used
+  `askClassifier`/`callGuarded`), so it needs no new helper and no rejection handler of its own
+  (`runWithTimeout` never rejects by contract).
+- Why: one source of truth for "how a classifier call is made and wrapped", as the plan asked.
+- Alternatives: inline the prefetch logic directly in `preGuard.ts` — rejected, duplicates the
+  cancel/timeout/validate wiring `askClassifier` already has.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4b virtual-clock delay gateway for the concurrency test · decided by builder · risk: low
+- Decided: a small test-only `ModelGateway` double local to `preGuard.test.ts`
+  (`delayedClassifierGateway`), driven by `VirtualClock.sleep`/`drive`, not `ScriptedGateway`
+  (which has no delay mechanism for `generateObject` and the plan's Q3 says to leave it that
+  way).
+- Why: proves concurrency (elapsed virtual time under 400 ms with three 150 ms calls, versus
+  ~450 ms if sequential) without any real wait.
+- Alternatives: extend `ScriptedGateway` itself with a delay field — rejected per the plan's Q3.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4b resolving prefetch disagreement defensively · decided by builder · risk: low
+- Decided: when a guard reads `ctx.classifierCalls?.moderation`/`.jailbreak` and the prefetch
+  resolved to `undefined` (its own decisive-rule re-check found a decisive hit), the guard falls
+  back to making its own fresh classifier call rather than treating `undefined` as a verdict. In
+  practice this branch is never reached: the guard's own decisive check runs first and returns
+  early before ever touching `classifierCalls`, so by the time it reaches this line its own
+  check has already found no decisive hit — and the prefetch, built from the identical pure
+  function on the identical inputs, must agree.
+- Why: a defensive fallback that costs nothing on the real path and keeps the guard correct even
+  if the invariant were ever violated, rather than asserting it with a type cast.
+- Alternatives: assert non-null — rejected, less safe for no benefit.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4b pre-guard classifiers run concurrently, merged · decided by lead · risk: high
+- Decided: Merge 4.4b. When no rule is decisive, the pre-guard step starts the distress, moderation and jailbreak classifier calls at the same time, and each guard consumes its own prefetched result. Rule hits still make no classifier call. Each guard's fail-closed outcome is unchanged.
+- Why: A benign turn must fit step 3's 400 ms budget, and three sequential calls of about 150 ms each didn't. code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings. It ran the guardrail and preGuard tests (1788 pass) and confirmed:
+  - every prefetch has a rejection handler;
+  - unused prefetches are cancelled through the step token;
+  - a prefetch records no safety event on its own;
+  - there is one fail-closed test per guard.
+  One LOW, the prefetch's hard-coded distress timeout, is deferred to 4.4i.
+- Alternatives: One combined classifier call. That would change the classifier prompt and need an ADR.
+- Reversible: yes; revert the PR.
+
+---
+
+### 4 Nov 2026 · 4.4b build over budget · decided by lead · risk: low
+- Decided: Accept 95 tool calls against a budget of 45 (2.1x) for the build, plus 106 for fix round 1 against a hard stop of 35.
+- Why: The builder kept going past its hard stop to reach a green, committed state, and it flagged the overrun itself. It also under-reported its count (61 against the harness's 95). The result is complete and approved, so a re-run would cost more than it saves.
+- Alternatives: Discard and re-run with a phase split. That would waste the finished work.
+- Reversible: n/a.
+- Note: The fix round was a CI-blocking fix on a safety path. The fixer reported heavy contention from other agents' vitest runs on the same machine (the 4.5b Phase A builder ran `pkill -f vitest`), which inflated its count.
+
+---
+
+### 4 Nov 2026 · 4.4b fix round 1 chain-order skip · decided by builder · risk: low
+- Decided: `prefetchModeration`/`prefetchJailbreak` now take an `earlierDecisive` flag/promise and
+  skip their own classifier prefetch when it is `true`, in addition to their own rule check.
+  `createPreGuardStep` computes `distressRuleDecisive` (sync, `distressKeywordMatch`) and a new
+  `moderationRuleDecisive` helper (the same logic moderationIn's prefetch already ran, pulled out
+  so jailbreak's prefetch can read it too) and threads them in chain order: moderation sees
+  distress's flag, jailbreak sees distress-or-moderation's.
+- Why: the original prefetch functions each checked only their own rule, so a decisive hit on an
+  earlier guard (e.g. a hard distress keyword) left the later guards' prefetches unconditioned —
+  they still fired. CI caught this as 430 evals failures expecting 0 classifier calls on
+  rule-decided turns.
+- Alternatives: cancel the later prefetches via `env.cancel` once an earlier guard's rule is known
+  decisive — rejected, same outcome but adds a cancellation path for something decidable
+  up front, synchronously or with one extra await, before any promise starts.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4b CI regression fixed before merge · decided by lead · risk: high
+- Decided: Hold PR #424 until fix round 1 was in, then merge.
+- Why: CI caught a regression in the first build: 430 eval failures in distressEscalate and moderationJailbreak. A hard distress keyword or a moderation rule hit still fired the later guards' classifier calls, breaking "rule hits still skip the model".
+  - The builder's handoff had claimed the evals were green. The code review ran only harness tests, so neither caught it.
+  - The fix skips a guard's prefetch when that guard's own rule, or any earlier guard's rule, is decisive. The fixer ran `@edmate/evals` explicitly (1993 tests, 0 failures, twice). The lead read the diff.
+  - From now on, briefs for guard and pipeline changes require an explicit `--filter @edmate/evals` run with its count.
+- Alternatives: Revert the concurrency change. The fix is small and keeps the latency win.
+- Reversible: yes; revert the PR.
+
+---
+
 ### 4 Nov 2026 · 4.2d risk-paths.txt carve-out · decided by builder · risk: low
 - Decided: Added `packages/harness/src/pipeline/steps/scrub.ts` and `admit.ts` to the *existing*
   waived student-safety group in `risk-paths.txt` (code-reviewer only until 13.3), not a new
