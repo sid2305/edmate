@@ -44,10 +44,7 @@ export function invalidCitations(text: string, count: number): number[] {
     const digits = m[1] ?? m[2];
     if (digits === undefined) continue;
     // Bracket form only: two units, so a letter outside the BMP (a surrogate pair) is read whole.
-    if (
-      m[1] !== undefined &&
-      INDEXED.test(prose.slice(Math.max(0, m.index - 2), m.index))
-    )
+    if (m[1] !== undefined && INDEXED.test(prose.slice(Math.max(0, m.index - 2), m.index)))
       continue;
     const n = Number(toAsciiDigits(digits));
     if (n < 1 || n > count) bad.add(n);

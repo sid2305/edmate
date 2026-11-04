@@ -231,7 +231,10 @@ describe('grounding: Rule C (numbers recomputed)', () => {
   it('5.6b: a fix that would show the active item’s correct option text is the hint', async () => {
     const item = { prompt: 'Pick one.', options: ['A) 2', 'B) 3', 'C) 5'], answerKey: ['B'] };
     const decision = { ...explain, mustNotReveal: ['B'] };
-    const hinted = await run('So 7 // 2 is 4.', x({ judge: judgeOf(GROUNDED).judge, decision, items: [item] }));
+    const hinted = await run(
+      'So 7 // 2 is 4.',
+      x({ judge: judgeOf(GROUNDED).judge, decision, items: [item] }),
+    );
     expect(hinted.result).toEqual({
       ok: false,
       action: 'rewrite',
