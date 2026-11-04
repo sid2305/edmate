@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · one always-on agent VM on Azure, on the human's Azure credit · decided by you · risk: high
+- Decided: the team lead moves from the Mac to one Azure Ubuntu 24.04 VM (Standard_D4s_v5, East US 2,
+  resource group `edmate-agents`), created by `infra/azure/create-vm.sh` and set up by cloud-init;
+  the lead runs in tmux under systemd through `scripts/claude-backup.sh` with Remote Control on, so
+  the phone attaches the same way. The subscription stays the primary model provider; Foundry
+  stays the backup and later uses the VM's managed identity (task 0.26). The VM's own cost goes on
+  the Azure credit. GitHub is the human's own login first; a bot account can replace it later.
+  The Mac keeps the console session for now. Guide: `docs/azure-vm.md`.
+- Why: the team stopped whenever the Mac slept (two days with no merge, 29 to 30 Oct); a VM gives
+  uptime without changing the team, the hooks or the merge gate. The subscription allowance is
+  pooled per account, so one VM is the whole gain; a pool (0.27) only pays with a budget per VM.
+- Alternatives: Azure Container Apps or a GitHub Actions runner (rejected: Claude Code's login,
+  tmux and worktrees want a plain long-lived machine); a Mac mini at home (rejected: not on the
+  credit, same sleep and network problems); keep the Mac plugged in (rejected: travel).
+- Rules kept: nothing under `infra/azure/` holds a secret, an IP or an account name; SSH by key
+  from the operator's current IP only; logins by hand over SSH; the VM never serves pilot students.
+- Review: security-reviewer (Sonnet) raised two HIGH findings. The hard-coded repo owner in cloud-init
+  is fixed (the clone URL now comes from the checkout's git origin at create time). The lead running
+  as the sudo-capable admin user is accepted for phase 1 (same trust as on the Mac; SSH from one IP by
+  key only) and moves to its own unprivileged user in task 0.25.
+- Reversible: yes — `az group delete -n edmate-agents` removes everything; the Mac setup is unchanged.
+
+---
+
 ### 4 Nov 2026 · 4.6d scope the drop to exactly two named ranges, not the broader Default_Ignorable set · decided by builder · risk: low
 - Decided: `dropDefaultIgnorableMarks` matches only U+FE00-FE0F and U+034F, as the plan specified,
   not the full `\p{Default_Ignorable_Code_Point}` set `digitForms.ts` uses for its own, narrower

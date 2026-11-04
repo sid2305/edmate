@@ -1,0 +1,20 @@
+# Edmate local dev stack (Postgres, Redis, MinIO, Mailpit, web, worker) at boot, so builders can run
+# e2e and sandbox checks on the VM. Needs docker/.env (docs/try-it.md step 2); it stays off until then.
+[Unit]
+Description=Edmate dev stack (docker compose)
+After=docker.service network-online.target
+Requires=docker.service
+ConditionPathExists=/opt/edmate/docker/.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=edmate
+Group=edmate
+WorkingDirectory=/opt/edmate
+ExecStart=/usr/bin/docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d --build
+ExecStop=/usr/bin/docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml down
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

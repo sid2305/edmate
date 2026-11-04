@@ -12148,3 +12148,61 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: '0.24'
+  milestone: M13
+  title: 'Always-on agent VM on Azure, phase 1 (human decision 4 Nov 2026): infra/azure/
+    create-vm.sh (resource group, Ubuntu 24.04 VM, SSH from the operator IP only, managed
+    identity), cloud-init toolchain, start-lead.sh and two systemd units (lead in tmux
+    through scripts/claude-backup.sh with Remote Control; dev stack at boot), and the
+    step-by-step guide docs/azure-vm.md. No secrets in the repo; logins by hand over SSH.'
+  accept: the human creates the VM from the Mac with one script, logs in to gh and claude
+    over SSH, enables edmate-lead.service and attaches from the phone; docs/azure-vm.md
+    covers it end to end; secret scan and a security review pass.
+  deps: []
+  risk: risky
+  status: done
+  branch: null
+  model: console (fable) review:sonnet
+- id: '0.25'
+  milestone: M13
+  title: 'VM phase 1b, after 0.24 has run once: a heartbeat the phone can see (the lead
+    writes a line to a small file or Azure Monitor custom log on each board commit),
+    Azure Monitor alerts for VM down and no heartbeat for 2 hours, the blockers watcher
+    as a systemd timer on the VM instead of a Claude session, and a budget alert on the
+    subscription at 50/80/100 percent of the monthly credit.'
+  accept: a stopped lead pages the phone within 2 hours; the watcher runs on the VM; the
+    budget alert exists; nothing in the repo names the subscription, IP or account.
+  deps:
+  - '0.24'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
+- id: '0.26'
+  milestone: M13
+  title: 'VM phase 2: Foundry backup through the VM''s managed identity (no key on disk):
+    role assignment documented in docs/azure-vm.md, scripts/claude-backup.sh verified on
+    Linux with the Entra path (auth=entra when no Keychain), and a probe that lets the
+    launcher switch back to the subscription when the window reopens.'
+  accept: on the VM, scripts/claude-backup.sh --foundry starts with /status showing
+    Microsoft Foundry and no ANTHROPIC_FOUNDRY_API_KEY set; the auto mode switches back
+    to the subscription after the window reopens; docs/backup-provider.md updated.
+  deps:
+  - '0.24'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
+- id: '0.27'
+  milestone: M13
+  title: 'VM phase 3, only if funded with a model budget per VM (parked): a pool of VMs,
+    one lead each, the board split by milestone with an owner filter so two leads never
+    take the same task; create-vm.sh takes EDMATE_VM for the name already.'
+  accept: two VMs run two leads on disjoint board slices for a day with no double-taken
+    task and no shared worktree.
+  deps:
+  - '0.26'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet

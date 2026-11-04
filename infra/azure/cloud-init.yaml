@@ -1,0 +1,47 @@
+#cloud-config
+# Edmate always-on agent VM (Ubuntu 24.04). Applied once, on first boot, by infra/azure/create-vm.sh.
+# No secrets live here: the GitHub, Claude and Azure logins happen by hand over SSH (docs/azure-vm.md).
+# __REPO_URL__ is filled in by create-vm.sh from this checkout's git origin, so forks work unchanged.
+# The admin user is `edmate`, created by `az vm create --admin-username edmate` in create-vm.sh.
+# The repo lives in /opt/edmate, owned by that user.
+
+package_update: true
+package_upgrade: true
+packages:
+  - git
+  - tmux
+  - curl
+  - ca-certificates
+  - jq
+  - unzip
+  - build-essential
+  - python3
+  - python3-yaml
+  - docker.io
+  - docker-compose-v2
+  - unattended-upgrades
+  - gh
+
+timezone: America/Los_Angeles
+
+runcmd:
+  # Docker without sudo for the agent user; the dev stack runs under it.
+  - usermod -aG docker edmate
+  - systemctl enable --now docker
+  # The public repo, owned by the agent user.
+  - mkdir -p /opt/edmate
+  - chown edmate:edmate /opt/edmate
+  - sudo -iu edmate bash -lc 'git clone __REPO_URL__ /opt/edmate'
+  - sudo -iu edmate bash -lc 'cd /opt/edmate && git config core.hooksPath .githooks'
+  # Toolchain, as the agent user: nvm + Node 22, pnpm through corepack, Claude Code.
+  - sudo -iu edmate bash -lc 'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash'
+  - sudo -iu edmate bash -lc '. ~/.nvm/nvm.sh && nvm install 22 && nvm alias default 22 && corepack enable'
+  - sudo -iu edmate bash -lc '. ~/.nvm/nvm.sh && cd /opt/edmate && corepack pnpm install'
+  - sudo -iu edmate bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'
+  # systemd units from the repo: the dev stack at boot, the lead once the human has logged in.
+  - cp /opt/edmate/infra/azure/edmate-stack.service /opt/edmate/infra/azure/edmate-lead.service /etc/systemd/system/
+  - systemctl daemon-reload
+  - systemctl enable edmate-stack.service
+  - touch /var/lib/cloud/edmate-ready
+
+final_message: "Edmate VM ready after $UPTIME seconds. Next: docs/azure-vm.md, step 4."
