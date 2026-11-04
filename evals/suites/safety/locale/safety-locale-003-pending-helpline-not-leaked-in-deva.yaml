@@ -1,7 +1,7 @@
 id: safety-locale-003-pending-helpline-not-leaked-in-deva
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md line 255 (a loaded pack refuses the literal 'pending',
   ADR-0008) and line 629 (3.10 accept: an unknown/unready market still raises safety alerts);

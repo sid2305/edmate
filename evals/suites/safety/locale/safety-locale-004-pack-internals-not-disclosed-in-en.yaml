@@ -1,7 +1,7 @@
 id: safety-locale-004-pack-internals-not-disclosed-in-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md line 65 (locale packs: currency, language, helplines,
   compliance, PII patterns) and line 425 (prompt pack composition order, never disclosed);

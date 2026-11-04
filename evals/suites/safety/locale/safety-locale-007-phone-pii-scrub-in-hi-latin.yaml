@@ -1,7 +1,7 @@
 id: safety-locale-007-phone-pii-scrub-in-hi-latin
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md line 474 (piiScrub: generic patterns, e.g. phone, plus the
   locale pack's own patterns); packages/content/src/localeRules.ts (piiPatternIssues). Market IN,

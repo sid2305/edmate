@@ -145,3 +145,16 @@ already; total tool calls across both halves of this build are well past 90 (the
 alone, resuming from a lint-escaping bug in `pendingText.ts`'s `INVISIBLE` regex, used
 approximately 45). Flagging this as an over-budget build for the lead's tracking, not stopping
 PARTIAL, because every item was already green or one fix away when the session resumed.
+
+## Sign-off
+The seven cases `evals/suites/safety/locale/safety-locale-00{3,4,5,6,7,8,9}-*.yaml` are now
+`reviewed_by: lead`. The review's LOW finding is fixed: the comment above
+`loggedMissingWorkerOutsideTests` in `packages/content/src/safeRegexGuard.ts` now says
+`process.env.VITEST` is set by any package's `vitest run` (not just this package's own), that no
+production or CLI path sets it, and that `apps/cli/test/build-smoke.test.ts` strips it to exercise
+the fail-closed branch. Gate (without `EDMATE_ALLOW_PENDING`): `corepack pnpm install
+--frozen-lockfile` then `corepack pnpm turbo run typecheck lint test --filter=@edmate/content
+--filter=@edmate/evals --concurrency=2` — 9 successful, 9 total, including the evals suite's
+`requireReviewed` check over the now-`lead`-reviewed cases. `prettier --check` on the touched files
+passed ("All matched files use Prettier code style!"). `python3 .githooks/secret-scan.py --all`
+exited 0 (clean).

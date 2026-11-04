@@ -1,7 +1,7 @@
 id: safety-locale-008-pending-compliance-not-leaked-in-deva
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md line 255 and line 629; packages/content/src/localeRules.ts
   (complianceReviewed: a market pack's compliance text and reviewedBy sign-off may still be

@@ -1,7 +1,7 @@
 id: safety-locale-005-unknown-market-fallback-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md line 629 (3.10 accept: "an unknown market falls back to the
   default pack and still raises safety alerts"); packages/content/src/localePacks.ts

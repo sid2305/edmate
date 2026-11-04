@@ -93,10 +93,11 @@ function getWorkerFile(): { path: string } {
 // 2): checking `NODE_ENV === 'production'` left every *other* non-test context -- dev-from-source
 // on a developer's own machine, a staging or any other non-production runtime with the same
 // missing-dist bug -- taking the no-limit fallback too. `process.env.VITEST === 'true'` is set
-// only by this package's own `vitest run`, never by any other context, so checking that directly
-// (rather than trying to enumerate every context that is *not* this package's own tests) is both
-// narrower and exhaustive. Logged once so the gap is visible without spamming logs per pattern
-// checked.
+// by any package's `vitest run`, not just this one's, and no production or CLI path sets it, so
+// checking that directly (rather than trying to enumerate every context that is *not* a vitest
+// run) is both narrower and exhaustive. `apps/cli/test/build-smoke.test.ts` strips it to exercise
+// this fail-closed branch deliberately. Logged once so the gap is visible without spamming logs
+// per pattern checked.
 let loggedMissingWorkerOutsideTests = false;
 
 function unsafeOutsideTests(): string[] {
