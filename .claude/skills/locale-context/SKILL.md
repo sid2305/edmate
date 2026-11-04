@@ -46,7 +46,7 @@ At runtime (`loadLocalePacks` / `pickLocalePack`) an unverified helpline is neve
 
 ## The first pack: India (if the pilot launches there)
 - **Currency:** ₹ with Indian digit grouping (₹1,25,000), via `Intl.NumberFormat('en-IN')`.
-- **Language:** English plus Hindi; students often mix them (Hinglish) or write Hindi in Latin script. Mirror the student.
+- **Language:** English only for teaching and replies during the pilot (18 Oct 2026 decision). Students may still write Hindi, Hinglish or Hindi in Latin script, so guards and safety cases cover those as a safety net; the agent replies in English.
 - **Payments:** UPI AutoPay mandates and cards.
 - **Helpline:** Tele-MANAS 14416 (already cited in the PRD). Verify the number and source before launch.
 - **Law:** DPDP Act 2023 and Rules 2025; IT Rules 2021 grievance officer.
