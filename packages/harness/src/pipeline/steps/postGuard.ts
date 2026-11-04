@@ -499,7 +499,12 @@ export function createPostGuard(
     // rewrites, answerLeak's own fallback, the locked reply): the check-in is dropped, like a held
     // turn (Q1). Only a genuine surgical fix of the model's own words (grounding's number fix,
     // answerLeak's small-tier rewrite) keeps it on the front.
-    const wholeReplacementTexts = new Set([askReply, ANSWER_LEAK_SAFE_HINT, lockedReply, ...fixedTexts]);
+    const wholeReplacementTexts = new Set([
+      askReply,
+      ANSWER_LEAK_SAFE_HINT,
+      lockedReply,
+      ...fixedTexts,
+    ]);
     // Metric, code only: a regulated agent's market has no disclaimer for its subject.
     const subjectCode = ctx.agent.regulatedSubject;
     if (subjectCode !== undefined && disclaimerGap(subjectCode, ctx.locale)) {

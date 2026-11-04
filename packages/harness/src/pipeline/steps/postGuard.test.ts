@@ -250,7 +250,7 @@ describe('postGuard: answerLeak', () => {
 
   it('4.3b fix round 1: a check-in folded onto the draft keeps it on a surgical rewrite', async () => {
     const s = setup([[say('Look at the last line again. '), say('What does it do?'), used]]);
-    const followup = "Before we carry on: thank you for telling me. ";
+    const followup = 'Before we carry on: thank you for telling me. ';
     const r = await s.run(`${followup}Easy: x ends as 16.`, { followup });
     expect(r).toEqual({
       result: 'replace',
@@ -264,14 +264,14 @@ describe('postGuard: answerLeak', () => {
 
   it('4.3b fix round 1: a whole-text replacement (the hint) drops the check-in', async () => {
     const s = setup([[say('Fine: sixteen.'), used]]);
-    const followup = "Before we carry on: thank you for telling me. ";
+    const followup = 'Before we carry on: thank you for telling me. ';
     expect(await s.run(`${followup}x ends as 16.`, { followup })).toEqual(
       hint(leakTrace, [usageSmall]),
     );
   });
 
   it('4.3b fix round 1: an escalation drops the check-in (same accepted gap as a held turn)', async () => {
-    const followup = "Before we carry on: thank you for telling me. ";
+    const followup = 'Before we carry on: thank you for telling me. ';
     const s = setup();
     const step = createPostGuard([
       fakeGuard<PostGuardCtx>('answerLeak', 'post', () => ({ ok: true })),

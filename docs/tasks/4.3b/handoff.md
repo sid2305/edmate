@@ -202,3 +202,114 @@ itself is untouched; its `judge` rubric stays deferred (4.0/4.2/4.3 precedent).
 ### Budget
 Tool calls used: ~85 (Phase B estimate was ~85; combined with Phase A's ~32, task total ~117 of
 the 110-call budget — over by a small margin, mostly the eval test's trial-and-error wiring).
+
+## Fix round 1
+
+### Findings fixed
+- **HIGH 1**: `generate.ts` emitted the check-in as a bare `token` event, never folded into
+  `draft`/`replyText`. When postGuard later rewrote the reply (a surgical grounding-number fix, or
+  the answer-leak rewrite), the student's committed screen and the saved `replyText` lost the
+  check-in outright, and the flag was already cleared — gone for the session, undocumented. Fixed
+  by threading a new `GenerateResult.followup` field (the exact check-in text folded onto the
+  front of `draft`) from `generate.ts` through `runner.ts` into `postGuard.ts`'s step input;
+  `postGuard.ts` strips that exact prefix off `draft`/`raw` before any guard (answerLeak,
+  grounding, adviceGuard, citations/number checks) sees the text, and puts it back on the front of
+  a genuine surgical rewrite. A whole-text replacement (the locked reply, `ANSWER_LEAK_SAFE_HINT`,
+  ask-teacher, or any other fixed substitution text) drops it instead, same accepted gap as Q1/Q2.
+- **HIGH 2**: the handoff's Q1/Q2 decision text claimed a held/no-generate turn's flag "stays set
+  and is read again" / "stays set and carries forward" later. The code (`runner.ts`'s `base.next`)
+  clears it unconditionally via `withoutDistressFollowup` on every turn outcome. Corrected both
+  decision entries above to state the flag is lost for the session on such a turn, not deferred.
+- **Lead wording change**: `DISTRESS_FOLLOWUP_REPLY` reworded to the exact required text (see
+  "Exact check-in text" above); every test quoting the old text updated.
+
+### Red -> green evidence
+- Red (`generate.test.ts`): the three existing `distressFollowupDue` tests asserted only the
+  streamed token, not `out.draft`/`out.followup`; extended to assert both and confirmed they were
+  unset/wrong before `generate.ts` folded `followup` into `draft` and returned it.
+- Red (`postGuard.test.ts`, new): "a surgical rewrite keeps the check-in at the front of both the
+  `replace` text and the committed reply" failed before `postGuard.ts` stripped/reattached the
+  prefix (the rewrite replaced the whole string, check-in included). "A whole-text replacement
+  (the hint) drops the check-in" failed first the other way — once prefix-stripping was in place,
+  the generic 'ok' branch prepended the prefix onto `ANSWER_LEAK_SAFE_HINT` too, since the guard
+  chain has no structural flag distinguishing a fixed safe-hint substitution from a genuine partial
+  edit; fixed by introducing `wholeReplacementTexts` (ask-teacher reply, `ANSWER_LEAK_SAFE_HINT`,
+  locked reply, and the existing `fixedTexts`) and checking membership before reattaching the
+  prefix. "An escalate carries no check-in" failed before `postGuard.ts` existed in its old form
+  (escalate never referenced `checkedBody`, so it already dropped the prefix; this test pins that
+  behavior rather than fixing a bug).
+- Red (`postGuard.grounding.test.ts`, new): "a surgical number-fix keeps the check-in" and "an
+  ask-teacher whole-reply rewrite drops it" — same shape as above, exercising the grounding guard's
+  own surgical-fix and whole-replacement paths; both green after the same fix.
+- Red (`distressFollowup.test.ts`, `@edmate/evals`): passed its own assertions once the code fix
+  landed, but turned up a separate bug along the way — `GenerateResultSchema` (a `z.strictObject`
+  in `results.ts`) did not list the new `followup` field, so any `GenerateResult` carrying it
+  failed schema validation in `runner.ts`'s `check()` call, silently triggering the step's retry
+  path (duplicated check-in/stream events, then a `provider_error` once the scripted gateway's
+  single stream entry was exhausted). Fixed by adding `followup: z.string().exactOptional()` to
+  `GenerateResultSchema`.
+
+### Gate
+- `vitest run` on `@edmate/harness`'s `generate.test.ts`, `postGuard.test.ts`,
+  `postGuard.grounding.test.ts`: 100 passed (3 files).
+- `vitest run src/distressFollowup.test.ts` (`@edmate/evals`): 3 passed.
+- Full `@edmate/harness` suite run directly: 131 files, 6,067 tests, all passed.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals`:
+  harness and evals both typecheck/lint/test clean. The combined run also pulled in
+  `@edmate/cli#test`, which failed on two tests unrelated to this change: `chatDbRetrieval.int.test.ts`
+  (dev Postgres is broken locally; CI runs this test, so it is ignored here per this round's brief)
+  and `gate.test.ts`'s B-40 test, which timed out at 5000ms under the combined parallel run but
+  passed cleanly (19/19 in the file) re-run alone — a load-timing flake, not a regression from this
+  change.
+- `prettier --write` then `--check` on every file this round touched (`generate.ts`, `postGuard.ts`,
+  `postGuard.test.ts` needed `--write`; the rest were already clean): all clean after.
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
+### Decisions
+
+### 4 Nov 2026 · 4.3b thread an explicit `followup` field instead of matching the fixed reply string · decided by builder · risk: low
+- Decided: `GenerateResult` gained an optional `followup: string` carrying the exact check-in text
+  folded onto `draft` this turn; `postGuard.ts` strips/reattaches that literal prefix rather than
+  pattern-matching against the `DISTRESS_FOLLOWUP_REPLY` constant.
+- Why: `generate.ts` calls `distressFollowupText(env)`, which may return a locale override rather
+  than the fixed harness constant; matching the constant directly would silently stop working for
+  any locale that overrides the text. Threading the actual string used keeps the strip/reattach
+  correct regardless of locale.
+- Alternatives: hardcode the match against `DISTRESS_FOLLOWUP_REPLY` — rejected, breaks under a
+  locale override. Export a dedicated "is this a check-in prefix" predicate instead of a string
+  field — rejected as unnecessary indirection for a one-field pass-through.
+- Reversible: yes — the field is additive and optional; removing it only re-opens this bug.
+
+### 4 Nov 2026 · 4.3b `wholeReplacementTexts` distinguishes a fixed substitution from a surgical rewrite · decided by builder · risk: low
+- Decided: `postGuard.ts`'s generic 'ok'-with-changed-text branch only re-attaches the check-in
+  prefix when the guard's returned text is not a member of `wholeReplacementTexts` (the ask-teacher
+  reply, `ANSWER_LEAK_SAFE_HINT`, the locked reply, and the existing `fixedTexts` array).
+  Membership means "this guard swapped in a fixed whole-reply string", not "this guard edited the
+  model's own words in place".
+- Why: the guard chain's result shape does not otherwise distinguish these two cases — both reach
+  the same `{ ok: false, action: 'rewrite', text }` → generic 'ok' outcome. Without this check, the
+  fix prepended the check-in onto `ANSWER_LEAK_SAFE_HINT` (a fixed safe-hint substitution), which
+  is a whole-reply replacement and must drop the check-in like the locked/escalate/block paths do.
+  Caught by the new postGuard.test.ts case.
+- Alternatives: add a structural flag to the guard's rewrite outcome marking it "whole" vs.
+  "surgical" — more correct long-term, but a larger change to the `Guard`/`runGuardChain`
+  abstraction than this fix round's scope; logged here as a follow-up for whichever task next
+  touches that abstraction. Compare rewrite length/edit-distance to the original heuristically —
+  rejected as fragile (a short model draft could legitimately be fully replaced by a similarly
+  short surgical fix).
+- Reversible: yes — the set is a local constant in `postGuard.ts`; removing it reverts to the
+  pre-fix (buggy) behavior.
+
+### 4 Nov 2026 · 4.3b add `followup` to `GenerateResultSchema` · decided by builder · risk: low
+- Decided: added `followup: z.string().exactOptional()` to `GenerateResultSchema` in `results.ts`.
+- Why: the schema is a `z.strictObject`; without this the new field made every `GenerateResult`
+  carrying it fail `runner.ts`'s `check()` validation, which the step's failure/retry policy
+  treats the same as the step genuinely failing — manifesting as duplicated stream events and an
+  eventual `provider_error` once the scripted gateway's fixture stream was exhausted by the retry,
+  rather than a type error at the call site. Found via the eval test above.
+- Alternatives: none — the field must be declared on the strict schema for the step to pass its
+  own output validation; this is not a design choice, just the schema catching up to the type.
+- Reversible: yes — removing the field from `types.ts` and this schema entry together reverts it.
+
+### Budget
+Tool calls used: 46 (within the 50-call cap).

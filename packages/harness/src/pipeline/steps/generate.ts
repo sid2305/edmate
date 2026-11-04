@@ -224,7 +224,11 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     // postGuard exactly what prefix to strip before judging and to put back on a rewrite.
     const followup = distressFollowupDue && !held ? distressFollowupText(env) : undefined;
     if (followup !== undefined) emit({ type: 'token', text: followup });
-    const { draft: modelDraft, raw, locked } = await runToolLoop({
+    const {
+      draft: modelDraft,
+      raw,
+      locked,
+    } = await runToolLoop({
       gateway: env.gateway,
       request,
       offered,
