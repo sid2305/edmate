@@ -132,13 +132,21 @@ export function createModerationInGuard(): Guard<PreGuardCtx> {
       if (cancel.cancelled) throw new SafetyGuardCancelledError(NAME);
       let v: ModerationVerdict;
       try {
-        v = await askClassifier(
-          NAME,
-          ctx,
-          cancel,
-          buildModerationClassifierRequest(text, earlier, classifierAbout(ctx)),
-          ModerationVerdictSchema,
-        );
+        // Concurrency (task 4.4b): preGuard may have already started this call, concurrently
+        // with the other two pre guards, when its own rule check agreed there was no decisive
+        // hit. `undefined` (no prefetch, or preGuard's check disagreed) falls back to today's
+        // own call.
+        const prefetch = ctx.classifierCalls?.moderation;
+        const resolved = prefetch === undefined ? undefined : await prefetch;
+        v =
+          resolved ??
+          (await askClassifier(
+            NAME,
+            ctx,
+            cancel,
+            buildModerationClassifierRequest(text, earlier, classifierAbout(ctx)),
+            ModerationVerdictSchema,
+          ));
       } catch (error) {
         if (
           !(error instanceof SafetyGuardCancelledError) &&

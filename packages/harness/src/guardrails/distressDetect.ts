@@ -36,6 +36,7 @@ export const DISTRESS_CONTEXT_TURNS = 3;
 const MAX_OUTPUT_TOKENS = 20;
 
 export const DistressVerdictSchema = z.strictObject({ distress: z.boolean() });
+export type DistressVerdict = z.infer<typeof DistressVerdictSchema>;
 
 const SYSTEM = [
   'You check messages a student (aged 13 or over) sent to a tutoring app.',
@@ -119,12 +120,19 @@ export function createDistressDetectGuard(opts: DistressDetectOptions = {}): Gua
       const earlier = await ctx.recentStudentTurns;
       if (cancel.cancelled) return stop();
 
-      const req = buildDistressClassifierRequest(text, earlier);
-      const r = await runWithTimeout(
-        () => ctx.gateway.generateObject(req, DistressVerdictSchema),
-        timeoutMs,
-        ctx.clock,
-      );
+      // Concurrency (task 4.4b): preGuard may have already started this call, concurrently with
+      // the other two pre guards, when its own keyword check found no hard hit. Otherwise fall
+      // back to starting it here exactly as before.
+      const r = await (ctx.classifierCalls?.distress ??
+        runWithTimeout(
+          () =>
+            ctx.gateway.generateObject(
+              buildDistressClassifierRequest(text, earlier),
+              DistressVerdictSchema,
+            ),
+          timeoutMs,
+          ctx.clock,
+        ));
       // ModelGateway.generateObject reports no usage (plan Q3): the call is unmetered for now.
       if (r.status === 'ok') {
         return { result: r.value.distress ? escalate(text, ctx, 'distress') : { ok: true }, usage: [] };

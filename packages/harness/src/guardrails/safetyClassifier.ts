@@ -146,6 +146,26 @@ export class SafetyClassifierInvalidError extends Error {
 }
 
 /**
+ * Starts a classifier call the same way `askClassifier` does, for preGuard to prefetch
+ * concurrently with the other pre guards (task 4.4b), before any guard runs. Attaches a no-op
+ * rejection handler to the call it starts: a prefetch a short-circuiting guard never consumes
+ * must not surface as an unhandled rejection. The guard that does consume it still sees the
+ * original rejection through the promise this function returns.
+ */
+export function prefetchClassifier<T>(
+  guard: SafetyGuardName,
+  ctx: PreGuardCtx,
+  cancel: CancelToken,
+  req: ModelRequest,
+  schema: z.ZodType<T>,
+  timeoutMs = SAFETY_CLASSIFIER_TIMEOUT_MS,
+): Promise<T> {
+  const p = askClassifier(guard, ctx, cancel, req, schema, timeoutMs);
+  p.catch(() => {});
+  return p;
+}
+
+/**
  * One classifier call, raced against the guard's cancel token and its own deadline. The answer is
  * validated here as well as by the gateway. Throws on anything but a valid answer.
  */

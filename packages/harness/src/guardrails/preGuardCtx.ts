@@ -11,6 +11,9 @@ import type {
   SafetyEventSink,
 } from '@edmate/contracts';
 import type { Clock, IdSource } from '../pipeline/clock.js';
+import type { TimedResult } from '../pipeline/timeout.js';
+import type { DistressVerdict } from './distressDetect.js';
+import type { JailbreakVerdict, ModerationVerdict } from './safetyClassifier.js';
 
 /**
  * Strikes at or above this count put jailbreak and moderationIn in strict mode: an otherwise
@@ -68,4 +71,19 @@ export interface PreGuardCtx {
   priorJailbreakStrikes: number | Promise<number>;
   /** Filled by a blocking guard, keyed by guard name; read by preGuard for the reply. Per turn. */
   blocks: Map<string, PreGuardBlock>;
+  /**
+   * Classifier calls preGuard already started concurrently, before any guard ran (task 4.4b),
+   * when its own copy of that guard's decisive-rule check found no decisive hit. Optional and
+   * additive: a hand-built ctx with no `classifierCalls` makes every guard take its own,
+   * unchanged, fallback path. A guard only ever reads the entry for its own name.
+   *
+   * `moderation`/`jailbreak` resolve to `undefined` on the rare chance preGuard's own rule check
+   * disagreed with the guard's (should not happen: both call the same pure function on the same
+   * inputs) — the guard then falls back to its own call rather than treat `undefined` as a verdict.
+   */
+  classifierCalls?: {
+    distress?: Promise<TimedResult<DistressVerdict>> | undefined;
+    moderation?: Promise<ModerationVerdict | undefined>;
+    jailbreak?: Promise<JailbreakVerdict | undefined>;
+  };
 }

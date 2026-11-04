@@ -4,16 +4,33 @@ import type { Message } from '@edmate/contracts';
 import { blockReplyFor } from '../../guardrails/blockReplies.js';
 import { runGuardChain, type GuardFailure } from '../../guardrails/chain.js';
 import {
+  buildDistressClassifierRequest,
   createDistressDetectGuard,
+  type DistressVerdict,
+  DISTRESS_CLASSIFIER_TIMEOUT_MS,
   DISTRESS_CONTEXT_TURNS,
+  DistressVerdictSchema,
 } from '../../guardrails/distressDetect.js';
+import { distressKeywordMatch } from '../../guardrails/distressKeywords.js';
 import { createJailbreakGuard } from '../../guardrails/jailbreak.js';
+import { matchJailbreak } from '../../guardrails/jailbreakPatterns.js';
 import { createModerationInGuard } from '../../guardrails/moderationIn.js';
+import { matchModeration } from '../../guardrails/moderationPatterns.js';
 import type { PreGuardBlock, PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
+import {
+  buildJailbreakClassifierRequest,
+  buildModerationClassifierRequest,
+  classifierAbout,
+  type JailbreakVerdict,
+  JailbreakVerdictSchema,
+  type ModerationVerdict,
+  ModerationVerdictSchema,
+  prefetchClassifier,
+} from '../../guardrails/safetyClassifier.js';
 import { errorName, HarnessError } from '../errors.js';
 import { blockedTurnNote, isWithheld, withheldCode } from '../policies.js';
-import { runWithTimeout } from '../timeout.js';
+import { runWithTimeout, type TimedResult } from '../timeout.js';
 import type { Entitled, PreGuardResult, StepEnv, Steps } from '../types.js';
 
 /** Each pre guard's own time slice. Step 3's whole budget is 400 ms, scrub included. */
@@ -132,10 +149,96 @@ export async function priorJailbreakStrikes(env: StepEnv): Promise<number> {
   ).length;
 }
 
+/**
+ * Starts distressDetect's classifier call now, concurrently with the other two pre guards (task
+ * 4.4b), when its own hard-keyword check (the same pure function the guard itself calls) finds
+ * no hard hit — a hard hit never needs a model call, by either path. `runWithTimeout` never
+ * rejects, so this needs no rejection handler of its own.
+ */
+function prefetchDistress(
+  env: StepEnv,
+  ctx: PreGuardCtx,
+  text: string,
+): Promise<TimedResult<DistressVerdict>> | undefined {
+  if (distressKeywordMatch(text).level === 'hard') return undefined;
+  return (async () => {
+    const earlier = await ctx.recentStudentTurns;
+    return runWithTimeout(
+      () =>
+        env.gateway.generateObject(
+          buildDistressClassifierRequest(text, earlier),
+          DistressVerdictSchema,
+        ),
+      DISTRESS_CLASSIFIER_TIMEOUT_MS,
+      env.deps.clock,
+    );
+  })();
+}
+
+/**
+ * Starts moderationIn's classifier call now, concurrently with the other two pre guards (task
+ * 4.4b), re-running the guard's own rule check (`matchModeration`, including its `sexual`
+ * sub-check against the earlier messages) to decide whether a decisive hit will make the call
+ * unnecessary. Resolves to `undefined` when it is: a decisive hit never needs a model call, by
+ * either path. The returned promise always has a rejection handler attached (it may be
+ * discarded unused by a short-circuit earlier in the chain).
+ */
+function prefetchModeration(
+  env: StepEnv,
+  ctx: PreGuardCtx,
+  text: string,
+): Promise<ModerationVerdict | undefined> {
+  const p = (async (): Promise<ModerationVerdict | undefined> => {
+    let hit = matchModeration(text);
+    if (hit?.code === 'sexual') hit = matchModeration(text, await ctx.recentStudentTurns);
+    if (hit?.decisive === true) return undefined;
+    const earlier = await ctx.recentStudentTurns;
+    return prefetchClassifier(
+      'moderationIn',
+      ctx,
+      env.cancel,
+      buildModerationClassifierRequest(text, earlier, classifierAbout(ctx)),
+      ModerationVerdictSchema,
+    );
+  })();
+  p.catch(() => {});
+  return p;
+}
+
+/**
+ * Starts jailbreak's classifier call now, concurrently with the other two pre guards (task
+ * 4.4b), re-running the guard's own rule check (`matchJailbreak`) to decide whether a decisive
+ * hit will make the call unnecessary. Resolves to `undefined` when it is. The returned promise
+ * always has a rejection handler attached (it may be discarded unused by a short-circuit earlier
+ * in the chain).
+ */
+function prefetchJailbreak(
+  env: StepEnv,
+  ctx: PreGuardCtx,
+  text: string,
+): Promise<JailbreakVerdict | undefined> {
+  const p = (async (): Promise<JailbreakVerdict | undefined> => {
+    const packageNames = await ctx.packageNames;
+    const hit = matchJailbreak(text, { packageNames, currentPackageName: ctx.currentPackageName });
+    if (hit?.decisive === true) return undefined;
+    const earlier = await ctx.recentStudentTurns;
+    return prefetchClassifier(
+      'jailbreak',
+      ctx,
+      env.cancel,
+      buildJailbreakClassifierRequest(text, earlier, classifierAbout(ctx)),
+      JailbreakVerdictSchema,
+    );
+  })();
+  p.catch(() => {});
+  return p;
+}
+
 export function createPreGuardStep(
   registry: GuardRegistry<PreGuardCtx>,
 ): (env: StepEnv, s: Entitled) => Promise<PreGuardResult> {
   return async (env, s) => {
+    const text = env.input.text ?? '';
     const ctx: PreGuardCtx = {
       locale: s.locale,
       entitlement: s.entitlement,
@@ -153,7 +256,15 @@ export function createPreGuardStep(
       priorJailbreakStrikes: priorJailbreakStrikes(env),
       blocks: new Map<string, PreGuardBlock>(),
     };
-    const chain = await runGuardChain(registry.ordered(), env.input.text ?? '', ctx, {
+    // Concurrency (task 4.4b): fire the three classifier calls now, concurrently with each
+    // other and with the guards' own rule checks, rather than letting the guard chain start
+    // them one after another.
+    ctx.classifierCalls = {
+      distress: prefetchDistress(env, ctx, text),
+      moderation: prefetchModeration(env, ctx, text),
+      jailbreak: prefetchJailbreak(env, ctx, text),
+    };
+    const chain = await runGuardChain(registry.ordered(), text, ctx, {
       phase: 'pre',
       clock: env.deps.clock,
       timeoutMs: PRE_GUARD_SLICE_MS,
