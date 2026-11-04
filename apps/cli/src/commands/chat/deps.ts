@@ -18,6 +18,7 @@ import {
   type ProviderAdapterFactories,
 } from '@edmate/gateway';
 import {
+  createSessionTurnQueue,
   createTurnLimits,
   hasDistressKeyword,
   type Clock,
@@ -300,6 +301,8 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     fallbackReplies: chatFallbackReplies(),
     promptPacks,
     distressCheck: (text, lang) => hasDistressKeyword(text, lang),
+    // 4.7b Phase D fix round 1: one queue for this process's whole chat session.
+    turnQueue: createSessionTurnQueue(),
     ...(personas === undefined ? {} : { personas }),
   };
 

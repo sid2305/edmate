@@ -2,7 +2,7 @@
 // `teacher_preview` entitlement store per package, over stub repositories and fake queues.
 import type { Repositories } from '@edmate/db';
 import { loadBundledPrices } from '@edmate/gateway';
-import { createTurnLimits } from '@edmate/harness';
+import { createSessionTurnQueue, createTurnLimits } from '@edmate/harness';
 import { describe, expect, it, vi } from 'vitest';
 import { systemClock, systemIds } from '../../turn/deps';
 import {
@@ -39,7 +39,12 @@ function process(repos: Repositories): TestChatProcess {
     repos,
     market: 'global',
     packMarket: () => 'global',
-    queues: { meter: fakeQueue(), commit: fakeQueue(), alert: fakeQueue(), safetyEvent: fakeQueue() },
+    queues: {
+      meter: fakeQueue(),
+      commit: fakeQueue(),
+      alert: fakeQueue(),
+      safetyEvent: fakeQueue(),
+    },
     limits: createTurnLimits(clock),
     // Built eagerly by createRouter; never called here (no model call in tests).
     factories: { anthropic: () => ({ capabilities: {} }) as never },
@@ -50,6 +55,7 @@ function process(repos: Repositories): TestChatProcess {
     clock,
     ids: systemIds(),
     log: { error: vi.fn() },
+    turnQueue: createSessionTurnQueue(),
   };
 }
 
@@ -113,7 +119,9 @@ describe('testChatDepsFor', () => {
     // A `teacherQuestions` port that would fail the test if the deps' own store ever delegated to
     // it, standing in for the real `teacherQuestionStoreFor(repos, scope)` this preview must not use.
     const open = vi.fn(async () => {
-      throw new Error('must never be called: a preview question must not become a teacher_questions row');
+      throw new Error(
+        'must never be called: a preview question must not become a teacher_questions row',
+      );
     });
     (repos as { teacherQuestions: unknown }).teacherQuestions = { open };
     const deps = testChatDepsFor(process(repos), scope, 'pkg_a');
@@ -145,14 +153,30 @@ describe('testChatDepsFor', () => {
     (repos as { evidenceEvents: unknown }).evidenceEvents = { appendAndFold };
     (repos as { learnerProfiles: unknown }).learnerProfiles = {
       get: vi.fn(async () => {
-        throw new Error('must never be called: a preview must not read the teacher\'s own profile row');
+        throw new Error(
+          "must never be called: a preview must not read the teacher's own profile row",
+        );
       }),
     };
     const deps = testChatDepsFor(process(repos), scope, 'pkg_a');
     const fresh = await deps.profiles.get('tch_a', 'tch_a');
-    expect(fresh).toEqual({ studentId: 'tch_a', teacherId: 'tch_a', lang: 'en', mastery: {}, mistakes: [] });
+    expect(fresh).toEqual({
+      studentId: 'tch_a',
+      teacherId: 'tch_a',
+      lang: 'en',
+      mastery: {},
+      mistakes: [],
+    });
     const moved = await deps.profiles.applyEvidence([
-      { studentId: 'tch_a', teacherId: 'tch_a', topicId: 'top_1', correct: true, source: 'check', weight: 1, ts: '2026-10-23T10:00:00.000Z' },
+      {
+        studentId: 'tch_a',
+        teacherId: 'tch_a',
+        topicId: 'top_1',
+        correct: true,
+        source: 'check',
+        weight: 1,
+        ts: '2026-10-23T10:00:00.000Z',
+      },
     ]);
     expect(moved).toEqual(fresh);
     expect(appendAndFold).not.toHaveBeenCalled();
@@ -164,11 +188,20 @@ describe('testChatDepsFor', () => {
     const { repos } = stubRepos();
     const added: unknown[] = [];
     const p = process(repos);
-    p.queues = { ...p.queues, meter: { add: async (_name: string, data: unknown) => void added.push(data) } };
+    p.queues = {
+      ...p.queues,
+      meter: { add: async (_name: string, data: unknown) => void added.push(data) },
+    };
     const deps = testChatDepsFor(p, scope, 'pkg_a');
     await deps.usage.record(
       { model: 'claude-haiku-4-5', tier: 'main', inputTokens: 1, outputTokens: 1, costMicroUsd: 1 },
-      { teacherId: 'tch_a', packageId: 'pkg_a', studentId: 'tch_a', turnId: 'trn_1', source: deps.entitlementSource },
+      {
+        teacherId: 'tch_a',
+        packageId: 'pkg_a',
+        studentId: 'tch_a',
+        turnId: 'trn_1',
+        source: deps.entitlementSource,
+      },
     );
     expect(added).toEqual([expect.objectContaining({ source: 'teacher_preview' })]);
   });

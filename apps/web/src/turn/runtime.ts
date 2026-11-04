@@ -11,7 +11,7 @@ import {
   loadProviderKeys,
   type ProviderAdapterFactories,
 } from '@edmate/gateway';
-import { defaultSteps, type TurnLimits } from '@edmate/harness';
+import { createSessionTurnQueue, defaultSteps, type TurnLimits } from '@edmate/harness';
 import { createTurnQueues, redisTurnLimits, type TurnQueues } from '@edmate/queue';
 import { Redis } from 'ioredis';
 import {
@@ -118,6 +118,10 @@ async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
     clock: systemClock(),
     ids: systemIds(),
     log: hooks.log,
+    // 4.7b Phase D fix round 1: built once here, so every turn in this process shares the queue
+    // that serialises same-session turns, even though `turnDepsFor` builds a fresh `PipelineDeps`
+    // object literal on every call.
+    turnQueue: createSessionTurnQueue(),
   };
   return {
     agents: repos.agents,

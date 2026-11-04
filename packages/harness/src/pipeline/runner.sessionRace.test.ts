@@ -22,7 +22,7 @@ import { testDecideResult, testDeps, testSteps } from '../testing/testSteps.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import { VIRTUAL_EPOCH_MS } from '../testing/virtualClock.js';
 import { cancelSource, type Cancel } from './clock.js';
-import { runTurn, sessionQueueSizeForTest } from './runner.js';
+import { createSessionTurnQueue, runTurn, sessionQueueSizeForTest } from './runner.js';
 import { GROUNDING_ASKS_PER_SESSION } from './spec.js';
 import { defaultSteps } from './steps/index.js';
 import type { Steps } from './types.js';
@@ -39,12 +39,15 @@ async function drain(events: AsyncIterable<TurnEvent>): Promise<TurnEvent[]> {
 }
 
 /**
- * A shared `deps` (so the queue is shared) and a shared help-state store, whose current
- * `groundingAsks` `buildContext` reads fresh on every call (a test double standing in for
- * `entitle`'s real `turnConfig.load` + `buildContext`'s own decode, out of this phase's scope:
- * only the dynamic *read* matters for proving the race, and `runner.ts` itself computes the
- * saved value from it). `streams`: one `StreamStep[]` per turn this test will run, consumed in
- * call order (`ScriptedGateway` matches FIFO).
+ * A fresh `PipelineDeps` object literal per `run()` call (mirroring the real caller,
+ * `apps/web/src/turn/routes.ts`'s per-turn `turnDepsFor`), all sharing one `turnQueue` (fix round
+ * 1: the queue serialising same-session turns lives on this field now, not on `deps` identity),
+ * and a shared help-state store whose current `groundingAsks` `buildContext` reads fresh on
+ * every call (a test double standing in for `entitle`'s real `turnConfig.load` +
+ * `buildContext`'s own decode, out of this phase's scope: only the dynamic *read* matters for
+ * proving the race, and `runner.ts` itself computes the saved value from it). `streams`: one
+ * `StreamStep[]` per turn this test will run, consumed in call order (`ScriptedGateway` matches
+ * FIFO).
  */
 function sessionDeps(initialAsks: number, streams: StreamStep[][]) {
   const store = memoryTeacherQuestionStore();
@@ -84,9 +87,17 @@ function sessionDeps(initialAsks: number, streams: StreamStep[][]) {
   const run = (sessionId: string, text: string, cancel?: Cancel) =>
     runTurn(
       { ...demoTurnInput, sessionId, text },
-      { deps: t.deps, steps, ...(cancel === undefined ? {} : { cancel }) },
+      // A fresh `PipelineDeps` object literal every call (not `t.deps` itself), same as the real
+      // caller builds one per turn; only `turnQueue` (and every other field) is shared by value.
+      { deps: { ...t.deps }, steps, ...(cancel === undefined ? {} : { cancel }) },
     );
-  return { t, store, sessionState, run };
+  /** Like `run`, but the given `deps` replaces `t.deps.turnQueue` (the boundary test). */
+  const runWith = (
+    sessionId: string,
+    text: string,
+    turnQueue: ReturnType<typeof createSessionTurnQueue>,
+  ) => runTurn({ ...demoTurnInput, sessionId, text }, { deps: { ...t.deps, turnQueue }, steps });
+  return { t, store, sessionState, run, runWith };
 }
 
 describe('runner: per-session turn queue (4.7b Phase D)', () => {
@@ -102,7 +113,24 @@ describe('runner: per-session turn queue (4.7b Phase D)', () => {
     expect(sessionState.saved).toHaveLength(2);
     const asks = sessionState.saved.map((s) => parseSessionHelp(s.helpState).help.groundingAsks);
     expect(asks.sort()).toEqual([GROUNDING_ASKS_PER_SESSION, GROUNDING_ASKS_PER_SESSION]);
-    expect(sessionQueueSizeForTest(t.deps)).toBe(0);
+    expect(sessionQueueSizeForTest(t.deps.turnQueue)).toBe(0);
+  });
+
+  it('documents the boundary: two turns with separate queues are not serialised', async () => {
+    // Same shape as the first test (two concurrent ungrounded turns at the cap), but each turn
+    // gets its own, independent `createSessionTurnQueue()` instead of sharing one — the boundary
+    // this fix does not and cannot cover (e.g. two different worker processes). Both turns race
+    // `groundingAsks` exactly as before this fix: both read "still under the cap" and both save
+    // past it, so two `TeacherQuestion`s open, not one.
+    const { t, store, sessionState, runWith } = sessionDeps(GROUNDING_ASKS_PER_SESSION - 1, [
+      [say('Python 4 makes // exact.'), used],
+      [say('Python 4 makes // exact.'), used],
+    ]);
+    const a = runWith('session_unshared', 'first', createSessionTurnQueue());
+    const b = runWith('session_unshared', 'second', createSessionTurnQueue());
+    await t.clock.drive(Promise.all([drain(a.events), a.finished, drain(b.events), b.finished]));
+    expect(store.opened).toHaveLength(2);
+    expect(sessionState.saved).toHaveLength(2);
   });
 
   it('a later turn (not concurrent) behaves as before: at the cap, the reply only', async () => {
@@ -134,7 +162,7 @@ describe('runner: per-session turn queue (4.7b Phase D)', () => {
     // sessions' chains ran independently, not one serialised behind the other.
     expect(t.clock.now() - VIRTUAL_EPOCH_MS).toBeLessThan(5_000);
     await t.clock.drive(Promise.all([drain(b.events), b.finished]));
-    expect(sessionQueueSizeForTest(t.deps)).toBe(0);
+    expect(sessionQueueSizeForTest(t.deps.turnQueue)).toBe(0);
   });
 
   it('many sessions, one turn each: the queue ends empty (no leaked entries)', async () => {
@@ -147,7 +175,7 @@ describe('runner: per-session turn queue (4.7b Phase D)', () => {
       run(`session_${String(i)}`, `msg${String(i)}`),
     );
     await t.clock.drive(Promise.all(runs.flatMap((r) => [drain(r.events), r.finished])));
-    expect(sessionQueueSizeForTest(t.deps)).toBe(0);
+    expect(sessionQueueSizeForTest(t.deps.turnQueue)).toBe(0);
   });
 
   it('a turn that throws (both generate attempts fail) still releases the next same-session turn', async () => {
@@ -162,7 +190,7 @@ describe('runner: per-session turn queue (4.7b Phase D)', () => {
     const ok = run('session_err', 'ok');
     const r2 = await t.clock.drive(Promise.all([drain(ok.events), ok.finished]));
     expect(r2[0].at(-1)?.type).toBe('done');
-    expect(sessionQueueSizeForTest(t.deps)).toBe(0);
+    expect(sessionQueueSizeForTest(t.deps.turnQueue)).toBe(0);
   });
 
   it('a turn cancelled by its caller (RunTurnOptions.cancel) still releases the next same-session turn', async () => {
@@ -177,6 +205,6 @@ describe('runner: per-session turn queue (4.7b Phase D)', () => {
     const b = run('session_cancel', 'second');
     const r = await t.clock.drive(Promise.all([drain(b.events), b.finished]));
     expect(r[0].at(-1)?.type).toBe('done');
-    expect(sessionQueueSizeForTest(t.deps)).toBe(0);
+    expect(sessionQueueSizeForTest(t.deps.turnQueue)).toBe(0);
   });
 });

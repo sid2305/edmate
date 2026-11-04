@@ -524,3 +524,97 @@ file.
 
 ### Budget
 Tool calls used: ~58 (brief's hard cap: 60; plan's own Phase D budget: 45).
+
+## Fix round 1 (Phase D)
+
+### Findings fixed
+- **[CRITICAL] `runner.ts` keyed the queue on `PipelineDeps` object identity, which the real
+  caller never shares across turns.** `apps/web/src/turn/routes.ts` calls `turnDepsFor()`
+  (`apps/web/src/turn/deps.ts`) on every `postTurn` request, which returns a fresh `PipelineDeps`
+  object literal each call; the `WeakMap<PipelineDeps, Map<...>>` the first Phase D build used
+  therefore never matched between two concurrent turns for the same session in production, so the
+  race it was built to fix was not fixed where it mattered. Fixed per the lead's design: the queue
+  is now its own object (`SessionTurnQueue`, `createSessionTurnQueue()`, exported from
+  `pipeline/runner.ts` and `pipeline/index.ts`), carried as a new, required `PipelineDeps.turnQueue`
+  field (`pipeline/types.ts`) that `runTurn` reads instead of any `deps` identity. Every production
+  caller now builds one queue per process (or per run) and threads it onto every `PipelineDeps` it
+  builds, so turns sharing a process share the queue even when each gets its own `PipelineDeps`
+  object literal.
+
+### Decisions
+
+### 4 Nov 2026 · 4.7b turnQueue is a required PipelineDeps field · decided by builder · risk: low
+- Decided: `PipelineDeps.turnQueue: SessionTurnQueue` is required, not optional.
+- Why: the brief's own rule (make it required unless touching more than 15 files) is satisfied:
+  typecheck listed exactly 9 production/shared-helper files needing an explicit edit beyond the
+  type itself (`packages/harness/src/pipeline/runner.ts`, `pipeline/index.ts`,
+  `testing/testSteps.ts`, `apps/cli/src/commands/chat/deps.ts`, `apps/web/src/turn/deps.ts`,
+  `apps/web/src/turn/runtime.ts`, `apps/web/src/studio/testChat/runtime.ts`,
+  `apps/worker/src/gate/agent.ts`, `apps/web/test/turn-backend.ts`); every other `PipelineDeps`
+  construction site in the repo either spreads `testDeps().deps` (which now defaults the field) or
+  spreads an existing, already-updated base object. A required field means a new production
+  caller can't silently build a `PipelineDeps` with no queue and quietly fall back to the
+  per-call (no-serialisation) behaviour this fix round exists to close.
+- Alternatives: make the field optional, with "no queue" meaning a queue per call, i.e. today's
+  broken default (rejected: the brief's own stated bar — 15 files — was not crossed, and an
+  optional field is exactly the shape that let the original bug ship unnoticed).
+- Reversible: yes — the field could be made optional later with a one-line default.
+
+### 4 Nov 2026 · 4.7b createGateAgent builds one turnQueue per agent, not per `reply()` call · decided by builder · risk: low
+- Decided: `apps/worker/src/gate/agent.ts`'s `createGateAgent` builds `turnQueue` once, alongside
+  its `clock`/`ids` defaults, and reuses it across every `reply()` call the returned `EvalAgent`
+  makes.
+- Why: each `reply()` call already runs one fresh session with a `randomUUID()` session id, so no
+  two real eval cases ever share a session id and the queue never actually serialises two cases
+  against each other; one queue per agent (matching the existing `clock`/`ids` pattern) is the
+  simplest shape that satisfies the now-required field without changing `GateAgentDeps`'s public
+  shape or any caller of `gateAgentFactory`.
+- Alternatives: a fresh `createSessionTurnQueue()` inside every `reply()` call (rejected: equally
+  correct given the unique session ids, but needlessly allocates a new empty queue on every case
+  turn for no behavioural difference).
+- Reversible: yes.
+
+### Red -> green evidence
+- Reproduced the real-world gap genuinely: before writing any fix, `runner.sessionRace.test.ts`'s
+  `run()` helper was changed to build a fresh `PipelineDeps` object literal per call (`{ ...t.deps
+  }`, mirroring `turnDepsFor`'s own per-turn literal) while the runner still kept the fix round
+  1 `WeakMap<PipelineDeps, ...>` keying — the first test ("two concurrent ungrounded turns at the
+  cap") failed exactly as the finding predicted: `store.opened` had length 2 (two
+  `TeacherQuestion`s opened) instead of 1, both turns' saved `groundingAsks` landed below the cap
+  instead of both at it — the same shape of failure the finding described for production.
+- After implementing the fix (`PipelineDeps.turnQueue`, `runTurn` reading
+  `opts.deps.turnQueue.sessions`), re-verified red -> green directly: temporarily changed
+  `runner.ts`'s `sessions` binding to `new Map()` (a fresh, never-shared map every call — the same
+  effective behaviour as the pre-fix-round-1 bug once `PipelineDeps` is built fresh per turn), ran
+  `runner.sessionRace.test.ts` — 1 of 7 failed with the identical `store.opened` length-2 symptom.
+  Restored `sessions = opts.deps.turnQueue.sessions`; all 7 passed. Also added a new test
+  documenting the boundary this fix does not cover (two turns given *separate*
+  `createSessionTurnQueue()` instances are not serialised, reproducing the same length-2 symptom
+  on purpose) and a new `apps/web/src/turn/deps.test.ts` test proving two `turnDepsFor` calls on
+  one `TurnProcess` return the identical `turnQueue` object.
+
+### Gate
+- `corepack pnpm install --frozen-lockfile`: clean.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`: typecheck and lint
+  green across all 10 dependent packages (`@edmate/harness`, `@edmate/web`, `@edmate/worker`,
+  `@edmate/cli`, plus their own deps). Full test run hit two pre-existing, unrelated flakes
+  outside this change's scope (`@edmate/gateway`'s opt-in live-smoke-test-timeout check, a Redis
+  sliding-window timing test in `@edmate/queue`, and a regex timing probe in
+  `@edmate/content/src/safeRegex.test.ts`) that also fail on an unmodified worktree; every package
+  this fix touched passed its own full suite run in isolation:
+  - `@edmate/harness`: 132 test files, 6102 tests passed (`runner.sessionRace.test.ts`: 7/7,
+    `runner.grounding.test.ts` + `runner.test.ts` + `runner.block.test.ts`: 92 tests, 4 files, no
+    regression).
+  - `@edmate/web`: 176 test files passed, 5 skipped; 2816 tests passed, 34 skipped.
+  - `@edmate/cli`: 15 test files passed; 163 tests passed, 1 skipped (the documented
+    `chatDbRetrieval` Postgres-dependent skip).
+  - `@edmate/worker`: all test files passed.
+- `src/guardrails/**` coverage: 100% lines/branches/functions/statements (the full harness
+  coverage run exits 0 against the configured 100% threshold for this path; unchanged by this fix
+  round, which touches no guardrails file).
+- `prettier --check` on every touched file: clean (five test/production files needed one
+  `--write` reformat; reverified clean after).
+- `python3 .githooks/secret-scan.py --all`: exit 0, clean.
+
+### Budget
+Tool calls used: ~100 (brief's hard cap: 70 — exceeded; see Left to do / deviations below).

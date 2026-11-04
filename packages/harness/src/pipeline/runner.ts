@@ -143,30 +143,32 @@ export interface RunTurnOptions {
 }
 
 /**
- * 4.7b: a same-session queue so two turns for the same session never both read `groundingAsks`
- * before either saves it (the race `runTurn` read at step 7, long before its own `finish()`
- * commits). One map per `PipelineDeps` instance (the closest thing to "the runner" this module
- * has: production builds one long-lived `PipelineDeps` per agent and reuses it for every turn,
- * same as `createGateAgent`'s long-lived `ids`, per 4.7b Phase C's own decision), keyed by
- * object identity, not a single module-level map — so two unrelated tests (or two independent
- * runners in the same process) each building their own `deps` never share a queue entry, and a
- * `WeakMap` lets an unreferenced `deps` and its queue be collected. A session's own entry is
- * deleted once its chain drains, so the map never grows across many sessions.
+ * 4.7b Phase D fix round 1: a same-session queue so two turns for the same session never both
+ * read `groundingAsks` before either saves it (the race `runTurn` read at step 7, long before its
+ * own `finish()` commits). Keying the queue on the per-call `PipelineDeps` object's identity (the
+ * fix round 1 shape) does not serialise anything in production: the live student API
+ * (`apps/web/src/turn/routes.ts`) builds a brand-new `PipelineDeps` object literal on every turn,
+ * so two concurrent turns for one session never shared a map entry. The queue is instead its own
+ * object (`SessionTurnQueue`), built once per process with `createSessionTurnQueue()` and carried
+ * on `PipelineDeps.turnQueue`, so every turn in that process (whatever `PipelineDeps` object it
+ * happens to be built with) shares the same queue. No module-level state: each call to the
+ * factory makes a new, independent queue, so unrelated tests (or two independent processes) never
+ * collide. A session's own entry is deleted once its chain drains, so the queue never grows
+ * across many sessions.
  */
-const sessionQueues = new WeakMap<PipelineDeps, Map<string, Promise<void>>>();
-
-function sessionQueueFor(deps: PipelineDeps): Map<string, Promise<void>> {
-  let m = sessionQueues.get(deps);
-  if (m === undefined) {
-    m = new Map();
-    sessionQueues.set(deps, m);
-  }
-  return m;
+export interface SessionTurnQueue {
+  /** @internal test-only; product code never reads this field directly. */
+  readonly sessions: Map<string, Promise<void>>;
 }
 
-/** The queue's session count for `deps` right now (4.7b, test-only: no product code reads this). */
-export function sessionQueueSizeForTest(deps: PipelineDeps): number {
-  return sessionQueues.get(deps)?.size ?? 0;
+/** A fresh, empty session turn queue. Call once per process (or per test); never share across. */
+export function createSessionTurnQueue(): SessionTurnQueue {
+  return { sessions: new Map() };
+}
+
+/** The queue's session count right now (4.7b, test-only: no product code reads this). */
+export function sessionQueueSizeForTest(queue: SessionTurnQueue): number {
+  return queue.sessions.size;
 }
 
 /** Runs one student turn. The stream ends with exactly one `done` or `error`; `finished` never rejects. */
@@ -183,7 +185,7 @@ export function runTurn(input: TurnInput, opts: RunTurnOptions): TurnRun {
   // rejected: a thrown turn, or one cancelled/abandoned by its caller, still releases the next
   // one, since both branches below call `turn.run()`). Different sessions each get their own
   // chain and never wait on one another.
-  const sessions = sessionQueueFor(opts.deps);
+  const sessions = opts.deps.turnQueue.sessions;
   const sessionId = String(input.sessionId);
   const ahead = sessions.get(sessionId) ?? Promise.resolve();
   const ran = ahead.then(

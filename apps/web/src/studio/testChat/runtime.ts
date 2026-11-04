@@ -4,7 +4,7 @@
 // REDIS_URL or provider key fails the build (logged once, by reason code) and the routes answer 503.
 import { join } from 'node:path';
 import { loadBundledPrices } from '@edmate/gateway';
-import { defaultSteps } from '@edmate/harness';
+import { createSessionTurnQueue, defaultSteps } from '@edmate/harness';
 import {
   loadLocalePacks,
   pickLocalePack,
@@ -16,7 +16,12 @@ import { devFactories, devModelEnabled } from '../../turn/devModel';
 import { configuredMarket } from '../../turn/previewMarket';
 import { errorName, TurnUnavailableError } from '../../turn/routes';
 import { anthropicFactories, contentDir, type Env, type RuntimeHooks } from '../../turn/runtime';
-import { previewEntitlementsFor, testChatDepsFor, testChatPorts, type TestChatProcess } from './deps';
+import {
+  previewEntitlementsFor,
+  testChatDepsFor,
+  testChatPorts,
+  type TestChatProcess,
+} from './deps';
 import type { TestChatBackend } from './routes';
 
 async function build(env: Env, hooks: RuntimeHooks): Promise<TestChatBackend> {
@@ -50,6 +55,8 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TestChatBackend> {
     clock: systemClock(),
     ids: systemIds(),
     log: hooks.log,
+    // 4.7b Phase D fix round 1: one queue per process, shared by every preview turn.
+    turnQueue: createSessionTurnQueue(),
   };
   return {
     agents: repos.agents,
