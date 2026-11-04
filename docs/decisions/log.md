@@ -10,6 +10,22 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 7.4e build over budget · decided by lead · risk: low
+- Decided: Accept 26 tool calls against a budget of 12 (hard stop 20).
+- Why: The change is one timeout and a comment. Most of the calls were install and gate runs. The diff is exactly what the plan asked for, and code-reviewer approved it.
+- Alternatives: None worth the cost.
+- Reversible: n/a.
+
+---
+
+### 4 Nov 2026 · 4.2e build over budget · decided by lead · risk: low
+- Decided: Accept 37 tool calls against a budget of 15 (hard stop 20).
+- Why: The change is one assertion. The overrun came from a vitest coverage-lock collision between two of the builder's own background runs. It ended one of its own runs by PID, not by name. The diff is exactly what the plan asked for.
+- Alternatives: None worth the cost; the work is done and reviewed.
+- Reversible: n/a.
+
+---
+
 ### 4 Nov 2026 · 4.4b call-volume trade-off on the classifier-short-circuit path · decided by builder · risk: low
 - Decided: accept the extra, discarded classifier calls when an earlier guard short-circuits the
   chain by a classifier verdict (not a rule hit) — e.g. distressDetect escalates on

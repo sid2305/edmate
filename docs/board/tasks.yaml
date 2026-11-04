@@ -12378,9 +12378,28 @@ tasks:
   accept: the assertion is added, and fails if isGuardDetection is put back into the lockedLeaks counter; the gate passes with --filter=@edmate/worker
   deps:
   - 4.2d
-  status: running
+  status: done
   branch: m13/4.2e-lockedleaks-pin
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 9
+    tokens_in: 30
+    tokens_out: 65
+    cache_read_tokens: 263213
+    wall_time_seconds: 36
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 4.4i
   milestone: M13
   title: 'The 4.4b review LOW: prefetchDistress in pipeline/steps/preGuard.ts uses the guard''s configured classifierTimeoutMs instead of the hard-coded DISTRESS_CLASSIFIER_TIMEOUT_MS.'
@@ -12396,6 +12415,25 @@ tasks:
     it an explicit timeout like the other real-suite tests.'
   accept: the test passes an explicit timeout (e.g. 30_000) matching the other real-suite tests in the file; the gate passes with --filter=@edmate/cli
   deps: []
-  status: running
+  status: done
   branch: m7/7.4e-gate-test-timeout
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 5
+    tokens_in: 18
+    tokens_out: 530
+    cache_read_tokens: 155579
+    wall_time_seconds: 20
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
