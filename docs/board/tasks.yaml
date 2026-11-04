@@ -1223,9 +1223,9 @@ tasks:
   deps:
   - GATE
   - '4.3'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 4.3c
   milestone: M13
   title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier per B-13 (SMS to the on-call phone plus email backup, e.g. Twilio and Resend, behind a notifier port; re-page every 15 min until
@@ -1636,9 +1636,30 @@ tasks:
   - 4.6c
   - GATE
   risky: true
-  status: running
-  model: plan:sonnet build:sonnet
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
   branch: m13/4.6d-locked-invisible-marks
+  metrics:
+    tool_calls: 539
+    tokens_in: 1894
+    tokens_out: 194501
+    cache_read_tokens: 74017524
+    wall_time_seconds: 382914
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 3
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
@@ -1664,9 +1685,9 @@ tasks:
   deps:
   - GATE
   - '4.7'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -10702,7 +10723,8 @@ tasks:
 - id: 4.4f
   milestone: M13
   title: 'Moderation/jailbreak follow-ups (4.4 review LOWs): narrow withheldCode/code to the SafetyEventCode subset; expectTypeOf links for the queue and db safety-event enums; build the alert before recording
-    the event in moderationIn; remove the classifier cancel listener; explicit block() return type; test indentation'
+    the event in moderationIn; remove the classifier cancel listener; explicit block() return type; test indentation; (4.4c review note) the moderation rule table is phrase-level, so a plain direct threat
+    ("I will stab him tomorrow") and "how do I get a gun" get no rule hit when the classifier is down: add first-person future-tense threat and weapon-acquisition shapes with no-false-positive cases'
   accept: the six LOWs in docs/tasks/4.4/review.md are fixed with tests where behaviour changes; the harness gate passes
   deps:
   - GATE
