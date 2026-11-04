@@ -82,8 +82,8 @@ so the runner's failed-chain fallback can build a small compatible context objec
 - Reversible: yes, by reverting the PR.
 
 ### 4 Nov 2026 · 4.4c build over budget · decided by lead · risk: low
-- Decided: accept 170 builder tool calls against a plan of 85 (2.0x), counted by the harness. That is 22 + 5 + 3 calls across two stalled starts, 100 for the build, and 40 for fix round 1. Planning (34), review (44) and the re-verify (26) are on top.
-- Why: the Mac slept on battery, which stalled the builder twice, and each restart re-read the context. The fix round was needed for a CRITICAL finding.
+- Decided: accept 244 builder tool calls against a plan of 85 (2.9x), counted by the harness. That is 22 + 5 + 3 calls across two stalled starts, 100 for the build, 40 for fix round 1, and 74 for fix round 2, the CI fix for the dependent apps. Planning (34), review (44) and the re-verify (26) are on top.
+- Why: the Mac slept on battery, which stalled the builder twice, and each restart re-read the context. Fix round 1 fixed a CRITICAL finding. Fix round 2 updated the dependent apps' outage tests, which the first gate missed because it was scoped to `@edmate/harness` only.
 - Alternatives: none worth taking; the work is done and verified.
 - Reversible: not applicable.
 
@@ -91,6 +91,12 @@ so the runner's failed-chain fallback can build a small compatible context objec
 - Decided: the moderation rule table is phrase-level, so plain direct threats ("I will stab him tomorrow") and "how do I get a gun" get no rule hit while the classifier is down. Both go to task 4.4f rather than this PR.
 - Why: 4.4c's scope was keeping alerts on the failed-chain path. Widening the rule table needs no-false-positive cases of its own.
 - Alternatives: widen the patterns in this PR (scope creep, more review).
+- Reversible: yes.
+
+### 4 Nov 2026 · 4.4c live eval scores a rule-table block during a classifier outage as blocked · decided by lead · risk: low
+- Decided: since 4.4c, when the pre-guard chain fails and the moderation or jailbreak rule table matches, the turn replies with a fixed block reply and no error event. Live eval and the gate score that turn as blocked. An outage with no rule hit still fails the case. The liveAgent outage test now uses a message with no rule hit, and a new test covers the rule-hit case.
+- Why: a rule-table hit is a real verdict, not a missing one. The test's intent, that an eval never scores a missing verdict as blocked, still holds. CI caught the change in apps/cli because the fix round gated only `@edmate/harness`.
+- Alternatives: make live eval fail any turn whose chain failed even when the rule table blocked. That hides a real block, and it needs a new outage signal in the turn events.
 - Reversible: yes.
 
 ## Red -> green evidence
@@ -134,7 +140,7 @@ Test counts for this task's own new/changed cases: 9 planned test cases, all 9 p
 (5, 6, 8, 9) all still passing unchanged.
 
 ## Budget
-Tool calls used (harness count): 170 builder calls against a plan of 85: 22 + 5 + 3 across two stalled starts, 100 for the build, and 40 for fix round 1. On top of that: plan 34, review 44, re-verify 26. See the lead's budget decision.
+Tool calls used (harness count): 244 builder calls against a plan of 85: 22 + 5 + 3 across two stalled starts, 100 for the build, 40 for fix round 1, and 74 for fix round 2 (the CI fix in apps/cli and apps/worker). On top of that: plan 34, review 44, re-verify 26. See the lead's budget decision.
 
 ## Fix round 1
 
