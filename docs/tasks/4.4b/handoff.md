@@ -72,6 +72,23 @@ guard unit test (hand-built `PreGuardCtx`, no `classifierCalls`) stays green unc
 - Alternatives: assert non-null — rejected, less safe for no benefit.
 - Reversible: yes.
 
+### 4 Nov 2026 · 4.4b pre-guard classifiers run concurrently, merged · decided by lead · risk: high
+- Decided: Merge 4.4b. When no rule is decisive, the pre-guard step starts the distress, moderation and jailbreak classifier calls at the same time, and each guard consumes its own prefetched result. Rule hits still make no classifier call. Each guard's fail-closed outcome is unchanged.
+- Why: A benign turn must fit step 3's 400 ms budget, and three sequential calls of about 150 ms each didn't. code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings. It ran the guardrail and preGuard tests (1788 pass) and confirmed:
+  - every prefetch has a rejection handler;
+  - unused prefetches are cancelled through the step token;
+  - a prefetch records no safety event on its own;
+  - there is one fail-closed test per guard.
+  One LOW, the prefetch's hard-coded distress timeout, is deferred to 4.4i.
+- Alternatives: One combined classifier call. That would change the classifier prompt and need an ADR.
+- Reversible: yes; revert the PR.
+
+### 4 Nov 2026 · 4.4b build over budget · decided by lead · risk: low
+- Decided: Accept 95 tool calls against a budget of 45 (2.1x).
+- Why: The builder kept going past its hard stop to reach a green, committed state, and it flagged the overrun itself. It also under-reported its count (61 against the harness's 95). The result is complete and approved, so a re-run would cost more than it saves.
+- Alternatives: Discard and re-run with a phase split. That would waste the finished work.
+- Reversible: n/a.
+
 ## Red -> green evidence
 
 - `src/pipeline/steps/preGuard.test.ts`: added a new describe block
@@ -109,4 +126,5 @@ guard unit test (hand-built `PreGuardCtx`, no `classifierCalls`) stays green unc
 
 ## Budget
 
-Tool calls used: 61
+Tool calls used: 95
+Builder estimate: 61 (the harness counted 95)
