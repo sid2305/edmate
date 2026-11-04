@@ -443,7 +443,7 @@ export interface CommitRecord {
    */
   inputWithheld?: true;
   /** The blocking guard's code, when a code came with the block (for the placeholder). */
-  withheldCode?: string;
+  withheldCode?: Exclude<SafetyEventCode, 'self_harm'>;
   /**
    * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
    * (the student got the caring template). Server-side only; commit decides where it is kept.

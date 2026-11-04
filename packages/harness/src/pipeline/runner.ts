@@ -19,6 +19,7 @@ import {
   type LearnerProfile,
   type PedagogyDecision,
   type SafetyAlert,
+  type SafetyEventCode,
   type Skill,
   type SourceRef,
   type TurnContext,
@@ -958,7 +959,7 @@ class Turn {
     intent: Intent,
     replyText: string,
     alert: SafetyAlert | undefined,
-    code: string | undefined,
+    code: Exclude<SafetyEventCode, 'self_harm'> | undefined,
   ): Promise<TurnRunResult> {
     const delivered = alert === undefined ? undefined : this.deliverAlert(alert);
     this.send({ type: 'token', text: replyText });
@@ -1018,7 +1019,12 @@ class Turn {
     e: Entitled,
   ):
     | { kind: 'self_harm' }
-    | { kind: 'block'; code: string; reply: string; alert: SafetyAlert | undefined }
+    | {
+        kind: 'block';
+        code: Exclude<SafetyEventCode, 'self_harm'>;
+        reply: string;
+        alert: SafetyAlert | undefined;
+      }
     | null {
     const text = scrubbed.text ?? '';
     const modHit = matchModeration(text);

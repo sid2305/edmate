@@ -10,6 +10,66 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.4h queue/db enum link location · decided by builder · risk: low
+- Decided: the `expectTypeOf` link between `SafetyEventJob` and `SafetyEventInput` lives in
+  `apps/worker/src/alerts/safetyEvents.test.ts`, not inside `packages/queue` (the task title says
+  "(packages/queue)").
+- Why: `packages/queue` depends on `@edmate/contracts`, `bullmq`, `ioredis`, `zod` — not
+  `@edmate/db`; adding `@edmate/db` purely for a test-only type check would be a new, one-off
+  production dependency. `apps/worker` already depends on and imports both packages' real types
+  in this same test file.
+- Alternatives: add `@edmate/db` as a dev dependency of `packages/queue` just for this test
+  (rejected — a new dependency for a test-only purpose, against the task's zero-new-dependency
+  intent); skip the link entirely (rejected — defeats the LOW's purpose).
+- Reversible: yes — moving the block is a small diff either way.
+
+---
+
+### 4 Nov 2026 · 4.4h indentation LOW already resolved · decided by builder · risk: low
+- Decided: no edit made to `runner.block.test.ts`; `prettier --check` reports it clean.
+- Why: the file has had other 4.4-series tasks (4.4c, 4.4d) land test cases in it since the
+  original review was written; the `describe('runTurn: a pre-guard block with a reply', ...)`
+  section (the likely target) already shows consistent indentation.
+- Alternatives: re-run prettier `--write` anyway (rejected — would produce a no-op diff and risk
+  masking whether the LOW ever reproduced for the next reader).
+- Reversible: n/a (no change made).
+
+---
+
+### 4 Nov 2026 · 4.4h third narrowing site (ruleTableFallback) · decided by builder · risk: low
+- Decided: narrowed `Turn.ruleTableFallback`'s return type's `code: string` to
+  `Exclude<SafetyEventCode, 'self_harm'>`, in addition to the two sites the plan named.
+- Why: 4.3b added this method/call site after the plan's "read first" grep was written (the plan's
+  own caveat: "every line number below is pre-4.3b... locate every edit by symbol"); its `code`
+  value flows into `sendBlockReply`'s now-narrower parameter and the build step failed without it.
+  Both of its producers (`modHit.code` past the `self_harm` check, `jbHit.code`) already satisfy
+  the narrower type, so this is still a type-only change, consistent with the plan's intent.
+- Alternatives: widen `sendBlockReply`'s parameter back to `string` at this one call site via a
+  cast (rejected — reintroduces the exact widening this task removes); leave it and report
+  BLOCKED (rejected — in-scope file, in-scope type family, no behaviour change, no new
+  dependency, not a guardrails/pedagogy/contracts file).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4h deferred 4.4 LOWs, merged · decided by lead · risk: high
+- Decided: merge 4.4h. It narrows the withheld/blocking safety-event code to `Exclude<SafetyEventCode, 'self_harm'>` in three places: `CommitRecord.withheldCode`, the `code` parameter in `runner.ts`, and `ruleTableFallback`'s block code, which 4.3b added after the plan.
+- It also adds a compile-time `expectTypeOf` link between the queue's `SafetyEventJob` and the db's `SafetyEventInput` guard, source and code. The link lives in `apps/worker/src/alerts/safetyEvents.test.ts`, so `packages/queue` takes no `@edmate/db` dependency.
+- The `runner.block.test.ts` indentation LOW had already been fixed.
+- Review: code-reviewer approved with no findings. It checked every writer and reader of the narrowed code, and confirmed that the type link fails `tsc`, not just vitest.
+- The builder had marked its link-location entry `risk: high`; the lead relabelled it `risk: low`, because only the lead logs `risk: high`. This entry is the risk: high one, for the `apps/worker/src/alerts/**` risk path.
+- Reversible: yes; revert the squash commit. All changes are type-only.
+
+---
+
+### 4 Nov 2026 · 4.4h build over budget · decided by lead · risk: low
+- Decided: accept 70 builder tool calls against the plan's 35. That is the harness count; the builder reported 32.
+- Why: the extra narrowing site and a flaky unrelated content test in the gate run.
+- This is the fourth builder in a row to under-report its calls by about half. Budget decisions keep using harness counts.
+- Reversible: n/a.
+
+---
+
 ### 4 Nov 2026 · 4.7b CLAIM_BEFORE connector adds "for" · decided by builder · risk: low
 - Decided: `CLAIM_BEFORE` reuses `CONNECTOR` (shared with `CLAIM_AFTER`) plus "for", in a
   separate `CONNECTOR_BEFORE` constant used only for the reversed form.
