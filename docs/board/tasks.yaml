@@ -12378,9 +12378,9 @@ tasks:
   accept: the assertion is added, and fails if isGuardDetection is put back into the lockedLeaks counter; the gate passes with --filter=@edmate/worker
   deps:
   - 4.2d
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.2e-lockedleaks-pin
+  model: plan:lead build:sonnet
 - id: 4.4i
   milestone: M13
   title: 'The 4.4b review LOW: prefetchDistress in pipeline/steps/preGuard.ts uses the guard''s configured classifierTimeoutMs instead of the hard-coded DISTRESS_CLASSIFIER_TIMEOUT_MS.'
@@ -12392,9 +12392,10 @@ tasks:
   model: null
 - id: 7.4e
   milestone: M7
-  title: 'CI flake: apps/cli src/commands/gate.test.ts "no longer reports a blocker B-40 gap" runs the real suites under the default 5s vitest timeout and timed out once on PR #424 (passed on re-run). Give it an explicit timeout like the other real-suite tests.'
+  title: 'CI flake: apps/cli src/commands/gate.test.ts "no longer reports a blocker B-40 gap" runs the real suites under the default 5s vitest timeout and timed out once on PR #424 (passed on re-run). Give
+    it an explicit timeout like the other real-suite tests.'
   accept: the test passes an explicit timeout (e.g. 30_000) matching the other real-suite tests in the file; the gate passes with --filter=@edmate/cli
   deps: []
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.4e-gate-test-timeout
+  model: plan:lead build:sonnet
