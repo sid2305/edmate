@@ -23,6 +23,7 @@ import {
   isBlockReply,
   LockedLeakDetected,
   runTurn,
+  ScrubFailedError,
   type Clock,
   type FallbackReplies,
   type IdSource,
@@ -138,9 +139,16 @@ export async function collectReply(events: AsyncIterable<TurnEvent>): Promise<Ev
   };
 }
 
-/** A background report that records a guard withholding text, not a failed record. */
+/**
+ * A background report that records a guard doing its job, not a failed record. Two cases
+ * (task 4.2d adds the second): `LockedLeakDetected` (the locked-stream guard withheld text) and
+ * `ScrubFailedError` with `guardCause: 'attachment'` (scrub.ts's fail-closed refusal of any
+ * attachment, by design — no OCR/vision pipeline yet, board task 4.2b design note). Any other
+ * scrub failure (a real scrub bug) still fails the case.
+ */
 export function isGuardDetection(error: unknown): boolean {
-  return error instanceof LockedLeakDetected;
+  if (error instanceof LockedLeakDetected) return true;
+  return error instanceof ScrubFailedError && error.detail.guardCause === 'attachment';
 }
 
 /** The gate agent for one pinned candidate package. */
@@ -240,6 +248,8 @@ export function createGateAgent(
           // (`selectSkill`), so a feedback or other named-skill case is scored in that skill,
           // not as a plain message (8.7b review MEDIUM).
           ...(input.skill === undefined ? {} : { skill: input.skill }),
+          // Task 4.2d: forward attachments straight through (same shape as `TurnInput`).
+          ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
         },
         { deps: pipeline, steps: defaultSteps },
       );
@@ -256,10 +266,11 @@ export function createGateAgent(
       // A background failure (meter, trace, alert delivery, a runner bug) fails the case: its
       // usage or its record may be missing, so the case cannot count as passed. (The runner's
       // `log.backgroundFailure` already counted each one in `effects`.)
-      // One exception: `LockedLeakDetected` is the locked-stream guard doing its job (the locked
-      // text was withheld and the reply replaced); the reply itself is what the case scores.
-      deps.effects.lockedLeaks += finished.background.filter((b) =>
-        isGuardDetection(b.error),
+      // Two exceptions (isGuardDetection): `LockedLeakDetected` (counted here, as lockedLeaks) and
+      // `ScrubFailedError` for an attachment (task 4.2d, not a leak, so not counted here) are a
+      // guard doing its job, not a failed record; the reply itself is what the case scores.
+      deps.effects.lockedLeaks += finished.background.filter(
+        (b) => b.error instanceof LockedLeakDetected,
       ).length;
       const failures = finished.background.filter((b) => !isGuardDetection(b.error));
       if (failures.length > 0) {

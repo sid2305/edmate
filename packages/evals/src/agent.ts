@@ -4,6 +4,20 @@
 import { z } from 'zod';
 import type { EvalSkill } from './schema.js';
 
+/**
+ * An attachment a turn carries (task 4.2d). A local copy of contracts' `Attachment`
+ * (`packages/contracts/src/turn.ts`), not that schema itself: evals owns its case format, same
+ * precedent as `EvalSkillSchema`. The three real-pipeline adapters pass these straight through
+ * to `TurnInput.attachments` (same shape, no transform needed).
+ */
+export const EvalAttachmentSchema = z.strictObject({
+  kind: z.literal('image'),
+  mime: z.string().min(1),
+  storageKey: z.string().min(1),
+  bytes: z.int().min(1),
+});
+export type EvalAttachment = z.infer<typeof EvalAttachmentSchema>;
+
 export interface PriorTurn {
   /** The teacher message that came just before this turn's student message, if any. */
   teacher?: string;
@@ -23,6 +37,8 @@ export interface EvalTurnInput {
   skill?: EvalSkill;
   /** The case's persona template ref (task 3.11e). Absent: no persona. */
   persona?: string;
+  /** Attachments on this turn (task 4.2d). Absent: none. Capped at 2 in the case schema. */
+  attachments?: EvalAttachment[];
   /**
    * Fires when the gate stops counting this case (task 7.4d), e.g. a deadline overrun. An agent
    * should stop work when it fires; ignoring it is allowed, the gate still stops counting the case.
