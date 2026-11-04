@@ -62,6 +62,14 @@ const GROUP =
 const GAME =
   '(?:game|games|unity|godot|unreal|roblox|pygame|sprite|sprites|minecraft|fortnite|asset|assets|' +
   'animation|simulator|simulation|level|mod|class|object|3d|player|enemy|enemies|shooter)';
+/**
+ * Fix round 1 (4.4f): "shoot" is a harm verb, but also everyday English for a message or a
+ * photo ("shoot him a text", "shoot her portrait"). Directly after the person word, this group
+ * keeps that sense clean.
+ */
+const MESSAGE_OR_PHOTO =
+  '(?:a |an |the )?(?:quick )?(?:message|text|msg|email|dm|note|line|reply|question|photo|photos|' +
+  'picture|pictures|portrait|headshot|headshots|video)';
 /** Nouns after "explicit", "adult" and so on that are about code or data, not content. */
 const NOT_CONTENT =
   '(?:type|types|header|headers|policy|rating|filter|filters|flag|warning|cast|conversion)';
@@ -147,11 +155,14 @@ const RULES: readonly Rule<ModerationCode>[] = [
   // 4.4f: a first-person future-tense statement of intent, not a question or a lead-in already
   // covered below. OTHER_PERSON already excludes objects/things ("I will kill this exam" never
   // matches); the GAME exemption keeps "im gonna kill him in fortnite" clean (lead review item 3).
+  // Fix round 1: "shoot" joins this row only (as a local verb group), not the shared HARM_VERB,
+  // because other rows reuse HARM_VERB and "shoot" is everyday English there ("shoot him a text").
+  // The MESSAGE_OR_PHOTO exemption keeps that everyday sense clean even in this row.
   decisive(
     'harm_to_others',
     '(?:i will|ill|i ll|i m going to|im going to|i am going to|i m gonna|im gonna|i plan to|' +
-      `i want to)${gap(1)} ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`,
-    { unless: GAME },
+      `i want to)${gap(1)} (?:${HARM_VERB}|shoot)${gap(1)} ${OTHER_PERSON}`,
+    { unless: `${GAME}|${OTHER_PERSON} ${MESSAGE_OR_PHOTO}` },
   ),
   decisive('harm_to_others', `(?:way|ways|how) to ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`),
   decisive(

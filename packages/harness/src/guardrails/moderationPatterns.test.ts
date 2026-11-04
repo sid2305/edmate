@@ -405,4 +405,26 @@ describe('matchModeration: 4.4f rule follow-ups (first-person threat, weapon acq
     },
     T,
   );
+
+  it(
+    'fix round 1: a first-person "shoot" threat hits harm_to_others',
+    () => {
+      expect(matchModeration("I'm going to shoot him")).toEqual(D('harm_to_others'));
+      expect(matchModeration('im gonna shoot her tomorrow')).toEqual(D('harm_to_others'));
+      expect(matchModeration('I will shoot him at school')).toEqual(D('harm_to_others'));
+    },
+    T,
+  );
+
+  it(
+    'fix round 1: "shoot" a message or a photo is everyday English, not a threat',
+    () => {
+      expect(matchModeration("I'll shoot him a text")).toBeNull();
+      expect(matchModeration('im gonna shoot her an email')).toBeNull();
+      expect(matchModeration("I'm going to shoot him a quick message")).toBeNull();
+      expect(matchModeration("I'm going to shoot her portrait for the yearbook")).toBeNull();
+      expect(matchModeration('im gonna shoot him in fortnite')).toBeNull();
+    },
+    T,
+  );
 });

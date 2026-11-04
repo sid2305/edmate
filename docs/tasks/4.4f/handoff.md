@@ -78,3 +78,64 @@ Tool calls used: 28 (plan: 45; one phase, packages/harness only).
 ## Left to do
 None — all three new-shape tests, the lead review's HIGH and two MEDIUMs, and the two safe LOWs
 are green. The three deferred LOWs move to 4.4g as described in Decisions above.
+
+## Fix round 1
+
+**Finding ([HIGH] `packages/harness/src/guardrails/moderationPatterns.ts`, HARM_VERB).**
+`matchModeration("I'm going to shoot him")` returned null: a clear first-person threat got no
+block, no safety event and no alert. HARM_VERB had no "shoot".
+
+### Red -> green
+Added `fix round 1` tests to the `4.4f rule follow-ups` describe block. Confirmed red first (ran
+with the pre-fix row, "shoot" not in the verb group): `fix round 1: a first-person "shoot" threat
+hits harm_to_others` failed, expected `{ code: 'harm_to_others', decisive: true }`, got `null`,
+for `"I'm going to shoot him"`. After the fix, both new tests (hit and no-hit cases) pass; the
+full file is green at 137/137 tests.
+
+### The fix
+- "shoot" was added only to the existing first-person future-tense threat row, through a local
+  verb group `(?:${HARM_VERB}|shoot)` — the shared `HARM_VERB` constant is unchanged, since other
+  rows reuse it and "shoot him a text" is everyday English there.
+- Added a `MESSAGE_OR_PHOTO` noun group and extended that row's `unless` to
+  `${GAME}|${OTHER_PERSON} ${MESSAGE_OR_PHOTO}`, exempting a person word directly followed by an
+  optional article/"quick" and a message or photo noun (message, text, msg, email, dm, note, line,
+  reply, question, photo(s), picture(s), portrait, headshot(s), video). The existing `GAME`
+  exemption is unchanged.
+
+### Gate results
+- `corepack pnpm install --frozen-lockfile`: clean.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`: harness typecheck,
+  lint and test all green (137/137 in `moderationPatterns.test.ts`, 100% coverage on
+  `src/guardrails/**`). The gated run also reran `@edmate/content#test`, which failed once on a
+  timing-probe test (`checkSafeRegex > the timing probe ... catches \`a?\` x25 then \`a\` x25`,
+  5000ms timeout) unrelated to this change; re-run in isolation (`vitest run
+  src/safeRegex.test.ts`) passed 56/56 — a pre-existing timing flake under load, not a regression
+  from this fix. The local `@edmate/cli` `chatDbRetrieval` integration test was not re-checked
+  (dev Postgres broken locally per the brief; CI covers it).
+- `prettier --check` on both touched files: pass.
+- `python3 .githooks/secret-scan.py --all`: clean.
+
+### Decisions
+
+### 4 Nov 2026 · 4.4f fix round 1: "shoot" scoped to one row, not shared HARM_VERB · decided by builder · risk: low
+- Decided: "shoot" joins only the first-person future-tense threat row (`(?:${HARM_VERB}|shoot)`
+  local to that row), not the shared `HARM_VERB` constant used by other rows.
+- Why: the lead's fix-round brief requires this scoping — other `harm_to_others` rows reuse
+  `HARM_VERB` for lead-ins like "how do I ... him" and "teach me how to ... him", and "shoot" in
+  those shapes is far more likely to be a game or photography question than in the direct
+  first-person statement shape.
+- Alternatives: add "shoot" to shared `HARM_VERB` — rejected per the lead's explicit instruction
+  and because it would widen every other row that reuses `HARM_VERB`.
+- Reversible: yes — a one-line regex change.
+
+### 4 Nov 2026 · 4.4f fix round 1: message/photo exemption keyed to adjacency with the person word · decided by builder · risk: low
+- Decided: the message/photo exemption is a phrase on the whole normalised text,
+  `${OTHER_PERSON} ${MESSAGE_OR_PHOTO}`, requiring the noun to sit directly after the person word
+  (with an optional article or "quick" in between), not a bare word-anywhere `unless`.
+- Why: the brief specifies the exemption only when the person word is "directly followed by" the
+  message/photo noun; a bare `unless` on "message" or "photo" anywhere in the text would also
+  clear unrelated threats that happen to mention a photo elsewhere in the same message.
+- Alternatives: a lookahead directly after `${HARM_VERB}|shoot}${gap(1)} ${OTHER_PERSON}` in the
+  main pattern — rejected as harder to read next to the existing `GAME` `unless`; the table's
+  `unless` field already supports a multi-alternative string and is the row's existing idiom.
+- Reversible: yes — a one-line regex change.
