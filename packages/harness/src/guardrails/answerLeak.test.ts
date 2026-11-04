@@ -244,8 +244,7 @@ describe('answerLeak: the paraphrase judge (4.5b)', () => {
   const judgeFromVerdict = (
     verdict: (input: { key: string; reply: string }) => string,
     calls: unknown[] = [],
-  ): GroundingJudge =>
-    judgeCalling((req) => verdict(readLeakJudgeRequest(toModelReq(req))), calls);
+  ): GroundingJudge => judgeCalling((req) => verdict(readLeakJudgeRequest(toModelReq(req))), calls);
   const toModelReq = (req: Parameters<GroundingJudge>[0]) => ({
     tier: 'small' as const,
     system: req.system,
@@ -255,21 +254,30 @@ describe('answerLeak: the paraphrase judge (4.5b)', () => {
 
   it('no judge call when the regex matcher already caught the leak', async () => {
     const calls: unknown[] = [];
-    const r = await run('x is 16.', ctxFor(['16'], { leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls) }));
+    const r = await run(
+      'x is 16.',
+      ctxFor(['16'], {
+        leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls),
+      }),
+    );
     expect(calls).toEqual([]);
     expect(r.result).toMatchObject({ reason: 'answer_key' });
   });
 
   it('no judge call when every key is numeric or a label', async () => {
     const calls: unknown[] = [];
-    const x = ctxFor(['16'], { leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls) });
+    const x = ctxFor(['16'], {
+      leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls),
+    });
     expect((await run('Trace each line.', x)).result.ok).toBe(true);
     expect(calls).toEqual([]);
   });
 
   it('a non-numeric key with no regex hit is sent to the judge, fenced', async () => {
     const calls: unknown[] = [];
-    const x = ctxFor(['Warm'], { leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls) });
+    const x = ctxFor(['Warm'], {
+      leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls),
+    });
     expect((await run('Think about a fire.', x)).result.ok).toBe(true);
     expect(calls).toHaveLength(1);
     const sent = toModelReq(calls[0] as Parameters<GroundingJudge>[0]);
@@ -278,7 +286,10 @@ describe('answerLeak: the paraphrase judge (4.5b)', () => {
 
   it('a clean judge verdict is ok, with its usage', async () => {
     const x = ctxFor(['Warm'], { leakJudge: judgeFromVerdict(() => CLEAN_LEAK_VERDICT) });
-    expect(await run('Think about a fire.', x)).toEqual({ result: { ok: true }, usage: [usageSmall] });
+    expect(await run('Think about a fire.', x)).toEqual({
+      result: { ok: true },
+      usage: [usageSmall],
+    });
   });
 
   // A two-word key, its words apart and out of order in the reply, so the regex matcher (a
@@ -312,7 +323,9 @@ describe('answerLeak: the paraphrase judge (4.5b)', () => {
   });
 
   it('no answer from the judge fails closed to the hint, reason judge_unavailable', async () => {
-    const x = ctxFor(['Warm'], { leakJudge: () => Promise.resolve({ text: undefined, usage: [usageSmall] }) });
+    const x = ctxFor(['Warm'], {
+      leakJudge: () => Promise.resolve({ text: undefined, usage: [usageSmall] }),
+    });
     expect(await run('Think about a fire.', x)).toEqual({
       result: {
         ok: false,

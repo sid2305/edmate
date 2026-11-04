@@ -40,7 +40,13 @@ function setup(o: Setup = {}) {
   );
   const v = o.verdict ?? 'clean';
   const verdict: LeakVerdict =
-    v === 'clean' ? () => CLEAN_LEAK_VERDICT : v === 'leak' ? () => LEAK_VERDICT : v === 'script' ? paraphraseJudge : v;
+    v === 'clean'
+      ? () => CLEAN_LEAK_VERDICT
+      : v === 'leak'
+        ? () => LEAK_VERDICT
+        : v === 'script'
+          ? paraphraseJudge
+          : v;
   const gateway =
     v === 'script'
       ? spy
