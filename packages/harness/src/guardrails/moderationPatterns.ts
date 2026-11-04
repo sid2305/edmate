@@ -144,6 +144,15 @@ const RULES: readonly Rule<ModerationCode>[] = [
   ),
 
   // ---- Harm to others -----------------------------------------------------------------------------
+  // 4.4f: a first-person future-tense statement of intent, not a question or a lead-in already
+  // covered below. OTHER_PERSON already excludes objects/things ("I will kill this exam" never
+  // matches); the GAME exemption keeps "im gonna kill him in fortnite" clean (lead review item 3).
+  decisive(
+    'harm_to_others',
+    '(?:i will|ill|i ll|i m going to|im going to|i am going to|i m gonna|im gonna|i plan to|' +
+      `i want to)${gap(1)} ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`,
+    { unless: GAME },
+  ),
   decisive('harm_to_others', `(?:way|ways|how) to ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`),
   decisive(
     'harm_to_others',
@@ -194,6 +203,19 @@ const RULES: readonly Rule<ModerationCode>[] = [
   ),
 
   // ---- Weapons --------------------------------------------------------------------------------------
+  // 4.4f (lead review): a weapon-acquisition question, not a make/build question (the rule below).
+  // No knives (an ordinary cooking question, lead review item 2). The license/permit exemption is
+  // a lookahead directly on the noun (lead review item 1, no "without a licence" loophole): it
+  // only exempts a license/permit that is itself the thing asked for, e.g. "...a gun license", not
+  // an evasion phrase like "...a gun without a license" or "...without a background check". The
+  // GAME exemption (as an `unless`, reused unchanged) keeps "how do I get a gun in this game" clean.
+  decisive(
+    'weapons',
+    '(?:how (?:do|can|could|should) i|where (?:do|can|could) i|help me|teach me how to|' +
+      `show me how to)${gap(2)} (?:get|buy|acquire|obtain|find|order)${gap(3)} ` +
+      '(?:gun|pistol|rifle|firearm|weapon)(?! (?:license|licence|permit|licensing)(?![\\p{L}]))',
+    { unless: GAME },
+  ),
   decisive(
     'weapons',
     `(?:make|build|making|building|create|assemble|bana|banana)${gap(3)} ` +

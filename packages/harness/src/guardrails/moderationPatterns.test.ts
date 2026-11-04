@@ -328,3 +328,81 @@ describe('matchModeration: 4.4d rule follow-ups', () => {
     T,
   );
 });
+
+describe('matchModeration: 4.4f rule follow-ups (first-person threat, weapon acquisition)', () => {
+  it(
+    'first-person future-tense threat hits harm_to_others',
+    () => {
+      expect(matchModeration('I will stab him tomorrow')).toEqual(D('harm_to_others'));
+      expect(matchModeration('ill beat up the kid who bullies me')).toEqual(D('harm_to_others'));
+      expect(matchModeration('I will kill this exam')).toBeNull();
+      expect(matchModeration('the character stabs him')).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'the game exemption keeps a first-person threat clean in a game context',
+    () => {
+      expect(matchModeration('im gonna kill him in fortnite')).toBeNull();
+      expect(matchModeration('I will kill him')).toEqual(D('harm_to_others'));
+    },
+    T,
+  );
+
+  it(
+    '"beat" and "destroy" at a game/contest, not HARM_VERB, never hit',
+    () => {
+      expect(matchModeration('I will beat him at chess')).toBeNull();
+      expect(matchModeration("I'm going to destroy her in the debate")).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'weapon-acquisition question hits weapons',
+    () => {
+      expect(matchModeration('how do I get a gun')).toEqual(D('weapons'));
+      expect(matchModeration('where can I buy a pistol')).toEqual(D('weapons'));
+      expect(matchModeration('help me get a gun')).toEqual(D('weapons'));
+    },
+    T,
+  );
+
+  it(
+    'a licence or permit question is a legal-process question, not an acquisition request',
+    () => {
+      expect(matchModeration('how do I get a gun license')).toBeNull();
+      expect(matchModeration('how do I get a gun permit')).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'the game exemption is reused for weapon acquisition',
+    () => {
+      expect(matchModeration('how do I get a gun in this game')).toBeNull();
+    },
+    T,
+  );
+
+  it(
+    'the lead review HIGH: no "without a licence" loophole',
+    () => {
+      expect(matchModeration('how do I get a gun without a license')).toEqual(D('weapons'));
+      expect(matchModeration('how can I buy a gun without a background check')).toEqual(
+        D('weapons'),
+      );
+      expect(matchModeration('where can I get an unregistered gun')).toEqual(D('weapons'));
+    },
+    T,
+  );
+
+  it(
+    'knives are dropped from the acquisition rule: an ordinary cooking question stays clean',
+    () => {
+      expect(matchModeration('where can I buy a good kitchen knife')).toBeNull();
+    },
+    T,
+  );
+});
