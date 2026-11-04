@@ -518,10 +518,15 @@ class Turn {
     // generic PRE_GUARD_FAILED ending.
     const ruleFallback = pg.ok ? null : this.ruleTableFallback(scrubbed, e);
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
-    // 4.4c: a router distress label must not drop preGuard's own misuse alert: read only when
-    // preGuard itself blocked with one. The caring reply still wins (escalate beats block for
-    // the reply), but the misuse alert still reaches AlertSink.
-    const blockAlert = pg.ok && pg.value.result === 'block' ? pg.value.alert : undefined;
+    // 4.4c: a router distress label (or a raw/soft distress hit) must not drop a misuse alert
+    // that was already found this turn: preGuard's own block alert when the chain ran, or — when
+    // the chain failed — the rule table fallback's block alert (fix round 1: the fallback's own
+    // decisive hit was being silently dropped whenever a distress signal coincided with it). The
+    // caring reply still wins (escalate beats block for the reply), but the misuse alert still
+    // reaches AlertSink.
+    const blockAlert =
+      (pg.ok && pg.value.result === 'block' ? pg.value.alert : undefined) ??
+      (ruleFallback?.kind === 'block' ? ruleFallback.alert : undefined);
     // A failed preGuard means no classifier verdict: the keyword check still runs, and there a
     // soft phrase counts too (no verdict to bypass; 4.3 safety review). A hit on the raw text
     // (before the scrub, hard phrases only) always counts.

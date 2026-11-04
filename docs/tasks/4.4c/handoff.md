@@ -122,3 +122,64 @@ budget was 85 tool calls; this session picked up from a stalled continuation rat
 a single running count, so the total across both sessions is estimated at ~95-110 tool calls,
 modestly over budget due to the lint-fix round and the flaky-test investigation requiring extra
 gate re-runs.
+
+## Fix round 1
+
+### Finding (CRITICAL)
+`runner.ts:519-537` (pre-fix): when the pre-guard chain fails (`!pg.ok`) and
+`ruleTableFallback()` finds a decisive `block` verdict carrying its own misuse alert
+(`harm_to_others`/`threat`/`weapons`), the turn could still enter the escalate branch through
+`intent === 'distress'` or `rawDistress` (not just `ruleFallback?.kind === 'self_harm'`). The old
+`blockAlert` was only ever read from `pg.value.alert`, which requires `pg.ok` — so in the
+chain-failed path `blockAlert` was always `undefined`, and `ruleFallback.alert` (the decisive
+misuse hit the fallback itself found) was silently dropped whenever a distress signal coincided
+with it. This directly violated the task's own acceptance line ("with the distress classifier
+down, a harm_to_others rule hit still raises a misuse alert") for the coincidence case, which none
+of the 9 originally planned/implemented test cases covered.
+
+### Fix
+`blockAlert` is now built as:
+```
+const blockAlert =
+  (pg.ok && pg.value.result === 'block' ? pg.value.alert : undefined) ??
+  (ruleFallback?.kind === 'block' ? ruleFallback.alert : undefined);
+```
+so it falls back to the rule-table fallback's own block alert whenever `pg.ok` is false (no other
+source can set it then). It is threaded through `escalate(scrubbed, e, preAlert, undefined,
+blockAlert)` exactly as before; `sendEscalation()`'s existing dedupe-by-`id` filter (unchanged)
+still guarantees each alert is delivered exactly once.
+
+### Red → green evidence
+Added two cases to `runner.test.ts` next to the existing 4.4c cases (chain forced to fail via
+`createPreGuardStep(new GuardRegistry('pre'))`):
+- *"a hard distress keyword plus a decisive harm_to_others rule hit both raise, exactly once
+  each"* — text combines a hard distress keyword ("i want to die") with the existing
+  harm_to_others phrase ("...hurt him so bad he can't come to school").
+- *"a router distress label plus a decisive harm_to_others rule hit both raise, exactly once
+  each"* — route step overridden to return `intent: 'distress'` directly, same harm_to_others
+  phrase, no keyword.
+
+Before the fix: both new tests failed — `AssertionError: expected [ { id: 'alert_2', ... } ] to
+have a length of 2 but got 1` (only the distress alert was raised; the misuse alert was missing).
+After the fix: `vitest run src/pipeline/runner.test.ts` → 58/58 tests pass, including both new
+cases, each asserting exactly one `distress` and one `misuse`/`critical` alert raised (no
+duplicates), the caring reply, and (for the keyword case) `outcome: 'escalated'`.
+
+### Gate
+- `corepack pnpm install --frozen-lockfile`: lockfile up to date, done.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness`: 4/4 tasks successful
+  (typecheck, lint, 2× test runs via the dependency graph); 131 test files, 6041 tests, all
+  passing; `src/guardrails/**` coverage 100% statements/branches/functions/lines (unchanged, no
+  guardrails files touched).
+- `prettier --check` on `runner.ts` and `runner.test.ts`: found drift in `runner.test.ts`, fixed
+  with `prettier --write`, re-ran `vitest run src/pipeline/runner.test.ts` (58/58 still pass), then
+  `prettier --check` clean on both files.
+- `python3 .githooks/secret-scan.py --all`: clean, exit 0.
+
+### Files touched
+Only `packages/harness/src/pipeline/runner.ts`, `packages/harness/src/pipeline/runner.test.ts`
+and this handoff, as instructed.
+
+### Decisions
+None — the fix matches the finding's suggested shape exactly, adapted to the real
+`ruleTableFallback()` return type (`{ kind: 'block'; ...; alert: SafetyAlert | undefined }`).
