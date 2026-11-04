@@ -139,12 +139,20 @@ test suite + both packages' lint to confirm the reformatting changed nothing but
   here for the lead/reviewer rather than silently hiding it.
 - Reversible: n/a (no code change, this is a note about how the gate was run).
 
+### 4 Nov 2026 · 3.10a locale follow-ups and seven safety/locale eval cases, merged · decided by lead · risk: high
+- Decided: merge 3.10a. The safe-regex guard now fails closed outside tests when the compiled worker is missing, and a build-smoke test checks it on the real built CLI. A separate integration-test outDir fixes the build race. Shared `isPending` and `looksLikeEmail` helpers replace the local copies. Seven new safety/locale eval cases (003–009) are signed `reviewed_by: lead`: the lead read all seven bodies before signing, and the sign-off commit changed only the `reviewed_by` line in each.
+- Why: these are the 3.10 review items. A code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings. The cases keep India/Hindi input as a safety net, with English replies (plan Q4). Their personal-data examples are standard dummy values. Under the MVP-first rule, the safety suites get a code-reviewer and no safety-reviewer per PR until the pilot gate.
+- Alternatives: leave the cases pending (they would not run in CI); fail closed on `NODE_ENV === 'production'` only (dev and staging would fail open).
+- Reversible: yes, by reverting the PR.
+
+### 4 Nov 2026 · 3.10a build over budget · decided by lead · risk: low
+- Decided: accept 240 builder tool calls against a plan of 90 (2.7x), counted by the harness. That is 4 for a stalled start, 206 for the build across a context reset, and 30 for the sign-off commit.
+- Why: the build covered three packages, plus a real built-CLI smoke test and host-load flakes that needed gate re-runs. It finished green, with no fix round needed.
+- Alternatives: split it into two PRs (the plan was one phase).
+- Reversible: not applicable.
+
 ## Budget
-Plan's budget: 90 tool calls. This handoff continues a session that ran out of context once
-already; total tool calls across both halves of this build are well past 90 (the second half
-alone, resuming from a lint-escaping bug in `pendingText.ts`'s `INVISIBLE` regex, used
-approximately 45). Flagging this as an over-budget build for the lead's tracking, not stopping
-PARTIAL, because every item was already green or one fix away when the session resumed.
+Tool calls used (harness count): 240 builder calls against a plan of 90. That is 4 for a stalled start, 206 for the build across a context reset, and 30 for the sign-off commit. On top of that: plan 70 and review 30. See the lead's budget decision.
 
 ## Sign-off
 The seven cases `evals/suites/safety/locale/safety-locale-00{3,4,5,6,7,8,9}-*.yaml` are now
