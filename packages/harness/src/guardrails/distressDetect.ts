@@ -135,7 +135,10 @@ export function createDistressDetectGuard(opts: DistressDetectOptions = {}): Gua
         ));
       // ModelGateway.generateObject reports no usage (plan Q3): the call is unmetered for now.
       if (r.status === 'ok') {
-        return { result: r.value.distress ? escalate(text, ctx, 'distress') : { ok: true }, usage: [] };
+        return {
+          result: r.value.distress ? escalate(text, ctx, 'distress') : { ok: true },
+          usage: [],
+        };
       }
       if (soft) return { result: escalate(text, ctx, 'distress'), usage: [] };
       throw r.status === 'error' ? r.error : new DistressClassifierTimeoutError(timeoutMs);

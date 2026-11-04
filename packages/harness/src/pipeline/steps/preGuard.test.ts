@@ -577,7 +577,9 @@ function gatewayWithFailure(which: 'distress' | 'moderation' | 'jailbreak'): Mod
           : 'moderation';
       calls[name]++;
       if (name === which) return Promise.reject(new Error(`${which} classifier down`));
-      return Promise.resolve((name === 'distress' ? { distress: false } : { category: 'none' }) as T);
+      return Promise.resolve(
+        (name === 'distress' ? { distress: false } : { category: 'none' }) as T,
+      );
     },
   };
 }
@@ -594,7 +596,10 @@ function delayedClassifierGateway(
       throw new Error('unused');
     },
     embed: () => Promise.reject(new Error('unused')),
-    async generateObject<T>(_req: unknown, schema: { safeParse(v: unknown): { success: boolean } }) {
+    async generateObject<T>(
+      _req: unknown,
+      schema: { safeParse(v: unknown): { success: boolean } },
+    ) {
       await clock.sleep(delayMs);
       const name = schema.safeParse({ distress: false }).success
         ? 'distress'
