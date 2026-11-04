@@ -1189,9 +1189,9 @@ tasks:
   deps:
   - GATE
   - 4.2b
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.2d-attachment-evals
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '4.3'
   milestone: M4
   title: '`distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation'
@@ -1282,7 +1282,7 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: 4.4c
