@@ -10,6 +10,132 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.4f deferred LOWs go to board task 4.4h, not 4.4g · decided by lead · risk: low
+- Decided: the three 4.4 review LOWs that 4.4f deferred (withheldCode narrowing, the runner.block.test.ts indentation, and the queue/db enum expectTypeOf links) become board task 4.4h. It depends on 4.4f and 4.3b.
+- Why: the id 4.4g was already taken by the finished jailbreak subject-exemption task (28 Oct 2026). The 4.4f entries below that say "4.4g" mean 4.4h.
+- Alternatives: rename the old task. Rejected: its PR and log entries already use 4.4g.
+- Reversible: yes.
+
+### 4 Nov 2026 · 4.4f first-person threat coded `harm_to_others` · decided by builder · risk: low
+- Decided: the new first-person future-tense threat shape ("I will stab him") is coded
+  `harm_to_others`, not `threat`.
+- Why: the plan's open question 3 and the lead review both recommend/accept this; the classifier's
+  own description of `harm_to_others` is "wants to hurt a person", and the existing `threat` rows
+  are all about threat *messages* someone wants to write, not a direct first-person statement.
+- Alternatives: code it `threat` — rejected, wrong fit with the existing table's split.
+- Reversible: yes — a one-line code change plus a test update.
+
+---
+
+### 4 Nov 2026 · 4.4f licence/permit exemption is a noun-adjacent lookahead, not a global `unless` · decided by builder · risk: low
+- Decided: the weapon-acquisition rule exempts a licence/permit request with a negative lookahead
+  immediately after the weapon noun (e.g. "...a gun license"), not the table's usual `unless`
+  field (which tests the whole message).
+- Why: the lead review's HIGH requires the exemption to apply only when the licence/permit is
+  itself the thing asked for; a global `unless` would also exempt "...a gun without a license" and
+  "...without a background check", which the review explicitly disallows.
+- Alternatives: a global `unless` listing license/permit, as the original plan text had — rejected
+  per lead review HIGH 1.
+- Reversible: yes — localised to one rule row.
+
+---
+
+### 4 Nov 2026 · 4.4f three LOWs move to 4.4g · decided by builder (per lead review) · risk: low
+- Decided: the three deferred LOWs from the original 4.4 review — `runner.ts:748` /
+  `types.ts:385` narrowing `withheldCode`/`code`, `runner.block.test.ts:46` indentation, and
+  `queues.ts:239` (`packages/queue`, tied to the db `safety-events.ts` enum) — stay open and move
+  to a new board task 4.4g, which the lead adds once 4.3b (owns `runner.ts`/`types.ts`) merges.
+- Why: lead review item 4, Q1: fixing them now risks a merge conflict with in-flight 4.3b/4.7b
+  work on the same lines; `queues.ts` is outside `packages/harness` entirely.
+- Alternatives: fix them in this task anyway — rejected, matches the plan's explicit scope
+  decision and the lead review's acceptance of it.
+- Reversible: yes — 4.4g is a new, independent task.
+
+---
+
+### 4 Nov 2026 · 4.4f first-person threat and weapon-acquisition rules, merged · decided by lead · risk: high
+- Decided: merge two new decisive rows in `packages/harness/src/guardrails/moderationPatterns.ts`.
+  - **Threat row.** A first-person future-tense threat ("I will stab him", "I'm going to shoot him") scores `harm_to_others`. `shoot` counts only in this row, and "shoot him a text" or "shoot her portrait" right after the person word is not a threat.
+  - **Weapon row.** A weapon-acquisition question ("how do I get a gun", "where can I buy a pistol") scores `weapons`. A gun licence or permit asked for as the thing itself stays clean, and "without a license" still hits. Knives are left out.
+  - **Shared fixes.** Both rows use the narrow `GAME_TITLE` list for their game exemption, not the shared `GAME` list. Two of the six 4.4 LOWs are also fixed: the alert is built before the event is recorded in `moderationIn.ts`, and `block()` in `jailbreak.ts` has an explicit return type. The other three LOWs move to 4.4g.
+- Why: the 4.4c review found that these everyday threat and acquisition phrasings scored nothing when the classifier was down.
+  - Code review found that "I'm going to shoot him" was missed; fix round 1 fixed it.
+  - The lead's own probe then found that the exemptions are tested against the whole message (`rulePhrases.ts`). The shared `GAME` list holds school words (class, level, object, player), so "I will stab him after class" and "how do I get a gun to bring to class" passed clean. Fix round 2 fixed that, and the lead re-ran 18 probe sentences: every hit and every no-hit came out right.
+  - Fix round 1's decision "message/photo exemption keyed to adjacency" is superseded by fix round 2's lookahead.
+- Alternatives:
+  - Add `shoot` to the shared HARM_VERB. Rejected: other rows would then block "shoot him a text".
+  - Keep the shared `GAME` exemption. Rejected: it hides threats made at school.
+  - Wait for a safety-reviewer. Rejected: there is no safety-reviewer per PR until the pilot gate (MVP first).
+- Reversible: yes. These are two table rows with their tests.
+
+---
+
+### 4 Nov 2026 · 4.4f build over budget · decided by lead · risk: low
+- Decided: accept 133 tool calls against a plan of 45 (about 3x). The build took 46, fix round 1 took 39 and fix round 2 took 48 (harness counts).
+- Why: the overrun is the two fix rounds, and each one closed a real missed threat.
+- Alternatives: none. The fixes were needed before merge.
+- Reversible: n/a.
+
+---
+
+### 4 Nov 2026 · 3.10a turbo.json `test` task gains `EDMATE_ALLOW_PENDING` · decided by builder · risk: low
+- Decided: added `"EDMATE_ALLOW_PENDING"` to the root `turbo.json` `test` task's `env` array
+  (alongside the existing `TEST_DATABASE_URL`, `TEST_REDIS_URL`).
+- Why: `turbo run test` does not forward arbitrary env vars to the underlying `vitest` process
+  unless they are declared in `env` (cache-key-affecting) or `passThroughEnv` (cache-key-neutral)
+  for that task. Without this, `EDMATE_ALLOW_PENDING=1 corepack pnpm turbo run test
+  --filter=@edmate/evals` (the gate command the plan itself specifies) silently runs `vitest`
+  with the var unset, and `suites.test.ts`'s pending-reviewer check always fails — not what the
+  plan's own gate line is asking for. `env` (not `passThroughEnv`) because the var changes test
+  behaviour and must bust the cache.
+- Alternatives: run `vitest` directly, bypassing `turbo`, for this one check (what I actually did
+  for the evidence above, to avoid touching the shared root config under time pressure); leave
+  `turbo.json` untouched and tell the lead the plan's gate line as written cannot pass through
+  `turbo`. Chose to fix `turbo.json` as well since it is a one-line, narrowly-scoped addition that
+  makes the plan's own documented gate command actually work for every future run, not just mine.
+- Reversible: yes — revert the one line in `turbo.json`.
+
+---
+
+### 4 Nov 2026 · 3.10a ran the typecheck/lint/test gate with `--concurrency=1` and some steps standalone · decided by builder · risk: low
+- Decided: confirmed `@edmate/content`, `@edmate/evals` (typecheck/lint) and `@edmate/cli`
+  (typecheck/lint, and `test` in isolation) are green by running them individually / with
+  `--concurrency=1`, rather than relying only on the single concurrent `turbo run typecheck lint
+  test --filter=...@edmate/content --filter=...@edmate/evals --filter=...@edmate/cli` invocation.
+- Why: that filter pulls in `@edmate/web` and `@edmate/worker` as dependents, and this worktree's
+  host had several other concurrent agent sessions running throughout the build (per the
+  background-task notifications I received); under that load, two pre-existing tests I never
+  touched (`gate.test.ts`'s B-40 case at a 5s default timeout, `chatDbRetrieval.int.test.ts`
+  against the shared dev Postgres) intermittently timed out or hit a Postgres
+  "terminating connection due to administrator command" error, and the new
+  `build-smoke.test.ts` once hit its own 30s ceiling. Every one of these passed cleanly when run
+  with less contention (standalone, or `--concurrency=1`), which is consistent with host load, not
+  a regression from this task's changes.
+- Alternatives: raise those tests' timeouts (out of scope — I didn't write them and raising a
+  timeout to paper over a flake it didn't cause is exactly the kind of "edit an existing test to
+  make it pass" the brief rules out); keep retrying the full concurrent command until it happened
+  to land clean. Chose the narrower, repeatable standalone runs instead, and am naming the flake
+  here for the lead/reviewer rather than silently hiding it.
+- Reversible: n/a (no code change, this is a note about how the gate was run).
+
+---
+
+### 4 Nov 2026 · 3.10a locale follow-ups and seven safety/locale eval cases, merged · decided by lead · risk: high
+- Decided: merge 3.10a. The safe-regex guard now fails closed outside tests when the compiled worker is missing, and a build-smoke test checks it on the real built CLI. A separate integration-test outDir fixes the build race. Shared `isPending` and `looksLikeEmail` helpers replace the local copies. Seven new safety/locale eval cases (003–009) are signed `reviewed_by: lead`: the lead read all seven bodies before signing, and the sign-off commit changed only the `reviewed_by` line in each.
+- Why: these are the 3.10 review items. A code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings. The cases keep India/Hindi input as a safety net, with English replies (plan Q4). Their personal-data examples are standard dummy values. Under the MVP-first rule, the safety suites get a code-reviewer and no safety-reviewer per PR until the pilot gate.
+- Alternatives: leave the cases pending (they would not run in CI); fail closed on `NODE_ENV === 'production'` only (dev and staging would fail open).
+- Reversible: yes, by reverting the PR.
+
+---
+
+### 4 Nov 2026 · 3.10a build over budget · decided by lead · risk: low
+- Decided: accept 240 builder tool calls against a plan of 90 (2.7x), counted by the harness. That is 4 for a stalled start, 206 for the build across a context reset, and 30 for the sign-off commit.
+- Why: the build covered three packages, plus a real built-CLI smoke test and host-load flakes that needed gate re-runs. It finished green, with no fix round needed.
+- Alternatives: split it into two PRs (the plan was one phase).
+- Reversible: not applicable.
+
+---
+
 ### 4 Nov 2026 · 4.4c skip writing a safety_event in the rule-table fallback · decided by builder · risk: low
 - Decided: the runner's new `!pg.ok` rule-table fallback does not write a `safety_event`
   (`ctx.safetyEvents.record`).

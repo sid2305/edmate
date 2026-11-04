@@ -1463,9 +1463,29 @@ tasks:
   deps:
   - GATE
   - '3.10'
-  status: running
+  status: done
   branch: m13/3.10a-locale-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 70
+    tokens_in: 212
+    tokens_out: 59243
+    cache_read_tokens: 9552243
+    wall_time_seconds: 33934
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: 3.10b
   milestone: M13
   title: 'Pre-pilot: a named person verifies the India locale pack (Tele-MANAS number, grievance contact, pack reviewedBy/reviewedOn) and fills the pending values; `edmate content validate content/locales`
@@ -10749,7 +10769,28 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
+  branch: m13/4.4f-threat-weapon-rules
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 5.1b
   milestone: M13
   title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on
@@ -12211,6 +12252,16 @@ tasks:
   deps:
   - '0.26'
   risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
+- id: 4.4h
+  milestone: M13
+  title: 'The three 4.4 review LOWs that 4.4f deferred: narrow withheldCode/code to the SafetyEventCode subset (runner.ts, types.ts); fix the indentation in runner.block.test.ts; add expectTypeOf links between the queue and db safety-event enums (packages/queue). Start after 4.3b merges, because 4.3b owns runner.ts and types.ts.'
+  accept: the three remaining LOWs in docs/tasks/4.4/review.md are fixed (type-only changes proven by typecheck; the indentation by prettier/lint); the gate passes with --filter=...@edmate/harness and --filter=...@edmate/queue
+  deps:
+  - 4.4f
+  - 4.3b
   status: todo
   branch: null
   model: plan:sonnet build:sonnet review:sonnet

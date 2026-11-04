@@ -6,6 +6,7 @@
 import type { LocalePack } from '@edmate/contracts';
 import { compileLocalePatterns } from '@edmate/harness';
 import { PLATFORM_MIN_AGE } from './agePolicy.js';
+import { isPending } from './pendingText.js';
 import { PILOT_LANGUAGES } from './pilotLanguages.js';
 import { checkSafeRegexGuarded } from './safeRegexGuard.js';
 
@@ -22,7 +23,6 @@ export type LocaleRule = (packs: LocalePacks) => string[];
 /** The fallback pack's market: it serves every market without a usable pack of its own. */
 export const DEFAULT_LOCALE_MARKET = 'global';
 
-const isPending = (s: string): boolean => s.trim().toLowerCase() === 'pending';
 const fileOf = (p: LocalePack): string => `${p.market}.yaml`;
 const each = (packs: LocalePacks, check: (p: LocalePack) => string[]): string[] =>
   [...packs.values()].flatMap((p) => check(p).map((issue) => `${fileOf(p)}: ${issue}`));

@@ -16,6 +16,7 @@
 import type { LocalePack } from '@edmate/contracts';
 import { readLocalePacksDir } from './localeLoader.js';
 import { DEFAULT_LOCALE_MARKET, type LocalePacks, piiPatternIssues } from './localeRules.js';
+import { isPending } from './pendingText.js';
 
 export { DEFAULT_LOCALE_MARKET };
 
@@ -32,8 +33,6 @@ export interface DroppedHelpline {
   helpline: string;
   reasons: HelplineDropReason[];
 }
-
-const isPending = (s: string): boolean => s.trim().toLowerCase() === 'pending';
 
 function dropReasons(h: LocalePack['helplines'][number]): HelplineDropReason[] {
   const reasons: HelplineDropReason[] = [];

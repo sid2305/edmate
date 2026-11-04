@@ -11,7 +11,9 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { load } from 'js-yaml';
 import { z } from 'zod';
+import { looksLikeEmail } from './emailLike.js';
 import { ContentLoadError } from './loader.js';
+import { isPending } from './pendingText.js';
 
 /** Marks a declaration body that is not the reviewed text yet. */
 export const PLACEHOLDER_MARKER = '[PLACEHOLDER]';
@@ -27,7 +29,7 @@ export const RightsDeclarationFrontMatterSchema = z.strictObject({
     .string()
     .max(200)
     .refine((s) => s.trim() !== '', 'must not be blank')
-    .refine((s) => !/\S@\S+\.\S/.test(s), 'a name or handle, not an email address'),
+    .refine((s) => !looksLikeEmail(s), 'a name or handle, not an email address'),
   reviewedOn: z.iso.date(),
 });
 export type RightsDeclarationFrontMatter = z.infer<typeof RightsDeclarationFrontMatterSchema>;
@@ -36,8 +38,6 @@ export interface RightsDeclaration extends RightsDeclarationFrontMatter {
   /** The declaration text (Markdown), after the front matter. */
   body: string;
 }
-
-const isPending = (s: string): boolean => s.trim().toLowerCase() === 'pending';
 
 /** The front matter between a leading `---` line and the next `---` line, and the body after it. */
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
