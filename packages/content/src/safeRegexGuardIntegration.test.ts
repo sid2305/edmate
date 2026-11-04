@@ -29,12 +29,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const PACKAGE_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const TSC_BIN = path.join(PACKAGE_ROOT, 'node_modules', '.bin', 'tsc');
 const DIST_GUARD = path.join(PACKAGE_ROOT, 'dist', 'integration-test', 'safeRegexGuard.js');
-const DIST_WORKER = path.join(
-  PACKAGE_ROOT,
-  'dist',
-  'integration-test',
-  'safeRegexWorkerEntry.js',
-);
+const DIST_WORKER = path.join(PACKAGE_ROOT, 'dist', 'integration-test', 'safeRegexWorkerEntry.js');
 
 let checkSafeRegexGuarded: (
   source: string,

@@ -15,7 +15,10 @@
 // alone: edit distance is at least the difference in length, so anything more than one character
 // longer or shorter than "pending" is rejected before the (cheap, non-regex) edit-distance check
 // even runs.
-const INVISIBLE = /[​-‍﻿]/g;
+// Written as explicit \u escapes, not literal characters, so the invisible characters this
+// matches are never themselves sitting invisibly in this source file: U+200B-U+200D (zero-width
+// space, non-joiner, joiner) and U+FEFF (byte-order mark / zero-width no-break space).
+const INVISIBLE = /[\u200B-\u200D\uFEFF]/g;
 
 const PENDING_WORD = 'pending';
 const TBD_WORD = 'tbd';

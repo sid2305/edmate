@@ -16,7 +16,14 @@ import {
   type PrivacyNotice,
   readPrivacyNoticesDir,
 } from './privacyNotices.js';
-import { copyNoticesValid, edit, LOCALES_VALID, NOTICES_VALID, tempDir, VALID } from './test-helpers.js';
+import {
+  copyNoticesValid,
+  edit,
+  LOCALES_VALID,
+  NOTICES_VALID,
+  tempDir,
+  VALID,
+} from './test-helpers.js';
 
 const FRONT = {
   version: '2026-01-01.1',
@@ -42,9 +49,9 @@ describe('PrivacyNoticeFrontMatterSchema', () => {
   });
 
   it('accepts "pending" as a signer (validation, not the schema, refuses it)', () => {
-    expect(PrivacyNoticeFrontMatterSchema.safeParse({ ...FRONT, reviewedBy: 'pending' }).success).toBe(
-      true,
-    );
+    expect(
+      PrivacyNoticeFrontMatterSchema.safeParse({ ...FRONT, reviewedBy: 'pending' }).success,
+    ).toBe(true);
   });
 
   it.each([

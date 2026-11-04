@@ -108,7 +108,9 @@ function unsafeOutsideTests(): string[] {
         'until this is fixed',
     );
   }
-  return ["the compiled safe-regex worker is missing outside this package's own tests (failing closed)"];
+  return [
+    "the compiled safe-regex worker is missing outside this package's own tests (failing closed)",
+  ];
 }
 
 function inProcessOrFailClosed(source: string, opts: TimingOptions): string[] {

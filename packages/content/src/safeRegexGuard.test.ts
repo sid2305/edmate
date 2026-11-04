@@ -17,9 +17,7 @@ describe('checkSafeRegexGuarded (no compiled worker file: in-process fallback)',
 
   it('returns the in-process result for a structurally unsafe pattern, fast', () => {
     const start = performance.now();
-    expect(checkSafeRegexGuarded('(a+)+$')).toEqual([
-      'nests a quantifier inside a repeated group',
-    ]);
+    expect(checkSafeRegexGuarded('(a+)+$')).toEqual(['nests a quantifier inside a repeated group']);
     expect(performance.now() - start).toBeLessThan(500);
   });
 

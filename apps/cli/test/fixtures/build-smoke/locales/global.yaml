@@ -1,0 +1,22 @@
+# Fixture only (3.10a review item 2's CLI build-smoke test): never read by production or the
+# real `edmate content validate` on the committed `content/locales`. A minimal, valid default
+# pack with one PII pattern -- `loadLocalePacks`/`checkLocalePacks` require a default pack to
+# validate at all, and the pattern gives `checkSafeRegexGuarded` something to actually check (an
+# empty `piiPatterns` array would never call the guard, so hiding or restoring the compiled
+# worker file either side of the guard would have no observable effect).
+market: global
+languages: [en]
+timezone: UTC
+currency: { code: USD, format: '$#,##0.00' }
+payments: { methods: [], provider: tbd }
+helplines: []
+compliance:
+  privacyLaw: 'n/a (fixture)'
+  minAge: 13
+  dataRegion: 'n/a (fixture)'
+  grievance: 'n/a (fixture)'
+  parentalConsentRequired: true
+regulatedDisclaimers:
+  investing: 'n/a (fixture)'
+piiPatterns:
+  - "\\d{4}"

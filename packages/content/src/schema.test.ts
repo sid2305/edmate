@@ -178,7 +178,13 @@ describe('item schemas', () => {
       expectedHeadings: ['1.1 Intro', '1.2 More'],
       reviewed_by: 'lead',
     };
-    const outOfCourse = { id: 'r2', moduleId: 'a', question: 'q?', outOfCourse: true, reviewed_by: 'pending' };
+    const outOfCourse = {
+      id: 'r2',
+      moduleId: 'a',
+      question: 'q?',
+      outOfCourse: true,
+      reviewed_by: 'pending',
+    };
 
     it('accepts an in-course item with headings and an out-of-course item', () => {
       expect(QaRecallItemSchema.safeParse(inCourse).success).toBe(true);
