@@ -37,6 +37,8 @@ import {
 import {
   type StepOverrides,
   TEST_CARING_REPLY,
+  TEST_DISTRESS_REPLY,
+  TEST_SAFE_REPLY,
   testAskDecision,
   testDecideResult,
   stepEnvExtras,
@@ -498,9 +500,11 @@ describe('runTurn with the real scrub (4.2)', () => {
       });
       const steps = testSteps({ scrub: defaultSteps.scrub });
       const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      // 4.3b: the scrub failed, so no step ran, but the reply still carries the pack's
+      // helplines via `deps.fallbackReplies.distress`, not the bare last-resort text.
       expect(events).toEqual([
         { type: 'safety', level: 'alert' },
-        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'token', text: TEST_DISTRESS_REPLY },
         { type: 'done', messageId: 'message_1', usage: [] },
       ]);
       expect(t.alerts.raised).toHaveLength(1);
@@ -512,6 +516,51 @@ describe('runTurn with the real scrub (4.2)', () => {
       // The scrub still failed closed on the attachment and is still reported, not swallowed.
       expect(result.background).toHaveLength(1);
       expect((result.background[0]?.error as Error).cause).toEqual({ guardCause: 'attachment' });
+    });
+
+    it('the locale pack helplines reach the reply via fallbackReplies.distress (4.3b)', async () => {
+      const MARKER = 'RAWDISTRESSMARKER_HELPLINE';
+      const raw = { ...demoTurnInput, text: `I feel ${MARKER} today`, attachments: [demoAttachment] };
+      const HELPLINE_REPLY = 'Please call the pack helpline.';
+      const t = testDeps({
+        overrides: {
+          distressCheck: (text) => text.includes(MARKER),
+          fallbackReplies: { safeReply: () => TEST_SAFE_REPLY, distress: () => HELPLINE_REPLY },
+        },
+      });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: HELPLINE_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+    });
+
+    it('a throwing/empty fallbackReplies.distress still falls back to the last-resort reply, never empty (4.3b)', async () => {
+      const MARKER = 'RAWDISTRESSMARKER_THROW';
+      const raw = { ...demoTurnInput, text: `I feel ${MARKER} today`, attachments: [demoAttachment] };
+      const t = testDeps({
+        overrides: {
+          distressCheck: (text) => text.includes(MARKER),
+          fallbackReplies: {
+            safeReply: () => TEST_SAFE_REPLY,
+            distress: () => {
+              throw new Error('locale pack lookup failed');
+            },
+          },
+        },
+      });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(result.background.map((b) => (b.error as Error).message)).toContain(
+        'locale pack lookup failed',
+      );
     });
 
     it('no distress hit + an attachment → the ordinary guard_blocked path (contrast)', async () => {

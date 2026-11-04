@@ -616,7 +616,9 @@ describe('distress keyword check when step 3 fails', () => {
     ['throws', boom],
     ['times out', hang()],
   ] as const)(
-    'scrub %s + a hit on the raw text → alert and last-resort reply',
+    // 4.3b: the reply now carries the pack's helplines via the fallback, not the bare last-resort
+    // text (testDeps' default fallbackReplies.distress returns TEST_DISTRESS_REPLY).
+    'scrub %s + a hit on the raw text → alert and the pack helpline reply',
     async (_l, scrub) => {
       const { t, seen } = checkDeps(() => true);
       const steps = testSteps({ scrub: scrub as Steps['scrub'] });
@@ -627,7 +629,7 @@ describe('distress keyword check when step 3 fails', () => {
       expect(seen).toEqual([RAW]);
       expect(events).toEqual([
         { type: 'safety', level: 'alert' },
-        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'token', text: TEST_DISTRESS_REPLY },
         { type: 'done', messageId: 'message_1', usage: [] },
       ]);
       expect(t.alerts.raised).toEqual([
@@ -641,7 +643,7 @@ describe('distress keyword check when step 3 fails', () => {
         outcome: 'escalated',
         input: null,
         intent: 'distress',
-        replyText: LAST_RESORT_DISTRESS_REPLY,
+        replyText: TEST_DISTRESS_REPLY,
       });
       expect(steps.log.find((l) => l.step === 'commit')?.text).toBeUndefined();
       expect(result.trace).toMatchObject({ intent: 'distress', move: 'redirect' });
@@ -650,6 +652,25 @@ describe('distress keyword check when step 3 fails', () => {
       expect(JSON.stringify(result.trace)).not.toContain(RAW);
     },
   );
+
+  it('scrub fails + a raw hit + a throwing fallbackReplies.distress → the last-resort reply (4.3b)', async () => {
+    const { t } = checkDeps(() => true);
+    t.deps.fallbackReplies = {
+      safeReply: () => TEST_SAFE_REPLY,
+      distress: () => {
+        throw new Error('locale pack down');
+      },
+    };
+    const steps = testSteps({ scrub: boom });
+    const { events, result } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(events).toEqual([
+      { type: 'safety', level: 'alert' },
+      { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+      { type: 'done', messageId: 'message_1', usage: [] },
+    ]);
+    expect(outcomeOf(result, 'escalate')).toBe('failed');
+    expect(result.background.some((b) => b.task === 'runner')).toBe(true);
+  });
 
   it('scrub fails and the check finds nothing → guard_blocked as before', async () => {
     const { t } = checkDeps(() => false);

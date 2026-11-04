@@ -464,11 +464,14 @@ class Turn {
       this.trace.step('preGuard', sc.ms, 'failed');
       // Reported, never dropped: a failed scrub is a guard bug or outage. Ids and names only.
       this.background.push({ task: 'runner', error: scrubFailure(scRaw) });
-      // A raw-text keyword hit escalates without running any step on the raw text.
+      // A raw-text keyword hit escalates without running any step on the raw text. 4.3b: the
+      // reply still carries the pack's helplines (same two-step fallback as escalate() below),
+      // never the bare last-resort text unless the fallback itself throws or returns empty.
       if (rawDistress) {
+        const fb = this.distressFallback(input, e);
         return this.sendEscalation(e, null, this.buildAlert(input, e, undefined), {
-          replyText: LAST_RESORT_DISTRESS_REPLY,
-          outcome: 'fallback',
+          replyText: fb.replyText,
+          outcome: fb.failed ? 'failed' : 'fallback',
           ms: 0,
         });
       }
@@ -766,6 +769,31 @@ class Turn {
     }
   }
 
+  /**
+   * The locale fallback, else the last resort. Never throws, never returns an empty string.
+   * Shared by `escalate()` (step text failed) and the scrub-failure branch above (no step ran at
+   * all), so both paths carry the pack's helplines rather than the bare last-resort text (4.3b).
+   */
+  private distressFallback(
+    input: TurnInput,
+    e: Entitled,
+  ): { replyText: string; failed: boolean } {
+    let replyText = '';
+    try {
+      replyText = this.deps.fallbackReplies.distress(input.lang, e.locale);
+    } catch (error) {
+      this.background.push({ task: 'runner', error });
+    }
+    if (replyText === '') {
+      this.background.push({
+        task: 'runner',
+        error: new HarnessError('no distress reply text; sent the last-resort reply'),
+      });
+      return { replyText: LAST_RESORT_DISTRESS_REPLY, failed: true };
+    }
+    return { replyText, failed: false };
+  }
+
   private async escalate(
     input: TurnInput,
     e: Entitled,
@@ -790,19 +818,9 @@ class Turn {
     let replyText = es.ok ? es.value.replyText : '';
     let outcome: 'ok' | 'fallback' | 'failed' = replyText !== '' ? 'ok' : 'fallback';
     if (replyText === '') {
-      try {
-        replyText = this.deps.fallbackReplies.distress(input.lang, e.locale);
-      } catch (error) {
-        this.background.push({ task: 'runner', error });
-      }
-    }
-    if (replyText === '') {
-      this.background.push({
-        task: 'runner',
-        error: new HarnessError('no distress reply text; sent the last-resort reply'),
-      });
-      replyText = LAST_RESORT_DISTRESS_REPLY;
-      outcome = 'failed';
+      const fb = this.distressFallback(input, e);
+      replyText = fb.replyText;
+      if (fb.failed) outcome = 'failed';
     }
     return this.sendEscalation(
       e,
