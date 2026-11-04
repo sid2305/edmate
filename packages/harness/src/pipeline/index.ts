@@ -51,7 +51,12 @@ export {
   type TurnCounter,
   type TurnLimits,
 } from './limits.js';
-export { runTurn, type RunTurnOptions } from './runner.js';
+export {
+  createSessionTurnQueue,
+  runTurn,
+  type RunTurnOptions,
+  type SessionTurnQueue,
+} from './runner.js';
 export { buildCaringReply } from './steps/escalate.js';
 export {
   createPreGuardStep,

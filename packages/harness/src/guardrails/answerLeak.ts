@@ -86,6 +86,17 @@ export interface PostGuardCtx {
   /** Fixed texts every post guard passes as they are: the safe and distress replies (4.7). */
   readonly fixedTexts?: readonly string[];
   /**
+   * One `Ids` port token (4.7b item 1), drawn once per turn via `ids.next('groundingFence')` (the
+   * postGuard step, never `grounding.ts` itself: the guard chain runs grounding's `run()` once per
+   * pass, so a token drawn there would differ pass 1 vs. the verification pass and defeat the
+   * judge-call cache keyed on the rendered request text). Mixed into the judge-request fence, so
+   * a retrieved chunk or the student's message can never pre-stage the exact delimiter text; one
+   * token covers every fence in one judge request and both passes of one turn, and a fresh token
+   * is drawn next turn. Absent (an older caller, or a unit test building the request directly):
+   * the fixed fence only.
+   */
+  readonly groundingFenceToken?: string;
+  /**
    * The locale's safe reply: grounding sends it when its judge is unavailable (4.7 fix round 1).
    * Absent: ANSWER_LEAK_SAFE_HINT.
    */

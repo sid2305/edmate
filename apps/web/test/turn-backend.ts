@@ -4,7 +4,13 @@
 // grounding and advice judges are answered by the harness's own judge wrappers (as in the CLI's
 // chat deps test), so a script only needs the reply streams.
 import type { Chunk, LearnerProfile, ModelGateway, ProfileStore } from '@edmate/contracts';
-import { createTurnLimits, defaultSteps, type Clock, type PipelineDeps } from '@edmate/harness';
+import {
+  createSessionTurnQueue,
+  createTurnLimits,
+  defaultSteps,
+  type Clock,
+  type PipelineDeps,
+} from '@edmate/harness';
 import {
   adviceJudgeGateway,
   CLEAN_ADVICE_VERDICT,
@@ -222,6 +228,9 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
     ],
   });
   let created = 0;
+  // 4.7b Phase D fix round 1: one queue for this memory backend, shared across every `depsFor`
+  // call, same as the real `TurnProcess.turnQueue`.
+  const turnQueue = createSessionTurnQueue();
 
   // `sessionId` (task 6.3d): accepted for signature compatibility with the real `TurnBackend`;
   // unused here -- `profiles()` below has no sessionId concept and is already a safe profile
@@ -250,6 +259,7 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
       fallbackReplies: webFallbackReplies(),
       promptPacks,
       distressCheck: () => false,
+      turnQueue,
     };
   };
 

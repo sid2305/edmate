@@ -374,7 +374,7 @@ function watched(g: Guard<PostGuardCtx>, reasons: Map<string, string[]>): Guard<
     async run(text, x, cancel): Promise<GuardRun> {
       const r = await g.run(text, x, cancel);
       // The chain validates the result; this only reads a string reason if there is one.
-      const res: unknown = (r as { result?: unknown } | null | undefined)?.result;
+      const res: unknown = r.result;
       if (typeof res === 'object' && res !== null && 'reason' in res) {
         const reason: unknown = res.reason;
         if (typeof reason === 'string') own.push(reason);
@@ -524,6 +524,10 @@ export function createPostGuard(
       ),
       askTeacherReply: askReply,
       fixedTexts,
+      // One token for the whole step call (4.7b item 1): both passes of this turn's chain share
+      // it, so the judge-call cache (keyed on the rendered request text) still dedupes an
+      // unchanged reply on the verification pass; next turn's `env.deps.ids` draws a fresh one.
+      groundingFenceToken: env.deps.ids.next('groundingFence'),
       ...(fixed.safe === undefined ? {} : { safeReply: fixed.safe }),
       // adviceGuard's judge may be called twice in one slice (the pre-check, then the rewrite's
       // own verify: 4.8b item 1), so its budget tracks what is actually left of the slice

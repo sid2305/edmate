@@ -33,6 +33,7 @@ import {
   type PersonaLibrary,
   type PipelineDeps,
   type PromptPackLibrary,
+  type SessionTurnQueue,
   type TurnLimits,
 } from '@edmate/harness';
 import { queuedTurnPorts, type TurnQueues } from '@edmate/queue';
@@ -105,6 +106,12 @@ export interface TurnProcess {
   clock: Clock;
   ids: IdSource;
   log: ServerLog;
+  /**
+   * The same-session turn queue (4.7b Phase D fix round 1), built once where this process's ports
+   * are built, so every turn `turnDepsFor` binds in this process shares it, even though each call
+   * gets its own fresh `PipelineDeps` object literal.
+   */
+  turnQueue: SessionTurnQueue;
 }
 
 /**
@@ -160,5 +167,6 @@ export function turnDepsFor(p: TurnProcess, scope: StudentScope, sessionId?: str
     promptPacks: p.promptPacks,
     personas: p.personas,
     distressCheck: (text, lang) => hasDistressKeyword(text, lang),
+    turnQueue: p.turnQueue,
   };
 }

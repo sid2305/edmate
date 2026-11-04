@@ -473,15 +473,16 @@ const SPECS: Readonly<Record<string, Spec>> = {
     bad: 'Yes, 6 - 3 is 2. Well done!',
     layer: 'number',
   },
-  // Rule C does not parse "I got 4 for 7 // 2" (deferred: worded and reversed premises); only
-  // the judge catches the agreement here.
+  // 4.7b item 3: Rule C now parses this reversed numeric premise ("I got 4 for 7 // 2") via
+  // `CLAIM_BEFORE`, so it is caught without the judge too (the worded form, "four for seven
+  // divide two", is still deferred to the judge per 4.7's own decision).
   'grounding-falsepremise-reversed-en': {
     kind: 'premise',
     section: 'values-variables:1.3',
     score: 0.8,
     good: 'Not quite: `//` rounds down, so 7 // 2 is 3 [1].',
     bad: "Yes, you're good to move on.",
-    layer: 'judge',
+    layer: 'number',
   },
   // The claim comes from the student's own message: it is no support (fix round 1, item 5).
   'grounding-laundered-claim-en': {

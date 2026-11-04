@@ -142,6 +142,35 @@ export interface RunTurnOptions {
   cancel?: Cancel;
 }
 
+/**
+ * 4.7b Phase D fix round 1: a same-session queue so two turns for the same session never both
+ * read `groundingAsks` before either saves it (the race `runTurn` read at step 7, long before its
+ * own `finish()` commits). Keying the queue on the per-call `PipelineDeps` object's identity (the
+ * fix round 1 shape) does not serialise anything in production: the live student API
+ * (`apps/web/src/turn/routes.ts`) builds a brand-new `PipelineDeps` object literal on every turn,
+ * so two concurrent turns for one session never shared a map entry. The queue is instead its own
+ * object (`SessionTurnQueue`), built once per process with `createSessionTurnQueue()` and carried
+ * on `PipelineDeps.turnQueue`, so every turn in that process (whatever `PipelineDeps` object it
+ * happens to be built with) shares the same queue. No module-level state: each call to the
+ * factory makes a new, independent queue, so unrelated tests (or two independent processes) never
+ * collide. A session's own entry is deleted once its chain drains, so the queue never grows
+ * across many sessions.
+ */
+export interface SessionTurnQueue {
+  /** @internal test-only; product code never reads this field directly. */
+  readonly sessions: Map<string, Promise<void>>;
+}
+
+/** A fresh, empty session turn queue. Call once per process (or per test); never share across. */
+export function createSessionTurnQueue(): SessionTurnQueue {
+  return { sessions: new Map() };
+}
+
+/** The queue's session count right now (4.7b, test-only: no product code reads this). */
+export function sessionQueueSizeForTest(queue: SessionTurnQueue): number {
+  return queue.sessions.size;
+}
+
 /** Runs one student turn. The stream ends with exactly one `done` or `error`; `finished` never rejects. */
 export function runTurn(input: TurnInput, opts: RunTurnOptions): TurnRun {
   const queue = new EventQueue<TurnEvent>();
@@ -150,8 +179,30 @@ export function runTurn(input: TurnInput, opts: RunTurnOptions): TurnRun {
   queue.onDetach(() => cancel.cancel());
   opts.cancel?.onCancel(() => cancel.cancel());
   const turn = new Turn(input, opts.deps, opts.steps, queue, background, cancel.token);
-  const finished = turn
-    .run()
+
+  // Chain this turn's own run onto the prior turn's for the same session (same `deps`), so
+  // `turn.run()` itself is not even called until the prior one has settled (resolved or
+  // rejected: a thrown turn, or one cancelled/abandoned by its caller, still releases the next
+  // one, since both branches below call `turn.run()`). Different sessions each get their own
+  // chain and never wait on one another.
+  const sessions = opts.deps.turnQueue.sessions;
+  const sessionId = String(input.sessionId);
+  const ahead = sessions.get(sessionId) ?? Promise.resolve();
+  const ran = ahead.then(
+    () => turn.run(),
+    () => turn.run(),
+  );
+  const release = ran.then(
+    () => undefined,
+    () => undefined,
+  );
+  sessions.set(sessionId, release);
+  void release.then(() => {
+    // Only delete if nothing newer queued behind this one (else that later entry owns the slot).
+    if (sessions.get(sessionId) === release) sessions.delete(sessionId);
+  });
+
+  const finished = ran
     .catch((error: unknown): TurnRunResult => {
       // A runner bug: never leave the stream hanging.
       background.push({ task: 'runner', error });

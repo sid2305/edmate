@@ -16,6 +16,7 @@ import type {
 import { entitlementStoreFor, type Repositories } from '@edmate/db';
 import type { EvalAgent, EvalAgentReply, EvalTurnInput } from '@edmate/evals';
 import {
+  createSessionTurnQueue,
   createTurnLimits,
   defaultSteps,
   hasDistressKeyword,
@@ -108,7 +109,8 @@ export async function collectReply(events: AsyncIterable<TurnEvent>): Promise<Ev
         // failed (PRE_GUARD_FAILED, retryable true: classifier outage, timeout, bad output).
         // Only the first is a block; the second never got a verdict, so the case fails.
         if (event.code === 'guard_blocked' && !event.retryable) blocked = true;
-        else if (event.code === 'guard_blocked') failed = 'guard_blocked (pre-guard failed, retryable)';
+        else if (event.code === 'guard_blocked')
+          failed = 'guard_blocked (pre-guard failed, retryable)';
         else failed = event.code;
         break;
       // Structured events the gate doesn't score: a hint rung, a locked notice (the reply text
@@ -142,19 +144,32 @@ export function isGuardDetection(error: unknown): boolean {
 }
 
 /** The gate agent for one pinned candidate package. */
-export function createGateAgent(deps: GateAgentDeps, basis: GateBasis, pkg: PackageConfig): EvalAgent {
+export function createGateAgent(
+  deps: GateAgentDeps,
+  basis: GateBasis,
+  pkg: PackageConfig,
+): EvalAgent {
   const pinned = basis.packageVersions.find((p) => p.packageId === pkg.id);
   if (pinned === undefined || pinned.version !== pkg.version || pkg.agentId !== basis.agentId) {
     throw new Error(`gate: package ${pkg.id}@${pkg.version} is not pinned by this run`);
   }
   const clock = deps.clock ?? systemClock();
   const ids = deps.ids ?? systemIds();
+  // 4.7b Phase D fix round 1: one queue for every `reply()` call this gate agent makes. Each
+  // call runs a fresh, randomly-id'd session, so this never serialises two real cases against
+  // one another; it only keeps `PipelineDeps.turnQueue` a required field satisfied.
+  const turnQueue = createSessionTurnQueue();
   const entitlements = entitlementStoreFor(deps.repos, {
     market: deps.market,
     packMarket: deps.packMarket,
     // Only a `subscription` resolve asks; the gate never makes one. False fails closed.
     learnerClear: () => Promise.resolve(false),
-    eval: { teacherId: basis.teacherId, packageId: pkg.id, version: pkg.version, market: deps.market },
+    eval: {
+      teacherId: basis.teacherId,
+      packageId: pkg.id,
+      version: pkg.version,
+      market: deps.market,
+    },
   });
   return {
     async reply(input: EvalTurnInput): Promise<EvalAgentReply> {
@@ -210,6 +225,7 @@ export function createGateAgent(deps: GateAgentDeps, basis: GateBasis, pkg: Pack
         promptPacks: deps.promptPacks,
         ...(deps.personas === undefined ? {} : { personas: deps.personas }),
         distressCheck: (text, lang) => hasDistressKeyword(text, lang),
+        turnQueue,
       };
       const run = runTurn(
         {
@@ -242,7 +258,9 @@ export function createGateAgent(deps: GateAgentDeps, basis: GateBasis, pkg: Pack
       // `log.backgroundFailure` already counted each one in `effects`.)
       // One exception: `LockedLeakDetected` is the locked-stream guard doing its job (the locked
       // text was withheld and the reply replaced); the reply itself is what the case scores.
-      deps.effects.lockedLeaks += finished.background.filter((b) => isGuardDetection(b.error)).length;
+      deps.effects.lockedLeaks += finished.background.filter((b) =>
+        isGuardDetection(b.error),
+      ).length;
       const failures = finished.background.filter((b) => !isGuardDetection(b.error));
       if (failures.length > 0) {
         const tasks = [...new Set(failures.map((b) => b.task))].join(',');

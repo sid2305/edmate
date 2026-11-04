@@ -47,6 +47,7 @@ import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { PriceUsage } from './generate/costCeiling.js';
 import type { StreamGateFactory } from './generate/streamGate.js';
 import type { TurnLimits } from './limits.js';
+import type { SessionTurnQueue } from './runner.js';
 import type { IssuedItem, ItemContext, ToolRegistry, ToolSessionState } from './tools.js';
 
 /** Who a turn's model calls are billed to: always from the entitlement, never the input. */
@@ -206,6 +207,15 @@ export interface PipelineDeps {
    * every turn: implementations must never log, store or send their input.
    */
   distressCheck(text: string, lang: Lang): boolean;
+  /**
+   * The same-session turn queue `runTurn` serialises on (4.7b Phase D fix round 1), so two
+   * concurrent turns for one session never both read `groundingAsks` before either saves it.
+   * Required: a fresh `PipelineDeps` per call (the real web/studio/CLI/worker callers each build
+   * one) must still share the same queue across that process's turns, which object identity on
+   * `PipelineDeps` itself cannot give. Built once per process with `createSessionTurnQueue()` and
+   * passed to every `PipelineDeps`; a shared test helper builds one for all its deps.
+   */
+  turnQueue: SessionTurnQueue;
 }
 
 export interface StepEnv {

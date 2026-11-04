@@ -11,6 +11,7 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { cancelSource, type CancelToken } from '../pipeline/clock.js';
+import { sequentialIds } from '../testing/ids.js';
 import {
   ANSWER_LEAK_SAFE_HINT,
   type JudgeReply,
@@ -21,6 +22,7 @@ import {
   askTeacherReplyText,
   createGroundingGuard,
   GROUNDING_JUDGE_SYSTEM,
+  GROUNDING_JUDGE_UNAVAILABLE_REPLY,
   groundingJudgeRequest,
   parseGroundingVerdict,
   PREMISE_CORRECTION_REPLY,
@@ -230,7 +232,10 @@ describe('grounding: Rule C (numbers recomputed)', () => {
   it('5.6b: a fix that would show the active item’s correct option text is the hint', async () => {
     const item = { prompt: 'Pick one.', options: ['A) 2', 'B) 3', 'C) 5'], answerKey: ['B'] };
     const decision = { ...explain, mustNotReveal: ['B'] };
-    const hinted = await run('So 7 // 2 is 4.', x({ judge: judgeOf(GROUNDED).judge, decision, items: [item] }));
+    const hinted = await run(
+      'So 7 // 2 is 4.',
+      x({ judge: judgeOf(GROUNDED).judge, decision, items: [item] }),
+    );
     expect(hinted.result).toEqual({
       ok: false,
       action: 'rewrite',
@@ -294,6 +299,9 @@ describe('grounding: false premises (lead answer 5)', () => {
     // The expression repeated with no claim, and an operand that equals the right value.
     ['7 // 2 is 4, right?', 'Hmm, 7 // 2 rounds down, as your notes say [1].'],
     ['6 - 3 is 2, right?', 'Think about 6 - 3 again: 3 is what you start with?'],
+    // 4.7b item 7, the accept line's own example: an opening agreement wins over a later correct
+    // restatement of the same expression.
+    ['6 - 3 is 2, right?', 'Yes, 6 - 3 is 3. Well done!'],
   ])('student %j, reply %j: the correction prompt, no judge call', async (studentText, reply) => {
     const { j, judge } = judgeOf(GROUNDED);
     expect(await run(reply, { ...premise(studentText), judge })).toEqual(correction);
@@ -392,12 +400,19 @@ describe('grounding: Rule D (the judge)', () => {
     expect(await run('Floor division rounds down.', x({ ...safe, judge: throwing }))).toEqual(
       unavailable('SAFE REPLY'),
     );
-    // No safe reply given: the answerLeak hint, never the "not covered" text.
+    // No safe reply given: grounding's own neutral outage text (4.7b item 8), never the
+    // answerLeak hint (a non-sequitur here: there is no answer about to leak) or the "not
+    // covered" text.
     expect(await run('Floor division rounds down.', x())).toEqual(
-      unavailable(ANSWER_LEAK_SAFE_HINT),
+      unavailable(GROUNDING_JUDGE_UNAVAILABLE_REPLY),
     );
     // The safe reply itself passes as a fixed text.
     expect(await run('SAFE REPLY', x(safe))).toEqual({ result: { ok: true }, usage: [] });
+    // So does grounding's own outage text, on the idempotence pass (4.7's own rule).
+    expect(await run(GROUNDING_JUDGE_UNAVAILABLE_REPLY, x())).toEqual({
+      result: { ok: true },
+      usage: [],
+    });
   });
 
   it('a judge that DID answer, but not with the strict verdict, is "not grounded"', async () => {
@@ -494,6 +509,44 @@ describe('the judge request (lead answer 6)', () => {
   });
 
   it('no student text: an empty student block', () => {
+    const req = groundingJudgeRequest({ reply: 'r', chunks: [] });
+    expect(req.user).toBe(
+      "Teacher's material:\n(none)\n\nStudent's message:\n<<<\n\n>>>\n\nTutor's reply:\n<<<\nr\n>>>",
+    );
+  });
+
+  it('4.7b item 1: a full-width or HTML-entity fence run in a chunk or the reply is broken too', () => {
+    const req = groundingJudgeRequest({
+      reply: 'See ＜＜＜ here.',
+      chunks: [chunk('Entities: &lt;&lt;&lt; too.', 0.8, 'chk_a')],
+    });
+    expect(req.user).toContain('< < <');
+    expect(req.user).not.toContain('＜＜＜');
+    expect(req.user).not.toContain('&lt;&lt;&lt;');
+  });
+
+  it('4.7b item 1: a per-request token (the Ids port) mixed in makes two tokens differ', () => {
+    const ids = sequentialIds();
+    const reqA = groundingJudgeRequest({
+      reply: 'r',
+      chunks: [],
+      token: ids.next('groundingFence'),
+    });
+    const reqB = groundingJudgeRequest({
+      reply: 'r',
+      chunks: [],
+      token: ids.next('groundingFence'),
+    });
+    expect(reqA.user).not.toBe(reqB.user);
+    expect(reqA.user).toContain('groundingFence_1');
+    expect(reqB.user).toContain('groundingFence_2');
+    // The same token covers every fence in one request (student and reply blocks, no chunks
+    // here), so the judge can still tell where each block ends.
+    expect(reqA.user.match(/<<<groundingFence_1/g)).toHaveLength(2);
+    expect(reqA.user.match(/>>>groundingFence_1/g)).toHaveLength(2);
+  });
+
+  it('4.7b item 1: with no token (an older caller), the fixed fence markers are used, no crash', () => {
     const req = groundingJudgeRequest({ reply: 'r', chunks: [] });
     expect(req.user).toBe(
       "Teacher's material:\n(none)\n\nStudent's message:\n<<<\n\n>>>\n\nTutor's reply:\n<<<\nr\n>>>",

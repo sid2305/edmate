@@ -2,7 +2,7 @@
 import type { Repositories } from '@edmate/db';
 import type { ModelPolicy } from '@edmate/contracts';
 import { loadBundledPrices } from '@edmate/gateway';
-import { createTurnLimits, type TurnGatewaySpec } from '@edmate/harness';
+import { createSessionTurnQueue, createTurnLimits, type TurnGatewaySpec } from '@edmate/harness';
 import { describe, expect, it, vi } from 'vitest';
 import { processPorts, systemClock, systemIds, turnDepsFor, type TurnProcess } from './deps';
 import { cancelSource } from '@edmate/harness';
@@ -24,7 +24,12 @@ function turnProcess(log = vi.fn()): TurnProcess {
   });
   return {
     repos,
-    queues: { meter: fakeQueue(), commit: fakeQueue(), alert: fakeQueue(), safetyEvent: fakeQueue() },
+    queues: {
+      meter: fakeQueue(),
+      commit: fakeQueue(),
+      alert: fakeQueue(),
+      safetyEvent: fakeQueue(),
+    },
     limits: createTurnLimits(clock),
     // Built eagerly by createRouter; never called here (no model call in tests).
     factories: { anthropic: () => ({ capabilities: {} }) as never },
@@ -35,6 +40,7 @@ function turnProcess(log = vi.fn()): TurnProcess {
     clock,
     ids: systemIds(),
     log: { error: log },
+    turnQueue: createSessionTurnQueue(),
   };
 }
 
@@ -77,7 +83,9 @@ describe('turnDepsFor', () => {
     expect(deps.limits).toBe(p.limits);
     expect(deps.entitlementSource).toBe('subscription');
     const target = { provider: 'anthropic', model: 'claude-haiku-4-5' } as const;
-    const policy = { tiers: { small: target, main: target, strong: target } } as unknown as ModelPolicy;
+    const policy = {
+      tiers: { small: target, main: target, strong: target },
+    } as unknown as ModelPolicy;
     const tg = deps.gatewayFor({
       policy,
       billing: { studentId: 'stu_1', teacherId: 'tch_a' } as unknown as TurnGatewaySpec['billing'],
@@ -106,14 +114,22 @@ describe('turnDepsFor', () => {
   it('logs a background failure by task, error name and turn id only', () => {
     const log = vi.fn();
     const deps = turnDepsFor(turnProcess(log), scope);
-    deps.log.backgroundFailure({ task: 'commit', errorName: 'TypeError', turnId: 'turn_1' } as never);
+    deps.log.backgroundFailure({
+      task: 'commit',
+      errorName: 'TypeError',
+      turnId: 'turn_1',
+    } as never);
     deps.log.backgroundFailure({ task: 'meter', errorName: 'Error' } as never);
     expect(log).toHaveBeenNthCalledWith(1, 'turn.background_failed', {
       task: 'commit',
       error: 'TypeError',
       turnId: 'turn_1',
     });
-    expect(log).toHaveBeenNthCalledWith(2, 'turn.background_failed', { task: 'meter', error: 'Error', turnId: '' });
+    expect(log).toHaveBeenNthCalledWith(2, 'turn.background_failed', {
+      task: 'meter',
+      error: 'Error',
+      turnId: '',
+    });
   });
 
   it('checks distress keywords and has the fallback replies', () => {
@@ -121,5 +137,13 @@ describe('turnDepsFor', () => {
     expect(deps.distressCheck('I want to kill myself', 'en')).toBe(true);
     expect(deps.distressCheck('What is a fraction?', 'en')).toBe(false);
     expect(deps.fallbackReplies).toBeDefined();
+  });
+
+  it('two turnDepsFor calls on one TurnProcess return the same turnQueue (4.7b Phase D fix round 1)', () => {
+    const p = turnProcess();
+    const first = turnDepsFor(p, scope);
+    const second = turnDepsFor(p, scope);
+    expect(first.turnQueue).toBe(p.turnQueue);
+    expect(second.turnQueue).toBe(first.turnQueue);
   });
 });

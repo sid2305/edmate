@@ -14,6 +14,7 @@ import type { ModelRequest, PedagogyDecision, RetrievalIndex } from '@edmate/con
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import type { PersonaLibrary } from '../pedagogy/personas.js';
 import { createTurnLimits } from '../pipeline/limits.js';
+import { createSessionTurnQueue } from '../pipeline/runner.js';
 import { refusingGateway } from '../pipeline/turnGateway.js';
 import type {
   CommitRecord,
@@ -406,6 +407,7 @@ export function testDeps(
       distressFollowup: () => TEST_DISTRESS_FOLLOWUP_REPLY,
     },
     distressCheck: () => false,
+    turnQueue: createSessionTurnQueue(),
     promptPacks: fixturePromptPackLibrary,
     ...(opts.personas === undefined ? {} : { personas: opts.personas }),
     ...opts.overrides,
