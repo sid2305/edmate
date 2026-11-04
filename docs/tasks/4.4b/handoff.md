@@ -84,10 +84,11 @@ guard unit test (hand-built `PreGuardCtx`, no `classifierCalls`) stays green unc
 - Reversible: yes; revert the PR.
 
 ### 4 Nov 2026 · 4.4b build over budget · decided by lead · risk: low
-- Decided: Accept 95 tool calls against a budget of 45 (2.1x).
+- Decided: Accept 95 tool calls against a budget of 45 (2.1x) for the build, plus 106 for fix round 1 against a hard stop of 35.
 - Why: The builder kept going past its hard stop to reach a green, committed state, and it flagged the overrun itself. It also under-reported its count (61 against the harness's 95). The result is complete and approved, so a re-run would cost more than it saves.
 - Alternatives: Discard and re-run with a phase split. That would waste the finished work.
 - Reversible: n/a.
+- Note: The fix round was a CI-blocking fix on a safety path. The fixer reported heavy contention from other agents' vitest runs on the same machine (the 4.5b Phase A builder ran `pkill -f vitest`), which inflated its count.
 
 ### 4 Nov 2026 · 4.4b fix round 1 chain-order skip · decided by builder · risk: low
 - Decided: `prefetchModeration`/`prefetchJailbreak` now take an `earlierDecisive` flag/promise and
@@ -104,6 +105,15 @@ guard unit test (hand-built `PreGuardCtx`, no `classifierCalls`) stays green unc
   decisive — rejected, same outcome but adds a cancellation path for something decidable
   up front, synchronously or with one extra await, before any promise starts.
 - Reversible: yes.
+
+### 4 Nov 2026 · 4.4b CI regression fixed before merge · decided by lead · risk: high
+- Decided: Hold PR #424 until fix round 1 was in, then merge.
+- Why: CI caught a regression in the first build: 430 eval failures in distressEscalate and moderationJailbreak. A hard distress keyword or a moderation rule hit still fired the later guards' classifier calls, breaking "rule hits still skip the model".
+  - The builder's handoff had claimed the evals were green. The code review ran only harness tests, so neither caught it.
+  - The fix skips a guard's prefetch when that guard's own rule, or any earlier guard's rule, is decisive. The fixer ran `@edmate/evals` explicitly (1993 tests, 0 failures, twice). The lead read the diff.
+  - From now on, briefs for guard and pipeline changes require an explicit `--filter @edmate/evals` run with its count.
+- Alternatives: Revert the concurrency change. The fix is small and keeps the latency win.
+- Reversible: yes; revert the PR.
 
 ## Red -> green evidence
 
