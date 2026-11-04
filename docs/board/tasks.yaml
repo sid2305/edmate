@@ -1189,9 +1189,30 @@ tasks:
   deps:
   - GATE
   - 4.2b
-  status: running
+  status: done
   branch: m13/4.2d-attachment-evals
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 287
+    tokens_in: 964
+    tokens_out: 128481
+    cache_read_tokens: 37959112
+    wall_time_seconds: 2384
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 2
 - id: '4.3'
   milestone: M4
   title: '`distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation'
@@ -12329,3 +12350,22 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 1
+- id: 4.2e
+  milestone: M13
+  title: 'The 4.2d review MEDIUM: the gate agent''s distress-with-attachment test (apps/worker/src/gate/agent.test.ts) also asserts s.effects.lockedLeaks stays 0, pinning the split between locked-leak counting
+    and guard detection.'
+  accept: the assertion is added, and fails if isGuardDetection is put back into the lockedLeaks counter; the gate passes with --filter=@edmate/worker
+  deps:
+  - 4.2d
+  status: todo
+  branch: null
+  model: null
+- id: 4.4i
+  milestone: M13
+  title: 'The 4.4b review LOW: prefetchDistress in pipeline/steps/preGuard.ts uses the guard''s configured classifierTimeoutMs instead of the hard-coded DISTRESS_CLASSIFIER_TIMEOUT_MS.'
+  accept: a test with a non-default distress classifierTimeoutMs shows the prefetch uses it; the gate passes with --filter=...@edmate/harness
+  deps:
+  - 4.4b
+  status: todo
+  branch: null
+  model: null
