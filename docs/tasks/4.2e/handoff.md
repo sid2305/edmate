@@ -6,6 +6,12 @@ Status: DONE
 
 None.
 
+### 4 Nov 2026 · 4.2e build over budget · decided by lead · risk: low
+- Decided: Accept 37 tool calls against a budget of 15 (hard stop 20).
+- Why: The change is one assertion. The overrun came from a vitest coverage-lock collision between two of the builder's own background runs. It ended one of its own runs by PID, not by name. The diff is exactly what the plan asked for.
+- Alternatives: None worth the cost; the work is done and reviewed.
+- Reversible: n/a.
+
 ## Red -> green evidence
 
 Added `expect(s.effects.lockedLeaks).toBe(0);` (with a one-line comment) to the test
@@ -37,4 +43,5 @@ filter only, no `git checkout --`/`git restore`). Gate run after revert:
 
 ## Budget
 
-Tool calls used: 23
+Tool calls used: 37
+Builder estimate: 23
