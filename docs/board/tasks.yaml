@@ -1223,9 +1223,30 @@ tasks:
   deps:
   - GATE
   - '4.3'
-  status: running
+  status: done
   branch: m13/4.3b-distress-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 305
+    tokens_in: 1054
+    tokens_out: 123277
+    cache_read_tokens: 47467478
+    wall_time_seconds: 5823
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 4.3c
   milestone: M13
   title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier per B-13 (SMS to the on-call phone plus email backup, e.g. Twilio and Resend, behind a notifier port; re-page every 15 min until
@@ -1727,7 +1748,7 @@ tasks:
   - '4.7'
   status: running
   branch: m13/4.7b-grounding-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -12257,7 +12278,8 @@ tasks:
   model: plan:sonnet build:sonnet review:sonnet
 - id: 4.4h
   milestone: M13
-  title: 'The three 4.4 review LOWs that 4.4f deferred: narrow withheldCode/code to the SafetyEventCode subset (runner.ts, types.ts); fix the indentation in runner.block.test.ts; add expectTypeOf links between the queue and db safety-event enums (packages/queue). Start after 4.3b merges, because 4.3b owns runner.ts and types.ts.'
+  title: 'The three 4.4 review LOWs that 4.4f deferred: narrow withheldCode/code to the SafetyEventCode subset (runner.ts, types.ts); fix the indentation in runner.block.test.ts; add expectTypeOf links
+    between the queue and db safety-event enums (packages/queue). Start after 4.3b merges, because 4.3b owns runner.ts and types.ts.'
   accept: the three remaining LOWs in docs/tasks/4.4/review.md are fixed (type-only changes proven by typecheck; the indentation by prettier/lint); the gate passes with --filter=...@edmate/harness and --filter=...@edmate/queue
   deps:
   - 4.4f

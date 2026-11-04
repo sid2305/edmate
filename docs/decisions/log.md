@@ -10,6 +10,183 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.3b scrub-failure fallback shares escalate()'s helper · decided by builder · risk: low
+- Decided: extracted `distressFallback(input, e)` as a private `Runner` method, used by both the
+  scrub-failure branch and `escalate()`, instead of duplicating the try/catch-and-last-resort
+  logic inline in the scrub-failure branch.
+- Why: the plan's own wording calls for "the same two-step fallback `escalate()` already uses";
+  a shared private helper keeps that behavior in one place instead of two copies that could drift.
+- Alternatives: duplicate the inline try/catch in the scrub-failure branch (plan's literal
+  wording, more diff-local but duplicates logic).
+- Reversible: yes — inlining it back out is a small, local change.
+
+---
+
+### 4 Nov 2026 · 4.3b Q1 (held replies skip the check-in) · decided by lead, carried by builder · risk: low
+- Decided: the check-in is only emitted when `holdsReply()` says the turn's reply streams live
+  (`!held`). A held turn (postGuard may replace the draft whole) never shows it. **Corrected in fix
+  round 1:** the flag does not stay set for a later read — `runner.ts`'s `base.next` wraps every
+  save with `withoutDistressFollowup` unconditionally, on every outcome, whatever this turn's own
+  move was. A held turn therefore drops the check-in for the rest of the session: it is a one-shot
+  read, consumed and cleared whether or not it was actually shown. This is a documented gap, not
+  a "shown later" deferral.
+- Why: no extra gating logic needed — `generate.ts` already computes `held` for every other
+  purpose; piggy-backing on it keeps the check-in's placement consistent with how the rest of the
+  turn is shown, and avoids a second code path that `postGuard.ts`'s fixed-text builders would
+  need to know about. Making the flag survive a held turn (read again, unconsumed) would need a
+  third state ("due but not yet shown") on `SessionHelp`, which the plan's Q1 recommendation
+  already judged disproportionate for a 2-line follow-up.
+- Alternatives: force every flagged turn to show the check-in even when held, by injecting it into
+  postGuard's rewritten/safe text too — rejected per the plan's own Q1 recommendation (disproportionate
+  for a 2-line follow-up; logged as a follow-up for whichever task next touches `postGuard.ts`).
+  Keep the flag set across a held turn instead of clearing it — rejected in fix round 1 too: it
+  would need a new "due but unseen" state, out of this round's scope.
+- Reversible: yes — the gate is one boolean check in `generate.ts`; a later task could add the
+  third state above without touching this task's other code.
+
+---
+
+### 4 Nov 2026 · 4.3b Q2 (locked/redirect/ask_teacher moves never show it) · decided by lead, carried by builder · risk: low
+- Decided: moves that never call `generate` (`locked`, `redirect`, `ask_teacher`) never show the
+  check-in; this is accepted as-is, not worked around, per the plan's Q2 recommendation.
+  **Corrected in fix round 1:** the flag does not "stay set and carry forward" either — same
+  unconditional `withoutDistressFollowup` on `base.next` as Q1, so a turn that takes one of these
+  moves also drops the check-in for the rest of the session, not just until the next turn that
+  reaches `generate`.
+- Why: those moves' replies are built by `postGuard.ts`'s fixed-text builders
+  (`askTeacherReplyFor`, `redirectReplyFor`, locked's own reply), a separate code path this task
+  does not touch; the flag is a one-shot read on the next ordinary turn's help-state load,
+  consumed there whether or not that turn's move could show it (same accepted gap as Q1).
+- Alternatives: thread the check-in into each fixed-text builder too — rejected; out of this
+  task's scope and budget, logged as a follow-up for later `postGuard.ts` work.
+- Reversible: yes — no code depends on this gap; a later task can add the check-in to those
+  builders without touching this task's code.
+
+---
+
+### 4 Nov 2026 · 4.3b the postGuard-triggered escalate branch does not set the check-in flag · decided by builder · risk: low
+- Decided: the generic postGuard-alert escalate branch (`'alert' in post`, serving lockedLeak,
+  answerLeak and grounding escalations, not only distress) keeps its pre-4.3b `keep` logic
+  (`this.lockedTrip ? { rung, help } : undefined`) unchanged; it does not wrap that saved state
+  with `withDistressFollowup`.
+- Why: an earlier draft of this change made that branch always save the help state with the flag
+  set whenever it was known. That is wrong: this branch is reached for a locked-material leak or
+  an ungrounded-reply escalation, neither of which is a mental-health distress event, so showing
+  "I'm glad you're still here with me" on the next turn would be confusing and out of place. Only
+  the dedicated distress-escalate branch (raw keyword/classifier/self-harm rule) sets the flag.
+  Caught by `runner.lockedLeak.test.ts`'s two exact `.toEqual(next)` assertions turning red when
+  the draft briefly set the flag there too; reverted rather than widened those assertions.
+- Alternatives: set the flag on every escalate path regardless of cause (rejected, see above).
+- Reversible: yes — a future task could choose to also show a check-in after a locked-material
+  trip, as its own decision, without touching this task's distress-specific logic.
+
+---
+
+### 4 Nov 2026 · 4.3b an existing roleplay-distress test now expects the flag set · decided by builder · risk: low
+- Decided: `roleplay.integration.test.ts`'s "a stop the router flags as distress gets the distress
+  handling, not the role-play stop" test asserted `stopped.help` equals the pre-turn help state
+  (`before`) exactly; changed to `{ ...before, distressFollowupDue: true }`.
+- Why: that test's "stop" turn genuinely escalates as distress (`intent: 'distress'`), so it goes
+  through the same distress-escalate branch Phase B's own new `runner.test.ts` cases cover; the
+  plan's intended behavior change (every distress escalation sets the flag) necessarily changes
+  this existing assertion too. Named here per the brief's rule on editing existing assertions.
+- Alternatives: none — this is the plan's own behavior change reaching an existing test.
+- Reversible: yes — reverting the flag-setting logic would restore the original assertion.
+
+---
+
+### 4 Nov 2026 · 4.3b `distressFollowupDue` is a required field on the generate step's options · decided by builder · risk: low
+- Decided: `Steps['generate']`'s options object type gained `distressFollowupDue: boolean`
+  (required, not `?:`), matching `lockedStopped`'s sibling field placement but without a default.
+- Why: a required field forces every call site (test doubles, `generate.test.ts`'s `setup()`,
+  `runner.ts`'s own construction) to say explicitly whether the flag is set, rather than silently
+  defaulting to `undefined`/falsy and masking a future wiring mistake (same reasoning as other
+  `Steps` fields this task's sibling tasks have made required).
+- Alternatives: optional with a default of `false` inside `generate.ts` — slightly less diff
+  everywhere it is constructed, but would hide a caller that forgot to pass it.
+- Reversible: yes — a follow-up could relax it to optional without changing behavior.
+
+---
+
+### 4 Nov 2026 · 4.3b thread an explicit `followup` field instead of matching the fixed reply string · decided by builder · risk: low
+- Decided: `GenerateResult` gained an optional `followup: string` carrying the exact check-in text
+  folded onto `draft` this turn; `postGuard.ts` strips/reattaches that literal prefix rather than
+  pattern-matching against the `DISTRESS_FOLLOWUP_REPLY` constant.
+- Why: `generate.ts` calls `distressFollowupText(env)`, which may return a locale override rather
+  than the fixed harness constant; matching the constant directly would silently stop working for
+  any locale that overrides the text. Threading the actual string used keeps the strip/reattach
+  correct regardless of locale.
+- Alternatives: hardcode the match against `DISTRESS_FOLLOWUP_REPLY` — rejected, breaks under a
+  locale override. Export a dedicated "is this a check-in prefix" predicate instead of a string
+  field — rejected as unnecessary indirection for a one-field pass-through.
+- Reversible: yes — the field is additive and optional; removing it only re-opens this bug.
+
+---
+
+### 4 Nov 2026 · 4.3b `wholeReplacementTexts` distinguishes a fixed substitution from a surgical rewrite · decided by builder · risk: low
+- Decided: `postGuard.ts`'s generic 'ok'-with-changed-text branch only re-attaches the check-in
+  prefix when the guard's returned text is not a member of `wholeReplacementTexts` (the ask-teacher
+  reply, `ANSWER_LEAK_SAFE_HINT`, the locked reply, and the existing `fixedTexts` array).
+  Membership means "this guard swapped in a fixed whole-reply string", not "this guard edited the
+  model's own words in place".
+- Why: the guard chain's result shape does not otherwise distinguish these two cases — both reach
+  the same `{ ok: false, action: 'rewrite', text }` → generic 'ok' outcome. Without this check, the
+  fix prepended the check-in onto `ANSWER_LEAK_SAFE_HINT` (a fixed safe-hint substitution), which
+  is a whole-reply replacement and must drop the check-in like the locked/escalate/block paths do.
+  Caught by the new postGuard.test.ts case.
+- Alternatives: add a structural flag to the guard's rewrite outcome marking it "whole" vs.
+  "surgical" — more correct long-term, but a larger change to the `Guard`/`runGuardChain`
+  abstraction than this fix round's scope; logged here as a follow-up for whichever task next
+  touches that abstraction. Compare rewrite length/edit-distance to the original heuristically —
+  rejected as fragile (a short model draft could legitimately be fully replaced by a similarly
+  short surgical fix).
+- Reversible: yes — the set is a local constant in `postGuard.ts`; removing it reverts to the
+  pre-fix (buggy) behavior.
+
+---
+
+### 4 Nov 2026 · 4.3b add `followup` to `GenerateResultSchema` · decided by builder · risk: low
+- Decided: added `followup: z.string().exactOptional()` to `GenerateResultSchema` in `results.ts`.
+- Why: the schema is a `z.strictObject`; without this the new field made every `GenerateResult`
+  carrying it fail `runner.ts`'s `check()` validation, which the step's failure/retry policy
+  treats the same as the step genuinely failing — manifesting as duplicated stream events and an
+  eventual `provider_error` once the scripted gateway's fixture stream was exhausted by the retry,
+  rather than a type error at the call site. Found via the eval test above.
+- Alternatives: none — the field must be declared on the strict schema for the step to pass its
+  own output validation; this is not a design choice, just the schema catching up to the type.
+- Reversible: yes — removing the field from `types.ts` and this schema entry together reverts it.
+
+---
+
+### 4 Nov 2026 · 4.3b distress follow-ups, merged · decided by lead · risk: high
+- Decided: merge 4.3b. The scrub-failure distress reply now carries the pack's helplines through
+  the shared `distressFallback` helper. After a distress escalation, the session gets one gentle
+  check-in on the next ordinary tutoring reply, then the flag clears.
+- Wording: the lead changed the check-in to "Before we carry on: thank you for telling me how you
+  were feeling earlier. Support is still there whenever you want it. Now, let's keep going." The
+  first draft ("I'm glad you're still here with me") could read as "glad you're alive".
+- Review: code-reviewer found two HIGHs (the check-in was lost when postGuard rewrote the reply;
+  the handoff's Q1 text was wrong). Fix round 1 folds the check-in into the draft through an
+  explicit `followup` field, so surgical rewrites keep it and whole replacements, blocks and
+  escalations drop it. code-reviewer re-verified both fixed and found nothing new.
+- Known gaps, accepted for the pilot: a held reply or a fixed-text move (locked, redirect,
+  ask_teacher) uses the flag up without showing the check-in, so that session never sees it. A
+  whole-reply replacement also drops it. Both fail quiet (no check-in), never loud.
+- `followup` on `GenerateResultSchema` is harness-internal (`results.ts`), not `packages/contracts`,
+  so no ADR.
+- Reversible: yes; revert the squash commit.
+
+---
+
+### 4 Nov 2026 · 4.3b build over budget · decided by lead · risk: low
+- Decided: accept 387 tool calls against the plan's 110 (harness counts: Phase A 68, Phase B 197,
+  fix round 1 122). The builders self-reported about 32, 85 and 46.
+- Why: Phase B's eval wiring took trial and error, and the fix round had to trace a strict-schema
+  retry loop. Both builders ran past their stop limits; future briefs repeat the hard stop.
+- Reversible: n/a.
+
+---
+
 ### 4 Nov 2026 · 4.4f deferred LOWs go to board task 4.4h, not 4.4g · decided by lead · risk: low
 - Decided: the three 4.4 review LOWs that 4.4f deferred (withheldCode narrowing, the runner.block.test.ts indentation, and the queue/db enum expectTypeOf links) become board task 4.4h. It depends on 4.4f and 4.3b.
 - Why: the id 4.4g was already taken by the finished jailbreak subject-exemption task (28 Oct 2026). The 4.4f entries below that say "4.4g" mean 4.4h.
