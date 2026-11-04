@@ -47,6 +47,18 @@ MathML-only ones (`&ApplyFunction;` etc.) are a documented known miss, pinned by
   behaviour, not weakening the assertion).
 - Reversible: yes — it is a test shape, not a design decision in the library code.
 
+### 4 Nov 2026 · 4.6d lockedLeak drops variation selectors and decodes invisible entities, merged · decided by lead · risk: high
+- Decided: Merge the guardrails change. The locked-content match path, and not the shared text fold, now drops the variation selectors U+FE00 to U+FE0F and U+034F, so "rep" + U+FE0F + "eatso" and "l" + U+034F + "**o**op" still hit. It also decodes `&shy;`, `&ZeroWidthSpace;`, `&NoBreak;`, `&zwnj;`, `&zwj;`, `&lrm;` and `&rlm;`. Under the MVP rule (no safety-reviewer per PR until the pilot gate), the safety group gets code-reviewer plus this risk: high entry.
+- Why: Closes the 4.6c review gaps. The code-reviewer ran the real guard with 12 probes and found no false positives on emoji with U+FE0F, keycaps or benign prose. labelKeys.ts, which shares the entity decoder, passes unchanged.
+- Alternatives: Drop the whole Default_Ignorable set, which digitForms.ts already uses. Not chosen: it is wider than the reproducers and untested here.
+- Reversible: yes; revert the PR.
+
+### 4 Nov 2026 · 4.6d build over budget · decided by lead · risk: low
+- Decided: Accept 132 tool calls against a plan budget of 85 (1.55x), by harness count: the build took 56, and fix round 1 took 76 against a brief limit of 40. A further 24 calls were lost to two sleep-stalled starts.
+- Why: The fix round replaced every literal invisible character with an escape across three files and the handoff, and re-ran the full gate. The fixer overran its brief limit, but the work was mechanical and the scope did not grow.
+- Alternatives: Stop the fixer at 40 and run a second round, which would have cost more in total.
+- Reversible: n/a (a budget record).
+
 ## Red -> green evidence
 Before the fix, running `vitest run src/guardrails/lockedMatch.test.ts src/guardrails/lockedLeak.test.ts`
 failed 7 new tests for the right reasons, e.g.:
@@ -89,17 +101,17 @@ source instead of `\uXXXX` escapes or `String.fromCharCode(...)`, in `lockedMatc
 What changed:
 - `lockedMatch.ts`: `DEFAULT_IGNORABLE_MARK` now uses `\u{FE00}-\u{FE0F}\u{034F}` escapes instead of
   literal characters inside the character class; the seven invisible `NAMED_ENTITIES` values (`shy`,
-  `zerowidthspace`, `nobreak`, `zwnj`, `zwj`, `lrm`, `rlm`) now use `­`/`​`/`⁠`/`‌`/
-  `‍`/`‎`/`‏` escapes; two illustrative examples in the header comment (`rep<VS16>eatso`,
-  `l<CGJ>**o**op`) now spell the code point as `️`/`͏` text inside the comment instead of
+  `zerowidthspace`, `nobreak`, `zwnj`, `zwj`, `lrm`, `rlm`) now use `\u00AD`/`\u200B`/`\u2060`/`\u200C`/
+  `\u200D`/`\u200E`/`\u200F` escapes; two illustrative examples in the header comment (`rep<VS16>eatso`,
+  `l<CGJ>**o**op`) now spell the code point as `\uFE0F`/`\u034F` text inside the comment instead of
   embedding the literal character.
 - `lockedMatch.test.ts`: `VS16` and `CGJ` now built with `String.fromCharCode(0xfe0f)` /
-  `String.fromCharCode(0x034f)`; the inline `'︀'` literal (lowest of the variation-selector range)
+  `String.fromCharCode(0x034f)`; the inline `'\uFE00'` literal (lowest of the variation-selector range)
   replaced with `String.fromCharCode(0xfe00)`; the `decodeHtmlEntities` expected-output literals for
-  the pad character (`'​'`, i.e. U+200B) replaced with the file's existing `ZWSP` constant; the
+  the pad character (`'\u200B'`, i.e. U+200B) replaced with the file's existing `ZWSP` constant; the
   seven named-entity expected characters (`&shy;` etc.) replaced with `String.fromCharCode(...)` for
   each code point, matching the file's established convention.
-- `lockedLeak.test.ts`: the `'pa️rts'` splice literal replaced with a template string using
+- `lockedLeak.test.ts`: the `'pa\uFE0Frts'` splice literal replaced with a template string using
   `String.fromCharCode(0xfe0f)`.
 - `docs/tasks/4.6d/handoff.md`: the two remaining literal invisible characters (one in a `- Decided:`
   line, two in the red/green evidence code block) replaced with code-point text; no other wording
@@ -125,4 +137,4 @@ only, re-verified green afterwards; no content change beyond the escape edits). 
 .githooks/secret-scan.py --all`: clean.
 
 ## Budget
-Budget: 85 tool calls (plan). Tool calls used: ~55 (initial build) + ~35 (fix round 1).
+Budget: 85 tool calls (plan). Tool calls used: 56 for the build and 76 for fix round 1, by harness count (the builder estimated about 55 and about 35), plus 24 lost to two sleep-stalled starts. Plan: 40. Review: 44. See the lead decision "4.6d build over budget".
