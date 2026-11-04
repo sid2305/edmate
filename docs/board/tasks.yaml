@@ -1463,9 +1463,29 @@ tasks:
   deps:
   - GATE
   - '3.10'
-  status: running
+  status: done
   branch: m13/3.10a-locale-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 70
+    tokens_in: 212
+    tokens_out: 59243
+    cache_read_tokens: 9552243
+    wall_time_seconds: 33934
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: 3.10b
   milestone: M13
   title: 'Pre-pilot: a named person verifies the India locale pack (Tele-MANAS number, grievance contact, pack reviewedBy/reviewedOn) and fills the pending values; `edmate content validate content/locales`
@@ -10749,7 +10769,8 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
+  status: planning
+  model: plan:sonnet
 - id: 5.1b
   milestone: M13
   title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on

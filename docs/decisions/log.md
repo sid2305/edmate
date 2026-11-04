@@ -10,6 +10,64 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 3.10a turbo.json `test` task gains `EDMATE_ALLOW_PENDING` · decided by builder · risk: low
+- Decided: added `"EDMATE_ALLOW_PENDING"` to the root `turbo.json` `test` task's `env` array
+  (alongside the existing `TEST_DATABASE_URL`, `TEST_REDIS_URL`).
+- Why: `turbo run test` does not forward arbitrary env vars to the underlying `vitest` process
+  unless they are declared in `env` (cache-key-affecting) or `passThroughEnv` (cache-key-neutral)
+  for that task. Without this, `EDMATE_ALLOW_PENDING=1 corepack pnpm turbo run test
+  --filter=@edmate/evals` (the gate command the plan itself specifies) silently runs `vitest`
+  with the var unset, and `suites.test.ts`'s pending-reviewer check always fails — not what the
+  plan's own gate line is asking for. `env` (not `passThroughEnv`) because the var changes test
+  behaviour and must bust the cache.
+- Alternatives: run `vitest` directly, bypassing `turbo`, for this one check (what I actually did
+  for the evidence above, to avoid touching the shared root config under time pressure); leave
+  `turbo.json` untouched and tell the lead the plan's gate line as written cannot pass through
+  `turbo`. Chose to fix `turbo.json` as well since it is a one-line, narrowly-scoped addition that
+  makes the plan's own documented gate command actually work for every future run, not just mine.
+- Reversible: yes — revert the one line in `turbo.json`.
+
+---
+
+### 4 Nov 2026 · 3.10a ran the typecheck/lint/test gate with `--concurrency=1` and some steps standalone · decided by builder · risk: low
+- Decided: confirmed `@edmate/content`, `@edmate/evals` (typecheck/lint) and `@edmate/cli`
+  (typecheck/lint, and `test` in isolation) are green by running them individually / with
+  `--concurrency=1`, rather than relying only on the single concurrent `turbo run typecheck lint
+  test --filter=...@edmate/content --filter=...@edmate/evals --filter=...@edmate/cli` invocation.
+- Why: that filter pulls in `@edmate/web` and `@edmate/worker` as dependents, and this worktree's
+  host had several other concurrent agent sessions running throughout the build (per the
+  background-task notifications I received); under that load, two pre-existing tests I never
+  touched (`gate.test.ts`'s B-40 case at a 5s default timeout, `chatDbRetrieval.int.test.ts`
+  against the shared dev Postgres) intermittently timed out or hit a Postgres
+  "terminating connection due to administrator command" error, and the new
+  `build-smoke.test.ts` once hit its own 30s ceiling. Every one of these passed cleanly when run
+  with less contention (standalone, or `--concurrency=1`), which is consistent with host load, not
+  a regression from this task's changes.
+- Alternatives: raise those tests' timeouts (out of scope — I didn't write them and raising a
+  timeout to paper over a flake it didn't cause is exactly the kind of "edit an existing test to
+  make it pass" the brief rules out); keep retrying the full concurrent command until it happened
+  to land clean. Chose the narrower, repeatable standalone runs instead, and am naming the flake
+  here for the lead/reviewer rather than silently hiding it.
+- Reversible: n/a (no code change, this is a note about how the gate was run).
+
+---
+
+### 4 Nov 2026 · 3.10a locale follow-ups and seven safety/locale eval cases, merged · decided by lead · risk: high
+- Decided: merge 3.10a. The safe-regex guard now fails closed outside tests when the compiled worker is missing, and a build-smoke test checks it on the real built CLI. A separate integration-test outDir fixes the build race. Shared `isPending` and `looksLikeEmail` helpers replace the local copies. Seven new safety/locale eval cases (003–009) are signed `reviewed_by: lead`: the lead read all seven bodies before signing, and the sign-off commit changed only the `reviewed_by` line in each.
+- Why: these are the 3.10 review items. A code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings. The cases keep India/Hindi input as a safety net, with English replies (plan Q4). Their personal-data examples are standard dummy values. Under the MVP-first rule, the safety suites get a code-reviewer and no safety-reviewer per PR until the pilot gate.
+- Alternatives: leave the cases pending (they would not run in CI); fail closed on `NODE_ENV === 'production'` only (dev and staging would fail open).
+- Reversible: yes, by reverting the PR.
+
+---
+
+### 4 Nov 2026 · 3.10a build over budget · decided by lead · risk: low
+- Decided: accept 240 builder tool calls against a plan of 90 (2.7x), counted by the harness. That is 4 for a stalled start, 206 for the build across a context reset, and 30 for the sign-off commit.
+- Why: the build covered three packages, plus a real built-CLI smoke test and host-load flakes that needed gate re-runs. It finished green, with no fix round needed.
+- Alternatives: split it into two PRs (the plan was one phase).
+- Reversible: not applicable.
+
+---
+
 ### 4 Nov 2026 · 4.4c skip writing a safety_event in the rule-table fallback · decided by builder · risk: low
 - Decided: the runner's new `!pg.ok` rule-table fallback does not write a `safety_event`
   (`ctx.safetyEvents.record`).
