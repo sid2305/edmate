@@ -12,6 +12,7 @@ import { fileRecorder, memoryRecorder, MissingFixtureError } from './recorder.js
 import { toJsonReport } from './report.js';
 import { runCase, runSuite, type RunOptions } from './runner.js';
 import type { EvalCase } from './schema.js';
+import { TurnSchema } from './schema.js';
 
 const FIXTURE_SUITE = fileURLToPath(new URL('../test/fixtures/suite', import.meta.url));
 const JUDGE_MODEL = { provider: 'anthropic', model: 'judge-test-model' };
@@ -538,6 +539,58 @@ describe('cancellation via AbortSignal (task 7.4d)', () => {
     expect(seenSignal?.aborted).toBe(false);
     controller.abort();
     expect(seenSignal?.aborted).toBe(true);
+  });
+});
+
+const demoAttachment = {
+  kind: 'image' as const,
+  mime: 'image/png',
+  storageKey: 'test/uploads/att_test_01.png',
+  bytes: 204800,
+};
+
+describe('attachments on a turn (task 4.2d)', () => {
+  it('a valid attachment parses on TurnSchema', () => {
+    const parsed = TurnSchema.safeParse({ student: 'hi', attachments: [demoAttachment] });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('a 3rd attachment over the cap is rejected', () => {
+    const parsed = TurnSchema.safeParse({
+      student: 'hi',
+      attachments: [demoAttachment, demoAttachment, demoAttachment],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('an absent attachments field is unaffected (regression)', () => {
+    const parsed = TurnSchema.safeParse({ student: 'hi' });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.attachments).toBeUndefined();
+  });
+
+  it('reaches EvalTurnInput unchanged when present', async () => {
+    const agent = scriptedAgent({ 'Hello?': { text: 'ok' } });
+    const c: EvalCase = {
+      ...oneTurnCase({ max_words: 5 }),
+      turns: [{ student: 'Hello?', attachments: [demoAttachment], expect: { max_words: 5 } }],
+    };
+    await runCase(c, {
+      agent,
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(agent.calls[0]?.attachments).toEqual([demoAttachment]);
+  });
+
+  it('a case without attachments gives exactly the old agent input, with no extra keys', async () => {
+    const agent = scriptedAgent({ 'Hello?': { text: 'ok' } });
+    await runCase(oneTurnCase({ max_words: 5 }), {
+      agent,
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(agent.calls[0]).not.toHaveProperty('attachments');
   });
 });
 
