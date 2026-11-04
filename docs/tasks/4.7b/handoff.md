@@ -2,6 +2,8 @@
 
 Status: DONE
 
+Tool calls used: 518 (harness count over all six builder rounds; see the 4.7b budget decision)
+
 ## Phase A
 
 ## Summary
@@ -54,7 +56,7 @@ Moved to `## Decisions` at the end of this file.
   no cli) is green.
 
 ## Budget
-Tool calls used: ~48 (plan budgeted 40 for Phase A).
+Builder estimate: ~48 (plan budgeted 40 for Phase A).
 
 ## Phase B
 
@@ -125,7 +127,7 @@ Moved to `## Decisions` at the end of this file.
   same posture as Phase A's handoff note.
 
 ## Budget
-Tool calls used: ~46 (plan budgeted 60 for Phase B).
+Builder estimate: ~46 (plan budgeted 60 for Phase B).
 
 ## Phase C
 
@@ -198,7 +200,7 @@ Moved to `## Decisions` at the end of this file.
   Phases A and B's own handoff notes.
 
 ## Budget
-Tool calls used: ~55 (plan budgeted 50 for Phase C; the extra calls traced and fixed the two
+Builder estimate: ~55 (plan budgeted 50 for Phase C; the extra calls traced and fixed the two
 regressions above, neither anticipated by the plan's own test list).
 
 ## Fix round 1
@@ -297,7 +299,7 @@ Moved to `## Decisions` at the end of this file.
 - `python3 .githooks/secret-scan.py --all`: exit 0, clean.
 
 ### Budget
-Tool calls used: ~58 (brief's hard cap: 60; plan's own Phase D budget: 45).
+Builder estimate: ~58 (brief's hard cap: 60; plan's own Phase D budget: 45).
 
 ## Fix round 1 (Phase D)
 
@@ -362,7 +364,7 @@ Moved to `## Decisions` at the end of this file.
 - `python3 .githooks/secret-scan.py --all`: exit 0, clean.
 
 ### Budget
-Tool calls used: ~100 (brief's hard cap: 70 — exceeded; see Left to do / deviations below).
+Builder estimate: ~100 (brief's hard cap: 70 — exceeded; see Left to do / deviations below).
 
 ## Decisions
 
