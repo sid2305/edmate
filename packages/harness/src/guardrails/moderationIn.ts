@@ -57,7 +57,11 @@ export const MISUSE_CODES: readonly ModerationCode[] = Object.freeze([
  * (harm_to_others, threat or weapons, level `critical` — B-50 and its lead amendment). The
  * excerpt is at most DISTRESS_EXCERPT_MAX code points of the scrubbed text, as in distressDetect.
  */
-export function preGuardAlert(text: string, ctx: PreGuardCtx, kind: Alert['kind']): SafetyAlert {
+export function preGuardAlert(
+  text: string,
+  ctx: Pick<PreGuardCtx, 'ids' | 'entitlement' | 'sessionId' | 'clock'>,
+  kind: Alert['kind'],
+): SafetyAlert {
   return SafetyAlertSchema.parse({
     id: ctx.ids.next('alert'),
     level: kind === 'misuse' ? 'critical' : 'alert',
