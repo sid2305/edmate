@@ -267,6 +267,8 @@ describe('createGateAgent', () => {
     );
     expect(reply.escalated).toBe(true);
     expect(s.effects.alerts).toBe(1);
+    // a guard detection (the attachment ScrubFailedError) must not count as a locked leak
+    expect(s.effects.lockedLeaks).toBe(0);
   }, 20_000);
 
   it('seeds prior turns and a teacher message into the in-memory transcript', async () => {
