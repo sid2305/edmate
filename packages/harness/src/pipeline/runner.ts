@@ -30,7 +30,7 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import type { z } from 'zod';
-import { type BlockCode, blockReplyFor } from '../guardrails/blockReplies.js';
+import { blockReplyFor } from '../guardrails/blockReplies.js';
 import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
 import { matchJailbreak } from '../guardrails/jailbreakPatterns.js';
 import { classifyMistakeTags } from '../memory/mistakeTags.js';
@@ -513,7 +513,15 @@ class Turn {
     }
 
     // 5. Escalate beats block: a distressed student always gets the caring reply.
+    // 4.4c: with the pre guard chain down (no classifier verdict at all), the rule tables still
+    // run on the raw scrubbed text, so a decisive moderation/jailbreak hit is not lost to the
+    // generic PRE_GUARD_FAILED ending.
+    const ruleFallback = pg.ok ? null : this.ruleTableFallback(scrubbed, e);
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
+    // 4.4c: a router distress label must not drop preGuard's own misuse alert: read only when
+    // preGuard itself blocked with one. The caring reply still wins (escalate beats block for
+    // the reply), but the misuse alert still reaches AlertSink.
+    const blockAlert = pg.ok && pg.value.result === 'block' ? pg.value.alert : undefined;
     // A failed preGuard means no classifier verdict: the keyword check still runs, and there a
     // soft phrase counts too (no verdict to bypass; 4.3 safety review). A hit on the raw text
     // (before the scrub, hard phrases only) always counts.
@@ -521,10 +529,23 @@ class Turn {
       preAlert !== undefined ||
       intent === 'distress' ||
       rawDistress ||
+      ruleFallback?.kind === 'self_harm' ||
       (!pg.ok &&
+        ruleFallback === null &&
         (this.distressHit(scrubbed, 'scrubbed') || hasAnyDistressKeyword(scrubbed.text ?? '')))
     ) {
-      return this.escalate(scrubbed, e, preAlert);
+      return this.escalate(scrubbed, e, preAlert, undefined, blockAlert);
+    }
+    if (ruleFallback?.kind === 'block') {
+      // The rule table's own reply, plus a misuse alert if the code carries one (4.4c).
+      return this.sendBlockReply(
+        e,
+        scrubbed,
+        intent,
+        ruleFallback.reply,
+        ruleFallback.alert,
+        ruleFallback.code,
+      );
     }
     if (pg.ok && pg.value.result === 'block' && pg.value.reply !== undefined) {
       // moderationIn / jailbreak (4.4): the code's own reply, plus a misuse alert if one came.
@@ -745,6 +766,12 @@ class Turn {
     e: Entitled,
     preAlert: SafetyAlert | undefined,
     next?: SessionHelp,
+    /**
+     * A misuse alert that must still reach AlertSink even though the caring reply wins (4.4c: the
+     * router's distress label must not drop preGuard's own misuse alert). Never the commit
+     * record's own `alert` field: that keeps today's single primary-alert shape.
+     */
+    extraAlert?: SafetyAlert,
   ): Promise<TurnRunResult> {
     const es = check(
       await this.timed(input, timeoutOf('escalate'), (env) =>
@@ -772,14 +799,23 @@ class Turn {
       replyText = LAST_RESORT_DISTRESS_REPLY;
       outcome = 'failed';
     }
-    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms }, next);
+    return this.sendEscalation(
+      e,
+      input,
+      built,
+      { replyText, outcome, ms: es.ms },
+      next,
+      extraAlert,
+    );
   }
 
   /**
    * The end of every escalated turn: dispatch the alert (if one could be built), record escalate
    * (`failed` when the alert could not be built first time), send safety + reply + done, save.
    * `commitInput` is null when the scrub failed, so the raw text is never stored. `next` is the
-   * help state to save, only after a locked trip (4.6b fix round 1).
+   * help state to save, only after a locked trip (4.6b fix round 1). `extraAlert` (4.4c) is
+   * delivered too, alongside `built.alert`, deduplicated by id so the same alert is never raised
+   * twice; the commit record's single `alert` field still holds only `built.alert`.
    */
   private sendEscalation(
     e: Entitled,
@@ -787,8 +823,15 @@ class Turn {
     built: { alert: SafetyAlert | null; failed: boolean },
     reply: { replyText: string; outcome: 'ok' | 'fallback' | 'failed'; ms: number },
     next?: SessionHelp,
+    extraAlert?: SafetyAlert,
   ): Promise<TurnRunResult> {
-    const delivered = built.alert === null ? undefined : this.deliverAlert(built.alert);
+    const toRaise = [built.alert, extraAlert ?? null].filter(
+      (a, i, arr): a is SafetyAlert => a !== null && arr.findIndex((b) => b?.id === a.id) === i,
+    );
+    const delivered =
+      toRaise.length === 0
+        ? undefined
+        : Promise.all(toRaise.map((a) => this.deliverAlert(a))).then(() => undefined);
     this.trace.step('escalate', reply.ms, built.failed ? 'failed' : reply.outcome);
     this.send({ type: 'safety', level: 'alert' });
     this.send({ type: 'token', text: reply.replyText });
@@ -862,6 +905,63 @@ class Turn {
       }
     }
     return { alert: null, failed: true };
+  }
+
+  /**
+   * 4.4c: with the pre guard chain down (no classifier verdict at all, e.g. a step error or
+   * timeout), the moderation and jailbreak rule tables still run directly on the scrubbed text
+   * (pure, synchronous, no model/gateway call; `matchModeration`/`matchJailbreak` are already
+   * exported for this). A decisive `self_harm` hit is reported as such so the caller folds it into
+   * the existing distress-escalate check (the moderation table is a better detector than the
+   * plain keyword lists already checked there). A decisive hit of any other moderation code, or a
+   * decisive jailbreak hit, builds the same block the real guard would have: its own reply, and
+   * — for `MISUSE_CODES` only — a critical misuse alert. No decisive hit at all (null) leaves the
+   * caller's existing keyword-only fallback unchanged. Never throws: `matchModeration` and
+   * `matchJailbreak` are pure pattern matchers.
+   */
+  private ruleTableFallback(
+    scrubbed: TurnInput,
+    e: Entitled,
+  ):
+    | { kind: 'self_harm' }
+    | { kind: 'block'; code: string; reply: string; alert: SafetyAlert | undefined }
+    | null {
+    const text = scrubbed.text ?? '';
+    const modHit = matchModeration(text);
+    if (modHit?.decisive === true) {
+      if (modHit.code === 'self_harm') return { kind: 'self_harm' };
+      const code = modHit.code;
+      const alert = MISUSE_CODES.includes(code)
+        ? preGuardAlert(text, this.ruleFallbackAlertCtx(e, scrubbed), 'misuse')
+        : undefined;
+      return { kind: 'block', code, reply: blockReplyFor(code), alert };
+    }
+    const jbHit = matchJailbreak(text, {
+      packageNames: [e.pkg.name],
+      currentPackageName: e.pkg.name,
+    });
+    if (jbHit?.decisive === true) {
+      return {
+        kind: 'block',
+        code: jbHit.code,
+        reply: blockReplyFor(jbHit.code),
+        alert: undefined,
+      };
+    }
+    return null;
+  }
+
+  /** The small `ctx` `preGuardAlert` reads, built from this turn's own fields (4.4c). */
+  private ruleFallbackAlertCtx(
+    e: Entitled,
+    scrubbed: TurnInput,
+  ): Parameters<typeof preGuardAlert>[1] {
+    return {
+      ids: this.deps.ids,
+      entitlement: e.entitlement,
+      sessionId: scrubbed.sessionId,
+      clock: this.deps.clock,
+    };
   }
 
   /**
