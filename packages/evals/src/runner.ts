@@ -127,6 +127,7 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
           ...(turn.teacher === undefined ? {} : { teacher: turn.teacher }),
           ...(turn.skill === undefined ? {} : { skill: turn.skill }),
           ...(evalCase.persona === undefined ? {} : { persona: evalCase.persona }),
+          ...(turn.attachments === undefined ? {} : { attachments: turn.attachments }),
           ...(opts.signal === undefined ? {} : { signal: opts.signal }),
         }),
         'agent reply',

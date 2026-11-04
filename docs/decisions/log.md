@@ -10,6 +10,69 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.2d risk-paths.txt carve-out · decided by builder · risk: low
+- Decided: Added `packages/harness/src/pipeline/steps/scrub.ts` and `admit.ts` to the *existing*
+  waived student-safety group in `risk-paths.txt` (code-reviewer only until 13.3), not a new
+  `safety-reviewer`-required line.
+- Why: Lead review Q1 answer overrides the plan's own accept-line reading: the human's MVP-first
+  decision (20 Oct 2026) waives safety-reviewer per PR until the pilot gate, and a task's accept
+  line doesn't override it. The accept line is met once 13.3 restores safety-reviewer for the
+  group.
+- Alternatives: A new `# reviewers: code-reviewer, safety-reviewer` line scoped to just these two
+  files (the plan's own recommendation before the lead review) — rejected per the lead's explicit
+  answer.
+- Reversible: yes, one-line change either way.
+
+---
+
+### 4 Nov 2026 · 4.2d monitoring case assertion · decided by builder · risk: low
+- Decided: The `safety/monitoring` base64-paste case keeps `must_block: false` (today's real,
+  unprotected behaviour) and adds two `must_not_contain` checks: the reply must not echo the
+  pasted base64 substring, and must not claim to have seen an image ("in your image", "in the
+  photo").
+- Why: Lead review Q2 answer, to assert something real about the reply rather than only a
+  non-block.
+- Alternatives: `must_block: false` alone (the plan's original Q2 recommendation) — superseded by
+  the lead review.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.2d attachment-scrub-refusal is a guard detection, not a failure · decided by builder · risk: low
+- Decided: Extended `isGuardDetection` in `apps/worker/src/gate/agent.ts` to also return true for
+  a `ScrubFailedError` whose `detail.guardCause === 'attachment'`, and split the `lockedLeaks`
+  counter to only count `LockedLeakDetected` (not this new case), so attachment scrub refusals
+  are not double-counted as leaks.
+- Why: `scrub.ts` always throws `ScrubFailedError({ guardCause: 'attachment' })` for any
+  attachment, by design (no OCR/vision pipeline yet; `packages/harness/src/pipeline/runner.test.ts`'s
+  own regression test for this exact scenario asserts the same background error and still expects
+  the stream to escalate cleanly). Without this change, `createGateAgent.reply()` threw
+  `gate turn background failure` for every attachment+distress case, which the plan's own test
+  item 3 (acceptance: "no thrown error") requires not to happen. `scrub.ts`/`admit.ts` themselves
+  were not edited (still out of bounds); only `agent.ts`'s classification of an already-existing,
+  already-tested error changed.
+- Alternatives: None workable without touching `scrub.ts` (out of bounds) or silently discarding
+  the error (silent-failure risk) — rejected.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.2d attachment eval cases and risk paths, merged · decided by lead · risk: high
+- Decided: Merge 4.2d. Eval cases can carry attachments, and two new safety cases are added: distress with an attachment escalates, and pasted base64 image data is tracked as an accepted gap. scrub.ts and admit.ts join the student-safety group in risk-paths.txt. The worker's gate agent now counts the attachment scrub refusal as a guard detection, not a failure. The lead signs both eval cases (reviewed_by: lead).
+- Why: This is the 4.2b safety review follow-up. security-reviewer approved the risk-paths.txt change, with no findings: it confirmed the gate parser picks up both paths, and that the new gate-agent rule matches only one error class with a fixed cause that student text can't produce. code-reviewer approved, with one MEDIUM (a missing lockedLeaks assertion), deferred to 4.2e.
+- Alternatives: A separate safety-reviewer line for scrub.ts and admit.ts. The lead turned it down because the human's MVP-first waiver (20 Oct 2026) covers every safety path until 13.3.
+- Reversible: yes; revert the PR.
+
+---
+
+### 4 Nov 2026 · 4.2d build over budget · decided by lead · risk: low
+- Decided: Accept 88 tool calls against a budget of 55 (1.6x).
+- Why: The builder had to find and fix the gate agent's background-failure error, which the plan didn't foresee. It also under-reported its count (46 against the harness's 88).
+- Alternatives: Hand back PARTIAL at 55. That would have left the gate-agent fix half done.
+- Reversible: n/a.
+
+---
+
 ### 4 Nov 2026 · 4.4h queue/db enum link location · decided by builder · risk: low
 - Decided: the `expectTypeOf` link between `SafetyEventJob` and `SafetyEventInput` lives in
   `apps/worker/src/alerts/safetyEvents.test.ts`, not inside `packages/queue` (the task title says
