@@ -81,34 +81,42 @@ function getWorkerFile(): { path: string } {
 }
 
 // Fix round (security review of PR #76): the in-process fallback below is meant for this
-// package's own tests and for `edmate content validate` run straight from TypeScript source --
-// cases where there genuinely is no build step, so the worker file genuinely cannot exist, and
-// running `checkSafeRegex` in-process (no wall-clock limit, but also nothing to time out on a
-// developer's own machine) is a reasonable substitute. In a production *runtime* the fallback
-// means something else: the compiled worker file -- and the app's compiled copy of
-// `@edmate/content` generally -- went missing after the build (a bundler inlined
-// `@edmate/content` into a server chunk and dropped its `dist/**` siblings, a container image's
-// standalone copy didn't carry `dist/**` along, ...). Reporting every pattern as unsafe without
-// a time limit (the fallback's literal behaviour today) silently drops the limit a production
-// deployment depends on -- failing open, not closed, exactly where this guard must not. Treat a
-// missing worker as unsafe instead whenever `NODE_ENV=production`, logged once so the gap is
-// visible in production logs without spamming them per pattern checked.
-let loggedMissingWorkerInProduction = false;
+// package's own tests -- the one case where there genuinely is no build step, so the worker file
+// genuinely cannot exist, and running `checkSafeRegex` in-process (no wall-clock limit, but also
+// nothing to time out on a developer's own machine) is a reasonable substitute. Everywhere else
+// the fallback means something else: a missing worker file (`edmate content validate` run
+// straight from TypeScript source with no build step first; a bundler inlined `@edmate/content`
+// into a server chunk and dropped its `dist/**` siblings; a container image's standalone copy
+// didn't carry `dist/**` along; ...). Reporting every pattern as unsafe without a time limit (the
+// fallback's literal behaviour before this fix round) silently drops the limit this guard exists
+// to enforce -- failing open, not closed, exactly where it must not. Fix round (3.10a review item
+// 2): checking `NODE_ENV === 'production'` left every *other* non-test context -- dev-from-source
+// on a developer's own machine, a staging or any other non-production runtime with the same
+// missing-dist bug -- taking the no-limit fallback too. `process.env.VITEST === 'true'` is set
+// by any package's `vitest run`, not just this one's, and no production or CLI path sets it, so
+// checking that directly (rather than trying to enumerate every context that is *not* a vitest
+// run) is both narrower and exhaustive. `apps/cli/test/build-smoke.test.ts` strips it to exercise
+// this fail-closed branch deliberately. Logged once so the gap is visible without spamming logs
+// per pattern checked.
+let loggedMissingWorkerOutsideTests = false;
 
-function unsafeInProduction(): string[] {
-  if (!loggedMissingWorkerInProduction) {
-    loggedMissingWorkerInProduction = true;
+function unsafeOutsideTests(): string[] {
+  if (!loggedMissingWorkerOutsideTests) {
+    loggedMissingWorkerOutsideTests = true;
     console.error(
-      '[@edmate/content] safeRegexGuard: the compiled safe-regex worker is missing in ' +
-        'production; every pattern is being reported unsafe (failing closed) until this is fixed',
+      '[@edmate/content] safeRegexGuard: the compiled safe-regex worker is missing outside ' +
+        "this package's own tests; every pattern is being reported unsafe (failing closed) " +
+        'until this is fixed',
     );
   }
-  return ['the compiled safe-regex worker is missing in production (failing closed)'];
+  return [
+    "the compiled safe-regex worker is missing outside this package's own tests (failing closed)",
+  ];
 }
 
 function inProcessOrFailClosed(source: string, opts: TimingOptions): string[] {
-  if (process.env.NODE_ENV === 'production') return unsafeInProduction();
-  return checkSafeRegex(source, opts); // no compiled worker file: dev and test only
+  if (process.env.VITEST === 'true') return checkSafeRegex(source, opts); // this package's own tests only
+  return unsafeOutsideTests();
 }
 
 /** Only the plain-data parts of `TimingOptions`: `now` is a function and cannot cross a worker boundary. */

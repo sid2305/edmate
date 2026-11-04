@@ -106,6 +106,20 @@ describe('licence schemas', () => {
     ).toBe(false);
   });
 
+  it('rejects the fullwidth-dot and spelled-out-"at" email bypasses (3.10a review item 5)', () => {
+    expect(
+      LicenceEntrySchema.safeParse({ path: 'a', licence: 'CC0-1.0', reviewed_by: 'a@b．com' })
+        .success,
+    ).toBe(false);
+    expect(
+      LicenceEntrySchema.safeParse({
+        path: 'a',
+        licence: 'CC0-1.0',
+        reviewed_by: 'jane at example dot com',
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts a manifest with a top-level default reviewer', () => {
     const m = { reviewed_by: 'sid2305', entries: [{ path: 'a', licence: 'CC0-1.0' }] };
     expect(LicenceManifestSchema.parse(m)).toEqual(m);
@@ -164,7 +178,13 @@ describe('item schemas', () => {
       expectedHeadings: ['1.1 Intro', '1.2 More'],
       reviewed_by: 'lead',
     };
-    const outOfCourse = { id: 'r2', moduleId: 'a', question: 'q?', outOfCourse: true, reviewed_by: 'pending' };
+    const outOfCourse = {
+      id: 'r2',
+      moduleId: 'a',
+      question: 'q?',
+      outOfCourse: true,
+      reviewed_by: 'pending',
+    };
 
     it('accepts an in-course item with headings and an out-of-course item', () => {
       expect(QaRecallItemSchema.safeParse(inCourse).success).toBe(true);
