@@ -774,10 +774,7 @@ class Turn {
    * Shared by `escalate()` (step text failed) and the scrub-failure branch above (no step ran at
    * all), so both paths carry the pack's helplines rather than the bare last-resort text (4.3b).
    */
-  private distressFallback(
-    input: TurnInput,
-    e: Entitled,
-  ): { replyText: string; failed: boolean } {
+  private distressFallback(input: TurnInput, e: Entitled): { replyText: string; failed: boolean } {
     let replyText = '';
     try {
       replyText = this.deps.fallbackReplies.distress(input.lang, e.locale);

@@ -520,7 +520,11 @@ describe('runTurn with the real scrub (4.2)', () => {
 
     it('the locale pack helplines reach the reply via fallbackReplies.distress (4.3b)', async () => {
       const MARKER = 'RAWDISTRESSMARKER_HELPLINE';
-      const raw = { ...demoTurnInput, text: `I feel ${MARKER} today`, attachments: [demoAttachment] };
+      const raw = {
+        ...demoTurnInput,
+        text: `I feel ${MARKER} today`,
+        attachments: [demoAttachment],
+      };
       const HELPLINE_REPLY = 'Please call the pack helpline.';
       const t = testDeps({
         overrides: {
@@ -539,7 +543,11 @@ describe('runTurn with the real scrub (4.2)', () => {
 
     it('a throwing/empty fallbackReplies.distress still falls back to the last-resort reply, never empty (4.3b)', async () => {
       const MARKER = 'RAWDISTRESSMARKER_THROW';
-      const raw = { ...demoTurnInput, text: `I feel ${MARKER} today`, attachments: [demoAttachment] };
+      const raw = {
+        ...demoTurnInput,
+        text: `I feel ${MARKER} today`,
+        attachments: [demoAttachment],
+      };
       const t = testDeps({
         overrides: {
           distressCheck: (text) => text.includes(MARKER),

@@ -662,7 +662,10 @@ describe('distress keyword check when step 3 fails', () => {
       },
     };
     const steps = testSteps({ scrub: boom });
-    const { events, result } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
     expect(events).toEqual([
       { type: 'safety', level: 'alert' },
       { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
