@@ -43,6 +43,27 @@ return type. No file outside `packages/harness/src/guardrails/` was touched.
   decision and the lead review's acceptance of it.
 - Reversible: yes — 4.4g is a new, independent task.
 
+### 4 Nov 2026 · 4.4f first-person threat and weapon-acquisition rules, merged · decided by lead · risk: high
+- Decided: merge two new decisive rows in `packages/harness/src/guardrails/moderationPatterns.ts`.
+  - **Threat row.** A first-person future-tense threat ("I will stab him", "I'm going to shoot him") scores `harm_to_others`. `shoot` counts only in this row, and "shoot him a text" or "shoot her portrait" right after the person word is not a threat.
+  - **Weapon row.** A weapon-acquisition question ("how do I get a gun", "where can I buy a pistol") scores `weapons`. A gun licence or permit asked for as the thing itself stays clean, and "without a license" still hits. Knives are left out.
+  - **Shared fixes.** Both rows use the narrow `GAME_TITLE` list for their game exemption, not the shared `GAME` list. Two of the six 4.4 LOWs are also fixed: the alert is built before the event is recorded in `moderationIn.ts`, and `block()` in `jailbreak.ts` has an explicit return type. The other three LOWs move to 4.4g.
+- Why: the 4.4c review found that these everyday threat and acquisition phrasings scored nothing when the classifier was down.
+  - Code review found that "I'm going to shoot him" was missed; fix round 1 fixed it.
+  - The lead's own probe then found that the exemptions are tested against the whole message (`rulePhrases.ts`). The shared `GAME` list holds school words (class, level, object, player), so "I will stab him after class" and "how do I get a gun to bring to class" passed clean. Fix round 2 fixed that, and the lead re-ran 18 probe sentences: every hit and every no-hit came out right.
+  - Fix round 1's decision "message/photo exemption keyed to adjacency" is superseded by fix round 2's lookahead.
+- Alternatives:
+  - Add `shoot` to the shared HARM_VERB. Rejected: other rows would then block "shoot him a text".
+  - Keep the shared `GAME` exemption. Rejected: it hides threats made at school.
+  - Wait for a safety-reviewer. Rejected: there is no safety-reviewer per PR until the pilot gate (MVP first).
+- Reversible: yes. These are two table rows with their tests.
+
+### 4 Nov 2026 · 4.4f build over budget · decided by lead · risk: low
+- Decided: accept 133 tool calls against a plan of 45 (about 3x). The build took 46, fix round 1 took 39 and fix round 2 took 48 (harness counts).
+- Why: the overrun is the two fix rounds, and each one closed a real missed threat.
+- Alternatives: none. The fixes were needed before merge.
+- Reversible: n/a.
+
 ## Red -> green evidence
 Added `describe('matchModeration: 4.4f rule follow-ups (first-person threat, weapon acquisition)')`
 in `moderationPatterns.test.ts` (8 cases plus the 3 lead-review additions: game exemption on the
@@ -73,7 +94,7 @@ After adding the two rule rows, the same file: `Test Files 1 passed (1)` / `Test
 - `python3 .githooks/secret-scan.py --all`: clean (exit 0).
 
 ## Budget
-Tool calls used: 28 (plan: 45; one phase, packages/harness only).
+Tool calls used (harness counts): build 46, fix round 1 39, fix round 2 48; total 133 against a plan of 45. See the lead budget decision.
 
 ## Left to do
 None — all three new-shape tests, the lead review's HIGH and two MEDIUMs, and the two safe LOWs
