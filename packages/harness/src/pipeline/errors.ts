@@ -173,6 +173,19 @@ export class GroundingJudgeUnavailable extends HarnessError {
 }
 
 /**
+ * answerLeak's judge gave no answer (missing, failed, timed out) so the chain failed closed to the
+ * safe hint (4.5b fix round 1, mirrors `GroundingJudgeUnavailable`). A metric, not a failure: fixed
+ * text, no turn text.
+ */
+export class AnswerLeakJudgeUnavailable extends HarnessError {
+  override readonly name = 'AnswerLeakJudgeUnavailable';
+
+  constructor() {
+    super('answer leak judge unavailable: sent the safe hint');
+  }
+}
+
+/**
  * adviceGuard's judge gave no answer (outage, timeout, cost ceiling) and the turn got its fixed
  * fallback or an unverified rewrite's fixed fallback (task 4.8). `cause` tells apart a PII-scrub
  * failure, the pre-check judge call itself failing, and the rewrite's own verify call giving no

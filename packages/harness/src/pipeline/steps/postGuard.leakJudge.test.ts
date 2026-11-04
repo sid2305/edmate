@@ -55,6 +55,7 @@ function setup(o: Setup = {}) {
           ...(o.judgeDelayMs === undefined ? {} : { delayMs: o.judgeDelayMs }),
         });
   const { deps } = testDeps({ clock });
+  const reported: unknown[] = [];
   const env: StepEnv = {
     input: { ...demoTurnInput, text: 'Is the answer warm?' },
     deps,
@@ -62,13 +63,13 @@ function setup(o: Setup = {}) {
     turnId: 'turn_1',
     gateway,
     usage: { record: () => undefined, checkBeforeCall: () => undefined },
-    report: () => undefined,
+    report: (e) => void reported.push(e),
     track: () => undefined,
   };
   const judged = 'leakJudged' in gateway ? gateway.leakJudged : [];
   const run = (draft: string, decision: PedagogyDecision = explain) =>
     clock.drive(postGuard(env, { ctx: CTX, decision, draft, sources: [] }));
-  return { clock, spy, run, judged };
+  return { clock, spy, run, judged, reported };
 }
 
 describe('postGuard: answerLeak’s paraphrase judge (4.5b)', () => {
@@ -104,5 +105,29 @@ describe('postGuard: answerLeak’s paraphrase judge (4.5b)', () => {
     const r = await s.run('Think about a fire.', { ...explain, mustNotReveal: ['Warm'] });
     expect(r).toMatchObject({ result: 'replace', text: ANSWER_LEAK_SAFE_HINT });
     expect(s.clock.now() - t0).toBeLessThan(BUDGET);
+  });
+
+  it('4.5b fix round 1: a judge timeout reports exactly one AnswerLeakJudgeUnavailable, fail closed unchanged', async () => {
+    const s = setup({ verdict: 'clean', judgeDelayMs: 60_000 });
+    const r = await s.run('Think about a fire.', { ...explain, mustNotReveal: ['Warm'] });
+    expect(r).toMatchObject({ result: 'replace', text: ANSWER_LEAK_SAFE_HINT });
+    expect(s.reported.map((e) => (e as Error).name)).toEqual(['AnswerLeakJudgeUnavailable']);
+  });
+
+  it('4.5b fix round 1: a judge that errors reports exactly one AnswerLeakJudgeUnavailable, fail closed unchanged', async () => {
+    const s = setup({
+      verdict: 'script',
+      rewrites: [[{ type: 'error', code: 'provider_error' }]],
+    });
+    const r = await s.run('Think about a fire.', { ...explain, mustNotReveal: ['Warm'] });
+    expect(r).toMatchObject({ result: 'replace', text: ANSWER_LEAK_SAFE_HINT });
+    expect(s.reported.map((e) => (e as Error).name)).toContain('AnswerLeakJudgeUnavailable');
+  });
+
+  it('4.5b fix round 1: a clean verdict makes no AnswerLeakJudgeUnavailable report', async () => {
+    const s = setup({ verdict: 'clean' });
+    const r = await s.run('Think about a fire.', { ...explain, mustNotReveal: ['Warm'] });
+    expect(r).toMatchObject({ result: 'ok' });
+    expect(s.reported.map((e) => (e as Error).name)).not.toContain('AnswerLeakJudgeUnavailable');
   });
 });

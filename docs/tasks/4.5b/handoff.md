@@ -271,3 +271,50 @@ case, was not done - out of budget; it is optional per the plan).
 Tool calls used: 61
 
 Phase B tool calls: 78
+
+## Fix round 1
+
+Review finding (HIGH): `WATCHED` (postGuard.ts) only wrapped `grounding` and `adviceGuard`, so when
+answerLeak's own judge was unavailable (`judge_unavailable`), the guard still failed closed to
+`ANSWER_LEAK_SAFE_HINT` correctly, but no named metric event was reported — only a generic
+`env.report` from the underlying model-call error, indistinguishable from any other failure.
+
+Fixed by mirroring `GroundingJudgeUnavailable`:
+- Added `export class AnswerLeakJudgeUnavailable extends HarnessError` to
+  `packages/harness/src/pipeline/errors.ts` (fixed text only, no turn content).
+- Added `'answerLeak'` to `WATCHED` in `packages/harness/src/pipeline/steps/postGuard.ts` and
+  updated its doc comment and `watched()`'s doc comment to name all three wrapped guards.
+- After the chain runs, reads `reasons.get('answerLeak')` for `ANSWER_LEAK_REASONS.judgeUnavailable`
+  (the existing constant `answerLeak.ts` already exports, not a string literal) and reports
+  `new AnswerLeakJudgeUnavailable()` when present.
+
+### Red -> green evidence
+
+Added three tests to `packages/harness/src/pipeline/steps/postGuard.leakJudge.test.ts`: a judge
+timeout, a judge error, and a clean verdict (no report). Confirmed red by reverse-applying the
+`errors.ts`/`postGuard.ts` diff and running
+`vitest run src/pipeline/steps/postGuard.leakJudge.test.ts` directly: 2 of 8 tests failed
+(`expected [] to deeply equal ['AnswerLeakJudgeUnavailable']` for the timeout case; the error case's
+report list did not contain the new name). Re-applied the fix and reran the same file: 8/8 passed.
+The reply stayed the safe hint (fail-closed behaviour unchanged) in both the red and green runs —
+only the report assertion moved from fail to pass.
+
+### Gate
+
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals`:
+  the `@edmate/harness`/`@edmate/evals` tasks passed (typecheck, lint, test+coverage all clean,
+  cached harness result from the direct vitest run below, fresh evals run below). The command also
+  pulled in `@edmate/cli#test` (a downstream dependent of harness), which failed on
+  `chatDbRetrieval.int.test.ts` — a local-Postgres integration test that needs a DB this worktree
+  does not run (same class of gap the Phase A gate already named: "not run, needs a local DB, CI
+  runs it"); unrelated to this fix, not touched by this change.
+- `vitest run src/pipeline/steps/postGuard.leakJudge.test.ts` directly (`@edmate/harness`): 8 files
+  → 1 file, 8/8 tests passed.
+- `vitest run` full suite (`@edmate/harness`, run directly before the turbo command above): 134
+  files, 6143 tests, all passed.
+- `corepack pnpm --filter @edmate/evals test`: **33 files passed, 2004 tests passed, 0 failed.**
+- The `@edmate/queue` `turnLimits.int.test.ts` Redis timing flake named in the brief was not
+  encountered — `@edmate/queue` was not part of either filtered run.
+- `python3 .githooks/secret-scan.py --all`: clean.
+
+Fix round 1 tool calls: 29

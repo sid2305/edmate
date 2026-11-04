@@ -47,6 +47,7 @@
 // judge get part of their own guard's slice.
 import { LIMITS, type ModelRequest, type TurnContext, type Usage } from '@edmate/contracts';
 import {
+  ANSWER_LEAK_REASONS,
   ANSWER_LEAK_SAFE_HINT,
   type GroundingJudge,
   type JudgeReply,
@@ -85,6 +86,7 @@ import { disclaimerGap } from '../../pedagogy/disclaimer.js';
 import {
   AdviceJudgeUnavailable,
   AdviceRewriteFailed,
+  AnswerLeakJudgeUnavailable,
   DisclaimerLocaleGap,
   GroundingJudgeUnavailable,
   HarnessError,
@@ -366,11 +368,11 @@ function fixedTextsFor(env: StepEnv, ctx: TurnContext): { safe?: string; texts: 
 }
 
 /** The guards whose reason codes (never their text) the step reads. */
-const WATCHED: ReadonlySet<string> = new Set(['grounding', 'adviceGuard']);
+const WATCHED: ReadonlySet<string> = new Set(['grounding', 'adviceGuard', 'answerLeak']);
 
 /**
- * Wraps grounding and adviceGuard so the step reads their reason codes (never their text): for
- * grounding's escalation and both judges' outage metrics.
+ * Wraps grounding, adviceGuard and answerLeak so the step reads their reason codes (never their
+ * text): for grounding's escalation and all three judges' outage metrics.
  */
 function watched(g: Guard<PostGuardCtx>, reasons: Map<string, string[]>): Guard<PostGuardCtx> {
   if (!WATCHED.has(g.name)) return g;
@@ -582,6 +584,10 @@ export function createPostGuard(
     }
     if (advice.includes(ADVICE_REASONS.rewriteFailed)) {
       env.report(new AdviceRewriteFailed());
+    }
+    const answerLeak = reasons.get('answerLeak') ?? [];
+    if (answerLeak.includes(ANSWER_LEAK_REASONS.judgeUnavailable)) {
+      env.report(new AnswerLeakJudgeUnavailable());
     }
     switch (r.outcome) {
       case 'ok': {
