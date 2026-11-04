@@ -406,3 +406,121 @@ regressions above, neither anticipated by the plan's own test list).
   check is additive safety for a cued `"for"` case the reviewer did not test, e.g. "I got 20 for
   5 * 2 friends.").
 - Reversible: yes, two added checks around the existing regex match.
+
+## Phase D
+
+### Summary
+Fixed the groundingAsks race: two concurrent turns for the same session could both read the
+pre-turn `groundingAsks` count (via `buildContext`) before either turn's own `commit` saved its
+updated value, so both could independently decide "still under the cap" and both escalate past
+`GROUNDING_ASKS_PER_SESSION`. `runTurn` (`pipeline/runner.ts`) now keeps a per-session chain of
+promises, keyed by session id, inside a `WeakMap<PipelineDeps, Map<string, Promise<void>>>`: a
+turn's own `turn.run()` is not invoked until the prior turn queued for that same session (under
+the same `deps`) has settled, so the second turn's `buildContext` only runs after the first
+turn's `commit` has saved. Different sessions, and different `deps` instances (e.g. unrelated
+test files), never share a chain or wait on one another. A session's map entry is deleted once
+its chain has drained and nothing newer has queued behind it, so the map never grows unbounded
+across many sessions. Only `pipeline/runner.ts` and a new test file,
+`pipeline/runner.sessionRace.test.ts`, changed; no change was needed to `types.ts` or any other
+file.
+
+### Decisions
+### 4 Nov 2026 · 4.7b per-session queue keyed by PipelineDeps, not module-level · decided by builder · risk: low
+- Decided: the session queue lives in a `WeakMap<PipelineDeps, Map<string, Promise<void>>>`
+  rather than a single module-level map, treating the long-lived `PipelineDeps` a production
+  agent builds once and reuses for every turn as the closest thing this module has to "the
+  runner instance" the plan's Lead review asked for (`runTurn` itself is a bare function, not a
+  method on a runner object).
+- Why: a single module-level map would let two unrelated runners (or two unrelated test files
+  sharing a process) collide on the same session id; keying by `deps` identity instead gives
+  each `PipelineDeps` its own queue, and a `WeakMap` lets an unreferenced `deps` and its queue be
+  garbage-collected rather than leaking for the life of the process.
+- Alternatives: add a formal `Runner` class/object that owns the queue explicitly (rejected for
+  this phase: no such object exists today and introducing one would be a larger, out-of-scope
+  change to the module's public shape); a single shared module-level `Map` (rejected: module-level
+  growing state, which the plan explicitly ruled out, and a real cross-test/cross-runner collision
+  risk).
+- Reversible: yes, an internal implementation detail with one tiny test-only export
+  (`sessionQueueSizeForTest`).
+
+### 4 Nov 2026 · 4.7b always release the next turn, even on throw or cancel · decided by builder · risk: low
+- Decided: the chain entry for a session is `ahead.then(() => turn.run(), () => turn.run())`, so
+  the next turn in the same session's chain starts as soon as the prior turn's promise settles,
+  whether it resolved or rejected; the queue's own bookkeeping promise likewise maps both outcomes
+  to `undefined` so one broken turn can never leave the next same-session turn waiting forever.
+- Why: the plan's Lead review required that a turn which throws, or whose stream is cancelled or
+  abandoned by the caller, still releases the next turn; `runTurn` already treats cancellation via
+  `RunTurnOptions.cancel`/the consumer's `events.return()` as a normal (if early) settlement of the
+  turn's own run, not a hang, so chaining on settlement rather than only success was the correct
+  and minimal fix.
+- Alternatives: chain only on success and separately catch failures to unblock the queue
+  (rejected: more code for the same outcome, and an easy place to miss the cancellation path,
+  which does not throw).
+- Reversible: yes.
+
+### 4 Nov 2026 · 4.7b real defaultSteps + FIXTURE_PROMPT_PACK_VERSION in the race test · decided by builder · risk: low
+- Decided: `runner.sessionRace.test.ts` uses the real `defaultSteps.generate`/`postGuard`/`commit`
+  (not stubs) so the race is tested through the actual code path that reads and saves
+  `groundingAsks`, with `entitle` overridden to stamp `FIXTURE_PROMPT_PACK_VERSION` (otherwise
+  `generate` throws `UnknownPromptPackVersionError`) and `transcripts` overridden to
+  `memoryTranscriptStore()` (otherwise `commit`'s `transcripts.append` throws `UnusedPortError`
+  before it ever reaches `sessionState.saveHelpState`, which would silently hide the real bug
+  behind an unrelated port error).
+- Why: `runner.grounding.test.ts` already establishes this pattern for exercising the real
+  pipeline steps; a stubbed `commit` would not prove the queue actually serialises the
+  read-then-save sequence that is the race's own mechanism.
+- Alternatives: stub `commit` to simulate a save (rejected: would test the stub's behaviour, not
+  the real race).
+- Reversible: yes, test-only.
+
+### 4 Nov 2026 · 4.7b cancellation test uses RunTurnOptions.cancel, not manual iterator detach · decided by builder · risk: low
+- Decided: the "cancelled by its caller" test creates a `cancelSource()`, passes its `.token` as
+  `RunTurnOptions.cancel`, and calls `.cancel()` directly, rather than manually driving
+  `events[Symbol.asyncIterator]()` and calling `.return()` to simulate a caller walking away.
+- Why: `runner.ts`'s own JSDoc documents `RunTurnOptions.cancel` as equivalent to the consumer
+  calling `return()` on `events` (both route through the same `cancel` token), so driving it
+  directly is both more deterministic and a closer match to what the brief asked to prove; manual
+  iterator manipulation in an earlier draft produced a flaky, unrelated `ScriptedGatewayError` on
+  the second turn, which a direct `cancel()` call avoids entirely.
+- Alternatives: keep the manual `.return()` approach (rejected: flaky and indirect for what the
+  test needs to show).
+- Reversible: yes, test-only.
+
+### 4 Nov 2026 · 4.7b multi-worker residual (unresolved, logged per Lead review) · decided by builder · risk: low
+- Decided: the per-session queue is scoped to a single process (one `PipelineDeps` instance's
+  `WeakMap` entry lives only in that process's memory); it does not serialise concurrent turns
+  for the same session across multiple worker processes or machines. No new board task is opened
+  for this now.
+- Why: the plan's Lead review asked that this residual be logged rather than fixed in this phase;
+  the pilot's current harness and its test doubles are single-process, and a cross-process lock
+  (e.g. a database row lock or Redis-based mutex) is a larger, separately-scoped change that would
+  touch ports/`types.ts`, which this phase was told to leave untouched.
+- Alternatives: add a cross-process lock now (rejected: out of this phase's file scope and the
+  pilot does not yet run multiple workers against the same session).
+- Reversible: yes -- a future task can add process-spanning locking without reverting this fix,
+  since this queue still correctly serialises the common single-process case.
+
+### Red -> green evidence
+- Reproduced the race genuinely: temporarily reverted `pipeline/runner.ts` to its pre-fix (HEAD)
+  content (keeping the new test file), reran `runner.sessionRace.test.ts` -- 5 of 6 tests failed.
+  The core race test failed with `store.opened` having length 2 (two teacher questions opened)
+  instead of the expected 1, and both saved `groundingAsks` values below the cap instead of both
+  at the cap -- a genuine reproduction of the real bug, not a missing-export `TypeError`.
+  Restored the fixed `runner.ts`; all 6 tests passed, with 0 regressions across
+  `runner.grounding.test.ts`, `runner.test.ts` and `runner.block.test.ts` (91 tests, 4 files).
+
+### Gate
+- `corepack pnpm install --frozen-lockfile`: clean.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`: all 4 tasks
+  successful. Full `@edmate/harness` suite: 132 test files, 6101 tests passed.
+  `runner.sessionRace.test.ts`: 6/6 passed. `runner.grounding.test.ts`, `runner.test.ts`,
+  `runner.block.test.ts`: 91 tests, 4 files, unaffected (no regression).
+- `src/guardrails/**` coverage: 100% lines/branches/functions/statements (unchanged by this
+  phase). `pipeline/runner.ts` itself (not under `guardrails/`, no 100% requirement): 98.93%
+  lines / 96.39% branches / 97.95% functions / 99.4% statements.
+- `prettier --check` on `pipeline/runner.ts` and `pipeline/runner.sessionRace.test.ts`: clean
+  (one `--write` reformat of the new test file, reverified green and clean after).
+- `python3 .githooks/secret-scan.py --all`: exit 0, clean.
+
+### Budget
+Tool calls used: ~58 (brief's hard cap: 60; plan's own Phase D budget: 45).
