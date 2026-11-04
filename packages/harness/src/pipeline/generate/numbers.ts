@@ -580,6 +580,13 @@ const CLAIM_BEFORE = new RegExp(
   String.raw`(?<![\d.])([-−]?)(\d+(?:\.\d+)?)(?![\d.]*\d)(?=(?:\s*${CONNECTOR_BEFORE}){1,3}\s*$)`,
   'u',
 );
+/**
+ * Fix round 1 (4.7b): a number only reads as a reversed claim when one of these cue words sits
+ * directly before it (or nothing does — the number opens its clause), so an ordinary word
+ * problem ("Split 20 for 5 * 2 friends.") is not misread as "20 for [5 * 2]".
+ */
+const CLAIM_CUE =
+  /(?:^|[^\p{L}\p{M}])(?:got|get|gets|is|was|equals|answer\s+is|i\s+think|i\s+said)\s*$|=\s*$/u;
 /** A unary sign next to `**`: the evaluator binds the sign first, Python binds `**` first. */
 const UNARY_WITH_POWER = /(?:^|[-+*/%(])\s*[-+]\s*\d/;
 
@@ -621,8 +628,16 @@ export function arithmeticClaims(text: string): ArithmeticClaim[] {
     } else {
       // Only the free text since the previous expression (not reaching back past it): an
       // operand of an earlier expression must never read as a claim about this one.
-      const before = CLAIM_BEFORE.exec(s.slice(windowStart, span.start));
+      const window = s.slice(windowStart, span.start);
+      const before = CLAIM_BEFORE.exec(window);
       if (before === null) continue;
+      // Fix round 1 (4.7b): require a claim cue directly before the number (or nothing —
+      // the clause's own start), and when the connector is "for", require the expression to
+      // end its clause (no trailing noun, as in "... 5 * 2 friends").
+      const precedingText = window.slice(0, before.index);
+      if (precedingText.trim() !== '' && !CLAIM_CUE.test(precedingText)) continue;
+      const connectorText = window.slice(before.index + (before[0] as string).length);
+      if (/\bfor\b/.test(connectorText) && !/^\s*(?:[.,!?]|$)/.test(s.slice(span.end))) continue;
       sign = before[1] as string;
       digits = before[2] as string;
       // `CLAIM_BEFORE`'s boundary checks are a lookbehind and a lookahead (zero-width), so the

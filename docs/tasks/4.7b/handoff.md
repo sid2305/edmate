@@ -327,3 +327,82 @@ list, and needed for the feature to work with the existing fake-judge test tooli
 ## Budget
 Tool calls used: ~55 (plan budgeted 50 for Phase C; the extra calls traced and fixed the two
 regressions above, neither anticipated by the plan's own test list).
+
+## Fix round 1
+
+## Findings
+1. **[HIGH]** `packages/harness/src/pipeline/generate/citations.ts:26` — `CITATION_VARIANT`'s
+   bare `"source N"` form matched ordinary prose (`invalidCitations("The light source 2 meters
+   away heats the plate.", 1)` returned `[2]`), so `grounding.ts` escalated a reply that never
+   attempted a citation.
+2. **[HIGH]** `packages/harness/src/pipeline/generate/numbers.ts:579-581` — `CLAIM_BEFORE` fired
+   on ordinary `"<N> for <expr> <noun>"` word-problem phrasing (`arithmeticClaims("Split 20 for
+   5 * 2 friends.")` and `arithmeticClaims("Pay 15 for 3 + 4 tickets.")` each produced a false
+   `correct:false` claim), so `premiseUncorrected` (Rule C) issued a spurious premise correction.
+
+## Red -> green evidence
+- `citations.test.ts`, new test `'fix round 1 (4.7b): bare "source N" needs citation context,
+  not just the word'`: before the fix, `invalidCitations('The light source 2 meters away heats
+  the plate.', 1)` returned `[2]` (red, confirmed against the reviewer's exact sentence);
+  `CITATION_VARIANT`'s bare-form alternative now requires citation context (inside `[...]`/`(...)`
+  or right after `see`/`per`/`cite`/`cited in`/`according to`) — after the fix, `[]` (green). The
+  sibling test for the bracket/cue forms (`'[source 4]'`, `'(source 4)'`, `'per source 4'`,
+  `'cite source 4'`, `'cited in source 4'`, `'according to source 4'`) stayed green throughout
+  (never red — added alongside the regression test as the positive half of the same fix).
+- `numbers.claims.test.ts`, new test `'fix round 1 (4.7b): an ordinary "N for expr noun" word
+  problem is not a reversed claim'`: before the fix, `arithmeticClaims('Split 20 for 5 * 2
+  friends.')` returned one claim (`computed: 10, correct: false`, matching the reviewer's
+  reproduction); `CLAIM_BEFORE`'s match now also requires a claim cue (`got`/`get`/`gets`/`is`/
+  `was`/`equals`/`=`/`answer is`/`i think`/`i said`, or nothing — the number opening its own
+  clause) directly before the number, and when the connector is `"for"`, the expression must end
+  its clause (no trailing noun). After the fix, both reviewer sentences give `[]` (green).
+- Confirmed no existing assertion was edited: `grounding-falsepremise-reversed-en`
+  (`packages/evals/src/groundingFixtures.test.ts`) and the plan's own `'I got 4 for 7 // 2'` case
+  (`numbers.claims.test.ts`) still pass unchanged — `got` directly precedes the number, and the
+  expression ends at end-of-text, so both new conditions hold for that case.
+
+## Gate
+- `corepack pnpm install --frozen-lockfile`: clean.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness`: `citations.test.ts`
+  (16 -> 18 tests) and `numbers.claims.test.ts` (+1 test) both green;
+  `packages/evals/src/groundingFixtures.test.ts` 46 tests passed, unchanged. Two unrelated
+  failures appeared, both confirmed pre-existing/flaky by rerunning in isolation (green alone):
+  `apps/cli`'s `chatDbRetrieval.int.test.ts` (dev Postgres is broken locally, per the brief — CI
+  runs it) and, as collateral from that same broken connection, `apps/cli`'s `gate.test.ts` one
+  timeout (19/19 green run alone); `packages/queue`'s `turnLimits.int.test.ts` sliding-window
+  timing assertion (104/104 green run alone); `packages/harness`'s `distressKeywords.test.ts` and
+  `preGuard.test.ts` each one 5s-timeout flake under load (282/282 green run alone).
+- `src/guardrails/**` coverage: 100% lines/branches/functions/statements (full `@edmate/harness`
+  `vitest run --coverage`, exit 0, no threshold `ERROR` lines).
+- `prettier --write` then `--check` on `numbers.ts` (one reformat), `citations.ts`,
+  `citations.test.ts`, `numbers.claims.test.ts`: clean.
+- `python3 .githooks/secret-scan.py --all`: exit 0, clean.
+
+### Decisions
+### 4 Nov 2026 · 4.7b citation bare "source N" needs citation context · decided by builder · risk: low
+- Decided: `CITATION_VARIANT`'s no-brackets `"source N"` alternative now only matches inside
+  `[...]`/`(...)` or directly after a citation cue (`see`, `per`, `cite`, `cited in`,
+  `according to`); the bracketed-number form (`"[ 3 ]"`, full-width digits) is unchanged.
+- Why: the reviewer's scratch test showed the old, unconditional bare form matching ordinary
+  science prose ("the light source 2 meters away"), turning a normal reply into a false
+  escalation.
+- Alternatives: drop the bare `"source N"` form entirely (rejected: it was added in Phase B to
+  close a real dodge, `"See source 4."` with no brackets; the lead's fix shape asks for
+  citation-context scoping, not removal).
+- Reversible: yes, a regex change.
+
+### 4 Nov 2026 · 4.7b CLAIM_BEFORE needs a cue word and a clause-ending "for" · decided by builder · risk: low
+- Decided: `CLAIM_BEFORE`'s number only counts as a reversed claim when (a) a claim cue
+  (`got`/`get`/`gets`/`is`/`was`/`equals`/`=`/`answer is`/`i think`/`i said`) sits directly before
+  it, or nothing does, and (b) when the connector matched is `"for"`, the expression ends its
+  clause (end of text, `.`, `,`, `?`, `!`, no trailing noun).
+- Why: the reviewer's scratch test showed the old pattern reading an ordinary word-problem's own
+  number ("Split 20 for 5 * 2 friends.") as a reversed claim about the expression, since `"for"`
+  was added as a connector in Phase A for exactly this direction but without a cue requirement.
+- Alternatives: drop `"for"` from `CONNECTOR_BEFORE` entirely (rejected: the plan's own
+  red/green case, "I got 4 for 7 // 2", needs it). Require the clause-ending check for every
+  connector, not only `"for"` (considered, not needed: the cue-word requirement alone already
+  excludes both reviewer sentences, since "Split"/"Pay" are not cue words; the clause-ending
+  check is additive safety for a cued `"for"` case the reviewer did not test, e.g. "I got 20 for
+  5 * 2 friends.").
+- Reversible: yes, two added checks around the existing regex match.

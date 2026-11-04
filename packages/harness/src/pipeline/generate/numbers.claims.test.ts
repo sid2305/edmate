@@ -121,6 +121,11 @@ describe('reversed claim form (4.7b, safety review item 3): the value before the
   it('prefers the forward form when both would match', () => {
     expect(wrong('for 7 // 2 is 4')).toMatchObject([{ computedText: '3' }]);
   });
+
+  it('fix round 1 (4.7b): an ordinary "N for expr noun" word problem is not a reversed claim', () => {
+    expect(arithmeticClaims('Split 20 for 5 * 2 friends.')).toEqual([]);
+    expect(arithmeticClaims('Pay 15 for 3 + 4 tickets.')).toEqual([]);
+  });
 });
 
 describe('fix round 1: expressions and stated numbers (task 4.7, safety HIGH 1)', () => {

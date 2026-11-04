@@ -21,11 +21,22 @@ const CODE = /```[\s\S]*?(?:```|$)|`[^`\n]*`/g;
 const INDEXED = /[\p{L}\p{N}_)\]'"]$/u;
 
 /**
+ * Fix round 1 (4.7b): the bare "source N" wording (no brackets) only counts in citation
+ * context, so ordinary prose ("a power source 3 times stronger") is left alone — either inside
+ * `[...]`/`(...)`, or right after a citation cue ("see", "per", "cite", "cited in",
+ * "according to").
+ */
+const CITATION_CUE = String.raw`(?:(?<=[[(]\s*)|\b(?:see|per|cite|cited\s+in|according\s+to)\s+)`;
+/**
  * Rule B's own wider pattern (4.7b item 2, not used by `citedSources`, which must stay the
  * composer's exact `[n]` numbering per 3.6/3.7): a bracketed number with inner spaces or a
- * full-width digit (group 1), or the no-brackets "source N" wording (group 2, English pilot).
+ * full-width digit (group 1), or the no-brackets "source N" wording in citation context
+ * (group 2, English pilot).
  */
-const CITATION_VARIANT = /\[\s*([0-9０-９]{1,3})\s*\]|\bsource\s+([0-9０-９]{1,3})\b/giu;
+const CITATION_VARIANT = new RegExp(
+  String.raw`\[\s*([0-9０-９]{1,3})\s*\]|${CITATION_CUE}source\s+([0-9０-９]{1,3})\b`,
+  'giu',
+);
 /** Full-width digits (U+FF10-U+FF19) read as their ASCII equivalent. */
 function toAsciiDigits(s: string): string {
   return s.replace(/[０-９]/g, (d) => String(d.codePointAt(0)! - 0xff10));

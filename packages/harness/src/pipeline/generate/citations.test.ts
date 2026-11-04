@@ -74,4 +74,19 @@ describe('invalidCitations (task 4.7, grounding Rule B)', () => {
   it('does not match "resource 4" (no word boundary before "source")', () => {
     expect(invalidCitations('See resource 4.', 3)).toEqual([]);
   });
+
+  it('fix round 1 (4.7b): bare "source N" needs citation context, not just the word', () => {
+    expect(invalidCitations('The light source 2 meters away heats the plate.', 1)).toEqual([]);
+    expect(invalidCitations('a power source 3 times stronger', 1)).toEqual([]);
+    expect(invalidCitations('Source 2 of the river is in the hills.', 1)).toEqual([]);
+  });
+
+  it('fix round 1 (4.7b): still catches "source N" in brackets or after a citation cue', () => {
+    expect(invalidCitations('[source 4]', 3)).toEqual([4]);
+    expect(invalidCitations('(source 4)', 3)).toEqual([4]);
+    expect(invalidCitations('per source 4', 3)).toEqual([4]);
+    expect(invalidCitations('cite source 4', 3)).toEqual([4]);
+    expect(invalidCitations('cited in source 4', 3)).toEqual([4]);
+    expect(invalidCitations('according to source 4', 3)).toEqual([4]);
+  });
 });
