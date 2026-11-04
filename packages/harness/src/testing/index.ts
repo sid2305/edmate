@@ -81,6 +81,7 @@ export {
   type StepLogEntry,
   type StepOverrides,
   TEST_CARING_REPLY,
+  TEST_DISTRESS_FOLLOWUP_REPLY,
   TEST_DISTRESS_REPLY,
   TEST_SAFE_REPLY,
   stepEnvExtras,

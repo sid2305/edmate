@@ -387,7 +387,9 @@ describe('role-play controls the router does not label on_task (5.8 fix round 1)
     const stopped = await s.turn({ text: 'stop' });
     expect(stopped.record).toMatchObject({ outcome: 'escalated', intent: 'distress' });
     expect(stopped.system).toBe('');
-    expect(stopped.help).toEqual(before);
+    // Task 4.3b: a distress escalation now also sets the one-turn check-in flag, so the saved
+    // help state is `before` plus that flag, not exactly `before` as it was pre-4.3b.
+    expect(stopped.help).toEqual({ ...before, distressFollowupDue: true });
     expect(stopped.help.personaPhase).toBeUndefined();
   });
 });

@@ -37,6 +37,8 @@ import {
 import {
   type StepOverrides,
   TEST_CARING_REPLY,
+  TEST_DISTRESS_REPLY,
+  TEST_SAFE_REPLY,
   testAskDecision,
   testDecideResult,
   stepEnvExtras,
@@ -56,6 +58,7 @@ import {
   StepNotImplementedError,
 } from './errors.js';
 import { createScrub } from './steps/scrub.js';
+import { INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES, STEP_SPEC } from './spec.js';
@@ -498,9 +501,11 @@ describe('runTurn with the real scrub (4.2)', () => {
       });
       const steps = testSteps({ scrub: defaultSteps.scrub });
       const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      // 4.3b: the scrub failed, so no step ran, but the reply still carries the pack's
+      // helplines via `deps.fallbackReplies.distress`, not the bare last-resort text.
       expect(events).toEqual([
         { type: 'safety', level: 'alert' },
-        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'token', text: TEST_DISTRESS_REPLY },
         { type: 'done', messageId: 'message_1', usage: [] },
       ]);
       expect(t.alerts.raised).toHaveLength(1);
@@ -512,6 +517,59 @@ describe('runTurn with the real scrub (4.2)', () => {
       // The scrub still failed closed on the attachment and is still reported, not swallowed.
       expect(result.background).toHaveLength(1);
       expect((result.background[0]?.error as Error).cause).toEqual({ guardCause: 'attachment' });
+    });
+
+    it('the locale pack helplines reach the reply via fallbackReplies.distress (4.3b)', async () => {
+      const MARKER = 'RAWDISTRESSMARKER_HELPLINE';
+      const raw = {
+        ...demoTurnInput,
+        text: `I feel ${MARKER} today`,
+        attachments: [demoAttachment],
+      };
+      const HELPLINE_REPLY = 'Please call the pack helpline.';
+      const t = testDeps({
+        overrides: {
+          distressCheck: (text) => text.includes(MARKER),
+          fallbackReplies: { safeReply: () => TEST_SAFE_REPLY, distress: () => HELPLINE_REPLY },
+        },
+      });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: HELPLINE_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+    });
+
+    it('a throwing/empty fallbackReplies.distress still falls back to the last-resort reply, never empty (4.3b)', async () => {
+      const MARKER = 'RAWDISTRESSMARKER_THROW';
+      const raw = {
+        ...demoTurnInput,
+        text: `I feel ${MARKER} today`,
+        attachments: [demoAttachment],
+      };
+      const t = testDeps({
+        overrides: {
+          distressCheck: (text) => text.includes(MARKER),
+          fallbackReplies: {
+            safeReply: () => TEST_SAFE_REPLY,
+            distress: () => {
+              throw new Error('locale pack lookup failed');
+            },
+          },
+        },
+      });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(result.background.map((b) => (b.error as Error).message)).toContain(
+        'locale pack lookup failed',
+      );
     });
 
     it('no distress hit + an attachment → the ordinary guard_blocked path (contrast)', async () => {
@@ -1038,6 +1096,13 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
     });
   }, 2_000);
 
+  it('also saves the session distress follow-up flag, for the next ordinary turn to read (4.3b)', async () => {
+    const t = deps();
+    const steps = realDistress();
+    await driveTurn(runTurn(at('i want to kill myself'), { deps: t.deps, steps }), t.clock);
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBe(true);
+  }, 2_000);
+
   it('the chain fails (no pre guard registered) on a hard keyword: the runner keyword check still escalates', async () => {
     const t = deps();
     const steps = realDistress({ preGuard: createPreGuardStep(new GuardRegistry('pre')) });
@@ -1241,4 +1306,63 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
     expect(steps.commits[0]).toMatchObject({ outcome: 'blocked' });
     expect(t.alerts.raised).toEqual([]);
   }, 2_000);
+});
+
+describe('the session distress follow-up flag, read on an ordinary turn (task 4.3b)', () => {
+  function loadedWith(distressFollowupDue: boolean | undefined) {
+    return (): Promise<BuiltContext> =>
+      Promise.resolve({
+        profile: demoLearnerProfile,
+        history: [],
+        retrieved: [demoChunk],
+        lockedHit: false,
+        helpRung: 0,
+        helpState: {
+          ...INITIAL_HELP_STATE,
+          ...(distressFollowupDue === undefined ? {} : { distressFollowupDue }),
+        },
+      });
+  }
+
+  it('true: reaches generate and is cleared on the saved help state, whatever this turn did', async () => {
+    let seen: boolean | undefined;
+    const steps = testSteps({
+      buildContext: loadedWith(true),
+      generate: (_env, x, _emit) => {
+        seen = x.distressFollowupDue;
+        return Promise.resolve({ draft: 'ok' });
+      },
+    });
+    const t = testDeps();
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(seen).toBe(true);
+    expect(steps.commits[0]?.outcome).toBe('replied');
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBeUndefined();
+  });
+
+  it('absent: reaches generate as false; the saved help state still has no flag', async () => {
+    let seen: boolean | undefined;
+    const steps = testSteps({
+      buildContext: loadedWith(undefined),
+      generate: (_env, x, _emit) => {
+        seen = x.distressFollowupDue;
+        return Promise.resolve({ draft: 'ok' });
+      },
+    });
+    const t = testDeps();
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(seen).toBe(false);
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBeUndefined();
+  });
+
+  it('true + generate fails: still cleared on the saved help state (error outcome)', async () => {
+    const steps = testSteps({
+      buildContext: loadedWith(true),
+      generate: () => Promise.reject(new Error('model down')),
+    });
+    const t = testDeps();
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(steps.commits[0]?.outcome).toBe('error');
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBeUndefined();
+  });
 });

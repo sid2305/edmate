@@ -100,7 +100,7 @@ export {
   redirectReplyFor,
   REWRITE_SYSTEM,
 } from './steps/postGuard.js';
-export { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
+export { DISTRESS_FOLLOWUP_REPLY, LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 export { defaultSteps } from './steps/index.js';
 export { runWithTimeout, type TimedResult } from './timeout.js';
 export type {

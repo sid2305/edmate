@@ -127,6 +127,12 @@ export interface FallbackReplies {
    * Optional: when absent, empty or failing, the built-in English `adviceRedirectReplyText`.
    */
   redirect?(lang: Lang): string;
+  /**
+   * The gentle check-in generate shows once, before its own stream, on the first unheld turn
+   * after a session escalated (task 4.3b). Optional: when absent, empty or failing, the built-in
+   * English `DISTRESS_FOLLOWUP_REPLY` is used.
+   */
+  distressFollowup?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -362,6 +368,14 @@ export interface GenerateResult {
    * looked up on the server by item id. Server-side only; absent when no item was issued.
    */
   practiceAnswerKey?: readonly string[];
+  /**
+   * The check-in text folded onto the front of `draft` this turn (4.3b fix round 1, lead fix
+   * shape): absent unless `distressFollowupDue && !held`. postGuard strips exactly this prefix
+   * before any guard sees `draft`, so grounding, adviceGuard and answerLeak never judge the
+   * check-in itself, and puts it back on the front of a surgical rewrite. A whole-text
+   * replacement (a block, an escalation, the safe-reply fallback) drops it, same as a held turn.
+   */
+  followup?: string;
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
@@ -498,6 +512,13 @@ export interface Steps {
        */
       lockedStopped?: boolean;
       /**
+       * The session escalated earlier this session and the check-in has not shown yet (task
+       * 4.3b): when true and the reply is not held, generate emits the built-in gentle check-in
+       * as one `token` event before its own stream. The runner always clears the saved flag
+       * after reading it once, whatever this turn's own outcome. Default false.
+       */
+      distressFollowupDue: boolean;
+      /**
        * Called at once on every locked hit or failed locked check in this attempt (the stream
        * tripping, or a tool output failed as `locked`), even when the attempt then fails: the
        * runner saves the session's stop flag from it (4.6b fix round 1).
@@ -550,6 +571,8 @@ export interface Steps {
       items?: readonly ItemContext[];
       /** Practice keys (5.6b, design 4): never quoted back as the student's own code. */
       practiceKeys?: readonly string[];
+      /** GenerateResult.followup (4.3b fix round 1): the check-in prefix to strip and re-add. */
+      followup?: string;
     },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;
