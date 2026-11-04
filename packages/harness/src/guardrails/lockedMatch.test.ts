@@ -59,6 +59,50 @@ describe('lockedTokens', () => {
   }, 5_000);
 });
 
+describe('lockedTokens (4.6d: default-ignorable marks inside a word)', () => {
+  const VS16 = String.fromCharCode(0xfe0f); // variation selector-16
+  const CGJ = String.fromCharCode(0x034f); // combining grapheme joiner
+
+  it('board example 1: a variation selector inside a word does not hide the leak', () => {
+    expect(lockedTokens(`rep${VS16}eatso`).map((t) => t.t)).toEqual(['repeatso']);
+    const spliced = `${SPAN8.slice(0, 10)}${VS16}${SPAN8.slice(10)}`; // inside "repeats"
+    expect(spliced).not.toBe(SPAN8);
+    expect(index.hits([spliced])).toBe(true);
+  }, 5_000);
+
+  it('board example 2: a combining grapheme joiner right before an emphasis run still folds', () => {
+    const spliced = SPAN8.replace('body', `bo${CGJ}**d**y`);
+    expect(index.hits([spliced])).toBe(true);
+  }, 5_000);
+
+  it('drops both ranges from inside a word, same as any other invisible character', () => {
+    for (const mark of [VS16, CGJ, String.fromCharCode(0xfe00)]) {
+      expect(
+        lockedTokens(`a${mark}b`).map((t) => t.t),
+        JSON.stringify(mark),
+      ).toEqual(['ab']);
+    }
+  }, 5_000);
+
+  it('reads both ranges as a space when asked for the space reading', () => {
+    expect(lockedTokens(`a${VS16}b`, 'space').map((t) => t.t)).toEqual(['a', 'b']);
+    expect(lockedTokens(`a${CGJ}b`, 'space').map((t) => t.t)).toEqual(['a', 'b']);
+  }, 5_000);
+
+  it('does not trigger a false hit on benign prose or an unrelated emoji', () => {
+    const heart = `❤${VS16}`; // heart + variation selector-16
+    const benign = 'thanks for asking, let us look at something else entirely today';
+    expect(index.hits([`${heart} ${benign}`])).toBe(false);
+  }, 5_000);
+
+  it('does not conflict with the digit-path mark drop (a keycap sequence in a locked span)', () => {
+    const digitSpan = 'count to 9 then stop the loop now'; // 8 tokens, includes a plain digit
+    const digitIndex = lockedIndex([digitSpan], []);
+    const keycap = `9${VS16}⃣`; // keycap digit sequence: folds to its digit, 4.6d or not
+    expect(digitIndex.hits([digitSpan.replace('9', keycap)])).toBe(true);
+  }, 5_000);
+});
+
 describe('shingles', () => {
   it('is every 8-token window, in both invisible-character readings', () => {
     expect(shingles(SPAN8)).toEqual(['repeats its body as long as its condition']);
@@ -212,7 +256,16 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
     expect(foldMarkup('<x a=/>c', 'rendered')).toBe(`${pad(7)}c`);
     // Not tags: a character other than a space, `/` or `>` right after the name; a quote or
     // `=` value broken by a `<`; and the unfinished ones.
-    for (const t of ['<b"x">c', '<a.b>c', '<x "a <y', "<x a='b <y", '<x a=', '<x a= ', '<x a/', '<x "a']) {
+    for (const t of [
+      '<b"x">c',
+      '<a.b>c',
+      '<x "a <y',
+      "<x a='b <y",
+      '<x a=',
+      '<x a= ',
+      '<x a/',
+      '<x "a',
+    ]) {
       expect(foldMarkup(t, 'rendered'), t).toBe(t);
     }
   }, 5_000);
@@ -231,9 +284,9 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
   }, 5_000);
 
   it('CRITICAL: prose inside an attribute value is still a candidate and still hits', () => {
-    expect(lockedCandidates([PAYLOAD]).some((c) => c.includes('the loop repeats until count'))).toBe(
-      true,
-    );
+    expect(
+      lockedCandidates([PAYLOAD]).some((c) => c.includes('the loop repeats until count')),
+    ).toBe(true);
     expect(proseIndex.hits([PAYLOAD])).toBe(true);
     // Single quotes; several attributes with the prose split across two of them.
     expect(proseIndex.hits([`<x data='${PROSE}'>done</x>`])).toBe(true);
@@ -248,9 +301,18 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
 
   it('a tag or comment inside a word folds away: lo<b></b>op, <b>lo</b>op, lo<!---->op', () => {
     for (const w of ['lo<b></b>op', '<b>lo</b>op', 'lo<!---->op']) {
-      expect(lockedTokens(w, 'drop', 'values').map((t) => t.t), w).toEqual(['loop']);
-      expect(lockedTokens(w, 'drop', 'rendered').map((t) => t.t), w).toEqual(['loop']);
-      expect(lockedTokens(w, 'space', 'rendered').map((t) => t.t), w).toEqual(['lo', 'op']);
+      expect(
+        lockedTokens(w, 'drop', 'values').map((t) => t.t),
+        w,
+      ).toEqual(['loop']);
+      expect(
+        lockedTokens(w, 'drop', 'rendered').map((t) => t.t),
+        w,
+      ).toEqual(['loop']);
+      expect(
+        lockedTokens(w, 'space', 'rendered').map((t) => t.t),
+        w,
+      ).toEqual(['lo', 'op']);
     }
     // An attribute value is text in `values`; only `rendered` drops it.
     const attr = 'lo<i class="x"></i>op';
@@ -287,9 +349,9 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
   }, 5_000);
 
   it('4.6c: markdown emphasis inside a word is padded only in the rendered reading', () => {
-    expect(lockedTokens('t**h**e l**o**op r**e**peats', 'drop', 'rendered').map((t) => t.t)).toEqual(
-      ['the', 'loop', 'repeats'],
-    );
+    expect(
+      lockedTokens('t**h**e l**o**op r**e**peats', 'drop', 'rendered').map((t) => t.t),
+    ).toEqual(['the', 'loop', 'repeats']);
     // Other readings split on the markdown punctuation as before (no change there).
     expect(lockedTokens('t**h**e', 'drop', 'text').map((t) => t.t)).toEqual(['t', 'h', 'e']);
     expect(lockedTokens('t**h**e', 'drop', 'values').map((t) => t.t)).toEqual(['t', 'h', 'e']);
@@ -315,9 +377,14 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
       'l\u{e0020}**o**op', // astral Cf (a tag character, a surrogate pair)
       'l\u00ad__o__\u00adop',
       'lo\u00ad~~o~~p',
+      'l\ufe0f**o**op', // 4.6d: variation selector-16
+      'l\u034f**o**op', // 4.6d: combining grapheme joiner
     ];
     for (const f of forms) {
-      expect(lockedTokens(f, 'drop', 'rendered').map((t) => t.t), f).toEqual(['loop']);
+      expect(
+        lockedTokens(f, 'drop', 'rendered').map((t) => t.t),
+        f,
+      ).toEqual(['loop']);
     }
     const bolded = SPAN8.split(' ')
       .map((w) => `${w.slice(0, 1)}\u00ad**${w.slice(1, 2)}**${w.slice(2)}`)
@@ -346,7 +413,15 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
   }, 5_000);
 
   it('4.6c fix round 1: long runs of invisible characters around emphasis stay linear', () => {
-    const units = ['\u00ad', 'l\u00ad**', '\u200b*', 'a\u2060~~\u2060', '\u{e0020}`'];
+    const units = [
+      '\u00ad',
+      'l\u00ad**',
+      '\u200b*',
+      'a\u2060~~\u2060',
+      '\u{e0020}`',
+      '\ufe0f', // 4.6d: variation selector-16
+      '\u034f', // 4.6d: combining grapheme joiner
+    ];
     for (const unit of units) {
       const text = unit.repeat(Math.ceil(200_000 / unit.length)).slice(0, 200_000);
       const start = Date.now();
@@ -445,10 +520,34 @@ describe('unfinishedMarkupStart', () => {
 
 describe('decodeHtmlEntities', () => {
   it('decodes named and numeric entities, padded to the entity’s own length', () => {
-    expect(decodeHtmlEntities('a&amp;b')).toBe('a&' + '​'.repeat(4) + 'b');
-    expect(decodeHtmlEntities('&#108;oop')).toBe('l' + '​'.repeat(5) + 'oop');
-    expect(decodeHtmlEntities('&#x6C;oop')).toBe('l' + '​'.repeat(5) + 'oop');
+    expect(decodeHtmlEntities('a&amp;b')).toBe('a&' + ZWSP.repeat(4) + 'b');
+    expect(decodeHtmlEntities('&#108;oop')).toBe('l' + ZWSP.repeat(5) + 'oop');
+    expect(decodeHtmlEntities('&#x6C;oop')).toBe('l' + ZWSP.repeat(5) + 'oop');
     expect(decodeHtmlEntities('x').length).toBe(1);
+  }, 5_000);
+
+  it('4.6d: decodes the invisible named entities the board lists, padded, case-insensitive', () => {
+    const cases: [string, string][] = [
+      ['&shy;', String.fromCharCode(0x00ad)],
+      ['&ZeroWidthSpace;', String.fromCharCode(0x200b)],
+      ['&NoBreak;', String.fromCharCode(0x2060)],
+      ['&zwnj;', String.fromCharCode(0x200c)],
+      ['&zwj;', String.fromCharCode(0x200d)],
+      ['&lrm;', String.fromCharCode(0x200e)],
+      ['&rlm;', String.fromCharCode(0x200f)],
+    ];
+    for (const [entity, ch] of cases) {
+      const pad = Math.max(0, entity.length - ch.length);
+      expect(decodeHtmlEntities(entity), entity).toBe(ch + ZWSP.repeat(pad));
+    }
+    expect(decodeHtmlEntities('&SHY;')).toBe(
+      String.fromCharCode(0x00ad) + ZWSP.repeat('&SHY;'.length - 1),
+    );
+  }, 5_000);
+
+  it('4.6d known miss: a MathML-only invisible named entity still does not decode', () => {
+    expect(decodeHtmlEntities('&ApplyFunction;')).toBe('&ApplyFunction;');
+    expect(decodeHtmlEntities('&InvisibleTimes;')).toBe('&InvisibleTimes;');
   }, 5_000);
 
   it('leaves an entity that does not decode as is', () => {
@@ -479,7 +578,8 @@ describe('foldConfusables', () => {
 
   it('folds the 4.6b review additions: palochka, Cyrillic capitals, Greek and Cyrillic smalls', () => {
     // ӏ (U+04CF) → l; В Н К М Т (Cyrillic capitals); α ν ρ τ κ (Greek); ԁ һ ԛ ԝ (Cyrillic).
-    const cps = (s: string) => String.fromCodePoint(...s.split(' ').map((h) => Number.parseInt(h, 16)));
+    const cps = (s: string) =>
+      String.fromCodePoint(...s.split(' ').map((h) => Number.parseInt(h, 16)));
     expect(foldConfusables(cps('4cf'))).toBe('l');
     expect(foldConfusables(cps('412 41d 41a 41c 422'))).toBe('BHKMT');
     expect(foldConfusables(cps('3b1 3bd 3c1 3c4 3ba'))).toBe('avptk');

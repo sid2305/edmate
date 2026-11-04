@@ -10,6 +10,52 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.6d scope the drop to exactly two named ranges, not the broader Default_Ignorable set · decided by builder · risk: low
+- Decided: `dropDefaultIgnorableMarks` matches only U+FE00-FE0F and U+034F, as the plan specified,
+  not the full `\p{Default_Ignorable_Code_Point}` set `digitForms.ts` uses for its own, narrower
+  (after-a-digit-only) purpose.
+- Why: the board's two reproducers are exactly these two ranges; matching the full
+  Default_Ignorable set would be a bigger, untested change to the locked-match path for no
+  reproducer-backed gain, and would risk interacting with `digitForms.ts`'s own drop-after-digit
+  logic in ways not covered by a test.
+- Alternatives: match `\p{Default_Ignorable_Code_Point}` directly (rejected: broader than the
+  board asked for, no reproducer).
+- Reversible: yes — widening the character class later is a one-line change.
+
+---
+
+### 4 Nov 2026 · 4.6d keycap-sequence test splices the digit into an existing span, not into a word · decided by builder · risk: low
+- Decided: the digit-path regression test (plan's case 8) builds a fresh 8-token locked span that
+  already contains a plain digit, then swaps that digit for its keycap form — rather than splicing
+  a keycap sequence into the middle of an unrelated word (e.g. "body").
+- Why: a keycap sequence (digit + VS16 + combining enclosing keycap) renders as a visible digit
+  glyph, not an invisible character; splicing it into a word's letters changes what the text visibly
+  says (adds a digit), so it can never fold back to the original word — that is correct, not a bug.
+  The plan's own wording ("still folds its digit correctly") matches the digit-already-present case.
+- Alternatives: keep the splice-into-a-word shape and treat the resulting `index.hits` miss as a
+  reproducer (rejected: that would be asserting a specific implementation detail should disappear
+  when it is actually working as intended — editing the test to expect the correct, documented
+  behaviour, not weakening the assertion).
+- Reversible: yes — it is a test shape, not a design decision in the library code.
+
+---
+
+### 4 Nov 2026 · 4.6d lockedLeak drops variation selectors and decodes invisible entities, merged · decided by lead · risk: high
+- Decided: Merge the guardrails change. The locked-content match path, and not the shared text fold, now drops the variation selectors U+FE00 to U+FE0F and U+034F, so "rep" + U+FE0F + "eatso" and "l" + U+034F + "**o**op" still hit. It also decodes `&shy;`, `&ZeroWidthSpace;`, `&NoBreak;`, `&zwnj;`, `&zwj;`, `&lrm;` and `&rlm;`. Under the MVP rule (no safety-reviewer per PR until the pilot gate), the safety group gets code-reviewer plus this risk: high entry.
+- Why: Closes the 4.6c review gaps. The code-reviewer ran the real guard with 12 probes and found no false positives on emoji with U+FE0F, keycaps or benign prose. labelKeys.ts, which shares the entity decoder, passes unchanged.
+- Alternatives: Drop the whole Default_Ignorable set, which digitForms.ts already uses. Not chosen: it is wider than the reproducers and untested here.
+- Reversible: yes; revert the PR.
+
+---
+
+### 4 Nov 2026 · 4.6d build over budget · decided by lead · risk: low
+- Decided: Accept 132 tool calls against a plan budget of 85 (1.55x), by harness count: the build took 56, and fix round 1 took 76 against a brief limit of 40. A further 24 calls were lost to two sleep-stalled starts.
+- Why: The fix round replaced every literal invisible character with an escape across three files and the handoff, and re-ran the full gate. The fixer overran its brief limit, but the work was mechanical and the scope did not grow.
+- Alternatives: Stop the fixer at 40 and run a second round, which would have cost more in total.
+- Reversible: n/a (a budget record).
+
+---
+
 ### 28 Oct 2026 · 4.4e strike window uses a value-mirrored constant, not an import · decided by builder · risk: low
 - Decided: `STRIKE_HISTORY_LIMIT = 200` is a new local constant in `preGuard.ts`, set to the same
   value as `packages/db`'s `HISTORY_MAX_LIMIT`, by comment reference, not by import.
