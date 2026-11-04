@@ -219,8 +219,12 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     if (progress !== undefined) emit(progress);
     // 4.3b (lead review Q1): a held reply skips the check-in this turn; the flag still clears, so
     // it is lost for this session rather than shown out of order once the whole reply is ready.
-    if (distressFollowupDue && !held) emit({ type: 'token', text: distressFollowupText(env) });
-    const { draft, raw, locked } = await runToolLoop({
+    // 4.3b fix round 1: the check-in is folded onto the front of `draft` below (not just streamed
+    // as a bare token) so postGuard's chain and any surgical rewrite keep it; `followup` tells
+    // postGuard exactly what prefix to strip before judging and to put back on a rewrite.
+    const followup = distressFollowupDue && !held ? distressFollowupText(env) : undefined;
+    if (followup !== undefined) emit({ type: 'token', text: followup });
+    const { draft: modelDraft, raw, locked } = await runToolLoop({
       gateway: env.gateway,
       request,
       offered,
@@ -262,13 +266,14 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       track: env.track,
     });
 
-    const cited = citedSources(draft, sources).filter((s) => {
+    const cited = citedSources(modelDraft, sources).filter((s) => {
       const leaks = revealsAnswerKey([s.title, s.locator], guarded);
       if (leaks) env.report(new SourceDropped());
       return !leaks;
     });
     if (cited.length > 0) emit({ type: 'sources', items: cited });
     if (decision.move === 'locked') emit(lockedEvent(ctx.pkg));
+    const draft = followup === undefined ? modelDraft : followup + modelDraft;
     return {
       draft,
       raw,
@@ -276,6 +281,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       ...(locked === undefined ? {} : { locked }),
       ...(held ? { held } : {}),
       ...(issued.length > 0 ? { practiceAnswerKey: issued } : {}),
+      ...(followup === undefined ? {} : { followup }),
     };
   };
 }

@@ -368,6 +368,14 @@ export interface GenerateResult {
    * looked up on the server by item id. Server-side only; absent when no item was issued.
    */
   practiceAnswerKey?: readonly string[];
+  /**
+   * The check-in text folded onto the front of `draft` this turn (4.3b fix round 1, lead fix
+   * shape): absent unless `distressFollowupDue && !held`. postGuard strips exactly this prefix
+   * before any guard sees `draft`, so grounding, adviceGuard and answerLeak never judge the
+   * check-in itself, and puts it back on the front of a surgical rewrite. A whole-text
+   * replacement (a block, an escalation, the safe-reply fallback) drops it, same as a held turn.
+   */
+  followup?: string;
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
@@ -563,6 +571,8 @@ export interface Steps {
       items?: readonly ItemContext[];
       /** Practice keys (5.6b, design 4): never quoted back as the student's own code. */
       practiceKeys?: readonly string[];
+      /** GenerateResult.followup (4.3b fix round 1): the check-in prefix to strip and re-add. */
+      followup?: string;
     },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;

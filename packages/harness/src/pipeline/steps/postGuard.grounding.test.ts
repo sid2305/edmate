@@ -118,7 +118,12 @@ function setup(o: Setup = {}) {
   const judged = 'judged' in gateway ? gateway.judged : [];
   const run = (
     draft: string,
-    extra: { decision?: PedagogyDecision; ctx?: TurnContext; raw?: string } = {},
+    extra: {
+      decision?: PedagogyDecision;
+      ctx?: TurnContext;
+      raw?: string;
+      followup?: string;
+    } = {},
   ) =>
     clock.drive(
       postGuard(env, {
@@ -126,6 +131,7 @@ function setup(o: Setup = {}) {
         decision: extra.decision ?? explain,
         draft,
         ...(extra.raw === undefined ? {} : { raw: extra.raw }),
+        ...(extra.followup === undefined ? {} : { followup: extra.followup }),
         sources: [chunk(NOTES).source],
       }),
     );
@@ -221,6 +227,24 @@ describe('postGuard: grounding', () => {
     // Plus adviceGuard's one judge call on pass 1 (a number is a signal; pass 2 is rules only).
     expect(fix.adviceJudged).toHaveLength(1);
     expect(r.usage).toEqual([usageSmall, usageSmall]);
+  });
+
+  it('4.3b fix round 1: a check-in folded onto the draft keeps it on a surgical number fix', async () => {
+    const followup = 'Before we carry on: thank you for telling me. ';
+    const fix = setup();
+    const r = await fix.run(`${followup}Here 7 // 2 is 4, it rounds down [1].`, { followup });
+    expect(r).toMatchObject({
+      result: 'replace',
+      text: `${followup}Here 7 // 2 is 3, it rounds down [1].`,
+    });
+  });
+
+  it('4.3b fix round 1: a whole-reply rewrite (the ask-teacher reply) drops the check-in', async () => {
+    const followup = 'Before we carry on: thank you for telling me. ';
+    const s = setup({ judge: 'ungrounded' });
+    const r = await s.run(`${followup}Python 4 makes // exact.`, { followup });
+    expect(r).toMatchObject({ result: 'replace', text: ASK, escalateToTeacher: true });
+    expect((r as { text: string }).text.startsWith(followup)).toBe(false);
   });
 
   it('a number fix that would show the answer key ends in the hint and never shows the key (lead answer 4)', async () => {

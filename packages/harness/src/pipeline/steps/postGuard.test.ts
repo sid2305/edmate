@@ -89,7 +89,12 @@ function setup(
   };
   const run = (
     draft: string,
-    extra: { raw?: string; withheld?: boolean; locked?: 'hit' | 'failed' } = {},
+    extra: {
+      raw?: string;
+      withheld?: boolean;
+      locked?: 'hit' | 'failed';
+      followup?: string;
+    } = {},
     step = postGuard,
   ) => clock.drive(step(env, { ctx: demoTurnContext, decision, draft, ...extra }));
   return { clock, spy, env, reported, run };
@@ -241,6 +246,44 @@ describe('postGuard: answerLeak', () => {
     expect(await s.run('Good. ', { raw: 'Good. Try again.', withheld: false })).toMatchObject({
       result: 'ok',
     });
+  });
+
+  it('4.3b fix round 1: a check-in folded onto the draft keeps it on a surgical rewrite', async () => {
+    const s = setup([[say('Look at the last line again. '), say('What does it do?'), used]]);
+    const followup = "Before we carry on: thank you for telling me. ";
+    const r = await s.run(`${followup}Easy: x ends as 16.`, { followup });
+    expect(r).toEqual({
+      result: 'replace',
+      text: `${followup}Look at the last line again. What does it do?`,
+      guards: leakTrace,
+      usage: [usageSmall],
+    });
+    // The check-in itself was never sent to the rewrite call: only the model's own text was.
+    expect(s.spy.requests[0]).toMatchObject({ messages: [{ content: 'Easy: x ends as 16.' }] });
+  });
+
+  it('4.3b fix round 1: a whole-text replacement (the hint) drops the check-in', async () => {
+    const s = setup([[say('Fine: sixteen.'), used]]);
+    const followup = "Before we carry on: thank you for telling me. ";
+    expect(await s.run(`${followup}x ends as 16.`, { followup })).toEqual(
+      hint(leakTrace, [usageSmall]),
+    );
+  });
+
+  it('4.3b fix round 1: an escalation drops the check-in (same accepted gap as a held turn)', async () => {
+    const followup = "Before we carry on: thank you for telling me. ";
+    const s = setup();
+    const step = createPostGuard([
+      fakeGuard<PostGuardCtx>('answerLeak', 'post', () => ({ ok: true })),
+      fakeGuard<PostGuardCtx>('tone', 'post', (text) =>
+        text.includes('hurt')
+          ? { ok: false, action: 'escalate', alert: demoSafetyAlert }
+          : { ok: true },
+      ),
+    ]);
+    const r = await s.run(`${followup}I want to hurt myself.`, { followup }, step);
+    expect(r).toMatchObject({ result: 'escalate', alert: demoSafetyAlert });
+    expect((r as { text: string }).text.startsWith(followup)).toBe(false);
   });
 
   it('lets the student’s own code be quoted back', async () => {

@@ -1189,6 +1189,7 @@ class Turn {
       // 5.6b: the loaded item plus every item issued this turn, and every practice key.
       items: this.activeItems(),
       practiceKeys: [...new Set([...this.loadedPracticeKeys, ...keys])],
+      ...(gen.followup === undefined ? {} : { followup: gen.followup }),
     };
     const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
       this.steps.postGuard(env, x),

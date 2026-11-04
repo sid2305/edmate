@@ -21,5 +21,5 @@ export const LAST_RESORT_DISTRESS_REPLY =
  * pack edit, no ADR; Q0).
  */
 export const DISTRESS_FOLLOWUP_REPLY =
-  "Before we carry on: thank you for telling me earlier. I'm glad you're still here with me, " +
-  "and support is still there whenever you want it. Now, let's keep going. ";
+  'Before we carry on: thank you for telling me how you were feeling earlier. Support is still ' +
+  "there whenever you want it. Now, let's keep going. ";

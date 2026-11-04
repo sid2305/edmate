@@ -71,9 +71,10 @@ the separate `finish()` expression on the success path), so it shows exactly onc
 missing `fallbackReplies.distressFollowup?(lang)` falls back to the built-in text, same resilience
 pattern as Phase A's `distressFallback`.
 
-**Exact check-in text (`DISTRESS_FOLLOWUP_REPLY`, `packages/harness/src/pipeline/replies.ts`):**
-> "Before we carry on: thank you for telling me earlier. I'm glad you're still here with me, and
-> support is still there whenever you want it. Now, let's keep going. "
+**Exact check-in text (`DISTRESS_FOLLOWUP_REPLY`, `packages/harness/src/pipeline/replies.ts`;
+reworded in fix round 1, see below):**
+> "Before we carry on: thank you for telling me how you were feeling earlier. Support is still
+> there whenever you want it. Now, let's keep going. "
 
 The retract-joke case (`evals/suites/safety/distress/in/safety-distress-retract-joke-in-en.yaml`)
 now passes offline as a new sibling file, `packages/evals/src/distressFollowup.test.ts`: turn 1
@@ -87,24 +88,37 @@ itself is untouched; its `judge` rubric stays deferred (4.0/4.2/4.3 precedent).
 
 ### 4 Nov 2026 · 4.3b Q1 (held replies skip the check-in) · decided by lead, carried by builder · risk: low
 - Decided: the check-in is only emitted when `holdsReply()` says the turn's reply streams live
-  (`!held`). A held turn (postGuard may replace the draft whole) never shows it; the flag stays
-  set and is read again on the next ordinary, unheld turn (lead review Q1/Q3).
+  (`!held`). A held turn (postGuard may replace the draft whole) never shows it. **Corrected in fix
+  round 1:** the flag does not stay set for a later read — `runner.ts`'s `base.next` wraps every
+  save with `withoutDistressFollowup` unconditionally, on every outcome, whatever this turn's own
+  move was. A held turn therefore drops the check-in for the rest of the session: it is a one-shot
+  read, consumed and cleared whether or not it was actually shown. This is a documented gap, not
+  a "shown later" deferral.
 - Why: no extra gating logic needed — `generate.ts` already computes `held` for every other
   purpose; piggy-backing on it keeps the check-in's placement consistent with how the rest of the
   turn is shown, and avoids a second code path that `postGuard.ts`'s fixed-text builders would
-  need to know about.
+  need to know about. Making the flag survive a held turn (read again, unconsumed) would need a
+  third state ("due but not yet shown") on `SessionHelp`, which the plan's Q1 recommendation
+  already judged disproportionate for a 2-line follow-up.
 - Alternatives: force every flagged turn to show the check-in even when held, by injecting it into
   postGuard's rewritten/safe text too — rejected per the plan's own Q1 recommendation (disproportionate
   for a 2-line follow-up; logged as a follow-up for whichever task next touches `postGuard.ts`).
-- Reversible: yes — the gate is one boolean check in `generate.ts`.
+  Keep the flag set across a held turn instead of clearing it — rejected in fix round 1 too: it
+  would need a new "due but unseen" state, out of this round's scope.
+- Reversible: yes — the gate is one boolean check in `generate.ts`; a later task could add the
+  third state above without touching this task's other code.
 
 ### 4 Nov 2026 · 4.3b Q2 (locked/redirect/ask_teacher moves never show it) · decided by lead, carried by builder · risk: low
 - Decided: moves that never call `generate` (`locked`, `redirect`, `ask_teacher`) never show the
   check-in; this is accepted as-is, not worked around, per the plan's Q2 recommendation.
+  **Corrected in fix round 1:** the flag does not "stay set and carry forward" either — same
+  unconditional `withoutDistressFollowup` on `base.next` as Q1, so a turn that takes one of these
+  moves also drops the check-in for the rest of the session, not just until the next turn that
+  reaches `generate`.
 - Why: those moves' replies are built by `postGuard.ts`'s fixed-text builders
   (`askTeacherReplyFor`, `redirectReplyFor`, locked's own reply), a separate code path this task
-  does not touch; the flag stays set and carries forward to the next turn that does reach
-  `generate` (same one-turn-until-read semantics as Q1/Q3).
+  does not touch; the flag is a one-shot read on the next ordinary turn's help-state load,
+  consumed there whether or not that turn's move could show it (same accepted gap as Q1).
 - Alternatives: thread the check-in into each fixed-text builder too — rejected; out of this
   task's scope and budget, logged as a follow-up for later `postGuard.ts` work.
 - Reversible: yes — no code depends on this gap; a later task can add the check-in to those

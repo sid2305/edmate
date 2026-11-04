@@ -552,7 +552,7 @@ describe('generate: distressFollowupDue (task 4.3b)', () => {
       decision: { move: 'ask', mustNotReveal: [] },
       distressFollowupDue: true,
     });
-    await s.run();
+    const out = await s.run();
     const tokens = s.events.filter((e) => e.type === 'token');
     expect(tokens[0]).toEqual({ type: 'token', text: TEST_DISTRESS_FOLLOWUP_REPLY });
     expect(
@@ -561,16 +561,21 @@ describe('generate: distressFollowupDue (task 4.3b)', () => {
         .map((e) => e.text)
         .join(''),
     ).toBe('Sure, here is an f-string.');
+    // 4.3b fix round 1: the check-in is folded onto the front of the returned draft too (not only
+    // streamed as a bare token), so postGuard's chain and any surgical rewrite keep it.
+    expect(out.draft).toBe(`${TEST_DISTRESS_FOLLOWUP_REPLY}Sure, here is an f-string.`);
+    expect(out.followup).toBe(TEST_DISTRESS_FOLLOWUP_REPLY);
   });
 
-  it('false (default): no check-in token', async () => {
+  it('false (default): no check-in token, and no followup prefix on the draft', async () => {
     const s = setup([[say('Sure.'), used]], {
       decision: { move: 'ask', mustNotReveal: [] },
     });
-    await s.run();
+    const out = await s.run();
     expect(
       s.events.filter((e) => e.type === 'token' && e.text === TEST_DISTRESS_FOLLOWUP_REPLY),
     ).toEqual([]);
+    expect(out.followup).toBeUndefined();
   });
 
   it('true + held (ask_teacher): no check-in token this turn (Q1, documented gap)', async () => {
@@ -578,8 +583,10 @@ describe('generate: distressFollowupDue (task 4.3b)', () => {
       decision: { move: 'ask_teacher', mustNotReveal: [] },
       distressFollowupDue: true,
     });
-    await s.run();
+    const out = await s.run();
     expect(s.events.filter((e) => e.type === 'token')).toEqual([]);
+    expect(out.followup).toBeUndefined();
+    expect(out.draft).toBe('Let me ask your teacher.');
   });
 });
 
