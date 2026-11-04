@@ -47,6 +47,7 @@ import {
   correctArithmeticClaims,
   statedNumbers,
 } from '../pipeline/generate/numbers.js';
+import { breakFenceRuns } from '../pedagogy/modelRequest.js';
 import { disclaimerFor, stripDisclaimerSuffix } from './adviceGuard.js';
 import {
   ANSWER_LEAK_SAFE_HINT,
@@ -128,10 +129,19 @@ export function parseGroundingVerdict(text: string | undefined): boolean {
   return v.success && v.data.grounded;
 }
 
-/** Breaks any run of 3+ `<` or `>`, so data can never close its own block (as the composer does). */
-function fence(text: string): string {
-  const safe = text.replace(/<{3,}|>{3,}/g, (m) => m.split('').join(' '));
-  return `${DATA_OPEN}\n${safe}\n${DATA_CLOSE}`;
+/**
+ * Breaks any run of 3+ `<`/`>` the way a reader sees it (full-width, HTML entities, zero-width
+ * padding: `breakFenceRuns`, shared with the composer), so data can never close its own block.
+ * With a per-request `token` (4.7b item 1), the open/close markers themselves also carry it, so a
+ * retrieved chunk or the student's message can never pre-stage the exact delimiter text: it would
+ * need to guess a token it is never shown. No token (an older caller, direct unit test): the fixed
+ * `DATA_OPEN`/`DATA_CLOSE` markers only, unchanged from before this item.
+ */
+function fence(text: string, token?: string): string {
+  const safe = breakFenceRuns(text);
+  const open = token === undefined ? DATA_OPEN : `${DATA_OPEN}${token}`;
+  const close = token === undefined ? DATA_CLOSE : `${DATA_CLOSE}${token}`;
+  return `${open}\n${safe}\n${close}`;
 }
 
 /** The judge request: the fixed rubric, then the material, the student's message and the reply. */
@@ -139,17 +149,20 @@ export function groundingJudgeRequest(o: {
   reply: string;
   chunks: readonly Chunk[];
   studentText?: string;
+  /** PostGuardCtx.groundingFenceToken (4.7b item 1), one per turn. Absent: no token mixed in. */
+  token?: string;
 }): JudgeRequest {
+  const { token } = o;
   const material =
     o.chunks.length === 0
       ? '(none)'
-      : o.chunks.map((c, i) => `[${String(i + 1)}]\n${fence(c.text)}`).join('\n');
+      : o.chunks.map((c, i) => `[${String(i + 1)}]\n${fence(c.text, token)}`).join('\n');
   return {
     system: GROUNDING_JUDGE_SYSTEM,
     user:
       `Teacher's material:\n${material}\n\n` +
-      `Student's message:\n${fence(o.studentText ?? '')}\n\n` +
-      `Tutor's reply:\n${fence(o.reply)}`,
+      `Student's message:\n${fence(o.studentText ?? '', token)}\n\n` +
+      `Tutor's reply:\n${fence(o.reply, token)}`,
   };
 }
 
@@ -263,7 +276,7 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
       if (x.judge !== undefined) {
         try {
           const r = await x.judge(
-            groundingJudgeRequest({ reply: subject, chunks, ...own }),
+            groundingJudgeRequest({ reply: subject, chunks, ...own, token: x.groundingFenceToken }),
             cancel,
           );
           usage = r.usage;

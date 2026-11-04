@@ -24,7 +24,9 @@ export interface JudgeInput {
 /** Decides the judge's raw text from the request (e.g. `{"grounded":true}` or anything else). */
 export type JudgeVerdict = (input: JudgeInput, req: ModelRequest) => string;
 
-const BLOCK = /<<<\n([\s\S]*?)\n>>>/g;
+// 4.7b item 1: the delimiter may carry a per-request token right after `<<<`/`>>>` (no token: the
+// bare markers, unchanged); either form still opens and closes exactly one block.
+const BLOCK = /<<<[^\n]*\n([\s\S]*?)\n>>>[^\n]*/g;
 
 /** Reads grounding's request: every block but the last two is material. */
 export function readJudgeRequest(req: ModelRequest): JudgeInput {

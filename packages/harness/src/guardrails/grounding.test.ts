@@ -11,6 +11,7 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { cancelSource, type CancelToken } from '../pipeline/clock.js';
+import { sequentialIds } from '../testing/ids.js';
 import {
   ANSWER_LEAK_SAFE_HINT,
   type JudgeReply,
@@ -508,6 +509,36 @@ describe('the judge request (lead answer 6)', () => {
   });
 
   it('no student text: an empty student block', () => {
+    const req = groundingJudgeRequest({ reply: 'r', chunks: [] });
+    expect(req.user).toBe(
+      "Teacher's material:\n(none)\n\nStudent's message:\n<<<\n\n>>>\n\nTutor's reply:\n<<<\nr\n>>>",
+    );
+  });
+
+  it('4.7b item 1: a full-width or HTML-entity fence run in a chunk or the reply is broken too', () => {
+    const req = groundingJudgeRequest({
+      reply: 'See ＜＜＜ here.',
+      chunks: [chunk('Entities: &lt;&lt;&lt; too.', 0.8, 'chk_a')],
+    });
+    expect(req.user).toContain('< < <');
+    expect(req.user).not.toContain('＜＜＜');
+    expect(req.user).not.toContain('&lt;&lt;&lt;');
+  });
+
+  it('4.7b item 1: a per-request token (the Ids port) mixed in makes two tokens differ', () => {
+    const ids = sequentialIds();
+    const reqA = groundingJudgeRequest({ reply: 'r', chunks: [], token: ids.next('groundingFence') });
+    const reqB = groundingJudgeRequest({ reply: 'r', chunks: [], token: ids.next('groundingFence') });
+    expect(reqA.user).not.toBe(reqB.user);
+    expect(reqA.user).toContain('groundingFence_1');
+    expect(reqB.user).toContain('groundingFence_2');
+    // The same token covers every fence in one request (student and reply blocks, no chunks
+    // here), so the judge can still tell where each block ends.
+    expect(reqA.user.match(/<<<groundingFence_1/g)).toHaveLength(2);
+    expect(reqA.user.match(/>>>groundingFence_1/g)).toHaveLength(2);
+  });
+
+  it('4.7b item 1: with no token (an older caller), the fixed fence markers are used, no crash', () => {
     const req = groundingJudgeRequest({ reply: 'r', chunks: [] });
     expect(req.user).toBe(
       "Teacher's material:\n(none)\n\nStudent's message:\n<<<\n\n>>>\n\nTutor's reply:\n<<<\nr\n>>>",

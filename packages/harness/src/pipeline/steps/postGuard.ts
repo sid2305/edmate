@@ -504,6 +504,10 @@ export function createPostGuard(
       ),
       askTeacherReply: askTeacherReplyFor(env),
       fixedTexts,
+      // One token for the whole step call (4.7b item 1): both passes of this turn's chain share
+      // it, so the judge-call cache (keyed on the rendered request text) still dedupes an
+      // unchanged reply on the verification pass; next turn's `env.deps.ids` draws a fresh one.
+      groundingFenceToken: env.deps.ids.next('groundingFence'),
       ...(fixed.safe === undefined ? {} : { safeReply: fixed.safe }),
       // adviceGuard's judge may be called twice in one slice (the pre-check, then the rewrite's
       // own verify: 4.8b item 1), so its budget tracks what is actually left of the slice

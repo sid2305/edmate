@@ -20,7 +20,7 @@ export interface Clock {
   sleep(ms: number, cancel?: Cancel): Promise<void>;
 }
 
-export type IdKind = 'turn' | 'message' | 'alert';
+export type IdKind = 'turn' | 'message' | 'alert' | 'groundingFence';
 
 export interface IdSource {
   /** Must return a contracts-valid id (1-128 of A-Z a-z 0-9 _ -). */
