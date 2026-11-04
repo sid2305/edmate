@@ -527,8 +527,16 @@ describe('the judge request (lead answer 6)', () => {
 
   it('4.7b item 1: a per-request token (the Ids port) mixed in makes two tokens differ', () => {
     const ids = sequentialIds();
-    const reqA = groundingJudgeRequest({ reply: 'r', chunks: [], token: ids.next('groundingFence') });
-    const reqB = groundingJudgeRequest({ reply: 'r', chunks: [], token: ids.next('groundingFence') });
+    const reqA = groundingJudgeRequest({
+      reply: 'r',
+      chunks: [],
+      token: ids.next('groundingFence'),
+    });
+    const reqB = groundingJudgeRequest({
+      reply: 'r',
+      chunks: [],
+      token: ids.next('groundingFence'),
+    });
     expect(reqA.user).not.toBe(reqB.user);
     expect(reqA.user).toContain('groundingFence_1');
     expect(reqB.user).toContain('groundingFence_2');

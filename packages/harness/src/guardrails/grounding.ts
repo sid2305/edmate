@@ -275,8 +275,9 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
       let usage: Usage[] = [];
       if (x.judge !== undefined) {
         try {
+          const token = x.groundingFenceToken === undefined ? {} : { token: x.groundingFenceToken };
           const r = await x.judge(
-            groundingJudgeRequest({ reply: subject, chunks, ...own, token: x.groundingFenceToken }),
+            groundingJudgeRequest({ reply: subject, chunks, ...own, ...token }),
             cancel,
           );
           usage = r.usage;

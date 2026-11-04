@@ -201,3 +201,129 @@ helpline or contact. Added to grounding's own `fixed` list (idempotence pass).
 
 ## Budget
 Tool calls used: ~46 (plan budgeted 60 for Phase B).
+
+## Phase C
+
+## Summary
+Item 1: `grounding.ts`'s `fence()` now calls `breakFenceRuns` (reused from `pedagogy/modelRequest.ts`,
+unmodified) instead of its own ASCII-only `<{3,}|>{3,}` regex, so a full-width (`＜＜＜`) or
+HTML-entity (`&lt;&lt;&lt;`) run in a chunk, the student's message or the reply is also broken up,
+not only a literal run of 3+ ASCII `<`/`>`.
+
+`fence()` also takes an optional per-request `token`, appended right after `DATA_OPEN`/`DATA_CLOSE`
+(`<<<groundingFence_7` ... `>>>groundingFence_7`); with no token, the markers are exactly
+`DATA_OPEN`/`DATA_CLOSE` as before (no behaviour change for a caller that passes none).
+`groundingJudgeRequest` takes this `token` as a plain optional string field and threads it into
+every fence in the request (material, student message, reply), so all of one request's blocks
+share one token and still nest the same way the un-tokened fence did.
+
+`PostGuardCtx` gains `groundingFenceToken?: string` (not the raw `Ids` port — see Decisions);
+`postGuard.ts` draws it once per step call via `env.deps.ids.next('groundingFence')` and passes it
+down; `grounding.ts`'s `run()` reads `x.groundingFenceToken` and forwards it to
+`groundingJudgeRequest`.
+
+`testing/groundingJudge.ts`'s `BLOCK` regex (reads a fake judge's own request back apart, for
+tests only) is widened from `/<<<\n([\s\S]*?)\n>>>/g` to `/<<<[^\n]*\n([\s\S]*?)\n>>>[^\n]*/g` so it
+still finds exactly the same blocks whether or not a token is appended to the markers — see
+Decisions (an edit outside the plan's named file list for this phase, not on the out-of-bounds
+list, and needed for the feature to work with the existing fake-judge test tooling).
+
+## Decisions
+### 4 Nov 2026 · 4.7b fence() reuses breakFenceRuns, unmodified · decided by builder · risk: low
+- Decided: `fence()` calls `breakFenceRuns` (imported from `pedagogy/modelRequest.js`) in place of
+  its own regex; `breakFenceRuns` itself is untouched, so `pedagogy/modelRequest.test.ts`'s existing
+  coverage of it (full-width, entities, zero-width padding, idempotence) is not re-proven here.
+- Why: the plan's own item 1 names this exact reuse; `fence()`'s old regex only caught a literal
+  ASCII run, missing full-width and entity-encoded look-alikes `breakFenceRuns` already handles.
+- Alternatives: none — the plan named the exact fix.
+- Reversible: yes.
+
+### 4 Nov 2026 · 4.7b the token is drawn once per turn in postGuard.ts, not inside grounding.ts · decided by builder · risk: low
+- Decided: `PostGuardCtx` gains `groundingFenceToken?: string` (a plain string), not `ids?: IdSource`
+  as the plan's prose literally named. `postGuard.ts` calls `env.deps.ids.next('groundingFence')`
+  once, when it builds `x` (the single `PostGuardCtx` object both passes of one turn's guard chain
+  share); `grounding.ts` reads `x.groundingFenceToken` and never calls `.next()` itself.
+- Why: TDD caught a real regression from the plan's literal reading (`x.ids.next('groundingFence')`
+  called inside `grounding.ts`'s `run()`): the guard chain calls `run()` once per pass (1, then the
+  verification pass), so a token drawn inside `run()` differs pass 1 vs. pass 2 even when the text
+  judged is identical — `postGuard.ts`'s `judgeFor` memoises a judge call by the rendered request
+  text, so a differing token on an unchanged reply forced a second real judge call on the
+  verification pass every time, breaking the documented invariant
+  (`postGuard.grounding.test.ts`'s "a premise correction or a number fix is replaced but never
+  escalated": `fix.judged` went from `1` to `2`). Drawing the token once per `postGuard.ts` step
+  call (shared by both passes, since `x` is built once and passed by reference) keeps that
+  invariant: the judge-call cache still dedupes an unchanged reply on pass 2, while a fresh token
+  is still drawn every turn (so two different turns' requests still differ, matching the plan's
+  accept-line intent and this phase's own red/green test). Still uses the `Ids` port, never
+  `Math.random`/`crypto`, per the brief's rule.
+- Alternatives: memoise the token per `IdSource` instance in a `WeakMap` inside `grounding.ts`
+  (rejected: `apps/worker/src/gate/agent.ts`'s `createGateAgent` builds one long-lived `ids` and
+  reuses it across every turn an agent serves, so a per-instance cache would hand out the *same*
+  token forever for that agent, not a fresh one per turn — defeats the whole point). Keep the
+  literal `ids: IdSource` field and accept the extra judge call on every verification pass
+  (rejected: a real cost/latency regression with no stated benefit — the plan's test list for this
+  item never asked for it, and 4.7's idempotence rule is a design invariant, not just one item's
+  test).
+- Reversible: yes, a field-shape and call-site change; no port or contracts change.
+
+### 4 Nov 2026 · 4.7b testing/groundingJudge.ts's BLOCK regex widened to tolerate a token · decided by builder · risk: low
+- Decided: `BLOCK` (`testing/groundingJudge.ts`, the fake judge's own request-reader, test support
+  code only) changed from `/<<<\n([\s\S]*?)\n>>>/g` to `/<<<[^\n]*\n([\s\S]*?)\n>>>[^\n]*/g`.
+- Why: with a token appended straight after the markers (`<<<groundingFence_1`), the old regex
+  (which needed `<<<` immediately followed by a newline) no longer matched at all, so the fake
+  `overlapJudge` read every block as empty and mis-graded replies (caught by the existing
+  `postGuard.grounding.test.ts` test "the overlap judge ... passes material-backed replies and
+  catches invented ones", which started failing). The widened pattern still matches the bare,
+  untokened form exactly as before (no token: `[^\n]*` matches zero characters).
+- Alternatives: put the token on its own line inside the block instead of on the marker line
+  (rejected: it would then be captured as block *content*, polluting `overlapJudge`'s word-overlap
+  reading of the material/reply with an extra token word in every block). Leave the token out of
+  the marker text entirely and mix it in elsewhere (rejected: defeats the point — the marker text
+  itself must be the thing a chunk or the student's message cannot pre-stage).
+- Reversible: yes, a one-line regex change in a test-support file; not a product file, not on the
+  plan's named-file or out-of-bounds lists for this phase.
+
+## Red -> green evidence
+- `breakFenceRuns` reuse: before the fix, `groundingJudgeRequest({ reply: 'See ＜＜＜ here.',
+  chunks: [chunk('Entities: &lt;&lt;&lt; too.', ...)] })` left both runs intact in `req.user` (the
+  old regex only matched ASCII `<{3,}`/`>{3,}`); after, both are broken to `< < <` and neither raw
+  form (`＜＜＜`, `&lt;&lt;&lt;`) survives.
+- Per-request token: before, two `groundingJudgeRequest` calls with the same or different
+  `sequentialIds()`-drawn tokens produced the exact same `<<<`/`>>>` text; after, each call's fence
+  carries its own token (`<<<groundingFence_1` vs. `<<<groundingFence_2`), so the two requests
+  differ; with no token passed, the request is byte-identical to the pre-Phase-C text (regression
+  check, same assertion as Phase A/B's own unmodified "no student text" case).
+- Pass 1/pass 2 cache regression (not in the plan's own test list, found by running the full gate
+  after the first implementation): `postGuard.grounding.test.ts`'s "a premise correction or a
+  number fix is replaced but never escalated" went from green to `fix.judged` length `2` (expected
+  `1`) under the plan's literal `ids: IdSource` design; green again after moving the token draw to
+  `postGuard.ts` (once per step call, shared by both passes).
+- `testing/groundingJudge.ts`'s fake judge regression (also found by the full gate, not anticipated
+  by the plan's test list): "the overlap judge (non-circular fake) passes material-backed replies
+  and catches invented ones" went from `{ result: 'replace', escalateToTeacher: true }` to
+  `{ result: 'ok' }` (the fake misread an unterminated-looking block as ungrounded-proof instead of
+  reading the reply at all) under the tokened marker; green again after widening `BLOCK`'s regex.
+
+## Gate
+- `packages/harness`: `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` — all
+  4 tasks successful (typecheck, lint, test, build). `src/guardrails/**` at 100%
+  lines/branches/functions/statements (vitest's coverage table; `guard.ts`/`index.ts` show 0/0/0/0,
+  type-only re-export files with no executable statements, same as every prior guardrails phase).
+- `packages/harness/src/guardrails/grounding.test.ts`: 66 tests passed (was 63 after Phase B; +3 new).
+- `packages/harness/src/pipeline/steps/postGuard.grounding.test.ts`: 17 tests passed, unchanged
+  count (one test's internal assertions were exercised by this phase's own fix, no new test added
+  here — the regression was caught and fixed, not newly tested, since it was an existing case).
+- `packages/harness/src/pedagogy/modelRequest.test.ts`: unchanged, passing (confirms `breakFenceRuns`
+  itself was not touched).
+- `prettier --check` on the six touched files: clean (after one `--write` pass on `grounding.ts`
+  and `grounding.test.ts`).
+- `python3 .githooks/secret-scan.py --all`: exit 0, clean.
+- Note: the plan's exact gate command, `--filter=...@edmate/harness` (dependency direction), also
+  ran `@edmate/content`'s tests, which failed on an unrelated flaky timing-probe test
+  (`safeRegex.test.ts`, a 5-second timeout on a regex-timing assertion) — infra timing, nothing
+  touched by this phase. `--filter=@edmate/harness` alone (no dependents) is green, same posture as
+  Phases A and B's own handoff notes.
+
+## Budget
+Tool calls used: ~55 (plan budgeted 50 for Phase C; the extra calls traced and fixed the two
+regressions above, neither anticipated by the plan's own test list).
