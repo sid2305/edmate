@@ -2,9 +2,9 @@
 // row through the repository, scoped to the job's student x teacher; a replay writes nothing new;
 // a malformed payload or a permanent repository error is not retried; logs carry ids and the code.
 import { EventEmitter } from 'node:events';
-import { RepositoryError } from '@edmate/db';
-import { JOB, RETRY, SAFETY_EVENT_QUEUE } from '@edmate/queue';
-import { describe, expect, it, vi } from 'vitest';
+import { RepositoryError, type SafetyEventInput } from '@edmate/db';
+import { JOB, RETRY, SAFETY_EVENT_QUEUE, type SafetyEventJob } from '@edmate/queue';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { PermanentJobError } from '../commit/processors.js';
 import type { LogLine } from '../log.js';
 import {
@@ -183,4 +183,12 @@ describe('createSafetyEventWorker', () => {
     },
     T,
   );
+});
+
+describe('SafetyEventJob and SafetyEventInput share one guard/source/code shape (4.4h)', () => {
+  it('types line up', () => {
+    expectTypeOf<SafetyEventJob['guard']>().toEqualTypeOf<SafetyEventInput['guard']>();
+    expectTypeOf<SafetyEventJob['source']>().toEqualTypeOf<SafetyEventInput['source']>();
+    expectTypeOf<SafetyEventJob['code']>().toEqualTypeOf<SafetyEventInput['code']>();
+  });
 });
