@@ -4,8 +4,6 @@ Status: DONE
 
 ## Decisions
 
-None.
-
 ### 4 Nov 2026 · 4.2e build over budget · decided by lead · risk: low
 - Decided: Accept 37 tool calls against a budget of 15 (hard stop 20).
 - Why: The change is one assertion. The overrun came from a vitest coverage-lock collision between two of the builder's own background runs. It ended one of its own runs by PID, not by name. The diff is exactly what the plan asked for.
