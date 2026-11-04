@@ -185,7 +185,7 @@ describe('lockedLeak guard', () => {
   it('4.6d: a default-ignorable mark spliced into the locked text still rewrites', async () => {
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     const { check, clock } = checkWith(r);
-    const spliced = LOCKED.replace('parts', 'pa️rts'); // variation selector-16 inside a word
+    const spliced = LOCKED.replace('parts', `pa${String.fromCharCode(0xfe0f)}rts`); // variation selector-16 inside a word
     const out = await clock.drive(guard.run(`Sure. ${spliced}`, ctxWith(check), token));
     expect(out).toEqual({
       result: { ok: false, action: 'rewrite', text: REPLY, reason: 'locked' },

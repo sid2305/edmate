@@ -60,8 +60,8 @@ describe('lockedTokens', () => {
 });
 
 describe('lockedTokens (4.6d: default-ignorable marks inside a word)', () => {
-  const VS16 = '️'; // variation selector-16
-  const CGJ = '͏'; // combining grapheme joiner
+  const VS16 = String.fromCharCode(0xfe0f); // variation selector-16
+  const CGJ = String.fromCharCode(0x034f); // combining grapheme joiner
 
   it('board example 1: a variation selector inside a word does not hide the leak', () => {
     expect(lockedTokens(`rep${VS16}eatso`).map((t) => t.t)).toEqual(['repeatso']);
@@ -76,7 +76,7 @@ describe('lockedTokens (4.6d: default-ignorable marks inside a word)', () => {
   }, 5_000);
 
   it('drops both ranges from inside a word, same as any other invisible character', () => {
-    for (const mark of [VS16, CGJ, '︀']) {
+    for (const mark of [VS16, CGJ, String.fromCharCode(0xfe00)]) {
       expect(
         lockedTokens(`a${mark}b`).map((t) => t.t),
         JSON.stringify(mark),
@@ -520,27 +520,29 @@ describe('unfinishedMarkupStart', () => {
 
 describe('decodeHtmlEntities', () => {
   it('decodes named and numeric entities, padded to the entity’s own length', () => {
-    expect(decodeHtmlEntities('a&amp;b')).toBe('a&' + '​'.repeat(4) + 'b');
-    expect(decodeHtmlEntities('&#108;oop')).toBe('l' + '​'.repeat(5) + 'oop');
-    expect(decodeHtmlEntities('&#x6C;oop')).toBe('l' + '​'.repeat(5) + 'oop');
+    expect(decodeHtmlEntities('a&amp;b')).toBe('a&' + ZWSP.repeat(4) + 'b');
+    expect(decodeHtmlEntities('&#108;oop')).toBe('l' + ZWSP.repeat(5) + 'oop');
+    expect(decodeHtmlEntities('&#x6C;oop')).toBe('l' + ZWSP.repeat(5) + 'oop');
     expect(decodeHtmlEntities('x').length).toBe(1);
   }, 5_000);
 
   it('4.6d: decodes the invisible named entities the board lists, padded, case-insensitive', () => {
     const cases: [string, string][] = [
-      ['&shy;', '­'],
-      ['&ZeroWidthSpace;', '​'],
-      ['&NoBreak;', '⁠'],
-      ['&zwnj;', '‌'],
-      ['&zwj;', '‍'],
-      ['&lrm;', '‎'],
-      ['&rlm;', '‏'],
+      ['&shy;', String.fromCharCode(0x00ad)],
+      ['&ZeroWidthSpace;', String.fromCharCode(0x200b)],
+      ['&NoBreak;', String.fromCharCode(0x2060)],
+      ['&zwnj;', String.fromCharCode(0x200c)],
+      ['&zwj;', String.fromCharCode(0x200d)],
+      ['&lrm;', String.fromCharCode(0x200e)],
+      ['&rlm;', String.fromCharCode(0x200f)],
     ];
     for (const [entity, ch] of cases) {
       const pad = Math.max(0, entity.length - ch.length);
-      expect(decodeHtmlEntities(entity), entity).toBe(ch + '​'.repeat(pad));
+      expect(decodeHtmlEntities(entity), entity).toBe(ch + ZWSP.repeat(pad));
     }
-    expect(decodeHtmlEntities('&SHY;')).toBe('­' + '​'.repeat('&SHY;'.length - 1));
+    expect(decodeHtmlEntities('&SHY;')).toBe(
+      String.fromCharCode(0x00ad) + ZWSP.repeat('&SHY;'.length - 1),
+    );
   }, 5_000);
 
   it('4.6d known miss: a MathML-only invisible named entity still does not decode', () => {

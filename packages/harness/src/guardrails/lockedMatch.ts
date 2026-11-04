@@ -55,8 +55,8 @@
 //
 // 4.6d: `TOKEN` keeps `\p{M}` (combining marks) inside a token on purpose (so an accented letter
 // stays one token), but that also kept two default-ignorable mark ranges literally inside a word:
-// the variation selectors (U+FE00-FE0F, `rep️eatso`) and U+034F (combining grapheme joiner,
-// `l͏**o**op`), neither of which renders as anything. `dropDefaultIgnorableMarks` turns both into
+// the variation selectors (U+FE00-FE0F, `rep\uFE0Featso`) and U+034F (combining grapheme joiner,
+// `l\u034F**o**op`), neither of which renders as anything. `dropDefaultIgnorableMarks` turns both into
 // the same zero-width-space padding (`PAD`, `\p{Cf}`) that markup and entities already leave behind,
 // run once in `prepared()`/`preparedForms()` before `foldMarkup` and `decodeHtmlEntities`'s own
 // `\p{Cf}` output reach `padMarkdownEmphasis`'s `letterBefore`/`letterAfter` (which already skip
@@ -339,13 +339,13 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   apos: "'",
   nbsp: ' ',
   // 4.6d: invisible named refs (HTML5's named character reference list).
-  shy: '­',
-  zerowidthspace: '​',
-  nobreak: '⁠',
-  zwnj: '‌',
-  zwj: '‍',
-  lrm: '‎',
-  rlm: '‏',
+  shy: '\u00ad',
+  zerowidthspace: '\u200b',
+  nobreak: '\u2060',
+  zwnj: '\u200c',
+  zwj: '\u200d',
+  lrm: '\u200e',
+  rlm: '\u200f',
 };
 const ENTITY = /&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g;
 
@@ -467,7 +467,7 @@ const spaced = (s: string): string => s.replace(INVISIBLE, (m) => ' '.repeat(m.l
 // default-ignorable mark ranges that `TOKEN`'s `\p{M}` would otherwise keep literally inside a
 // word (see the header). Not the broader `\p{Default_Ignorable_Code_Point}` set `digitForms.ts`
 // uses: scoped to exactly these two named ranges, local to the locked-match path.
-const DEFAULT_IGNORABLE_MARK = /[︀-️͏]/gu;
+const DEFAULT_IGNORABLE_MARK = /[\u{FE00}-\u{FE0F}\u{034F}]/gu;
 
 /** The two default-ignorable mark ranges above, turned into `PAD` (same length, `\p{Cf}`). */
 function dropDefaultIgnorableMarks(text: string): string {

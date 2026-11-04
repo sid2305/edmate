@@ -22,7 +22,7 @@ MathML-only ones (`&ApplyFunction;` etc.) are a documented known miss, pinned by
 ## Decisions
 
 ### 4 Nov 2026 · 4.6d scope the drop to exactly two named ranges, not the broader Default_Ignorable set · decided by builder · risk: low
-- Decided: `dropDefaultIgnorableMarks` matches only `[︀-️͏]`, as the plan specified,
+- Decided: `dropDefaultIgnorableMarks` matches only U+FE00-FE0F and U+034F, as the plan specified,
   not the full `\p{Default_Ignorable_Code_Point}` set `digitForms.ts` uses for its own, narrower
   (after-a-digit-only) purpose.
 - Why: the board's two reproducers are exactly these two ranges; matching the full
@@ -53,9 +53,9 @@ failed 7 new tests for the right reasons, e.g.:
 ```
 FAIL lockedMatch.test.ts > ... > board example 2 ...
 FAIL lockedMatch.test.ts > ... invisible characters between the letter and the run do not hide it
-  AssertionError: l️**o**op: expected [ 'l️', 'oop' ] to deeply equal [ 'loop' ]
+  AssertionError: l<U+FE0F>**o**op: expected [ 'l<U+FE0F>', 'oop' ] to deeply equal [ 'loop' ]
 FAIL lockedMatch.test.ts > decodeHtmlEntities > 4.6d: decodes the invisible named entities ...
-  AssertionError: &shy;: expected '&shy;' to be '­​​​​'
+  AssertionError: &shy;: expected '&shy;' to be 'U+00AD followed by four U+200B'
 Tests  7 failed | 55 passed (62)
 ```
 After implementing `dropDefaultIgnorableMarks` (wired into `prepared()`/`preparedForms()`) and the
@@ -79,5 +79,50 @@ After implementing `dropDefaultIgnorableMarks` (wired into `prepared()`/`prepare
   unrelated to this change (no file this task touches is anywhere near it); the scoped
   `--filter=@edmate/harness` run above is the gate this plan asks for and is fully green.
 
+## Fix round 1
+The first review found three HIGH findings, all the same problem: literal invisible characters
+(U+FE00 to U+FE0F, U+034F, U+00AD, U+200B to U+200F, U+2060 and the like) pasted directly into
+source instead of `\uXXXX` escapes or `String.fromCharCode(...)`, in `lockedMatch.ts`'s
+`DEFAULT_IGNORABLE_MARK` regex and the new `NAMED_ENTITIES` values, and in test fixtures in
+`lockedMatch.test.ts` and `lockedLeak.test.ts`.
+
+What changed:
+- `lockedMatch.ts`: `DEFAULT_IGNORABLE_MARK` now uses `\u{FE00}-\u{FE0F}\u{034F}` escapes instead of
+  literal characters inside the character class; the seven invisible `NAMED_ENTITIES` values (`shy`,
+  `zerowidthspace`, `nobreak`, `zwnj`, `zwj`, `lrm`, `rlm`) now use `­`/`​`/`⁠`/`‌`/
+  `‍`/`‎`/`‏` escapes; two illustrative examples in the header comment (`rep<VS16>eatso`,
+  `l<CGJ>**o**op`) now spell the code point as `️`/`͏` text inside the comment instead of
+  embedding the literal character.
+- `lockedMatch.test.ts`: `VS16` and `CGJ` now built with `String.fromCharCode(0xfe0f)` /
+  `String.fromCharCode(0x034f)`; the inline `'︀'` literal (lowest of the variation-selector range)
+  replaced with `String.fromCharCode(0xfe00)`; the `decodeHtmlEntities` expected-output literals for
+  the pad character (`'​'`, i.e. U+200B) replaced with the file's existing `ZWSP` constant; the
+  seven named-entity expected characters (`&shy;` etc.) replaced with `String.fromCharCode(...)` for
+  each code point, matching the file's established convention.
+- `lockedLeak.test.ts`: the `'pa️rts'` splice literal replaced with a template string using
+  `String.fromCharCode(0xfe0f)`.
+- `docs/tasks/4.6d/handoff.md`: the two remaining literal invisible characters (one in a `- Decided:`
+  line, two in the red/green evidence code block) replaced with code-point text; no other wording
+  changed.
+
+No behaviour changed — same code points, same ranges, same test assertions, only the source
+representation.
+
+Proof (must print nothing; ran clean):
+```
+$ grep -nP "[\x{00AD}\x{034F}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FE00}-\x{FE0F}\x{FEFF}]" \
+    packages/harness/src/guardrails/lockedMatch.ts \
+    packages/harness/src/guardrails/lockedMatch.test.ts \
+    packages/harness/src/guardrails/lockedLeak.test.ts
+(no output)
+```
+
+Gate re-run after the fix: `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness`
+green — `Test Files 131 passed (131)`, `Tests 6043 passed (6043)`, `src/guardrails` coverage
+100/100/100/100 (`lockedMatch.ts` and `lockedLeak.ts` both 100/100/100/100). `prettier --check` on
+the three touched files: clean (one `--write` pass needed on `lockedMatch.test.ts` for whitespace
+only, re-verified green afterwards; no content change beyond the escape edits). `python3
+.githooks/secret-scan.py --all`: clean.
+
 ## Budget
-Budget: 85 tool calls (plan). Tool calls used: ~55.
+Budget: 85 tool calls (plan). Tool calls used: ~55 (initial build) + ~35 (fix round 1).
