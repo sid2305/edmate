@@ -86,13 +86,20 @@ export function createJailbreakGuard(): Guard<PreGuardCtx> {
       if (cancel.cancelled) throw new SafetyGuardCancelledError(NAME);
       const earlier = await ctx.recentStudentTurns;
       if (cancel.cancelled) throw new SafetyGuardCancelledError(NAME);
-      const v = await askClassifier(
-        NAME,
-        ctx,
-        cancel,
-        buildJailbreakClassifierRequest(text, earlier, classifierAbout(ctx)),
-        JailbreakVerdictSchema,
-      );
+      // Concurrency (task 4.4b): preGuard may have already started this call, concurrently with
+      // the other two pre guards, when its own rule check agreed there was no decisive hit.
+      // `undefined` (no prefetch, or preGuard's check disagreed) falls back to today's own call.
+      const prefetch = ctx.classifierCalls?.jailbreak;
+      const resolved = prefetch === undefined ? undefined : await prefetch;
+      const v =
+        resolved ??
+        (await askClassifier(
+          NAME,
+          ctx,
+          cancel,
+          buildJailbreakClassifierRequest(text, earlier, classifierAbout(ctx)),
+          JailbreakVerdictSchema,
+        ));
       if (v.category !== 'none')
         return block(ctx, v.category, 'classifier', await ctx.priorJailbreakStrikes);
       // An ambiguous rule hit the classifier called `none`: in strict mode (3+ prior strikes)
