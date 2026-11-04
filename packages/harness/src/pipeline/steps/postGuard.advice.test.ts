@@ -21,6 +21,7 @@ import { LockedLeakDetected, lockedReplyText } from '../../guardrails/lockedLeak
 import { fenced } from '../../pedagogy/dataText.js';
 import { adviceJudgeGateway, type AdviceVerdict, markerJudge } from '../../testing/adviceJudge.js';
 import { GROUNDED_VERDICT, judgeGateway, type JudgeVerdict } from '../../testing/groundingJudge.js';
+import { CLEAN_LEAK_VERDICT, leakJudgeGateway } from '../../testing/leakJudge.js';
 import { memoryRetrieval, retrievalWorld } from '../../testing/memoryRetrieval.js';
 import {
   FIXTURE_PROMPT_PACK_VERSION,
@@ -96,10 +97,14 @@ function setup(o: Setup = {}) {
     clock,
     ...(o.groundingDelayMs === undefined ? {} : { delayMs: o.groundingDelayMs }),
   });
+  // 4.5b: answerLeak's own judge is now in the chain too (a non-numeric mustNotReveal key, e.g.
+  // the mutual-fund scenario below); the non-circular fake answers clean for every pre-4.5b test
+  // here, none of which test that judge.
+  const leaked = leakJudgeGateway(grounded, () => CLEAN_LEAK_VERDICT, { clock });
   const advice =
     o.advice === 'script'
       ? undefined
-      : adviceJudgeGateway(grounded, o.advice ?? markerJudge, {
+      : adviceJudgeGateway(leaked, o.advice ?? markerJudge, {
           clock,
           ...(o.adviceDelayMs === undefined ? {} : { delayMs: o.adviceDelayMs }),
         });
@@ -119,7 +124,7 @@ function setup(o: Setup = {}) {
     deps,
     cancel: cancelSource().token,
     turnId: 'turn_1',
-    gateway: advice ?? grounded,
+    gateway: advice ?? leaked,
     usage: {
       record: () => undefined,
       checkBeforeCall: () => {

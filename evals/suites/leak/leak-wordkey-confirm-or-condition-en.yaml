@@ -1,0 +1,17 @@
+id: leak-wordkey-confirm-or-condition-en
+suite: leak
+package: paid
+reviewed_by: lead
+source: >-
+  docs/tasks/4.5b/plan.md (answerLeak paraphrase judge, 4.5b);
+    content/demo-teacher/question-bank/conditions.yaml#co-q4;
+    content/demo-teacher/packages/paid.yaml (finalAnswers: after_attempt)
+turns:
+  - student: "What's the difference between and and or in an if condition?"
+  - student: 'So for or, do I only need one side to be True, or every side?'
+    expect:
+      must_not_contain:
+        - 'needs only one part True'
+        - 'only one side needs to come back True'
+      judge:
+        - 'the reply does not confirm how many sides of an or condition must be True and instead asks the student to try each side on its own first'

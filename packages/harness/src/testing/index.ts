@@ -126,6 +126,17 @@ export {
   UNGROUNDED_VERDICT,
 } from './groundingJudge.js';
 export {
+  CLEAN_LEAK_VERDICT,
+  type LeakJudgeGateway,
+  leakJudgeGateway,
+  type LeakJudgeInput,
+  LEAK_VERDICT,
+  type LeakVerdict,
+  paraphraseJudge,
+  paraphrasesKey,
+  readLeakJudgeRequest,
+} from './leakJudge.js';
+export {
   scriptedEmbedPair,
   scriptedObjectIntent,
   scriptedStreamProviderError,

@@ -47,6 +47,7 @@
 // judge get part of their own guard's slice.
 import { LIMITS, type ModelRequest, type TurnContext, type Usage } from '@edmate/contracts';
 import {
+  ANSWER_LEAK_REASONS,
   ANSWER_LEAK_SAFE_HINT,
   type GroundingJudge,
   type JudgeReply,
@@ -85,11 +86,12 @@ import { disclaimerGap } from '../../pedagogy/disclaimer.js';
 import {
   AdviceJudgeUnavailable,
   AdviceRewriteFailed,
+  AnswerLeakJudgeUnavailable,
   DisclaimerLocaleGap,
   GroundingJudgeUnavailable,
   HarnessError,
 } from '../errors.js';
-import { compileAnswerKeys } from '../generate/answerKey.js';
+import { compileAnswerKeys, hasNonNumericKey } from '../generate/answerKey.js';
 import { StreamReader } from '../generate/streamReader.js';
 import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
 import { STEP_SPEC } from '../spec.js';
@@ -104,6 +106,14 @@ export const POST_GUARD_BUDGET_MS =
   (STEP_SPEC.postGuard.timeoutMs as number) - POST_GUARD_MARGIN_MS;
 /** The share of answerLeak's slice its rewrite call may use (the rest is rules: microseconds). */
 export const REWRITE_SHARE = 0.8;
+/**
+ * answerLeak's weight on a turn with a non-numeric (word or code) key (4.5b): up to two paraphrase
+ * judge calls and one rewrite can now run in its slice, so it gets a larger share than its default
+ * (weight 3 in `postGuards.ts`), the same idiom as adviceGuard's own weight bump (lead review item
+ * 1, Q1: no cheaper pre-filter yet, so the weight bump is the only guard against starving the
+ * guards after it when this turn's reply holds no leak at all).
+ */
+export const ANSWER_LEAK_JUDGE_WEIGHT = 5;
 /** The rewrite reply's token cap (it is a short hint). */
 export const REWRITE_MAX_OUTPUT_TOKENS = 400;
 /** The grounding judge's own timeout (lead answer 1; configurable, tuned live in 7.x). */
@@ -358,11 +368,11 @@ function fixedTextsFor(env: StepEnv, ctx: TurnContext): { safe?: string; texts: 
 }
 
 /** The guards whose reason codes (never their text) the step reads. */
-const WATCHED: ReadonlySet<string> = new Set(['grounding', 'adviceGuard']);
+const WATCHED: ReadonlySet<string> = new Set(['grounding', 'adviceGuard', 'answerLeak']);
 
 /**
- * Wraps grounding and adviceGuard so the step reads their reason codes (never their text): for
- * grounding's escalation and both judges' outage metrics.
+ * Wraps grounding, adviceGuard and answerLeak so the step reads their reason codes (never their
+ * text): for grounding's escalation and all three judges' outage metrics.
  */
 function watched(g: Guard<PostGuardCtx>, reasons: Map<string, string[]>): Guard<PostGuardCtx> {
   if (!WATCHED.has(g.name)) return g;
@@ -448,11 +458,16 @@ export function createPostGuard(
     // it reserve its judge's time only for a strong signal; the weak ones (any number, an
     // imperative, a proper noun) are in most teaching replies and count only for its own slice.
     const regulated = ctx.agent.regulatedSubject !== undefined;
+    // 4.5b: a non-numeric key can send the reply to answerLeak's paraphrase judge, up to twice
+    // plus one rewrite, so it gets a bigger slice on those turns only.
+    const answerLeakJudgeTurn = hasNonNumericKey(decision.mustNotReveal);
     const weightsFor = (text: string, own: boolean): number[] => {
       const adviceRules = !adviceMayCall(text, studentText, regulated, !own);
-      return guards.map((g) =>
-        g.name === 'adviceGuard' && adviceRules ? PASS2_WEIGHT : postGuards.weight(g.name),
-      );
+      return guards.map((g) => {
+        if (g.name === 'adviceGuard' && adviceRules) return PASS2_WEIGHT;
+        if (g.name === 'answerLeak' && answerLeakJudgeTurn) return ANSWER_LEAK_JUDGE_WEIGHT;
+        return postGuards.weight(g.name);
+      });
     };
     const clock = env.deps.clock;
     const started = clock.now();
@@ -515,7 +530,12 @@ export function createPostGuard(
       decision,
       ...own,
       ...answerContext,
-      rewrite: rewriter(env, () => share('answerLeak', REWRITE_SHARE)),
+      // 4.5b: up to two paraphrase-judge calls (the pre-check, then the rewrite's own re-verify)
+      // plus the rewrite itself can now run in one slice, so its budget tracks what is actually
+      // left of the slice (`leftOf`), the same idiom `adviceRewrite`/`adviceJudge` already use,
+      // not a fixed share sized for one call (lead review item 1, Q2).
+      rewrite: rewriter(env, () => leftOf('answerLeak')),
+      leakJudge: judgeFor(env, () => Math.min(GROUNDING_JUDGE_TIMEOUT_MS, leftOf('answerLeak'))),
       lockedCheck: lockedCheckFor(env, ctx),
       lockedReply,
       ...(sources === undefined ? {} : { sources }),
@@ -564,6 +584,10 @@ export function createPostGuard(
     }
     if (advice.includes(ADVICE_REASONS.rewriteFailed)) {
       env.report(new AdviceRewriteFailed());
+    }
+    const answerLeak = reasons.get('answerLeak') ?? [];
+    if (answerLeak.includes(ANSWER_LEAK_REASONS.judgeUnavailable)) {
+      env.report(new AnswerLeakJudgeUnavailable());
     }
     switch (r.outcome) {
       case 'ok': {

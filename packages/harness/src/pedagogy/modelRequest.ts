@@ -257,6 +257,22 @@ function safeText(text: string, label: string): string {
   return breakFenceRuns(neutraliseForgedLabel(text, label));
 }
 
+/**
+ * Breaks any run of 3+ `<`/`>` the way a reader sees it (`breakFenceRuns`), so data can never
+ * close its own block, then fences it with `DATA_OPEN`/`DATA_CLOSE`. With a per-request `token`
+ * (4.7b item 1), the open/close markers themselves also carry it, so a retrieved chunk, the
+ * student's message or (4.5b) a judge's own reply can never pre-stage the exact delimiter text: it
+ * would need to guess a token it is never shown. No token (an older caller, direct unit test): the
+ * fixed `DATA_OPEN`/`DATA_CLOSE` markers only. Shared by grounding's and answerLeak's judge
+ * requests, so both fence their judge input the same way.
+ */
+export function fencedToken(text: string, token?: string): string {
+  const safe = breakFenceRuns(text);
+  const open = token === undefined ? DATA_OPEN : `${DATA_OPEN}${token}`;
+  const close = token === undefined ? DATA_CLOSE : `${DATA_CLOSE}${token}`;
+  return `${open}\n${safe}\n${close}`;
+}
+
 function historyMessage(m: Message, set: PromptPackSet): ModelRequest['messages'][number] {
   const label = set.frame['teacher-label'];
   // The agent's own past replies were never student-controlled (commit stores only the guarded

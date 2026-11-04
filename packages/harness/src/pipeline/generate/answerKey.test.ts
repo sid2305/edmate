@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normaliseForMatch, revealsAnswerKey } from './answerKey.js';
+import { hasNonNumericKey, normaliseForMatch, revealsAnswerKey } from './answerKey.js';
 
 describe('normaliseForMatch', () => {
   it('NFKC-folds, lower-cases and strips spaces, separators, commas and zero-width characters', () => {
@@ -37,5 +37,28 @@ describe('revealsAnswerKey', () => {
     expect(revealsAnswerKey({ hint: 'find a common denominator' }, keys)).toBe(false);
     expect(revealsAnswerKey('anything', ['', ' ', '​'])).toBe(false);
     expect(revealsAnswerKey(undefined, keys)).toBe(false);
+  });
+});
+
+// Task 4.5b: whether the turn's do-not-say list holds a key the answerLeak judge is needed for.
+describe('hasNonNumericKey', () => {
+  it.each([
+    ['a word key', ['Warm']],
+    ['a code key', ['n % 2 == 0']],
+    ['a mix of numeric and a word key', ['16', 'Warm']],
+  ])('true for %s', (_n, keys) => {
+    expect(hasNonNumericKey(keys)).toBe(true);
+  });
+
+  it.each([
+    ['empty', []],
+    ['only digits', ['16']],
+    ['only a number word', ['sixteen']],
+    ['only a label key', ['B']],
+    ['only a parenthesised label', ['(B)']],
+    ['labels and numbers together', ['B', '16']],
+    ['blank and whitespace-only entries', ['', '  ']],
+  ])('false for %s', (_n, keys) => {
+    expect(hasNonNumericKey(keys)).toBe(false);
   });
 });

@@ -400,6 +400,22 @@ function labelScope(items: readonly ItemContext[]): LabelScope {
   return full.length === 0 ? NO_ITEM_SCOPE : { labels: new Set(full.flat()), full };
 }
 
+/**
+ * Whether `mustNotReveal` holds at least one key that is neither a label (A, B, ...) nor a number
+ * in any form `numericKey` reads (task 4.5b): a word or code key, the kind a paraphrase can leak
+ * without ever matching the regex/number/base64 matcher above. Reuses this file's own numeric and
+ * label detection, so `answerLeak.ts` never duplicates number-parsing logic.
+ */
+export function hasNonNumericKey(mustNotReveal: readonly string[]): boolean {
+  return mustNotReveal.some(
+    (raw) =>
+      typeof raw === 'string' &&
+      raw.trim() !== '' &&
+      labelOf(raw) === undefined &&
+      numericKey(raw) === undefined,
+  );
+}
+
 /** Builds the matcher for one turn's do-not-say list. */
 export function compileAnswerKeys(
   mustNotReveal: readonly string[],
