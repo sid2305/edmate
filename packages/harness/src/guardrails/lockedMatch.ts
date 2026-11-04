@@ -99,7 +99,8 @@ interface MarkupSpan {
 
 const isAsciiLetter = (c: string): boolean => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 const isNameChar = (c: string): boolean => isAsciiLetter(c) || (c >= '0' && c <= '9') || c === '-';
-const isSpace = (c: string): boolean => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+const isSpace = (c: string): boolean =>
+  c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
 /** Characters that end an attribute name or an unquoted value. */
 const ATTR_STOP = new Set([' ', '\t', '\n', '\r', '\f', '"', "'", '<', '>', '/', '=', '`']);
 
@@ -190,7 +191,7 @@ function scanMarkup(text: string): { spans: MarkupSpan[]; open: number } {
   let open = -1;
   let commentEnds = true;
   const n = text.length;
-  for (let i = text.indexOf('<'); i >= 0; ) {
+  for (let i = text.indexOf('<'); i >= 0;) {
     let next = i + 1;
     if (text.startsWith('<!--', i)) {
       const j = commentEnds ? text.indexOf('-->', i + 4) : -1;
@@ -377,16 +378,60 @@ export function decodeHtmlEntities(text: string): string {
 // A small, conservative table of Cyrillic and Greek letters that render identically (or near
 // identically) to a Latin letter: not an exhaustive confusables mapping (see known misses above).
 const CONFUSABLES: Readonly<Record<string, string>> = {
-  а: 'a', А: 'A', е: 'e', Е: 'E', о: 'o', О: 'O', р: 'p', Р: 'P', с: 'c', С: 'C',
-  х: 'x', Х: 'X', у: 'y', У: 'Y', і: 'i', І: 'I', ѕ: 's', Ѕ: 'S', ј: 'j', Ј: 'J',
-  Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O',
-  Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X', ο: 'o', ι: 'i',
+  а: 'a',
+  А: 'A',
+  е: 'e',
+  Е: 'E',
+  о: 'o',
+  О: 'O',
+  р: 'p',
+  Р: 'P',
+  с: 'c',
+  С: 'C',
+  х: 'x',
+  Х: 'X',
+  у: 'y',
+  У: 'Y',
+  і: 'i',
+  І: 'I',
+  ѕ: 's',
+  Ѕ: 'S',
+  ј: 'j',
+  Ј: 'J',
+  Α: 'A',
+  Β: 'B',
+  Ε: 'E',
+  Ζ: 'Z',
+  Η: 'H',
+  Ι: 'I',
+  Κ: 'K',
+  Μ: 'M',
+  Ν: 'N',
+  Ο: 'O',
+  Ρ: 'P',
+  Τ: 'T',
+  Υ: 'Y',
+  Χ: 'X',
+  ο: 'o',
+  ι: 'i',
   // 4.6b fix round 1 (safety review): palochka (lower and capital, both render as l/I), Cyrillic
   // capitals В Н К М Т, Greek α ν ρ τ κ and Cyrillic ԁ һ ԛ ԝ.
-  'ӏ': 'l', 'Ӏ': 'l',
-  'В': 'B', 'Н': 'H', 'К': 'K', 'М': 'M', 'Т': 'T',
-  'α': 'a', 'ν': 'v', 'ρ': 'p', 'τ': 't', 'κ': 'k',
-  'ԁ': 'd', 'һ': 'h', 'ԛ': 'q', 'ԝ': 'w',
+  ӏ: 'l',
+  Ӏ: 'l',
+  В: 'B',
+  Н: 'H',
+  К: 'K',
+  М: 'M',
+  Т: 'T',
+  α: 'a',
+  ν: 'v',
+  ρ: 'p',
+  τ: 't',
+  κ: 'k',
+  ԁ: 'd',
+  һ: 'h',
+  ԛ: 'q',
+  ԝ: 'w',
 };
 
 /** Folds the look-alike letters in `CONFUSABLES`; every other character passes through unchanged. */

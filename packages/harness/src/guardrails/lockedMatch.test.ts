@@ -77,7 +77,10 @@ describe('lockedTokens (4.6d: default-ignorable marks inside a word)', () => {
 
   it('drops both ranges from inside a word, same as any other invisible character', () => {
     for (const mark of [VS16, CGJ, '︀']) {
-      expect(lockedTokens(`a${mark}b`).map((t) => t.t), JSON.stringify(mark)).toEqual(['ab']);
+      expect(
+        lockedTokens(`a${mark}b`).map((t) => t.t),
+        JSON.stringify(mark),
+      ).toEqual(['ab']);
     }
   }, 5_000);
 
@@ -253,7 +256,16 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
     expect(foldMarkup('<x a=/>c', 'rendered')).toBe(`${pad(7)}c`);
     // Not tags: a character other than a space, `/` or `>` right after the name; a quote or
     // `=` value broken by a `<`; and the unfinished ones.
-    for (const t of ['<b"x">c', '<a.b>c', '<x "a <y', "<x a='b <y", '<x a=', '<x a= ', '<x a/', '<x "a']) {
+    for (const t of [
+      '<b"x">c',
+      '<a.b>c',
+      '<x "a <y',
+      "<x a='b <y",
+      '<x a=',
+      '<x a= ',
+      '<x a/',
+      '<x "a',
+    ]) {
       expect(foldMarkup(t, 'rendered'), t).toBe(t);
     }
   }, 5_000);
@@ -272,9 +284,9 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
   }, 5_000);
 
   it('CRITICAL: prose inside an attribute value is still a candidate and still hits', () => {
-    expect(lockedCandidates([PAYLOAD]).some((c) => c.includes('the loop repeats until count'))).toBe(
-      true,
-    );
+    expect(
+      lockedCandidates([PAYLOAD]).some((c) => c.includes('the loop repeats until count')),
+    ).toBe(true);
     expect(proseIndex.hits([PAYLOAD])).toBe(true);
     // Single quotes; several attributes with the prose split across two of them.
     expect(proseIndex.hits([`<x data='${PROSE}'>done</x>`])).toBe(true);
@@ -289,9 +301,18 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
 
   it('a tag or comment inside a word folds away: lo<b></b>op, <b>lo</b>op, lo<!---->op', () => {
     for (const w of ['lo<b></b>op', '<b>lo</b>op', 'lo<!---->op']) {
-      expect(lockedTokens(w, 'drop', 'values').map((t) => t.t), w).toEqual(['loop']);
-      expect(lockedTokens(w, 'drop', 'rendered').map((t) => t.t), w).toEqual(['loop']);
-      expect(lockedTokens(w, 'space', 'rendered').map((t) => t.t), w).toEqual(['lo', 'op']);
+      expect(
+        lockedTokens(w, 'drop', 'values').map((t) => t.t),
+        w,
+      ).toEqual(['loop']);
+      expect(
+        lockedTokens(w, 'drop', 'rendered').map((t) => t.t),
+        w,
+      ).toEqual(['loop']);
+      expect(
+        lockedTokens(w, 'space', 'rendered').map((t) => t.t),
+        w,
+      ).toEqual(['lo', 'op']);
     }
     // An attribute value is text in `values`; only `rendered` drops it.
     const attr = 'lo<i class="x"></i>op';
@@ -328,9 +349,9 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
   }, 5_000);
 
   it('4.6c: markdown emphasis inside a word is padded only in the rendered reading', () => {
-    expect(lockedTokens('t**h**e l**o**op r**e**peats', 'drop', 'rendered').map((t) => t.t)).toEqual(
-      ['the', 'loop', 'repeats'],
-    );
+    expect(
+      lockedTokens('t**h**e l**o**op r**e**peats', 'drop', 'rendered').map((t) => t.t),
+    ).toEqual(['the', 'loop', 'repeats']);
     // Other readings split on the markdown punctuation as before (no change there).
     expect(lockedTokens('t**h**e', 'drop', 'text').map((t) => t.t)).toEqual(['t', 'h', 'e']);
     expect(lockedTokens('t**h**e', 'drop', 'values').map((t) => t.t)).toEqual(['t', 'h', 'e']);
@@ -360,7 +381,10 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
       'l\u034f**o**op', // 4.6d: combining grapheme joiner
     ];
     for (const f of forms) {
-      expect(lockedTokens(f, 'drop', 'rendered').map((t) => t.t), f).toEqual(['loop']);
+      expect(
+        lockedTokens(f, 'drop', 'rendered').map((t) => t.t),
+        f,
+      ).toEqual(['loop']);
     }
     const bolded = SPAN8.split(' ')
       .map((w) => `${w.slice(0, 1)}\u00ad**${w.slice(1, 2)}**${w.slice(2)}`)
@@ -552,7 +576,8 @@ describe('foldConfusables', () => {
 
   it('folds the 4.6b review additions: palochka, Cyrillic capitals, Greek and Cyrillic smalls', () => {
     // ӏ (U+04CF) → l; В Н К М Т (Cyrillic capitals); α ν ρ τ κ (Greek); ԁ һ ԛ ԝ (Cyrillic).
-    const cps = (s: string) => String.fromCodePoint(...s.split(' ').map((h) => Number.parseInt(h, 16)));
+    const cps = (s: string) =>
+      String.fromCodePoint(...s.split(' ').map((h) => Number.parseInt(h, 16)));
     expect(foldConfusables(cps('4cf'))).toBe('l');
     expect(foldConfusables(cps('412 41d 41a 41c 422'))).toBe('BHKMT');
     expect(foldConfusables(cps('3b1 3bd 3c1 3c4 3ba'))).toBe('avptk');
