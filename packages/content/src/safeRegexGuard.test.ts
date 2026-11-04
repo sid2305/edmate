@@ -35,28 +35,53 @@ describe('checkSafeRegexGuarded (no compiled worker file: in-process fallback)',
   });
 });
 
-// Fix round (security review of PR #76): a missing compiled worker in a *production* runtime
-// (a bundler dropped `dist/**`, a relocated standalone copy left it behind, ...) must not reuse
-// the fast in-process fallback above -- that branch has no wall-clock limit, so it fails open on
-// exactly the path this guard exists to protect. `NODE_ENV=production` must report every pattern
-// unsafe instead, and log the gap once rather than once per pattern checked.
-describe('checkSafeRegexGuarded (no compiled worker file, NODE_ENV=production: fails closed)', () => {
+// Fix round (3.10a review item 2): a missing compiled worker outside this package's own tests --
+// a production runtime (a bundler dropped `dist/**`, a relocated standalone copy left it behind,
+// ...), dev-from-source on a developer's own machine, or any other non-test context -- must not
+// reuse the fast in-process fallback above -- that branch has no wall-clock limit, so it fails
+// open on exactly the path this guard exists to protect. The guard keys off `VITEST === 'true'`
+// (set only by this package's own `vitest run`), not `NODE_ENV === 'production'`, so every one of
+// those contexts fails closed, not only a production one: report every pattern unsafe instead,
+// and log the gap once rather than once per pattern checked.
+describe("checkSafeRegexGuarded (no compiled worker file, outside this package's own tests: fails closed)", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
-  it('reports a pattern that is actually safe as unsafe, and logs the gap exactly once', () => {
-    vi.stubEnv('NODE_ENV', 'production');
+  it('T3: VITEST and NODE_ENV both unset -> fails closed, and logs the gap exactly once', () => {
+    vi.stubEnv('VITEST', '');
+    vi.stubEnv('NODE_ENV', '');
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     expect(checkSafeRegexGuarded('a')).toEqual([
-      'the compiled safe-regex worker is missing in production (failing closed)',
+      "the compiled safe-regex worker is missing outside this package's own tests (failing closed)",
     ]);
     expect(checkSafeRegexGuarded('b')).toEqual([
-      'the compiled safe-regex worker is missing in production (failing closed)',
+      "the compiled safe-regex worker is missing outside this package's own tests (failing closed)",
     ]);
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy.mock.calls[0]?.[0]).toContain('failing closed');
+  });
+
+  it('T3b: VITEST=false, NODE_ENV=production -> still fails closed (not just the literal NODE_ENV check)', () => {
+    vi.stubEnv('VITEST', 'false');
+    vi.stubEnv('NODE_ENV', 'production');
+
+    expect(checkSafeRegexGuarded('a')).toEqual([
+      "the compiled safe-regex worker is missing outside this package's own tests (failing closed)",
+    ]);
+  });
+});
+
+// T4: inside this package's own vitest run (VITEST === 'true', the real environment every test in
+// this file runs under unless stubbed otherwise), the missing-worker case above still uses the
+// fast in-process fallback -- no regression to the dev/test convenience the first describe block
+// in this file already exercises without any stubbing at all.
+describe("checkSafeRegexGuarded (no compiled worker file, inside this package's own tests: in-process fallback)", () => {
+  it('T4: VITEST explicitly stubbed back to "true" still takes the fast in-process path', () => {
+    vi.stubEnv('VITEST', 'true');
+    expect(checkSafeRegexGuarded('a')).toEqual([]);
+    vi.unstubAllEnvs();
   });
 });

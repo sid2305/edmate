@@ -5,17 +5,21 @@
 //
 // `checkSafeRegexGuarded` looks for its compiled worker file next to its own module
 // (`import.meta.url`), so the only way to make it take the real-worker branch is to run it from a
-// build: `beforeAll` compiles this package with `tsc -p tsconfig.build.json` (the package's own
-// build script), then the test dynamically imports the compiled `dist/safeRegexGuard.js`. The two
-// "terminated" cases below pass a short 300 ms ceiling and the inputs are designed to never answer
-// inside it -- a real worker cannot finish them in time, so a slow/noisy CI runner only makes the
-// termination happen (correctly) sooner relative to real work, never a false pass. The "answers
-// fast" case passes the library's own default ceiling (2,000 ms, see `safeRegexGuard.ts`) instead
-// of a tight one: this test spawns a real `node:worker_threads` worker from inside a vitest worker
-// thread, and under CI's heavy per-file worker isolation (many nested worker threads scheduled at
-// once) that spawn + round trip can occasionally take longer than a tight budget even though the
-// check itself is trivial -- a 300 ms ceiling here was a false-positive source (CI: the real work
-// took 437 ms once), not a real hang. The production default ceiling itself is untouched.
+// build: `beforeAll` compiles this package with `tsc -p tsconfig.integration-test.json` (a plan
+// variant of the package's own build script), then the test dynamically imports the compiled
+// `dist/integration-test/safeRegexGuard.js`. A dedicated outDir (3.10a review item 1), not the
+// shared `dist/` the package's own `build` script writes: `content#build` and `content#test` can
+// run concurrently (turbo's own parallel scheduling), and this test's own `tsc` invocation would
+// otherwise race the main build script writing the same `dist/` tree. The two "terminated" cases
+// below pass a short 300 ms ceiling and the inputs are designed to never answer inside it -- a
+// real worker cannot finish them in time, so a slow/noisy CI runner only makes the termination
+// happen (correctly) sooner relative to real work, never a false pass. The "answers fast" case
+// passes the library's own default ceiling (2,000 ms, see `safeRegexGuard.ts`) instead of a tight
+// one: this test spawns a real `node:worker_threads` worker from inside a vitest worker thread,
+// and under CI's heavy per-file worker isolation (many nested worker threads scheduled at once)
+// that spawn + round trip can occasionally take longer than a tight budget even though the check
+// itself is trivial -- a 300 ms ceiling here was a false-positive source (CI: the real work took
+// 437 ms once), not a real hang. The production default ceiling itself is untouched.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -24,8 +28,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PACKAGE_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const TSC_BIN = path.join(PACKAGE_ROOT, 'node_modules', '.bin', 'tsc');
-const DIST_GUARD = path.join(PACKAGE_ROOT, 'dist', 'safeRegexGuard.js');
-const DIST_WORKER = path.join(PACKAGE_ROOT, 'dist', 'safeRegexWorkerEntry.js');
+const DIST_GUARD = path.join(PACKAGE_ROOT, 'dist', 'integration-test', 'safeRegexGuard.js');
+const DIST_WORKER = path.join(
+  PACKAGE_ROOT,
+  'dist',
+  'integration-test',
+  'safeRegexWorkerEntry.js',
+);
 
 let checkSafeRegexGuarded: (
   source: string,
@@ -35,11 +44,16 @@ let checkSafeRegexGuarded: (
 let builtHere = false;
 
 beforeAll(async () => {
-  // A previous full-package build (another test run, or `pnpm build`) may already have left a
-  // usable `dist` on disk; rebuilding every run is not required for correctness, only for a clean
-  // worktree. Build only when the worker file this test needs is missing.
+  // A previous run of this same test may already have left a usable `dist/integration-test` on
+  // disk (the package's own `build` script writes to the sibling `dist/` instead, since the two
+  // outDirs are deliberately kept apart -- item 1 above); rebuilding every run is not required for
+  // correctness, only for a clean worktree. Build only when the worker file this test needs is
+  // missing.
   if (!existsSync(DIST_WORKER)) {
-    execFileSync(TSC_BIN, ['-p', 'tsconfig.build.json'], { cwd: PACKAGE_ROOT, stdio: 'pipe' });
+    execFileSync(TSC_BIN, ['-p', 'tsconfig.integration-test.json'], {
+      cwd: PACKAGE_ROOT,
+      stdio: 'pipe',
+    });
     builtHere = true;
   }
   expect(existsSync(DIST_WORKER)).toBe(true); // the real-worker branch needs this file to exist
@@ -50,9 +64,9 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => {
-  // Leaves `dist` in place when this test built it: other packages' own build steps (and a real
-  // production build) overwrite it, and removing it here would make a second local run in the
-  // same worktree rebuild for no reason. Nothing commits `dist` (gitignored).
+  // Leaves `dist/integration-test` in place when this test built it: removing it here would make
+  // a second local run in the same worktree rebuild for no reason, and nothing else writes to
+  // this outDir to go stale. Nothing commits `dist` (gitignored).
   void builtHere;
 });
 

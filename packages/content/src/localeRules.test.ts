@@ -31,6 +31,16 @@ describe('unverifiedHelplines', () => {
     ['verifiedBy Pending, padded', { verifiedBy: ' Pending ' }, 'verifiedBy is "pending"'],
     ['number pending', { number: 'pending' }, 'number is "pending"'],
     ['number blank', { number: '  ' }, 'number is blank'],
+    [
+      'verifiedBy TBD (3.10a item 3)',
+      { verifiedBy: 'TBD' },
+      'verifiedBy is "pending"',
+    ],
+    [
+      'number a typo of "pending" (3.10a item 3)',
+      { number: 'Pendingg' },
+      'number is "pending"',
+    ],
   ])('%s → named by helpline', (_label, change, why) => {
     const pack = { ...XX, helplines: [line, { ...line, name: 'Line B', ...change }] };
     expect(unverifiedHelplines(pack)).toEqual([`helpline "Line B": ${why}`]);
