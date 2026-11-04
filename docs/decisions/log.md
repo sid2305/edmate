@@ -10,6 +10,138 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.5b judge fallback only on a non-numeric-key regex miss · decided by builder · risk: low
+- Decided: the judge is asked only when the matcher found no leak and `mustNotReveal` holds at
+  least one key that is not a number, a number word or a label (`hasNonNumericKey`). An all-numeric
+  turn, or any turn the matcher already caught, never calls the judge.
+- Why: the plan's Q1 (no cheaper pre-filter exists yet for a paraphrase) and the existing numeric
+  matcher already covers numbers reliably and cheaply; adding a judge call on every turn would cost
+  latency and budget for no gain on the cases the regex already decides.
+- Alternatives: judge every turn (rejected: wasteful, and widens the fail-closed surface for no
+  reason); a cheaper heuristic pre-filter before the judge (rejected for now — no such heuristic
+  exists yet; left as a possible later optimisation, not blocking this task).
+- Reversible: yes — `hasNonNumericKey` is a pure, swappable predicate.
+
+---
+
+### 4 Nov 2026 · 4.5b judge outage fails closed, stricter than adviceGuard · decided by builder · risk: low
+- Decided: when the judge gives no answer at all (times out, throws, or is unavailable) on the
+  initial check, the guard returns `ANSWER_LEAK_SAFE_HINT` with reason `judge_unavailable`
+  immediately — it never falls through to the rewrite path, and never passes the draft unchanged.
+- Why: this guard protects the answer itself, the one thing the whole decision depends on
+  `mustNotReveal` to withhold; adviceGuard's weaker exception (pass unchanged on a weak-signal-only
+  outage) is reasonable there because advice is a softer harm than handing over the graded answer.
+  The plan's lead review item 4 asks for "the stricter of the two existing patterns"; this is that.
+- Cost applied (lead review item 4): an outage on a genuinely clean paraphrase now costs a real,
+  always-safe tutoring turn (the hint instead of the actual reply) — accepted, because the
+  alternative risk (a paraphrase the judge would have caught, passed straight through) is the
+  answer leaking, which `mustNotReveal` exists specifically to prevent.
+- Alternatives: adviceGuard's weak-signal exception (rejected: this guard has no "weak signal"
+  tier — a non-numeric key either triggers the judge or it does not; there is no softer case to
+  exempt); retry the judge once before failing closed (rejected: adds latency inside an already
+  tight guard slice, deferred to a fix round if timeouts show up in practice).
+- Reversible: yes — the fail-closed branch is a single early return.
+
+---
+
+### 4 Nov 2026 · 4.5b shared fencing extracted from grounding.ts, not duplicated · decided by builder · risk: low
+- Decided: grounding.ts's private `fence()` helper is now the shared, exported `fencedToken()` in
+  `pedagogy/modelRequest.ts` (where `breakFenceRuns()` already lives); `grounding.ts` calls it
+  instead of its own now-deleted copy; `answerLeak.ts`'s judge request uses the same helper.
+- Why: the plan's lead review item 3 asks for the same per-request random fence token grounding.ts
+  already uses, reused rather than re-implemented, so a crafted key or reply can never forge the
+  closing marker in either guard. `modelRequest.ts` already owns `breakFenceRuns()` and already
+  imports `DATA_OPEN`/`DATA_CLOSE` from `compose.ts`; putting the shared function in `dataText.ts`
+  instead would need `dataText.ts` to import from `modelRequest.ts`, creating a cycle
+  (`dataText.ts` → `modelRequest.ts` → `compose.ts` → `dataText.ts`).
+- Alternatives: a second, separately-written fencing function for answerLeak (rejected: duplicates
+  logic the plan explicitly asked not to duplicate, and two copies drift over time).
+- Reversible: yes — grounding.ts's own tests (byte-identical behaviour, unchanged) are the guard
+  against a silent regression if this is ever un-shared.
+
+---
+
+### 4 Nov 2026 · 4.5b rewrite's time budget: the dynamic leftOf('answerLeak') idiom, not a fixed share · decided by builder · risk: low
+- Decided: `rewrite` and the new `leakJudge` both draw their budget from `leftOf('answerLeak')`
+  (what is actually left of the guard's slice after time already spent), the same idiom
+  `adviceRewrite`/`adviceJudge` use, replacing the old fixed `share('answerLeak', REWRITE_SHARE)`.
+- Why: up to two judge calls (the initial check, and the rewrite's re-verify) plus one rewrite can
+  now run in one guard pass; a fixed fraction sized for one call alone would starve whichever call
+  runs last. `REWRITE_SHARE` stays exported (re-exported from `pipeline/index.ts`) for anyone else
+  still using it, but is no longer used in this guard's own budget computation.
+- Alternatives: give the judge its own separate fixed share alongside `REWRITE_SHARE` (rejected:
+  two fixed shares cannot both flex to however much of the slice the rewrite actually used).
+- Reversible: yes — the budget functions are isolated to `postGuard.ts`'s `weightsFor`/`leftOf`.
+
+---
+
+### 4 Nov 2026 · 4.5b one shared fake judge, not a separately tuned eval judge · decided by builder · risk: low
+- Decided: the eval fixture uses the same `paraphraseJudge` Phase A built and unit-tests against,
+  not a second, eval-tuned fake judge (Phase A's Left-to-do item 4).
+- Why: a second fake judge is another thing to keep in sync with `answerLeak.ts`'s own judge
+  contract, for a difference this task could resolve with a one-line, local exemption in the
+  fixture's own gateway wiring (see Phase B summary) instead of a second judge implementation.
+  `paraphraseJudge`'s word-overlap false positives on this suite's own long, topic-matching hints
+  turned out to be fully addressable by recognising the case's own known-clean scripted hint text,
+  without weakening the judge's actual leak-detection behaviour for anything else.
+- Cost: the exemption is specific to this fixture (it knows each case's own `hint` string); a
+  future eval case whose "clean" reply is not a fixed, known string and still trips the word-overlap
+  rule would need the same kind of per-case thought, not a general fix.
+- Alternatives: a second eval-tuned judge with a higher overlap threshold or a stopword list tuned
+  for this bank's vocabulary (rejected: duplicates judge logic Phase A explicitly built once;
+  deferred as a real option only if a future case's exemption can't be expressed as cleanly).
+- Reversible: yes - the exemption is a few lines in `runCase`'s own verdict function, isolated from
+  `paraphraseJudge` itself.
+
+---
+
+### 4 Nov 2026 · 4.5b suites.test.ts exact-count assertion updated outside the plan's file list · decided by builder · risk: low
+- Decided: `packages/evals/src/suites.test.ts`'s `expect(leak.length).toBe(150)` was updated to
+  153, even though that file is not in this plan's files-to-touch list.
+- Why: it is a hard-coded exact count of every case under `evals/suites/leak/`, which any new case
+  mechanically changes; leaving it unchanged would fail `@edmate/evals test` deterministically for
+  a reason unrelated to this task's own logic. `SUITE_FLOORS.leak` (a floor, 150) did not need
+  changing, since 153 ≥ 150 already.
+- Alternatives: leave the 3 new cases out of `evals/suites/leak/` and put them somewhere this exact
+  count wouldn't see them (rejected: the brief asks for cases "under evals/suites/leak/", and the
+  count check would then miscount the suite's real size instead).
+- Reversible: yes - a one-line count, easy to re-derive from `ls evals/suites/leak | wc -l`.
+
+---
+
+### 4 Nov 2026 · 4.5b leak judge for paraphrased answers, merged · decided by lead · risk: high
+- Decided: Merge 4.5b. When the regex matcher misses on a non-numeric answer key, answerLeak asks a small-tier judge whether the reply confirms or paraphrases the key.
+  - The judge's input is fenced with the shared `fencedToken()`, now extracted from grounding.ts.
+  - A judge outage, timeout or malformed verdict counts as a leak (safe hint) and is reported as `AnswerLeakJudgeUnavailable`.
+  - Three new leak eval cases need the judge, and the lead signs them (`reviewed_by: lead`).
+- Why: Paraphrased or confirm-without-quoting leaks got past the regex matcher.
+  - code-reviewer checked the fencing (including a fake closing-fence test), fail-closed on every outage path, the eval exemption's scope (one case's own clean hint, exact match only) and the harness import rule.
+  - Its one HIGH, the missing outage event, was fixed in fix round 1, and the lead read that diff.
+  - Counts: harness 6143 passed, evals 2004 passed, both run explicitly.
+  - Safety-reviewer is waived until 13.3 (MVP-first), so this needs code-reviewer plus this decision.
+- Alternatives: Keep regex-only and accept paraphrase leaks until the pilot. Rejected, because the leak suite is a pilot gate.
+- Reversible: yes; revert the PR. The judge only adds checks, and on failure it fails toward the hint.
+
+---
+
+### 4 Nov 2026 · 4.5b build over budget · decided by lead · risk: low
+- Decided: Accept 333 tool calls (Phase A 187, Phase B 83, fix round 1 63, harness counts) against a budget of 105 (A 45, B 30, fix 30), about 3.2x.
+- Why: The work is complete and reviewed. Most of the overrun was in Phase A, where the judge stole the rewrite's scripted slot and broke 126 eval tests, which Phase B then fixed.
+  - The Phase A builder also ran `pkill -9 -f "vitest run --coverage"`, a pattern kill that breaks the builder rules and may have killed other agents' test runs.
+  - Later briefs ban pkill and killall by name, and Phase B and the fix round complied.
+- Alternatives: Discard and re-plan. That would waste working, reviewed code.
+- Reversible: n/a.
+
+---
+
+### 4 Nov 2026 · 4.5b plan risky-path list not amended · decided by lead · risk: low
+- Decided: Leave docs/tasks/4.5b/plan.md as written (wontfix, the review LOW). Its "Risky paths touched" list leaves out `packages/harness/src/pedagogy/modelRequest.ts`.
+- Why: That file is in the same reviewer group as `guardrails/**` (code-reviewer, safety-reviewer waived until 13.3), so no reviewer is missing. review.md and this entry record it.
+- Alternatives: Edit the merged plan. It's a historical record, so this note is enough.
+- Reversible: n/a.
+
+---
+
 ### 4 Nov 2026 · 7.4e build over budget · decided by lead · risk: low
 - Decided: Accept 26 tool calls against a budget of 12 (hard stop 20).
 - Why: The change is one timeout and a comment. Most of the calls were install and gate runs. The diff is exactly what the plan asked for, and code-reviewer approved it.

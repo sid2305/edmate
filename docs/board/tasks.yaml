@@ -1378,9 +1378,31 @@ tasks:
   deps:
   - GATE
   - '4.5'
-  status: running
+  status: done
   branch: m13/4.5b-leak-judge
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 480
+    tokens_in: 1638
+    tokens_out: 175074
+    cache_read_tokens: 74926913
+    wall_time_seconds: 4213
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 3
 - id: 4.5c
   milestone: M4
   title: 'answerLeak follow-ups (4.5 safety re-review): "baar/times" counts as an answer word only next to run or print words, never before an imperative ("ek baar try karo"); no own-code exemption when
