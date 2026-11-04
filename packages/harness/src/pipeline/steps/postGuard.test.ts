@@ -26,6 +26,7 @@ import { postGuards } from '../../guardrails/postGuards.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
 import { fakeGuard } from '../../testing/guardFixtures.js';
+import { CLEAN_LEAK_VERDICT, leakJudgeGateway } from '../../testing/leakJudge.js';
 import { type StreamStep, ScriptedGateway } from '../../testing/scriptedGateway.js';
 import { spyGateway } from '../../testing/spyGateway.js';
 import { memoryRetrieval, retrievalWorld } from '../../testing/memoryRetrieval.js';
@@ -72,12 +73,16 @@ function setup(
     deps.fallbackReplies = { ...deps.fallbackReplies, lockedReply: o.lockedReply };
   }
   const reported: unknown[] = [];
+  // 4.5b: a non-numeric key (e.g. the student's own code, quoted back) now asks answerLeak's own
+  // judge too; the non-circular fake answers clean so these pre-4.5b tests, none of which test
+  // that judge, keep their own behaviour.
+  const gateway = leakJudgeGateway(spy, () => CLEAN_LEAK_VERDICT, { clock });
   const env: StepEnv = {
     input: { ...demoTurnInput, text: o.studentText ?? 'What is x at the end?' },
     deps,
     cancel: cancelSource().token,
     turnId: 'turn_1',
-    gateway: spy,
+    gateway,
     usage: {
       record: () => undefined,
       checkBeforeCall: () => {

@@ -1,12 +1,21 @@
 // Task 4.5: the answerLeak guard on its own. Keys are synthetic.
-import { GuardResultSchema, LIMITS } from '@edmate/contracts';
+import { GuardResultSchema, LIMITS, type ModelRequest } from '@edmate/contracts';
 import { demoPedagogyDecision, demoTurnContext, usageSmall } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { cancelSource } from '../pipeline/clock.js';
+import {
+  CLEAN_LEAK_VERDICT,
+  LEAK_VERDICT,
+  paraphraseJudge,
+  readLeakJudgeRequest,
+} from '../testing/leakJudge.js';
 import { virtualClock } from '../testing/virtualClock.js';
 import {
   ANSWER_LEAK_SAFE_HINT,
   createAnswerLeakGuard,
+  type GroundingJudge,
+  type JudgeReply,
+  leakJudgeRequest,
   type LeakRewrite,
   type PostGuardCtx,
 } from './answerLeak.js';
@@ -207,6 +216,141 @@ describe('answerLeak: answer context (5.6b)', () => {
     expect((await run(text, ctxFor([key], student))).result.ok).toBe(true);
     expect((await run(text, ctxFor([key], { ...student, practiceKeys: [key] }))).result).toEqual(
       leak,
+    );
+  });
+});
+
+// Task 4.5b: the paraphrase judge, called only on a non-numeric key the matcher missed.
+describe('answerLeak: the paraphrase judge (4.5b)', () => {
+  const paraphraseLeak = {
+    ok: false,
+    action: 'rewrite',
+    text: ANSWER_LEAK_SAFE_HINT,
+    reason: 'paraphrase',
+  };
+  // paraphraseJudge's type (LeakVerdict) takes the request too; this fake judge ignores it.
+  const dummyReq: ModelRequest = {
+    tier: 'small',
+    system: '',
+    messages: [],
+    maxOutputTokens: 20,
+  };
+  const judgeCalling =
+    (verdict: (req: Parameters<GroundingJudge>[0]) => string, calls: unknown[] = []) =>
+    (req: Parameters<GroundingJudge>[0]): Promise<JudgeReply> => {
+      calls.push(req);
+      return Promise.resolve({ text: verdict(req), usage: [usageSmall] });
+    };
+  const judgeFromVerdict = (
+    verdict: (input: { key: string; reply: string }) => string,
+    calls: unknown[] = [],
+  ): GroundingJudge =>
+    judgeCalling((req) => verdict(readLeakJudgeRequest(toModelReq(req))), calls);
+  const toModelReq = (req: Parameters<GroundingJudge>[0]) => ({
+    tier: 'small' as const,
+    system: req.system,
+    messages: [{ role: 'user' as const, content: req.user }],
+    maxOutputTokens: 20,
+  });
+
+  it('no judge call when the regex matcher already caught the leak', async () => {
+    const calls: unknown[] = [];
+    const r = await run('x is 16.', ctxFor(['16'], { leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls) }));
+    expect(calls).toEqual([]);
+    expect(r.result).toMatchObject({ reason: 'answer_key' });
+  });
+
+  it('no judge call when every key is numeric or a label', async () => {
+    const calls: unknown[] = [];
+    const x = ctxFor(['16'], { leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls) });
+    expect((await run('Trace each line.', x)).result.ok).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
+  it('a non-numeric key with no regex hit is sent to the judge, fenced', async () => {
+    const calls: unknown[] = [];
+    const x = ctxFor(['Warm'], { leakJudge: judgeFromVerdict((input) => paraphraseJudge(input, dummyReq), calls) });
+    expect((await run('Think about a fire.', x)).result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    const sent = toModelReq(calls[0] as Parameters<GroundingJudge>[0]);
+    expect(readLeakJudgeRequest(sent)).toEqual({ key: 'Warm', reply: 'Think about a fire.' });
+  });
+
+  it('a clean judge verdict is ok, with its usage', async () => {
+    const x = ctxFor(['Warm'], { leakJudge: judgeFromVerdict(() => CLEAN_LEAK_VERDICT) });
+    expect(await run('Think about a fire.', x)).toEqual({ result: { ok: true }, usage: [usageSmall] });
+  });
+
+  // A two-word key, its words apart and out of order in the reply, so the regex matcher (a
+  // contiguous phrase match) misses it while the judge's own word-overlap rule still catches it.
+  const splitReply = "Yes, it's very toasty, and basically warm.";
+
+  it('a leak verdict takes the rewrite-or-hint path, with the paraphrase reason', async () => {
+    const x = ctxFor(['very warm'], { leakJudge: judgeFromVerdict(() => LEAK_VERDICT) });
+    expect((await run(splitReply, x)).result).toEqual(paraphraseLeak);
+  });
+
+  it('the rewrite is re-checked by the judge too: a clean rewrite is accepted', async () => {
+    const x = ctxFor(['very warm'], {
+      leakJudge: judgeFromVerdict((input) =>
+        input.reply === splitReply ? LEAK_VERDICT : CLEAN_LEAK_VERDICT,
+      ),
+      rewrite: rewriteTo('Think about the next step.'),
+    });
+    expect((await run(splitReply, x)).result).toEqual({
+      ...paraphraseLeak,
+      text: 'Think about the next step.',
+    });
+  });
+
+  it('the rewrite is re-checked by the judge too: a rewrite the judge still flags falls back to the hint', async () => {
+    const x = ctxFor(['very warm'], {
+      leakJudge: judgeFromVerdict(() => LEAK_VERDICT),
+      rewrite: rewriteTo('It is still rather warm and very noticeable.'),
+    });
+    expect((await run(splitReply, x)).result).toEqual(paraphraseLeak);
+  });
+
+  it('no answer from the judge fails closed to the hint, reason judge_unavailable', async () => {
+    const x = ctxFor(['Warm'], { leakJudge: () => Promise.resolve({ text: undefined, usage: [usageSmall] }) });
+    expect(await run('Think about a fire.', x)).toEqual({
+      result: {
+        ok: false,
+        action: 'rewrite',
+        text: ANSWER_LEAK_SAFE_HINT,
+        reason: 'judge_unavailable',
+      },
+      usage: [usageSmall],
+    });
+  });
+
+  it('an oversized judge verdict is not read as the strict JSON clean verdict', async () => {
+    const x = ctxFor(['Warm'], {
+      leakJudge: judgeFromVerdict(() => `{"leak": false, "pad": "${'x'.repeat(200)}"}`),
+    });
+    expect((await run('Think about a fire.', x)).result).toMatchObject({ reason: 'paraphrase' });
+  });
+
+  it('a judge verdict that is not strict JSON (malformed, or the wrong shape) is not clean', async () => {
+    const x = ctxFor(['Warm'], { leakJudge: judgeFromVerdict(() => '{"leak": false') });
+    expect((await run('Think about a fire.', x)).result).toMatchObject({ reason: 'paraphrase' });
+  });
+
+  it('a judge that throws is treated as no answer: fails closed too', async () => {
+    const x = ctxFor(['Warm'], { leakJudge: () => Promise.reject(new Error('boom')) });
+    expect((await run('Think about a fire.', x)).result).toMatchObject({
+      reason: 'judge_unavailable',
+    });
+  });
+
+  it('no leakJudge configured: a non-numeric key with no regex hit passes unchecked', async () => {
+    expect((await run('Think about a fire.', ctxFor(['Warm']))).result.ok).toBe(true);
+  });
+
+  it('leakJudgeRequest fences the key and the reply with the shared per-request token', () => {
+    const req = leakJudgeRequest({ key: 'Warm', reply: 'r', token: 'leakFence_1' });
+    expect(req.user).toBe(
+      "Hidden answer:\n<<<leakFence_1\nWarm\n>>>leakFence_1\n\nTutor's reply:\n<<<leakFence_1\nr\n>>>leakFence_1",
     );
   });
 });
