@@ -1310,7 +1310,7 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
 
 describe('the session distress follow-up flag, read on an ordinary turn (task 4.3b)', () => {
   function loadedWith(distressFollowupDue: boolean | undefined) {
-    return () =>
+    return (): Promise<BuiltContext> =>
       Promise.resolve({
         profile: demoLearnerProfile,
         history: [],

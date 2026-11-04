@@ -214,7 +214,8 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
     // 13.skillpresent: harness-computed progress, before the first token and before any tool
     // runs, never from a model tool call (ADR-0012, ADR-0013). At most one of these fires.
-    const progress = rolePlaySkillEvent(rolePlay, ctx) ?? feedbackSkillEvent(skill, decision.move, ctx);
+    const progress =
+      rolePlaySkillEvent(rolePlay, ctx) ?? feedbackSkillEvent(skill, decision.move, ctx);
     if (progress !== undefined) emit(progress);
     // 4.3b (lead review Q1): a held reply skips the check-in this turn; the flag still clears, so
     // it is lost for this session rather than shown out of order once the whole reply is ready.

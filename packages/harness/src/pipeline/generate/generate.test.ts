@@ -480,7 +480,10 @@ describe('generate: an issued item and a gate without addKeys (5.6 review, fail 
   const item = { itemId: 'i', moduleId: 'm', answerKey: ['7'], shown: ['What is 3 + 4?'] };
   const issuing = { ...presenting({ prompt: 'What is 3 + 4?' }), issuedItem: () => item };
   const plain: StreamGateFactory = () => ({ push: (t) => [t], flush: () => [] });
-  const stream = [[callCalc, used], [say('Try it. '), say('It is 7.'), used]];
+  const stream = [
+    [callCalc, used],
+    [say('Try it. '), say('It is 7.'), used],
+  ];
 
   it('holds the rest of the attempt and reports it withheld', async () => {
     const s = setup(stream, { gate: plain, tools: [issuing], decision: { move: 'ask' } });
@@ -552,7 +555,12 @@ describe('generate: distressFollowupDue (task 4.3b)', () => {
     await s.run();
     const tokens = s.events.filter((e) => e.type === 'token');
     expect(tokens[0]).toEqual({ type: 'token', text: TEST_DISTRESS_FOLLOWUP_REPLY });
-    expect(tokens.slice(1).map((e) => e.text).join('')).toBe('Sure, here is an f-string.');
+    expect(
+      tokens
+        .slice(1)
+        .map((e) => e.text)
+        .join(''),
+    ).toBe('Sure, here is an f-string.');
   });
 
   it('false (default): no check-in token', async () => {
@@ -560,7 +568,9 @@ describe('generate: distressFollowupDue (task 4.3b)', () => {
       decision: { move: 'ask', mustNotReveal: [] },
     });
     await s.run();
-    expect(s.events.filter((e) => e.type === 'token' && e.text === TEST_DISTRESS_FOLLOWUP_REPLY)).toEqual([]);
+    expect(
+      s.events.filter((e) => e.type === 'token' && e.text === TEST_DISTRESS_FOLLOWUP_REPLY),
+    ).toEqual([]);
   });
 
   it('true + held (ask_teacher): no check-in token this turn (Q1, documented gap)', async () => {

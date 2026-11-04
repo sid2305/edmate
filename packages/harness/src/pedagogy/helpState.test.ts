@@ -141,7 +141,10 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
 
   it('round-trips distressFollowupDue true/false; absent on an old blob reads false (4.3b)', () => {
     for (const due of [true, false]) {
-      const s = { rung: 1 as const, help: { ...INITIAL_HELP_STATE, answerKey: [], distressFollowupDue: due } };
+      const s = {
+        rung: 1 as const,
+        help: { ...INITIAL_HELP_STATE, answerKey: [], distressFollowupDue: due },
+      };
       expect(parseSessionHelp(serializeSessionHelp(s))).toEqual(s);
     }
     const old = { ...VALID, groundingAsks: 2 };

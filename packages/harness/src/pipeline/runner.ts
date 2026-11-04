@@ -692,11 +692,10 @@ class Turn {
     if ('alert' in post) {
       this.clearAll();
       // A locked trip must still be saved (4.6b fix round 1): the loaded state, untouched, gets
-      // the flag in finish(). 4.3b: whenever the help state is known, it is saved too, with the
-      // session distress follow-up flag set, so the next ordinary turn shows the check-in once.
-      const keep = helpLoaded
-        ? withDistressFollowup({ rung: built.helpRung, help: built.helpState })
-        : undefined;
+      // the flag in finish(). This escalate branch serves every postGuard alert (lockedLeak,
+      // answerLeak, grounding), not only distress, so it does not set the 4.3b check-in flag
+      // (that is set only on the distress escalate path below, where it belongs).
+      const keep = this.lockedTrip ? { rung: built.helpRung, help: built.helpState } : undefined;
       return this.escalate(scrubbed, e, post.alert, keep);
     }
     const { replyText } = post;
