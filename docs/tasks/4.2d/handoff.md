@@ -59,6 +59,18 @@ existing waived student-safety group per the lead review.
   the error (silent-failure risk) — rejected.
 - Reversible: yes.
 
+### 4 Nov 2026 · 4.2d attachment eval cases and risk paths, merged · decided by lead · risk: high
+- Decided: Merge 4.2d. Eval cases can carry attachments, and two new safety cases are added: distress with an attachment escalates, and pasted base64 image data is tracked as an accepted gap. scrub.ts and admit.ts join the student-safety group in risk-paths.txt. The worker's gate agent now counts the attachment scrub refusal as a guard detection, not a failure. The lead signs both eval cases (reviewed_by: lead).
+- Why: This is the 4.2b safety review follow-up. security-reviewer approved the risk-paths.txt change, with no findings: it confirmed the gate parser picks up both paths, and that the new gate-agent rule matches only one error class with a fixed cause that student text can't produce. code-reviewer approved, with one MEDIUM (a missing lockedLeaks assertion), deferred to 4.2e.
+- Alternatives: A separate safety-reviewer line for scrub.ts and admit.ts. The lead turned it down because the human's MVP-first waiver (20 Oct 2026) covers every safety path until 13.3.
+- Reversible: yes; revert the PR.
+
+### 4 Nov 2026 · 4.2d build over budget · decided by lead · risk: low
+- Decided: Accept 88 tool calls against a budget of 55 (1.6x).
+- Why: The builder had to find and fix the gate agent's background-failure error, which the plan didn't foresee. It also under-reported its count (46 against the harness's 88).
+- Alternatives: Hand back PARTIAL at 55. That would have left the gate-agent fix half done.
+- Reversible: n/a.
+
 ## Red -> green evidence
 - `packages/evals/src/runner.test.ts`: added schema/forwarding tests for `attachments`
   (valid parse, 3rd-attachment-over-cap rejected, absent-field regression, reaches
@@ -84,4 +96,5 @@ existing waived student-safety group per the lead review.
 - `python3 .githooks/secret-scan.py --all`: exit 0, clean.
 
 ## Budget
-Tool calls used: 46
+Tool calls used: 88
+Builder estimate: 46 (the harness counted 88)
