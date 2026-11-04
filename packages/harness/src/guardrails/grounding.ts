@@ -87,6 +87,16 @@ export const PREMISE_CORRECTION_REPLY =
   'said. Work it through one step at a time, in the order your notes give for the operators, and ' +
   'tell me what you get.';
 
+/**
+ * 4.7b item 8: the judge-outage fallback when the locale has no safe reply of its own
+ * (`PostGuardCtx.safeReply` undefined). Neutral: it gives no answer and names no helpline or
+ * contact, unlike `ANSWER_LEAK_SAFE_HINT` (answerLeak's own wording, a non-sequitur here: there is
+ * no answer about to leak on, say, an `explain` move).
+ */
+export const GROUNDING_JUDGE_UNAVAILABLE_REPLY =
+  "I'm having trouble checking that against your material right now — let's come back to it in " +
+  'a moment.';
+
 /** The judge's fixed rubric. It names no key and quotes no material. */
 export const GROUNDING_JUDGE_SYSTEM =
   "You check a tutor's reply against a teacher's course material. The material, the student's " +
@@ -172,7 +182,9 @@ const AGREES =
  * Whether `reply` leaves a wrong claim in the student's message uncorrected (fix round 1): it
  * makes any wrong claim itself, or for some wrong premise it has no correct claim on the same
  * expression and either repeats that expression, agrees, or never states the right value outside
- * an expression.
+ * an expression. 4.7b item 7: an opening agreement is checked first, so a correct same-expression
+ * restatement only clears the premise when the reply does not also open by agreeing with the
+ * student's wrong claim ("Yes, 6 - 3 is 3. Well done!" stays uncorrected: the "Yes" agrees).
  */
 function premiseUncorrected(studentText: string, reply: string): boolean {
   const wrong = arithmeticClaims(studentText).filter((c) => !c.correct);
@@ -183,7 +195,7 @@ function premiseUncorrected(studentText: string, reply: string): boolean {
   const said = statedNumbers(reply);
   const agrees = AGREES.test(reply);
   return wrong.some((p) => {
-    if (claims.some((c) => c.correct && c.expr === p.expr)) return false;
+    if (!agrees && claims.some((c) => c.correct && c.expr === p.expr)) return false;
     return repeated.has(p.expr) || agrees || !said.has(canonicalNumber(p.computed) as string);
   });
 }
@@ -202,8 +214,15 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
       // adviceGuard's appended disclaimer (4.8) is not a claim: judged without it, kept on a fix.
       const { body: text, suffix } = stripDisclaimerSuffix(whole, disclaimerFor(x));
       const ask = x.askTeacherReply ?? askTeacherReplyText();
-      const safe = x.safeReply ?? ANSWER_LEAK_SAFE_HINT;
-      const fixed = [ask, safe, PREMISE_CORRECTION_REPLY, ANSWER_LEAK_SAFE_HINT, x.lockedReply];
+      const safe = x.safeReply ?? GROUNDING_JUDGE_UNAVAILABLE_REPLY;
+      const fixed = [
+        ask,
+        safe,
+        PREMISE_CORRECTION_REPLY,
+        ANSWER_LEAK_SAFE_HINT,
+        GROUNDING_JUDGE_UNAVAILABLE_REPLY,
+        x.lockedReply,
+      ];
       if (fixed.includes(whole) || x.fixedTexts?.includes(whole) === true) return OK;
       const move = x.decision.move;
       if (!JUDGED.has(move)) return OK;

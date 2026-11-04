@@ -374,7 +374,7 @@ function watched(g: Guard<PostGuardCtx>, reasons: Map<string, string[]>): Guard<
     async run(text, x, cancel): Promise<GuardRun> {
       const r = await g.run(text, x, cancel);
       // The chain validates the result; this only reads a string reason if there is one.
-      const res: unknown = (r as { result?: unknown } | null | undefined)?.result;
+      const res: unknown = r.result;
       if (typeof res === 'object' && res !== null && 'reason' in res) {
         const reason: unknown = res.reason;
         if (typeof reason === 'string') own.push(reason);

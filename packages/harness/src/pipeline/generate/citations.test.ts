@@ -56,4 +56,22 @@ describe('invalidCitations (task 4.7, grounding Rule B)', () => {
   it('an unclosed fence hides the rest (it is all code)', () => {
     expect(invalidCitations('Look:\n```\nx = [5]\n', 0)).toEqual([]);
   });
+
+  it('catches wider forms that dodge Rule B (4.7b item 2): spaced brackets, a full-width digit, "source N"', () => {
+    expect(invalidCitations('See [ 4 ].', 3)).toEqual([4]);
+    expect(invalidCitations('See [４].', 3)).toEqual([4]);
+    expect(invalidCitations('See source 4.', 3)).toEqual([4]);
+    expect(invalidCitations('See Source 4.', 3)).toEqual([4]);
+    // In range: not flagged.
+    expect(invalidCitations('See [ 2 ], [２], and source 2.', 3)).toEqual([]);
+  });
+
+  it('still ignores indexing and code for the wider bracket forms', () => {
+    expect(invalidCitations('pets[ 0 ]', 0)).toEqual([]);
+    expect(invalidCitations('Inline `nums[ 2 ]` is code.\n```\n[ 9 ]\n```', 0)).toEqual([]);
+  });
+
+  it('does not match "resource 4" (no word boundary before "source")', () => {
+    expect(invalidCitations('See resource 4.', 3)).toEqual([]);
+  });
 });

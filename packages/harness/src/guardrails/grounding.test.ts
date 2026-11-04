@@ -21,6 +21,7 @@ import {
   askTeacherReplyText,
   createGroundingGuard,
   GROUNDING_JUDGE_SYSTEM,
+  GROUNDING_JUDGE_UNAVAILABLE_REPLY,
   groundingJudgeRequest,
   parseGroundingVerdict,
   PREMISE_CORRECTION_REPLY,
@@ -294,6 +295,9 @@ describe('grounding: false premises (lead answer 5)', () => {
     // The expression repeated with no claim, and an operand that equals the right value.
     ['7 // 2 is 4, right?', 'Hmm, 7 // 2 rounds down, as your notes say [1].'],
     ['6 - 3 is 2, right?', 'Think about 6 - 3 again: 3 is what you start with?'],
+    // 4.7b item 7, the accept line's own example: an opening agreement wins over a later correct
+    // restatement of the same expression.
+    ['6 - 3 is 2, right?', 'Yes, 6 - 3 is 3. Well done!'],
   ])('student %j, reply %j: the correction prompt, no judge call', async (studentText, reply) => {
     const { j, judge } = judgeOf(GROUNDED);
     expect(await run(reply, { ...premise(studentText), judge })).toEqual(correction);
@@ -392,12 +396,19 @@ describe('grounding: Rule D (the judge)', () => {
     expect(await run('Floor division rounds down.', x({ ...safe, judge: throwing }))).toEqual(
       unavailable('SAFE REPLY'),
     );
-    // No safe reply given: the answerLeak hint, never the "not covered" text.
+    // No safe reply given: grounding's own neutral outage text (4.7b item 8), never the
+    // answerLeak hint (a non-sequitur here: there is no answer about to leak) or the "not
+    // covered" text.
     expect(await run('Floor division rounds down.', x())).toEqual(
-      unavailable(ANSWER_LEAK_SAFE_HINT),
+      unavailable(GROUNDING_JUDGE_UNAVAILABLE_REPLY),
     );
     // The safe reply itself passes as a fixed text.
     expect(await run('SAFE REPLY', x(safe))).toEqual({ result: { ok: true }, usage: [] });
+    // So does grounding's own outage text, on the idempotence pass (4.7's own rule).
+    expect(await run(GROUNDING_JUDGE_UNAVAILABLE_REPLY, x())).toEqual({
+      result: { ok: true },
+      usage: [],
+    });
   });
 
   it('a judge that DID answer, but not with the strict verdict, is "not grounded"', async () => {
