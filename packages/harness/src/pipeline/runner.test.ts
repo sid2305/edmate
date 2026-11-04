@@ -58,6 +58,7 @@ import {
   StepNotImplementedError,
 } from './errors.js';
 import { createScrub } from './steps/scrub.js';
+import { INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES, STEP_SPEC } from './spec.js';
@@ -1095,6 +1096,13 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
     });
   }, 2_000);
 
+  it('also saves the session distress follow-up flag, for the next ordinary turn to read (4.3b)', async () => {
+    const t = deps();
+    const steps = realDistress();
+    await driveTurn(runTurn(at('i want to kill myself'), { deps: t.deps, steps }), t.clock);
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBe(true);
+  }, 2_000);
+
   it('the chain fails (no pre guard registered) on a hard keyword: the runner keyword check still escalates', async () => {
     const t = deps();
     const steps = realDistress({ preGuard: createPreGuardStep(new GuardRegistry('pre')) });
@@ -1298,4 +1306,63 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
     expect(steps.commits[0]).toMatchObject({ outcome: 'blocked' });
     expect(t.alerts.raised).toEqual([]);
   }, 2_000);
+});
+
+describe('the session distress follow-up flag, read on an ordinary turn (task 4.3b)', () => {
+  function loadedWith(distressFollowupDue: boolean | undefined) {
+    return () =>
+      Promise.resolve({
+        profile: demoLearnerProfile,
+        history: [],
+        retrieved: [demoChunk],
+        lockedHit: false,
+        helpRung: 0,
+        helpState: {
+          ...INITIAL_HELP_STATE,
+          ...(distressFollowupDue === undefined ? {} : { distressFollowupDue }),
+        },
+      });
+  }
+
+  it('true: reaches generate and is cleared on the saved help state, whatever this turn did', async () => {
+    let seen: boolean | undefined;
+    const steps = testSteps({
+      buildContext: loadedWith(true),
+      generate: (_env, x, _emit) => {
+        seen = x.distressFollowupDue;
+        return Promise.resolve({ draft: 'ok' });
+      },
+    });
+    const t = testDeps();
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(seen).toBe(true);
+    expect(steps.commits[0]?.outcome).toBe('replied');
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBeUndefined();
+  });
+
+  it('absent: reaches generate as false; the saved help state still has no flag', async () => {
+    let seen: boolean | undefined;
+    const steps = testSteps({
+      buildContext: loadedWith(undefined),
+      generate: (_env, x, _emit) => {
+        seen = x.distressFollowupDue;
+        return Promise.resolve({ draft: 'ok' });
+      },
+    });
+    const t = testDeps();
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(seen).toBe(false);
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBeUndefined();
+  });
+
+  it('true + generate fails: still cleared on the saved help state (error outcome)', async () => {
+    const steps = testSteps({
+      buildContext: loadedWith(true),
+      generate: () => Promise.reject(new Error('model down')),
+    });
+    const t = testDeps();
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(steps.commits[0]?.outcome).toBe('error');
+    expect(steps.commits[0]?.next?.help.distressFollowupDue).toBeUndefined();
+  });
 });

@@ -110,6 +110,7 @@ export function testDecideResult(
 export const TEST_SAFE_REPLY = 'Let us try that a different way.';
 export const TEST_DISTRESS_REPLY = 'You are not alone. Please reach out to a helpline.';
 export const TEST_CARING_REPLY = 'I am here with you. Here are people you can talk to now.';
+export const TEST_DISTRESS_FOLLOWUP_REPLY = 'Thanks for telling me. I am glad you are still here.';
 
 function happySteps(commits: CommitRecord[]): Steps {
   return {
@@ -402,6 +403,7 @@ export function testDeps(
     fallbackReplies: {
       safeReply: () => TEST_SAFE_REPLY,
       distress: () => TEST_DISTRESS_REPLY,
+      distressFollowup: () => TEST_DISTRESS_FOLLOWUP_REPLY,
     },
     distressCheck: () => false,
     promptPacks: fixturePromptPackLibrary,

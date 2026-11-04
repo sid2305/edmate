@@ -27,7 +27,7 @@ import {
 } from '../../testing/promptPackFixtures.js';
 import { type StreamStep, ScriptedGateway } from '../../testing/scriptedGateway.js';
 import { spyGateway } from '../../testing/spyGateway.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { testDeps, TEST_DISTRESS_FOLLOWUP_REPLY } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
@@ -81,6 +81,7 @@ function setup(
     usage?: Partial<UsageRecorder>;
     gate?: StreamGateFactory;
     lockedStopped?: boolean;
+    distressFollowupDue?: boolean;
     onLockedTrip?: () => void;
     step?: Steps['generate'];
     /** The student's (scrubbed) message; default demoTurnInput's. */
@@ -129,6 +130,7 @@ function setup(
             decision: d,
             sources,
             attempt: 'primary',
+            distressFollowupDue: o.distressFollowupDue ?? false,
             ...(o.lockedStopped === undefined ? {} : { lockedStopped: o.lockedStopped }),
             ...(o.onLockedTrip === undefined ? {} : { onLockedTrip: o.onLockedTrip }),
             ...extra,
@@ -538,6 +540,36 @@ describe('generate: the answer-leak sentence gate is the default (4.5)', () => {
     expect(s.reported.map((e) => String(e))).toEqual([
       'SourceDropped: a cited source label held the answer key and was dropped',
     ]);
+  });
+});
+
+describe('generate: distressFollowupDue (task 4.3b)', () => {
+  it('true + unheld: the first token is the built-in check-in, then the model stream', async () => {
+    const s = setup([[say('Sure, '), say('here is an f-string.'), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+      distressFollowupDue: true,
+    });
+    await s.run();
+    const tokens = s.events.filter((e) => e.type === 'token');
+    expect(tokens[0]).toEqual({ type: 'token', text: TEST_DISTRESS_FOLLOWUP_REPLY });
+    expect(tokens.slice(1).map((e) => e.text).join('')).toBe('Sure, here is an f-string.');
+  });
+
+  it('false (default): no check-in token', async () => {
+    const s = setup([[say('Sure.'), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+    });
+    await s.run();
+    expect(s.events.filter((e) => e.type === 'token' && e.text === TEST_DISTRESS_FOLLOWUP_REPLY)).toEqual([]);
+  });
+
+  it('true + held (ask_teacher): no check-in token this turn (Q1, documented gap)', async () => {
+    const s = setup([[say('Let me ask your teacher.'), used]], {
+      decision: { move: 'ask_teacher', mustNotReveal: [] },
+      distressFollowupDue: true,
+    });
+    await s.run();
+    expect(s.events.filter((e) => e.type === 'token')).toEqual([]);
   });
 });
 

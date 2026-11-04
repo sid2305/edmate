@@ -11,3 +11,15 @@ export const LAST_RESORT_DISTRESS_REPLY =
   "I'm an AI, so please reach out to someone you trust right now, like a friend, " +
   'family member, teacher or counsellor. If you are in danger or might hurt yourself, ' +
   'contact your local emergency services now.';
+
+/**
+ * Sent once, before the model's own stream, on the first unheld turn after a session escalated
+ * (task 4.3b, lead review Q0/Q4): a short, built-in English check-in that acknowledges without
+ * scolding and says support is still there, never that the earlier message is forgotten or that
+ * no one will be told, and never a diagnosis. Built in, not injected, for the same reason as
+ * `LAST_RESORT_DISTRESS_REPLY`: no i18n library in the harness, pilot is English-only (no prompt-
+ * pack edit, no ADR; Q0).
+ */
+export const DISTRESS_FOLLOWUP_REPLY =
+  "Before we carry on: thank you for telling me earlier. I'm glad you're still here with me, " +
+  "and support is still there whenever you want it. Now, let's keep going. ";

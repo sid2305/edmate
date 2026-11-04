@@ -44,7 +44,9 @@ import {
   PRACTICE_SERVED_MAX,
   practiceFields,
   type SessionHelp,
+  withDistressFollowup,
   withGroundingAsks,
+  withoutDistressFollowup,
   withPersonaCount,
 } from '../pedagogy/helpState.js';
 import type { RolePlay } from '../pedagogy/roleplay.js';
@@ -515,6 +517,13 @@ class Turn {
       this.trace.addGuards([{ name: 'answerKeyContext', ok: false, action: 'drop' }]);
     }
 
+    // 4.3b: the loaded help state, set here (before decide may rebuild it) so the escalate branch
+    // just below can carry the session distress follow-up flag forward too. Recomputed below
+    // (unconditionally) once `built`/`helpLoaded` may have changed from a buildContext fallback.
+    const bcHelpLoaded = bc.ok && bc.value.helpStateUnreadable !== true;
+    this.loadedStop = bcHelpLoaded ? bc.value.helpState.lockedStopped === true : null;
+    this.loadedHelp = bcHelpLoaded ? { rung: bc.value.helpRung, help: bc.value.helpState } : null;
+
     // 5. Escalate beats block: a distressed student always gets the caring reply.
     // 4.4c: with the pre guard chain down (no classifier verdict at all), the rule tables still
     // run on the raw scrubbed text, so a decisive moderation/jailbreak hit is not lost to the
@@ -542,7 +551,11 @@ class Turn {
         ruleFallback === null &&
         (this.distressHit(scrubbed, 'scrubbed') || hasAnyDistressKeyword(scrubbed.text ?? '')))
     ) {
-      return this.escalate(scrubbed, e, preAlert, undefined, blockAlert);
+      // 4.3b: when the help state was loaded, carry the session distress follow-up flag forward
+      // so the next ordinary turn shows the gentle check-in once.
+      const escalateNext =
+        this.loadedHelp === null ? undefined : withDistressFollowup(this.loadedHelp);
+      return this.escalate(scrubbed, e, preAlert, escalateNext, blockAlert);
     }
     if (ruleFallback?.kind === 'block') {
       // The rule table's own reply, plus a misuse alert if the code carries one (4.4c).
@@ -623,12 +636,15 @@ class Turn {
     // The session's grounding escalation count rides along on every path that saves the help
     // state (decide's ladder may rebuild the state without it; 4.7 fix round 1).
     const asked = built.helpState.groundingAsks ?? 0;
+    // 4.3b: read once here, then always cleared on `base.next` below, whatever this turn's own
+    // outcome (Q3: a second escalation in a row just saves it true again instead).
+    const followupDue = helpLoaded && built.helpState.distressFollowupDue === true;
     const base = {
       input: scrubbed,
       intent,
       context: ctx,
       decision,
-      next: withGroundingAsks(decided.next, asked),
+      next: withoutDistressFollowup(withGroundingAsks(decided.next, asked)),
       promptPack: decided.promptPack,
     };
 
@@ -644,6 +660,7 @@ class Turn {
       decided.skill,
       decided.rolePlay,
       this.loadedStop !== false,
+      followupDue,
       {
         servedItemIds: built.helpState.practiceServed ?? [],
         ...(built.helpState.practiceModuleId === undefined
@@ -675,8 +692,11 @@ class Turn {
     if ('alert' in post) {
       this.clearAll();
       // A locked trip must still be saved (4.6b fix round 1): the loaded state, untouched, gets
-      // the flag in finish(). Without one, an escalation saves no help state, as before.
-      const keep = this.lockedTrip ? { rung: built.helpRung, help: built.helpState } : undefined;
+      // the flag in finish(). 4.3b: whenever the help state is known, it is saved too, with the
+      // session distress follow-up flag set, so the next ordinary turn shows the check-in once.
+      const keep = helpLoaded
+        ? withDistressFollowup({ rung: built.helpRung, help: built.helpState })
+        : undefined;
       return this.escalate(scrubbed, e, post.alert, keep);
     }
     const { replyText } = post;
@@ -700,10 +720,14 @@ class Turn {
       {
         ...base,
         // Only the model's own reply, passed by the post guard, counts a persona question
-        // (3.11e): the safe reply and a guard's replacement keep the loaded count.
-        next: withGroundingAsks(
-          post.modelReply ? decided.next : withPersonaCount(decided.next, built.helpState),
-          asked + (escalating && questionId !== undefined ? 1 : 0),
+        // (3.11e): the safe reply and a guard's replacement keep the loaded count. 4.3b: the
+        // session distress follow-up flag was read once into `followupDue` above; it is always
+        // cleared here too, whatever this turn's own outcome.
+        next: withoutDistressFollowup(
+          withGroundingAsks(
+            post.modelReply ? decided.next : withPersonaCount(decided.next, built.helpState),
+            asked + (escalating && questionId !== undefined ? 1 : 0),
+          ),
         ),
         outcome: 'replied',
         replyText,
@@ -1061,6 +1085,7 @@ class Turn {
     skill: Skill | null | undefined,
     rolePlay: RolePlay | undefined,
     lockedStopped: boolean,
+    distressFollowupDue: boolean,
     practice: ToolSessionState,
   ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
@@ -1087,6 +1112,7 @@ class Turn {
               ...(skill === undefined ? {} : { skill }),
               ...(rolePlay === undefined ? {} : { rolePlay }),
               lockedStopped,
+              distressFollowupDue,
               onLockedTrip: () => {
                 this.lockedTrip = true;
               },
