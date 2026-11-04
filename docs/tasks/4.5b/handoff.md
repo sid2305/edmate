@@ -145,6 +145,12 @@ the paraphrase judge itself, so this is setup, not an assertion change.
 - Alternatives: Discard and re-plan. That would waste working, reviewed code.
 - Reversible: n/a.
 
+### 4 Nov 2026 · 4.5b plan risky-path list not amended · decided by lead · risk: low
+- Decided: Leave docs/tasks/4.5b/plan.md as written (wontfix, the review LOW). Its "Risky paths touched" list leaves out `packages/harness/src/pedagogy/modelRequest.ts`.
+- Why: That file is in the same reviewer group as `guardrails/**` (code-reviewer, safety-reviewer waived until 13.3), so no reviewer is missing. review.md and this entry record it.
+- Alternatives: Edit the merged plan. It's a historical record, so this note is enough.
+- Reversible: n/a.
+
 ## Red -> green evidence
 
 Implementation and tests were written together rather than strictly test-first in every case
