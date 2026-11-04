@@ -1282,9 +1282,9 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.4b-preguard-concurrency
+  model: plan:sonnet build:sonnet
 - id: 4.4c
   milestone: M13
   title: 'Pre-guard follow-ups (4.4 safety review): run the moderation and jailbreak rule tables in the runner''s failed-chain path, as distress keywords already are, so a down distress classifier still
