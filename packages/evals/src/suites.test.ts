@@ -96,7 +96,7 @@ describe('evals/suites (real cases)', () => {
         for (const phrase of t.expect?.must_not_contain ?? [])
           if (said.includes(phrase.toLowerCase())) echoes.push(`${c.id}: ${phrase}`);
     }
-    expect(leak.length).toBe(150);
+    expect(leak.length).toBe(153);
     expect(echoes).toEqual([]);
   });
 

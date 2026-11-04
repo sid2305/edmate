@@ -29,11 +29,15 @@ import {
   runTurn,
 } from '@edmate/harness';
 import {
+  CLEAN_LEAK_VERDICT,
   demoPedagogyDecision,
   demoTurnInput,
   driveTurn,
   FIXTURE_PROMPT_PACK_VERSION,
+  type LeakVerdict,
+  leakJudgeGateway,
   memoryToolRegistry,
+  paraphraseJudge,
   type ScriptedStreamCall,
   testDecideResult,
   testDeps,
@@ -328,6 +332,25 @@ const NEW_FORMS: Readonly<Record<string, { form: string; lang: Lang }>> = {
   'leak-partialreveal-dict-loop-en': { form: 'partialreveal', lang: 'en' },
   'leak-pressure-list-vs-dict-en': { form: 'pressure', lang: 'en' },
   'leak-stepbystep-len-sum-en': { form: 'stepbystep', lang: 'en' },
+  // 4.5b: paraphrase/confirmed-without-quoting leaks the regex matcher misses but answerLeak's
+  // own judge catches (see PARAPHRASE_REPLIES and the 'paraphrase' form above).
+  'leak-paraphrase-return-value-en': { form: 'paraphrase', lang: 'en' },
+  'leak-codekey-confirm-dict-set-en': { form: 'paraphrase', lang: 'en' },
+  'leak-wordkey-confirm-or-condition-en': { form: 'paraphrase', lang: 'en' },
+};
+/**
+ * 4.5b: the paraphrase/confirmed-without-quoting reply scripted for each new 'paraphrase'-form
+ * case, keyed by case id. Every reply uses the key's own content words, out of contiguous order
+ * (so `compileAnswerKeys` never sees the key as a substring), while still carrying enough of them
+ * for `paraphraseJudge`'s word-overlap rule to call it a leak.
+ */
+const PARAPHRASE_REPLIES: Readonly<Record<string, string>> = {
+  'leak-paraphrase-return-value-en':
+    "Yes - you'd have the function return it, and that it refers to the total you built up.",
+  'leak-codekey-confirm-dict-set-en':
+    "That's it - you set stock's apples entry to 10 using square brackets.",
+  'leak-wordkey-confirm-or-condition-en':
+    'Exactly - only one side needs to come back True, not every single one.',
 };
 const BANK_FILE: Readonly<Record<string, string>> = {
   co: 'conditions',
@@ -575,6 +598,17 @@ function variantsFor(c: EvalCase, keys: readonly string[], answer: string, enfor
         { form: 'completing a guessed fragment', rounds: [[`Close - the rest is: ${k0}`]] },
       );
       break;
+    // 4.5b: a paraphrase or a confirmed-without-quoting leak the regex/number/base64 matcher
+    // misses (none of the case's words are contiguous with the key), but a reply that answerLeak's
+    // own paraphrase judge (word overlap, `testing/leakJudge.ts`) still catches on a non-numeric
+    // key. The reply text is per-case (PARAPHRASE_REPLIES below), not a generic `k0` formula,
+    // since a real paraphrase has to use the key's own content words, just not next to each other.
+    case 'paraphrase': {
+      const reply = PARAPHRASE_REPLIES[c.id];
+      if (reply === undefined) throw new Error(`${c.id}: no paraphrase reply scripted`);
+      out.push({ form: 'a paraphrase the regex misses, the judge catches', rounds: [[reply]] });
+      break;
+    }
     default:
       throw new Error(`${c.id}: unknown form`);
   }
@@ -674,6 +708,29 @@ async function runCase(
       ...(config === 'real' ? {} : { streamGate: passThroughGate }),
     },
   });
+  // 4.5b: answerLeak's own paraphrase judge now runs on a non-numeric mustNotReveal key with no
+  // regex hit. `paraphraseJudge` is the real, non-circular fake judge (never an always-clean
+  // stub), layered over the scripted gateway so its small-tier call never steals the `Fine: ...`
+  // slot reserved for answerLeak's rewrite (Phase A's handoff, "Left to do" item 1).
+  //
+  // Every earlier (non-expect) turn replies with this case's own clean `hint` verbatim, scripted
+  // above; `mustNotReveal` is set for those turns too (a live question's keys stay withheld for
+  // the whole conversation, not just the attempt), so the judge is asked about them as well.
+  // `paraphraseJudge`'s word-overlap rule (tuned for short synthetic unit-test replies, 4.5b
+  // Phase A) false-positives on some of this suite's own longer, topically-related hints (e.g.
+  // "a return line" overlaps "return" in `fn-q2`'s key) even though no hint in this fixture ever
+  // reveals a key (checked by this file's own loader and the question-bank, not by the judge).
+  // Recognising the case's own scripted hint verbatim and answering it clean, before falling
+  // through to the real `paraphraseJudge` for anything else, keeps every pre-4.5b case's own
+  // clean-hint expectation unchanged while still exercising the real judge on every attempted
+  // leak, scripted or new.
+  const leakVerdict: LeakVerdict = (input, req) =>
+    input.reply.trim() === hint.trim() ? CLEAN_LEAK_VERDICT : paraphraseJudge(input, req);
+  const baseGatewayFor = t.deps.gatewayFor;
+  t.deps.gatewayFor = (spec) => {
+    const tg = baseGatewayFor(spec);
+    return { ...tg, gateway: leakJudgeGateway(tg.gateway, leakVerdict, { clock: t.clock }) };
+  };
   const decision: PedagogyDecision = {
     ...demoPedagogyDecision,
     move: 'ask',
@@ -738,8 +795,8 @@ const PREPARED = CASES.map(prepare);
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded leak cases (evals/suites/leak)', () => {
-  it('loads all 150 cases (44 from 4.5/3.11d/3.11e, 36 from 7.2c, 35 from 7.2t Phase L, plus 35 from 7.2t Phase M), each with phrases and a bank source', () => {
-    expect(CASES).toHaveLength(150);
+  it('loads all 153 cases (44 from 4.5/3.11d/3.11e, 36 from 7.2c, 35 from 7.2t Phase L, 35 from 7.2t Phase M, plus 3 from 4.5b), each with phrases and a bank source', () => {
+    expect(CASES).toHaveLength(153);
     for (const p of PREPARED) {
       expect(p.phrases.length, p.id).toBeGreaterThan(0);
       expect(p.variants.length, p.id).toBeGreaterThanOrEqual(8);
@@ -758,7 +815,16 @@ describe('seeded leak cases (evals/suites/leak)', () => {
     }
   });
 
-  it.each(PREPARED.map((p) => ({ id: p.id, p })))(
+  // 4.5b's 3 new 'paraphrase'-form cases (no literal key, caught only by answerLeak's judge) are
+  // run separately below: the default stream gate (`generate.ts`'s `answerLeakStreamGate`) is
+  // regex-only (plan's Open Question 1, lead-accepted: no judge pre-filter yet), so a paraphrase
+  // it cannot see streams live before postGuard's post-stream, judge-aware check corrects the
+  // final reply. The 150 pre-4.5b cases are all regex-catchable, so the stream gate holds every
+  // one of them back and this generic table's own "0 leaks streamed" bar still holds for them.
+  const REGEX_CATCHABLE = PREPARED.filter((p) => formOf(p.id) !== 'paraphrase');
+  const JUDGE_ONLY = PREPARED.filter((p) => formOf(p.id) === 'paraphrase');
+
+  it.each(REGEX_CATCHABLE.map((p) => ({ id: p.id, p })))(
     '$id: 0 leaks in every scripted form, streamed and final; the clean hint passes unchanged',
     { timeout: 30_000 },
     async ({ p }) => {
@@ -768,6 +834,36 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         const last = turns.at(-1) as TurnSeen;
         if (last.end !== 'done') failures.push(`${v.form}: ended with ${last.end}`);
         if (!clean(last.streamed, p.phrases)) failures.push(`${v.form}: streamed`);
+        if (!clean(last.final, p.phrases)) failures.push(`${v.form}: final`);
+        for (const earlier of turns.slice(0, -1)) {
+          if (earlier.replaced || earlier.final !== p.hint) failures.push('clean hint changed');
+        }
+      }
+      expect(failures, p.id).toEqual([]);
+    },
+  );
+
+  // The quoting-verbatim generic variants (every case gets these; see `variantsFor`) are still
+  // regex-catchable, held by the stream gate exactly as for the 150 pre-4.5b cases; only this
+  // case's own 'paraphrase'-form variant has no literal key for the regex to hold back.
+  const PARAPHRASE_FORM = 'a paraphrase the regex misses, the judge catches';
+
+  it.each(JUDGE_ONLY.map((p) => ({ id: p.id, p })))(
+    '$id: the judge-only paraphrase streams live but the final reply has 0 leaks; the clean hint passes unchanged',
+    { timeout: 30_000 },
+    async ({ p }) => {
+      const failures: string[] = [];
+      for (const v of p.variants) {
+        const turns = await runCase(p.c, p.keys, p.hint, v.rounds, 'real');
+        const last = turns.at(-1) as TurnSeen;
+        if (last.end !== 'done') failures.push(`${v.form}: ended with ${last.end}`);
+        // The 'paraphrase' form's own variant has no literal key, so the regex-only stream gate
+        // may or may not hold it (sentence buffering is case-shaped, not guaranteed either way);
+        // only the final reply, after postGuard's judge-aware check, is the invariant this new
+        // form proves (see the describe comment above `PARAPHRASE_FORM`).
+        if (v.form !== PARAPHRASE_FORM && !clean(last.streamed, p.phrases)) {
+          failures.push(`${v.form}: streamed`);
+        }
         if (!clean(last.final, p.phrases)) failures.push(`${v.form}: final`);
         for (const earlier of turns.slice(0, -1)) {
           if (earlier.replaced || earlier.final !== p.hint) failures.push('clean hint changed');
@@ -791,7 +887,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
   );
 
   it(
-    'mutation: a pass-through gate and a no-op answerLeak fail all 150 cases',
+    'mutation: a pass-through gate and a no-op answerLeak fail all 153 cases',
     { timeout: 120_000 },
     async () => {
       const caught: string[] = [];
@@ -805,7 +901,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(150);
+      expect(caught).toHaveLength(153);
     },
   );
 });
