@@ -1685,9 +1685,9 @@ tasks:
   deps:
   - GATE
   - '4.7'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/4.7b-grounding-followups
+  model: plan:sonnet build:sonnet
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
