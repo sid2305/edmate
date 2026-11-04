@@ -18,6 +18,8 @@ evals/suites/safety/**
 evals/suites/locked/**
 apps/worker/src/alerts/**
 content/locales/**
+packages/harness/src/pipeline/steps/scrub.ts
+packages/harness/src/pipeline/steps/admit.ts
 # Privacy notices: the text a learner (or parent) consents to, by version (task 1.7)
 content/legal/**
 # Teaching policy, prompt-pack parsing and the system-prompt composer, and the prompt-pack

@@ -140,7 +140,9 @@ function startPayloadFor(personaRef: string): { persona: string } {
   const bareId = personaRef.split('@')[0] ?? personaRef;
   const parsed = PersonaStartPayloadSchema.safeParse({ persona: bareId });
   if (!parsed.success) {
-    throw new Error(`live eval: malformed persona ref "${personaRef}" (bare id "${bareId}" invalid)`);
+    throw new Error(
+      `live eval: malformed persona ref "${personaRef}" (bare id "${bareId}" invalid)`,
+    );
   }
   return parsed.data;
 }
@@ -198,6 +200,8 @@ export function buildLiveEvalAgent(opts: LiveEvalAgentOptions): EvalAgent {
         studentId: setup.studentId,
         lang: 'en' as const,
         clientTs: new Date().toISOString(),
+        // Task 4.2d: forward attachments straight through (same shape as `TurnInput`).
+        ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
       };
       const turnInput =
         input.turnIndex === 0 && input.persona !== undefined

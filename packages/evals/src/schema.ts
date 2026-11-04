@@ -2,6 +2,7 @@
 // outside the eval runner reads it. Suite content rules live with the eval-author agent; this
 // file only decides what parses.
 import { z } from 'zod';
+import { EvalAttachmentSchema } from './agent.js';
 
 /** A regex source that `new RegExp(source, 'i')` accepts; checked at load time, not mid-run. */
 const RegexSource = z
@@ -65,6 +66,8 @@ export const TurnSchema = z.strictObject({
   /** The skill the student is in for this turn (task 3.11e). Absent: the agent's default. */
   skill: EvalSkillSchema.exactOptional(),
   student: z.string().min(1),
+  /** Attachments on this turn (task 4.2d), capped at 2 (as contracts' `LIMITS.turnAttachmentsMax`). */
+  attachments: z.array(EvalAttachmentSchema).max(2).exactOptional(),
   /** A turn with no `expect` just advances the conversation (pressure build-up). */
   expect: CheckSchema.exactOptional(),
 });
