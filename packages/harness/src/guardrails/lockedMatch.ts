@@ -53,6 +53,19 @@
 // back from its `<`); and a tag name in a non-ASCII script (only an ASCII letter starts a tag
 // name, so e.g. `<Ω>` is never a tag in any reading). Each is pinned by a unit test.
 //
+// 4.6d: `TOKEN` keeps `\p{M}` (combining marks) inside a token on purpose (so an accented letter
+// stays one token), but that also kept two default-ignorable mark ranges literally inside a word:
+// the variation selectors (U+FE00-FE0F, `rep️eatso`) and U+034F (combining grapheme joiner,
+// `l͏**o**op`), neither of which renders as anything. `dropDefaultIgnorableMarks` turns both into
+// the same zero-width-space padding (`PAD`, `\p{Cf}`) that markup and entities already leave behind,
+// run once in `prepared()`/`preparedForms()` before `foldMarkup` and `decodeHtmlEntities`'s own
+// `\p{Cf}` output reach `padMarkdownEmphasis`'s `letterBefore`/`letterAfter` (which already skip
+// `\p{Cf}`) and the shared `foldText` token drop — so neither of those is changed. `NAMED_ENTITIES`
+// also now decodes the invisible named refs HTML5 defines (`&shy;`, `&ZeroWidthSpace;`, `&NoBreak;`,
+// `&zwnj;`, `&zwj;`, `&lrm;`, `&rlm;`). Known miss, not implemented: the MathML-only invisible named
+// refs (`&ApplyFunction;`, `&InvisibleTimes;`, `&InvisibleComma;`, `&InvisibleSeparator;`) are left
+// undecoded — no plausible route into student-facing text or teacher material in this product.
+//
 // 4.6c: markdown emphasis inside a word is now padded, but only in the `rendered` reading (the
 // `text` and `values` readings still read `*`, `_`, `~` and `` ` `` as plain punctuation, so
 // `lo**o**p` splits into `lo`, `o`, `p` there, same as before). `padMarkdownEmphasis` pads a run of
@@ -324,6 +337,14 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = {
   quot: '"',
   apos: "'",
   nbsp: ' ',
+  // 4.6d: invisible named refs (HTML5's named character reference list).
+  shy: '­',
+  zerowidthspace: '​',
+  nobreak: '⁠',
+  zwnj: '‌',
+  zwj: '‍',
+  lrm: '‎',
+  rlm: '‏',
 };
 const ENTITY = /&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g;
 
@@ -397,19 +418,32 @@ const lower = (u: string): string => u.toLowerCase();
 /** Invisible characters read as spaces of the same length. */
 const spaced = (s: string): string => s.replace(INVISIBLE, (m) => ' '.repeat(m.length));
 
+// 4.6d: variation selectors (U+FE00-FE0F) and U+034F (combining grapheme joiner), the two
+// default-ignorable mark ranges that `TOKEN`'s `\p{M}` would otherwise keep literally inside a
+// word (see the header). Not the broader `\p{Default_Ignorable_Code_Point}` set `digitForms.ts`
+// uses: scoped to exactly these two named ranges, local to the locked-match path.
+const DEFAULT_IGNORABLE_MARK = /[︀-️͏]/gu;
+
+/** The two default-ignorable mark ranges above, turned into `PAD` (same length, `\p{Cf}`). */
+function dropDefaultIgnorableMarks(text: string): string {
+  return text.replace(DEFAULT_IGNORABLE_MARK, (m) => PAD.repeat(m.length));
+}
+
 /**
- * `text` after every length-preserving pass for one reading: entities decoded, markup read as
- * `markup` says, confusables folded, and (for `space`) invisible characters as spaces. Exactly as
- * long as `text`, so every index still points into it.
+ * `text` after every length-preserving pass for one reading: entities decoded, default-ignorable
+ * marks dropped, markup read as `markup` says, confusables folded, and (for `space`) invisible
+ * characters as spaces. Exactly as long as `text`, so every index still points into it.
  */
 function prepared(text: string, invisible: InvisibleReading, markup: MarkupReading): string {
-  const folded = foldConfusables(foldMarkup(decodeHtmlEntities(text), markup));
+  const folded = foldConfusables(
+    foldMarkup(dropDefaultIgnorableMarks(decodeHtmlEntities(text)), markup),
+  );
   return invisible === 'space' ? spaced(folded) : folded;
 }
 
 /** Every distinct prepared form of `text`, over all six readings (usually far fewer differ). */
 function preparedForms(text: string): string[] {
-  const decoded = decodeHtmlEntities(text);
+  const decoded = dropDefaultIgnorableMarks(decodeHtmlEntities(text));
   const out = new Set<string>();
   for (const m of MARKUP_READINGS) {
     const folded = foldConfusables(foldMarkup(decoded, m));

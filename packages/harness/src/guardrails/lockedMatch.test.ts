@@ -59,6 +59,47 @@ describe('lockedTokens', () => {
   }, 5_000);
 });
 
+describe('lockedTokens (4.6d: default-ignorable marks inside a word)', () => {
+  const VS16 = '️'; // variation selector-16
+  const CGJ = '͏'; // combining grapheme joiner
+
+  it('board example 1: a variation selector inside a word does not hide the leak', () => {
+    expect(lockedTokens(`rep${VS16}eatso`).map((t) => t.t)).toEqual(['repeatso']);
+    const spliced = `${SPAN8.slice(0, 10)}${VS16}${SPAN8.slice(10)}`; // inside "repeats"
+    expect(spliced).not.toBe(SPAN8);
+    expect(index.hits([spliced])).toBe(true);
+  }, 5_000);
+
+  it('board example 2: a combining grapheme joiner right before an emphasis run still folds', () => {
+    const spliced = SPAN8.replace('body', `bo${CGJ}**d**y`);
+    expect(index.hits([spliced])).toBe(true);
+  }, 5_000);
+
+  it('drops both ranges from inside a word, same as any other invisible character', () => {
+    for (const mark of [VS16, CGJ, '︀']) {
+      expect(lockedTokens(`a${mark}b`).map((t) => t.t), JSON.stringify(mark)).toEqual(['ab']);
+    }
+  }, 5_000);
+
+  it('reads both ranges as a space when asked for the space reading', () => {
+    expect(lockedTokens(`a${VS16}b`, 'space').map((t) => t.t)).toEqual(['a', 'b']);
+    expect(lockedTokens(`a${CGJ}b`, 'space').map((t) => t.t)).toEqual(['a', 'b']);
+  }, 5_000);
+
+  it('does not trigger a false hit on benign prose or an unrelated emoji', () => {
+    const heart = `❤${VS16}`; // heart + variation selector-16
+    const benign = 'thanks for asking, let us look at something else entirely today';
+    expect(index.hits([`${heart} ${benign}`])).toBe(false);
+  }, 5_000);
+
+  it('does not conflict with the digit-path mark drop (a keycap sequence in a locked span)', () => {
+    const digitSpan = 'count to 9 then stop the loop now'; // 8 tokens, includes a plain digit
+    const digitIndex = lockedIndex([digitSpan], []);
+    const keycap = `9${VS16}⃣`; // keycap digit sequence: folds to its digit, 4.6d or not
+    expect(digitIndex.hits([digitSpan.replace('9', keycap)])).toBe(true);
+  }, 5_000);
+});
+
 describe('shingles', () => {
   it('is every 8-token window, in both invisible-character readings', () => {
     expect(shingles(SPAN8)).toEqual(['repeats its body as long as its condition']);
@@ -315,6 +356,8 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
       'l\u{e0020}**o**op', // astral Cf (a tag character, a surrogate pair)
       'l\u00ad__o__\u00adop',
       'lo\u00ad~~o~~p',
+      'l\ufe0f**o**op', // 4.6d: variation selector-16
+      'l\u034f**o**op', // 4.6d: combining grapheme joiner
     ];
     for (const f of forms) {
       expect(lockedTokens(f, 'drop', 'rendered').map((t) => t.t), f).toEqual(['loop']);
@@ -346,7 +389,15 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
   }, 5_000);
 
   it('4.6c fix round 1: long runs of invisible characters around emphasis stay linear', () => {
-    const units = ['\u00ad', 'l\u00ad**', '\u200b*', 'a\u2060~~\u2060', '\u{e0020}`'];
+    const units = [
+      '\u00ad',
+      'l\u00ad**',
+      '\u200b*',
+      'a\u2060~~\u2060',
+      '\u{e0020}`',
+      '\ufe0f', // 4.6d: variation selector-16
+      '\u034f', // 4.6d: combining grapheme joiner
+    ];
     for (const unit of units) {
       const text = unit.repeat(Math.ceil(200_000 / unit.length)).slice(0, 200_000);
       const start = Date.now();
@@ -449,6 +500,28 @@ describe('decodeHtmlEntities', () => {
     expect(decodeHtmlEntities('&#108;oop')).toBe('l' + '​'.repeat(5) + 'oop');
     expect(decodeHtmlEntities('&#x6C;oop')).toBe('l' + '​'.repeat(5) + 'oop');
     expect(decodeHtmlEntities('x').length).toBe(1);
+  }, 5_000);
+
+  it('4.6d: decodes the invisible named entities the board lists, padded, case-insensitive', () => {
+    const cases: [string, string][] = [
+      ['&shy;', '­'],
+      ['&ZeroWidthSpace;', '​'],
+      ['&NoBreak;', '⁠'],
+      ['&zwnj;', '‌'],
+      ['&zwj;', '‍'],
+      ['&lrm;', '‎'],
+      ['&rlm;', '‏'],
+    ];
+    for (const [entity, ch] of cases) {
+      const pad = Math.max(0, entity.length - ch.length);
+      expect(decodeHtmlEntities(entity), entity).toBe(ch + '​'.repeat(pad));
+    }
+    expect(decodeHtmlEntities('&SHY;')).toBe('­' + '​'.repeat('&SHY;'.length - 1));
+  }, 5_000);
+
+  it('4.6d known miss: a MathML-only invisible named entity still does not decode', () => {
+    expect(decodeHtmlEntities('&ApplyFunction;')).toBe('&ApplyFunction;');
+    expect(decodeHtmlEntities('&InvisibleTimes;')).toBe('&InvisibleTimes;');
   }, 5_000);
 
   it('leaves an entity that does not decode as is', () => {
