@@ -1746,9 +1746,31 @@ tasks:
   deps:
   - GATE
   - '4.7'
-  status: running
+  status: done
   branch: m13/4.7b-grounding-followups
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 434
+    tokens_in: 1472
+    tokens_out: 147401
+    cache_read_tokens: 56593810
+    wall_time_seconds: 5823
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        CRITICAL: 1
+        HIGH: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -12284,6 +12306,6 @@ tasks:
   deps:
   - 4.4f
   - 4.3b
-  status: todo
-  branch: null
+  status: running
+  branch: m13/4.4h-deferred-lows
   model: plan:sonnet build:sonnet review:sonnet

@@ -10,6 +10,357 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.7b CLAIM_BEFORE connector adds "for" · decided by builder · risk: low
+- Decided: `CLAIM_BEFORE` reuses `CONNECTOR` (shared with `CLAIM_AFTER`) plus "for", in a
+  separate `CONNECTOR_BEFORE` constant used only for the reversed form.
+- Why: the plan's own red/green example, "I got 4 for 7 // 2", needs "for" as a connector; it is
+  only natural in this direction ("N for expr"), so adding it to the shared `CONNECTOR` risked a
+  false match after an expression ("7 // 2 for homework is due").
+- Alternatives: add "for" to the shared `CONNECTOR` (rejected: risks forward false positives).
+- Reversible: yes, a one-line constant change.
+
+---
+
+### 4 Nov 2026 · 4.7b CLAIM_BEFORE windowed to the previous expression · decided by builder · risk: low
+- Decided: `CLAIM_BEFORE` searches only `s.slice(prevExpressionEnd, span.start)`, not
+  `s.slice(0, span.start)`.
+- Why: TDD caught a regression — without the window, "7 // 2 is 4 - 1" (already-covered, loose
+  claim case) matched the operand "2" of the first expression as a reversed claim for the second
+  expression "4 - 1", via the connector "is" between them.
+- Alternatives: a no-arithmetic-digit lookbehind (rejected: harder to reason about and still
+  would not stop a connector bridging two expressions).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.7b worded premise form deferred to the judge (Q1) · decided by builder · risk: low
+- Decided: only the reversed numeric form is parsed; "seven over two is four" (number words as
+  operands) is left to the judge, as the lead's Q1 answer and the plan's scope note direct.
+- Why: parsing number words as arithmetic operands needs `arithmeticSpans`/`TOKEN` changes well
+  beyond this phase's budget.
+- Alternatives: none explored (out of scope per plan).
+- Reversible: n/a (residual, already tracked by 4.7's own documented residuals per the lead).
+
+---
+
+### 4 Nov 2026 · 4.7b groundingFixtures.test.ts SPECS layer updated · decided by builder · risk: low
+- Decided: `grounding-falsepremise-reversed-en`'s `layer` in `packages/evals/src/groundingFixtures.test.ts`
+  changed from `'judge'` to `'number'` (comment updated); the yaml fixture itself is untouched.
+- Why: with `CLAIM_BEFORE`, Rule C now catches this case without the judge (confirmed by running
+  the suite); the "judge always grounded" mutation test asserts exactly the judge-only cases fail,
+  so it broke without this update. The plan's item 3 anticipated this ("confirms the existing
+  pending case now passes via Rule C too, not only the judge").
+- Alternatives: leave the SPECS layer as `'judge'` and widen the mutation test's exemption list
+  (rejected: less accurate, and the plan's own "update the handoff table" note already flagged
+  that something about this case's record needed to change).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.7b citation variant pattern scope (Q2) · decided by builder · risk: low
+- Decided: `CITATION_VARIANT` matches exactly the three forms the plan named (spaced brackets, a
+  full-width digit, `"source N"`), case-insensitive, with a `\b` word boundary so `"resource N"`
+  is not matched.
+- Why: a broader net (e.g. "ref N", "source #N") risks false positives on ordinary prose; the plan
+  recommends the literal three examples and widening later if a real eval case needs it.
+- Alternatives: a wider net now (rejected per Q2's recommendation).
+- Reversible: yes, a regex change.
+
+---
+
+### 4 Nov 2026 · 4.7b postGuard watched() cast removed as a pure refactor · decided by builder · risk: low
+- Decided: `const res: unknown = r.result;` replaces the `(r as {...} | null | undefined)?.result`
+  cast; no new test scenario, the existing escalation-reason test
+  (`postGuard.grounding.test.ts`'s "an ungrounded reply becomes the ask-teacher reply...") still
+  passes unchanged, proving no regression.
+- Why: `GuardRun.result` is required and typed as `GuardResult`, a union that already narrows with
+  `'reason' in res`; `g.run()` always returns a `GuardRun` object, so `r` is never `null`/`undefined`
+  by its own type — the cast hid nothing real and would have hidden a genuine type error if the
+  field were ever renamed.
+- Alternatives: keep the defensive cast (rejected: the plan's own point — it silently hides a real
+  type error).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.7b premiseUncorrected checks agrees before the same-expression clear (item 7) · decided by builder · risk: low
+- Decided: inside `premiseUncorrected`'s `wrong.some` callback, the same-expression correct-claim
+  clear only fires when `!agrees`; `agrees` (or any wrong claim in the reply, checked earlier) wins
+  over a later correct restatement.
+- Why: the accept line's own example ("Yes, 6 - 3 is 3. Well done!" after "6 - 3 is 2, right?")
+  opens by agreeing with the wrong claim before restating it correctly; the old order read the
+  correct restatement first and never checked the opening "Yes" at all.
+- Alternatives: none explored — the plan named the exact fix (check order, not a new signal).
+- Reversible: yes, a one-line condition change.
+
+---
+
+### 4 Nov 2026 · 4.7b GROUNDING_JUDGE_UNAVAILABLE_REPLY replaces ANSWER_LEAK_SAFE_HINT on no safeReply (item 8) · decided by builder · risk: low
+- Decided: `safe = x.safeReply ?? GROUNDING_JUDGE_UNAVAILABLE_REPLY` (was `?? ANSWER_LEAK_SAFE_HINT`);
+  the new text is also added to grounding's `fixed` array alongside `ANSWER_LEAK_SAFE_HINT` (which
+  stays there for the answer-key fallback path, item 8 does not touch that).
+- Why: `ANSWER_LEAK_SAFE_HINT` ("let's work this out together rather than jump to the final
+  answer") is answerLeak's wording for a leak about to happen, a non-sequitur on a judge outage
+  with no answer-leak risk (e.g. an `explain` move). The new text is neutral, gives no answer and
+  names no helpline or contact, per the brief's extra instruction for this item.
+- Alternatives: a locale-supplied outage text (rejected: out of this phase's scope — the plan only
+  asks for the fixed English fallback; a locale pack can still override via `x.safeReply`).
+- Reversible: yes, a string constant change.
+
+---
+
+### 4 Nov 2026 · 4.7b fence() reuses breakFenceRuns, unmodified · decided by builder · risk: low
+- Decided: `fence()` calls `breakFenceRuns` (imported from `pedagogy/modelRequest.js`) in place of
+  its own regex; `breakFenceRuns` itself is untouched, so `pedagogy/modelRequest.test.ts`'s existing
+  coverage of it (full-width, entities, zero-width padding, idempotence) is not re-proven here.
+- Why: the plan's own item 1 names this exact reuse; `fence()`'s old regex only caught a literal
+  ASCII run, missing full-width and entity-encoded look-alikes `breakFenceRuns` already handles.
+- Alternatives: none — the plan named the exact fix.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.7b the token is drawn once per turn in postGuard.ts, not inside grounding.ts · decided by builder · risk: low
+- Decided: `PostGuardCtx` gains `groundingFenceToken?: string` (a plain string), not `ids?: IdSource`
+  as the plan's prose literally named. `postGuard.ts` calls `env.deps.ids.next('groundingFence')`
+  once, when it builds `x` (the single `PostGuardCtx` object both passes of one turn's guard chain
+  share); `grounding.ts` reads `x.groundingFenceToken` and never calls `.next()` itself.
+- Why: TDD caught a real regression from the plan's literal reading (`x.ids.next('groundingFence')`
+  called inside `grounding.ts`'s `run()`): the guard chain calls `run()` once per pass (1, then the
+  verification pass), so a token drawn inside `run()` differs pass 1 vs. pass 2 even when the text
+  judged is identical — `postGuard.ts`'s `judgeFor` memoises a judge call by the rendered request
+  text, so a differing token on an unchanged reply forced a second real judge call on the
+  verification pass every time, breaking the documented invariant
+  (`postGuard.grounding.test.ts`'s "a premise correction or a number fix is replaced but never
+  escalated": `fix.judged` went from `1` to `2`). Drawing the token once per `postGuard.ts` step
+  call (shared by both passes, since `x` is built once and passed by reference) keeps that
+  invariant: the judge-call cache still dedupes an unchanged reply on pass 2, while a fresh token
+  is still drawn every turn (so two different turns' requests still differ, matching the plan's
+  accept-line intent and this phase's own red/green test). Still uses the `Ids` port, never
+  `Math.random`/`crypto`, per the brief's rule.
+- Alternatives: memoise the token per `IdSource` instance in a `WeakMap` inside `grounding.ts`
+  (rejected: `apps/worker/src/gate/agent.ts`'s `createGateAgent` builds one long-lived `ids` and
+  reuses it across every turn an agent serves, so a per-instance cache would hand out the *same*
+  token forever for that agent, not a fresh one per turn — defeats the whole point). Keep the
+  literal `ids: IdSource` field and accept the extra judge call on every verification pass
+  (rejected: a real cost/latency regression with no stated benefit — the plan's test list for this
+  item never asked for it, and 4.7's idempotence rule is a design invariant, not just one item's
+  test).
+- Reversible: yes, a field-shape and call-site change; no port or contracts change.
+
+---
+
+### 4 Nov 2026 · 4.7b testing/groundingJudge.ts's BLOCK regex widened to tolerate a token · decided by builder · risk: low
+- Decided: `BLOCK` (`testing/groundingJudge.ts`, the fake judge's own request-reader, test support
+  code only) changed from `/<<<\n([\s\S]*?)\n>>>/g` to `/<<<[^\n]*\n([\s\S]*?)\n>>>[^\n]*/g`.
+- Why: with a token appended straight after the markers (`<<<groundingFence_1`), the old regex
+  (which needed `<<<` immediately followed by a newline) no longer matched at all, so the fake
+  `overlapJudge` read every block as empty and mis-graded replies (caught by the existing
+  `postGuard.grounding.test.ts` test "the overlap judge ... passes material-backed replies and
+  catches invented ones", which started failing). The widened pattern still matches the bare,
+  untokened form exactly as before (no token: `[^\n]*` matches zero characters).
+- Alternatives: put the token on its own line inside the block instead of on the marker line
+  (rejected: it would then be captured as block *content*, polluting `overlapJudge`'s word-overlap
+  reading of the material/reply with an extra token word in every block). Leave the token out of
+  the marker text entirely and mix it in elsewhere (rejected: defeats the point — the marker text
+  itself must be the thing a chunk or the student's message cannot pre-stage).
+- Reversible: yes, a one-line regex change in a test-support file; not a product file, not on the
+  plan's named-file or out-of-bounds lists for this phase.
+
+---
+
+### 4 Nov 2026 · 4.7b citation bare "source N" needs citation context · decided by builder · risk: low
+- Decided: `CITATION_VARIANT`'s no-brackets `"source N"` alternative now only matches inside
+  `[...]`/`(...)` or directly after a citation cue (`see`, `per`, `cite`, `cited in`,
+  `according to`); the bracketed-number form (`"[ 3 ]"`, full-width digits) is unchanged.
+- Why: the reviewer's scratch test showed the old, unconditional bare form matching ordinary
+  science prose ("the light source 2 meters away"), turning a normal reply into a false
+  escalation.
+- Alternatives: drop the bare `"source N"` form entirely (rejected: it was added in Phase B to
+  close a real dodge, `"See source 4."` with no brackets; the lead's fix shape asks for
+  citation-context scoping, not removal).
+- Reversible: yes, a regex change.
+
+---
+
+### 4 Nov 2026 · 4.7b CLAIM_BEFORE needs a cue word and a clause-ending "for" · decided by builder · risk: low
+- Decided: `CLAIM_BEFORE`'s number only counts as a reversed claim when (a) a claim cue
+  (`got`/`get`/`gets`/`is`/`was`/`equals`/`=`/`answer is`/`i think`/`i said`) sits directly before
+  it, or nothing does, and (b) when the connector matched is `"for"`, the expression ends its
+  clause (end of text, `.`, `,`, `?`, `!`, no trailing noun).
+- Why: the reviewer's scratch test showed the old pattern reading an ordinary word-problem's own
+  number ("Split 20 for 5 * 2 friends.") as a reversed claim about the expression, since `"for"`
+  was added as a connector in Phase A for exactly this direction but without a cue requirement.
+- Alternatives: drop `"for"` from `CONNECTOR_BEFORE` entirely (rejected: the plan's own
+  red/green case, "I got 4 for 7 // 2", needs it). Require the clause-ending check for every
+  connector, not only `"for"` (considered, not needed: the cue-word requirement alone already
+  excludes both reviewer sentences, since "Split"/"Pay" are not cue words; the clause-ending
+  check is additive safety for a cued `"for"` case the reviewer did not test, e.g. "I got 20 for
+  5 * 2 friends.").
+- Reversible: yes, two added checks around the existing regex match.
+
+---
+
+### 4 Nov 2026 · 4.7b per-session queue keyed by PipelineDeps, not module-level · decided by builder · risk: low
+- Decided: the session queue lives in a `WeakMap<PipelineDeps, Map<string, Promise<void>>>`
+  rather than a single module-level map, treating the long-lived `PipelineDeps` a production
+  agent builds once and reuses for every turn as the closest thing this module has to "the
+  runner instance" the plan's Lead review asked for (`runTurn` itself is a bare function, not a
+  method on a runner object).
+- Why: a single module-level map would let two unrelated runners (or two unrelated test files
+  sharing a process) collide on the same session id; keying by `deps` identity instead gives
+  each `PipelineDeps` its own queue, and a `WeakMap` lets an unreferenced `deps` and its queue be
+  garbage-collected rather than leaking for the life of the process.
+- Alternatives: add a formal `Runner` class/object that owns the queue explicitly (rejected for
+  this phase: no such object exists today and introducing one would be a larger, out-of-scope
+  change to the module's public shape); a single shared module-level `Map` (rejected: module-level
+  growing state, which the plan explicitly ruled out, and a real cross-test/cross-runner collision
+  risk).
+- Reversible: yes, an internal implementation detail with one tiny test-only export
+  (`sessionQueueSizeForTest`).
+
+---
+
+### 4 Nov 2026 · 4.7b always release the next turn, even on throw or cancel · decided by builder · risk: low
+- Decided: the chain entry for a session is `ahead.then(() => turn.run(), () => turn.run())`, so
+  the next turn in the same session's chain starts as soon as the prior turn's promise settles,
+  whether it resolved or rejected; the queue's own bookkeeping promise likewise maps both outcomes
+  to `undefined` so one broken turn can never leave the next same-session turn waiting forever.
+- Why: the plan's Lead review required that a turn which throws, or whose stream is cancelled or
+  abandoned by the caller, still releases the next turn; `runTurn` already treats cancellation via
+  `RunTurnOptions.cancel`/the consumer's `events.return()` as a normal (if early) settlement of the
+  turn's own run, not a hang, so chaining on settlement rather than only success was the correct
+  and minimal fix.
+- Alternatives: chain only on success and separately catch failures to unblock the queue
+  (rejected: more code for the same outcome, and an easy place to miss the cancellation path,
+  which does not throw).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.7b real defaultSteps + FIXTURE_PROMPT_PACK_VERSION in the race test · decided by builder · risk: low
+- Decided: `runner.sessionRace.test.ts` uses the real `defaultSteps.generate`/`postGuard`/`commit`
+  (not stubs) so the race is tested through the actual code path that reads and saves
+  `groundingAsks`, with `entitle` overridden to stamp `FIXTURE_PROMPT_PACK_VERSION` (otherwise
+  `generate` throws `UnknownPromptPackVersionError`) and `transcripts` overridden to
+  `memoryTranscriptStore()` (otherwise `commit`'s `transcripts.append` throws `UnusedPortError`
+  before it ever reaches `sessionState.saveHelpState`, which would silently hide the real bug
+  behind an unrelated port error).
+- Why: `runner.grounding.test.ts` already establishes this pattern for exercising the real
+  pipeline steps; a stubbed `commit` would not prove the queue actually serialises the
+  read-then-save sequence that is the race's own mechanism.
+- Alternatives: stub `commit` to simulate a save (rejected: would test the stub's behaviour, not
+  the real race).
+- Reversible: yes, test-only.
+
+---
+
+### 4 Nov 2026 · 4.7b cancellation test uses RunTurnOptions.cancel, not manual iterator detach · decided by builder · risk: low
+- Decided: the "cancelled by its caller" test creates a `cancelSource()`, passes its `.token` as
+  `RunTurnOptions.cancel`, and calls `.cancel()` directly, rather than manually driving
+  `events[Symbol.asyncIterator]()` and calling `.return()` to simulate a caller walking away.
+- Why: `runner.ts`'s own JSDoc documents `RunTurnOptions.cancel` as equivalent to the consumer
+  calling `return()` on `events` (both route through the same `cancel` token), so driving it
+  directly is both more deterministic and a closer match to what the brief asked to prove; manual
+  iterator manipulation in an earlier draft produced a flaky, unrelated `ScriptedGatewayError` on
+  the second turn, which a direct `cancel()` call avoids entirely.
+- Alternatives: keep the manual `.return()` approach (rejected: flaky and indirect for what the
+  test needs to show).
+- Reversible: yes, test-only.
+
+---
+
+### 4 Nov 2026 · 4.7b multi-worker residual (unresolved, logged per Lead review) · decided by builder · risk: low
+- Decided: the per-session queue is scoped to a single process (one `PipelineDeps` instance's
+  `WeakMap` entry lives only in that process's memory); it does not serialise concurrent turns
+  for the same session across multiple worker processes or machines. No new board task is opened
+  for this now.
+- Why: the plan's Lead review asked that this residual be logged rather than fixed in this phase;
+  the pilot's current harness and its test doubles are single-process, and a cross-process lock
+  (e.g. a database row lock or Redis-based mutex) is a larger, separately-scoped change that would
+  touch ports/`types.ts`, which this phase was told to leave untouched.
+- Alternatives: add a cross-process lock now (rejected: out of this phase's file scope and the
+  pilot does not yet run multiple workers against the same session).
+- Reversible: yes -- a future task can add process-spanning locking without reverting this fix,
+  since this queue still correctly serialises the common single-process case.
+
+---
+
+### 4 Nov 2026 · 4.7b turnQueue is a required PipelineDeps field · decided by builder · risk: low
+- Decided: `PipelineDeps.turnQueue: SessionTurnQueue` is required, not optional.
+- Why: the brief's own rule (make it required unless touching more than 15 files) is satisfied:
+  typecheck listed exactly 9 production/shared-helper files needing an explicit edit beyond the
+  type itself (`packages/harness/src/pipeline/runner.ts`, `pipeline/index.ts`,
+  `testing/testSteps.ts`, `apps/cli/src/commands/chat/deps.ts`, `apps/web/src/turn/deps.ts`,
+  `apps/web/src/turn/runtime.ts`, `apps/web/src/studio/testChat/runtime.ts`,
+  `apps/worker/src/gate/agent.ts`, `apps/web/test/turn-backend.ts`); every other `PipelineDeps`
+  construction site in the repo either spreads `testDeps().deps` (which now defaults the field) or
+  spreads an existing, already-updated base object. A required field means a new production
+  caller can't silently build a `PipelineDeps` with no queue and quietly fall back to the
+  per-call (no-serialisation) behaviour this fix round exists to close.
+- Alternatives: make the field optional, with "no queue" meaning a queue per call, i.e. today's
+  broken default (rejected: the brief's own stated bar — 15 files — was not crossed, and an
+  optional field is exactly the shape that let the original bug ship unnoticed).
+- Reversible: yes — the field could be made optional later with a one-line default.
+
+---
+
+### 4 Nov 2026 · 4.7b createGateAgent builds one turnQueue per agent, not per `reply()` call · decided by builder · risk: low
+- Decided: `apps/worker/src/gate/agent.ts`'s `createGateAgent` builds `turnQueue` once, alongside
+  its `clock`/`ids` defaults, and reuses it across every `reply()` call the returned `EvalAgent`
+  makes.
+- Why: each `reply()` call already runs one fresh session with a `randomUUID()` session id, so no
+  two real eval cases ever share a session id and the queue never actually serialises two cases
+  against each other; one queue per agent (matching the existing `clock`/`ids` pattern) is the
+  simplest shape that satisfies the now-required field without changing `GateAgentDeps`'s public
+  shape or any caller of `gateAgentFactory`.
+- Alternatives: a fresh `createSessionTurnQueue()` inside every `reply()` call (rejected: equally
+  correct given the unique session ids, but needlessly allocates a new empty queue on every case
+  turn for no behavioural difference).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.7b grounding follow-ups, merged · decided by lead · risk: high
+- Decided: merge 4.7b, all eight items:
+  - reversed numeric premises ("I got 4 for 7 // 2");
+  - canonicalNumber skips values over 1e15 instead of casting;
+  - citation variants ("[ 3 ]", full-width digits, "source 3" after a citation cue);
+  - the cast-free reason read in postGuard `watched()`;
+  - Rule C's agree-first order;
+  - a neutral judge-outage text;
+  - a per-turn random judge fence token, with full-width and look-alike fence runs broken;
+  - a per-session turn queue so two concurrent turns open at most one teacher question.
+- Review:
+  - **Phases A to C:** code-reviewer found two HIGH false positives: "source 2 meters" read as a citation, and "pay 15 for 3 + 4 tickets" read as a wrong claim. Fix round 1 added cue words, and the lead verified the diff.
+  - **Phase D:** code-reviewer found a CRITICAL. The queue was keyed on the per-call `PipelineDeps` object, which apps/web rebuilds every turn, so it never engaged in production. The Phase D fix round makes `PipelineDeps.turnQueue` a required `SessionTurnQueue`, built once per process: memoised `build()` in apps/web's turn runtime, the studio test-chat runtime, the CLI chat, and once per worker gate agent. The lead verified those creation sites from the diff rather than re-running code-reviewer.
+  - The Phase D decision "per-session queue keyed by PipelineDeps" is superseded by "turnQueue is a required PipelineDeps field".
+- `PipelineDeps` is a harness type (`pipeline/types.ts`), not `packages/contracts`, so no ADR.
+- Residuals, accepted for the pilot:
+  - the worded premise form ("seven // two is four") is left to the judge;
+  - the queue covers one process only, so two web instances can still race; the pilot runs one.
+- Reversible: yes; revert the squash commit.
+
+---
+
+### 4 Nov 2026 · 4.7b build over budget · decided by lead · risk: low
+- Decided: accept 518 builder tool calls against the plan's 195. Harness counts by round:
+
+  | Round | Calls |
+  | --- | --- |
+  | Phase A | 68 |
+  | Phase B | 59 |
+  | Phase C | 97 |
+  | Fix round 1 | 68 |
+  | Phase D | 106 |
+  | Phase D fix round | 120 |
+
+  Builders self-reported about 48, 46, 55, ?, 58 and 100.
+- Why: the two review fix rounds were not in the plan. Phase D and its fix round each ran well past their hard stops (60 and 70). Builders under-count their calls, so the lead keeps using harness counts for budget decisions.
+- Reversible: n/a.
+
+---
+
 ### 4 Nov 2026 · 4.3b scrub-failure fallback shares escalate()'s helper · decided by builder · risk: low
 - Decided: extracted `distressFallback(input, e)` as a private `Runner` method, used by both the
   scrub-failure branch and `escalate()`, instead of duplicating the try/catch-and-last-resort
