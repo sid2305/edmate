@@ -340,15 +340,17 @@ function wordMentions(toks: readonly Token[], out: NumberMention[]): void {
   const emit = () => {
     if (first < 0) return;
     const num = total + current;
-    const value = canonicalNumber(num) as string;
-    out.push({
-      value,
-      num,
-      decimals: 0,
-      kind: 'word',
-      answerContext: inAnswerContext(toks, first, lastAt),
-      weak: false,
-    });
+    const value = canonicalNumber(num);
+    if (value !== undefined) {
+      out.push({
+        value,
+        num,
+        decimals: 0,
+        kind: 'word',
+        answerContext: inAnswerContext(toks, first, lastAt),
+        weak: false,
+      });
+    }
     total = 0;
     current = 0;
     first = -1;
@@ -568,6 +570,16 @@ const CLAIM_AFTER = new RegExp(
   String.raw`^(?:\s*${CONNECTOR}){1,3}\s*([-−]?)(\d+(?:\.\d+)?)(?![\d.]*\d)(?!\s*(?:\*\*|//|[-+*/%×÷])\s*\d)`,
   'u',
 );
+/**
+ * The reversed form ("I got 4 for 7 // 2"): the claimed value comes before the expression. Same
+ * connector words as `CONNECTOR`, plus "for" (only natural in this direction; adding it to
+ * `CONNECTOR` itself would risk matching ordinary prose after an expression).
+ */
+const CONNECTOR_BEFORE = String.raw`(?:${CONNECTOR}|for(?![\p{L}\p{M}]))`;
+const CLAIM_BEFORE = new RegExp(
+  String.raw`(?<![\d.])([-−]?)(\d+(?:\.\d+)?)(?![\d.]*\d)(?=(?:\s*${CONNECTOR_BEFORE}){1,3}\s*$)`,
+  'u',
+);
 /** A unary sign next to `**`: the evaluator binds the sign first, Python binds `**` first. */
 const UNARY_WITH_POWER = /(?:^|[-+*/%(])\s*[-+]\s*\d/;
 
@@ -588,16 +600,36 @@ export function arithmeticClaims(text: string): ArithmeticClaim[] {
   const f = foldText(text, (u) => foldWord(u.toLowerCase()));
   const s = f.s;
   const out: ArithmeticClaim[] = [];
+  let prevEnd = 0;
   for (const span of arithmeticSpans(s)) {
     const expr = s.slice(span.start, span.end);
+    const windowStart = prevEnd;
+    prevEnd = span.end;
     if (expr.includes('**') && UNARY_WITH_POWER.test(expr)) continue;
-    const m = CLAIM_AFTER.exec(s.slice(span.end));
     const computedText = signedText(span.value);
-    if (m === null || computedText === undefined) continue;
-    const sign = m[1] as string;
-    const digits = m[2] as string;
-    const claimEnd = span.end + m[0].length;
-    const claimStart = claimEnd - digits.length - sign.length;
+    if (computedText === undefined) continue;
+    const after = CLAIM_AFTER.exec(s.slice(span.end));
+    let sign: string;
+    let digits: string;
+    let claimStart: number;
+    let claimEnd: number;
+    if (after !== null) {
+      sign = after[1] as string;
+      digits = after[2] as string;
+      claimEnd = span.end + after[0].length;
+      claimStart = claimEnd - digits.length - sign.length;
+    } else {
+      // Only the free text since the previous expression (not reaching back past it): an
+      // operand of an earlier expression must never read as a claim about this one.
+      const before = CLAIM_BEFORE.exec(s.slice(windowStart, span.start));
+      if (before === null) continue;
+      sign = before[1] as string;
+      digits = before[2] as string;
+      // `CLAIM_BEFORE`'s boundary checks are a lookbehind and a lookahead (zero-width), so the
+      // whole match is exactly the sign and digits.
+      claimStart = windowStart + before.index;
+      claimEnd = claimStart + (before[0] as string).length;
+    }
     out.push({
       start: f.at[claimStart] as number,
       end: claimEnd < f.at.length ? (f.at[claimEnd] as number) : text.length,

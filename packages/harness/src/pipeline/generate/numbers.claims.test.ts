@@ -99,6 +99,30 @@ describe('correctArithmeticClaims', () => {
   });
 });
 
+describe('reversed claim form (4.7b, safety review item 3): the value before the expression', () => {
+  it('reads "I got N for expr" as a claim, correct or not', () => {
+    expect(arithmeticClaims('I got 4 for 7 // 2')).toMatchObject([
+      { computedText: '3', correct: false, expr: '7//2' },
+    ]);
+    expect(arithmeticClaims('I got 3 for 7 // 2')).toMatchObject([
+      { computedText: '3', correct: true, expr: '7//2' },
+    ]);
+  });
+
+  it('also reads the connector words shared with the forward form ("is", "=")', () => {
+    expect(arithmeticClaims('4 is 7 // 2')).toMatchObject([{ correct: false, expr: '7//2' }]);
+  });
+
+  it('never reads an earlier expression’s own operand as a reversed claim', () => {
+    // "2" is the second operand of "7 // 2", not a claim about "4 - 1".
+    expect(arithmeticClaims('7 // 2 is 4 - 1')).toEqual([]);
+  });
+
+  it('prefers the forward form when both would match', () => {
+    expect(wrong('for 7 // 2 is 4')).toMatchObject([{ computedText: '3' }]);
+  });
+});
+
 describe('fix round 1: expressions and stated numbers (task 4.7, safety HIGH 1)', () => {
   it('each claim carries its expression, spaces dropped', () => {
     expect(arithmeticClaims('6 - 3 is 2, and 7  //  2 = 3').map((c) => c.expr)).toEqual([

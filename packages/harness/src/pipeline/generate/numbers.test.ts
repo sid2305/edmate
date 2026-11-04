@@ -189,6 +189,15 @@ describe('helpers', () => {
     expect(canonicalNumber(Number.NaN)).toBeUndefined();
   });
 
+  it('a spoken-number run past 1e15 is not emitted, not pushed with an uncast value (4.7b item 4)', () => {
+    // "nine hundred hundred ..." (repeated "hundred"): current multiplies by 100 each time with
+    // no scale word needed, past MAX_VALUE in a few words.
+    const text = `nine ${'hundred '.repeat(10)}dollars, right?`;
+    const mentions = numberMentions(text);
+    expect(mentions.every((m) => m.kind !== 'word' || typeof m.value === 'string')).toBe(true);
+    expect(mentions.some((m) => m.kind === 'word')).toBe(false);
+  });
+
   it('number words and suffixes', () => {
     expect(numberWord('constructor')).toBeUndefined();
     expect(numberWord('lakh')).toEqual({ kind: 'scale', value: 100_000 });
