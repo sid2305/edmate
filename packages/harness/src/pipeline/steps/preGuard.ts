@@ -176,22 +176,35 @@ function prefetchDistress(
 }
 
 /**
+ * moderationIn's own rule check (`matchModeration`, including its `sexual` sub-check against
+ * the earlier messages) by itself, decoupled from whether a classifier call is fired. Shared by
+ * `prefetchModeration` (its own decisiveness) and `prefetchJailbreak` (chain-order: a guard
+ * earlier than jailbreak that is rule-decisive must also stop jailbreak's prefetch, fix round 1).
+ */
+async function moderationRuleDecisive(ctx: PreGuardCtx, text: string): Promise<boolean> {
+  let hit = matchModeration(text);
+  if (hit?.code === 'sexual') hit = matchModeration(text, await ctx.recentStudentTurns);
+  return hit?.decisive === true;
+}
+
+/**
  * Starts moderationIn's classifier call now, concurrently with the other two pre guards (task
- * 4.4b), re-running the guard's own rule check (`matchModeration`, including its `sexual`
- * sub-check against the earlier messages) to decide whether a decisive hit will make the call
- * unnecessary. Resolves to `undefined` when it is: a decisive hit never needs a model call, by
- * either path. The returned promise always has a rejection handler attached (it may be
- * discarded unused by a short-circuit earlier in the chain).
+ * 4.4b), re-running the guard's own rule check to decide whether a decisive hit will make the
+ * call unnecessary. Resolves to `undefined` when moderationIn's own rule is decisive, or when
+ * `earlierDecisive` (distressDetect's rule, chain order) already is — a guard earlier in chain
+ * order never needs this guard's classifier call either (fix round 1). The returned promise
+ * always has a rejection handler attached (it may be discarded unused by a short-circuit earlier
+ * in the chain).
  */
 function prefetchModeration(
   env: StepEnv,
   ctx: PreGuardCtx,
   text: string,
+  earlierDecisive: boolean,
 ): Promise<ModerationVerdict | undefined> {
   const p = (async (): Promise<ModerationVerdict | undefined> => {
-    let hit = matchModeration(text);
-    if (hit?.code === 'sexual') hit = matchModeration(text, await ctx.recentStudentTurns);
-    if (hit?.decisive === true) return undefined;
+    if (earlierDecisive) return undefined;
+    if (await moderationRuleDecisive(ctx, text)) return undefined;
     const earlier = await ctx.recentStudentTurns;
     return prefetchClassifier(
       'moderationIn',
@@ -208,16 +221,23 @@ function prefetchModeration(
 /**
  * Starts jailbreak's classifier call now, concurrently with the other two pre guards (task
  * 4.4b), re-running the guard's own rule check (`matchJailbreak`) to decide whether a decisive
- * hit will make the call unnecessary. Resolves to `undefined` when it is. The returned promise
- * always has a rejection handler attached (it may be discarded unused by a short-circuit earlier
- * in the chain).
+ * hit will make the call unnecessary. Resolves to `undefined` when it is, or when
+ * `earlierDecisive` (distressDetect's or moderationIn's rule, chain order) resolves `true` — a
+ * guard earlier in chain order that is rule-decisive must also stop this prefetch (fix round 1;
+ * before this fix, `preGuard.test.ts`'s own call counts were right but the evals' hard-distress
+ * and moderation-block cases showed extra jailbreak/moderation calls, because this function only
+ * ever checked its own rule, never an earlier guard's). The returned promise always has a
+ * rejection handler attached (it may be discarded unused by a short-circuit earlier in the
+ * chain).
  */
 function prefetchJailbreak(
   env: StepEnv,
   ctx: PreGuardCtx,
   text: string,
+  earlierDecisive: Promise<boolean>,
 ): Promise<JailbreakVerdict | undefined> {
   const p = (async (): Promise<JailbreakVerdict | undefined> => {
+    if (await earlierDecisive) return undefined;
     const packageNames = await ctx.packageNames;
     const hit = matchJailbreak(text, { packageNames, currentPackageName: ctx.currentPackageName });
     if (hit?.decisive === true) return undefined;
@@ -258,11 +278,18 @@ export function createPreGuardStep(
     };
     // Concurrency (task 4.4b): fire the three classifier calls now, concurrently with each
     // other and with the guards' own rule checks, rather than letting the guard chain start
-    // them one after another.
+    // them one after another. A guard's classifier is prefetched only when its own rule check
+    // is not decisive *and* no guard earlier in chain order (distressDetect, then moderationIn,
+    // then jailbreak) is decisive by rule (fix round 1) — so rule-decided cases keep today's
+    // exact call counts. The only extra calls are the accepted trade-off: an earlier guard
+    // short-circuits by a *classifier* verdict, not a rule (lead review item 1).
+    const distressRuleDecisive = distressKeywordMatch(text).level === 'hard';
+    const jailbreakEarlierDecisive = (async () =>
+      distressRuleDecisive || (await moderationRuleDecisive(ctx, text)))();
     ctx.classifierCalls = {
       distress: prefetchDistress(env, ctx, text),
-      moderation: prefetchModeration(env, ctx, text),
-      jailbreak: prefetchJailbreak(env, ctx, text),
+      moderation: prefetchModeration(env, ctx, text, distressRuleDecisive),
+      jailbreak: prefetchJailbreak(env, ctx, text, jailbreakEarlierDecisive),
     };
     const chain = await runGuardChain(registry.ordered(), text, ctx, {
       phase: 'pre',

@@ -89,6 +89,22 @@ guard unit test (hand-built `PreGuardCtx`, no `classifierCalls`) stays green unc
 - Alternatives: Discard and re-run with a phase split. That would waste the finished work.
 - Reversible: n/a.
 
+### 4 Nov 2026 · 4.4b fix round 1 chain-order skip · decided by builder · risk: low
+- Decided: `prefetchModeration`/`prefetchJailbreak` now take an `earlierDecisive` flag/promise and
+  skip their own classifier prefetch when it is `true`, in addition to their own rule check.
+  `createPreGuardStep` computes `distressRuleDecisive` (sync, `distressKeywordMatch`) and a new
+  `moderationRuleDecisive` helper (the same logic moderationIn's prefetch already ran, pulled out
+  so jailbreak's prefetch can read it too) and threads them in chain order: moderation sees
+  distress's flag, jailbreak sees distress-or-moderation's.
+- Why: the original prefetch functions each checked only their own rule, so a decisive hit on an
+  earlier guard (e.g. a hard distress keyword) left the later guards' prefetches unconditioned —
+  they still fired. CI caught this as 430 evals failures expecting 0 classifier calls on
+  rule-decided turns.
+- Alternatives: cancel the later prefetches via `env.cancel` once an earlier guard's rule is known
+  decisive — rejected, same outcome but adds a cancellation path for something decidable
+  up front, synchronously or with one extra await, before any promise starts.
+- Reversible: yes.
+
 ## Red -> green evidence
 
 - `src/pipeline/steps/preGuard.test.ts`: added a new describe block
@@ -128,3 +144,69 @@ guard unit test (hand-built `PreGuardCtx`, no `classifierCalls`) stays green unc
 
 Tool calls used: 95
 Builder estimate: 61 (the harness counted 95)
+
+## Fix round 1
+
+**Cause:** `prefetchModeration`/`prefetchJailbreak` in `preGuard.ts` each re-ran only their *own*
+rule check before deciding to fire a classifier call. Neither checked whether a guard **earlier**
+in chain order (distressDetect, then moderationIn, then jailbreak) had already decided the turn
+by rule. So a hard distress keyword (distressDetect decisive) still let moderationIn's and
+jailbreak's prefetches fire, and a decisive moderation rule hit still let jailbreak's prefetch
+fire — both wasted, unasserted-for calls that CI's evals caught as unexpected `classifierCalls`/
+`jailbreakCalls` counts.
+
+**Fix:** `packages/harness/src/pipeline/steps/preGuard.ts` only.
+- Pulled moderationIn's rule check out into a shared `moderationRuleDecisive(ctx, text)` (same
+  logic as before, just reusable).
+- `prefetchModeration` now takes an `earlierDecisive: boolean` (distressDetect's own rule, computed
+  synchronously up front) and returns `undefined` without calling the classifier when it is `true`,
+  in addition to its own rule check.
+- `prefetchJailbreak` now takes an `earlierDecisive: Promise<boolean>` (distress-rule-decisive OR
+  moderation-rule-decisive, chained) and does the same.
+- `createPreGuardStep` computes `distressRuleDecisive` once (sync) and `jailbreakEarlierDecisive`
+  (awaits `moderationRuleDecisive` after distress), then threads them into the three prefetch
+  calls. No change to `distressDetect.ts`, `moderationIn.ts`, `jailbreak.ts`, `preGuardCtx.ts` or
+  `safetyClassifier.ts` — the guard files' own consume-the-prefetch-or-fall-back branch is
+  unaffected; only which prefetches fire changed.
+
+**Red -> green evidence:**
+- Before the fix, `src/distressEscalate.test.ts` and `src/moderationJailbreak.test.ts` failed in
+  CI exactly as described (430 failures): hard-distress and moderation-rule-decisive cases showed
+  nonzero `classifierCalls`/jailbreak calls.
+- Added 4 new tests to `packages/harness/src/pipeline/steps/preGuard.test.ts` (prefixed
+  "fix round 1"), each with a per-classifier call counter (`delayedClassifierGateway`):
+  - a hard distress keyword → `{ distress: 0, moderation: 0, jailbreak: 0 }` total calls;
+  - a moderation rule hit → `{ distress: 1, moderation: 0, jailbreak: 0 }` (distressDetect's own
+    rule is not decisive on that text, so it still prefetches — only guards *after* the decisive
+    one are suppressed; jailbreak correctly shows 0);
+  - a jailbreak rule hit → `{ distress: 1, moderation: 1, jailbreak: 0 }` (earlier guards' own
+    calls still fire, confirming chain order only suppresses guards *after* a decisive hit, per
+    the brief).
+  Ran against the pre-fix code first (confirmed failing: moderation-rule-hit and jailbreak-rule-hit
+  cases showed nonzero later-guard calls), then against the fix (all pass).
+- No eval test or assertion was changed.
+
+**Gate counts:**
+- `preGuard.test.ts` (harness): **37/37 passed** (33 existing + 4 new).
+- `@edmate/evals` full suite (`corepack pnpm --filter @edmate/evals test`, run to completion after
+  a local coverage-directory lock conflict from a stray leftover process was worked around with a
+  separate `--coverage.reportsDirectory`): **33 test files, 1993 tests, all passed, 0 failures** —
+  includes `distressEscalate.test.ts` and `moderationJailbreak.test.ts` both green.
+- `corepack pnpm --filter @edmate/harness test` (full package): exit 0, **`src/guardrails/**`
+  stays at the enforced 100%/100%/100%/100% threshold** (`vitest.config` fails the run below that;
+  it passed). Full coverage summary: 98.94% statements / 97.18% branches / 98.61% functions /
+  99.46% lines package-wide.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals
+  --force`: harness and evals tasks green (14 of the filtered set's tasks succeeded outright; no
+  harness/evals test failure in the run). One **unrelated** failure surfaced in `@edmate/content`
+  (`src/safeRegex.test.ts`'s timing-probe test, `Test timed out in 5000ms`) — a real-clock timing
+  assertion under this machine's heavy concurrent load (several vitest processes from earlier
+  attempts were still finishing in the background), not a package this task touches and not a DB
+  test; naming it per the gate instructions rather than re-running turbo again given the budget.
+  No local DB integration test was exercised in this round (none of the commands above reach
+  `apps/cli`'s Postgres-backed suite).
+- `prettier --check` on both touched files: clean (`preGuard.test.ts` needed one `--write` pass
+  for the new tests' formatting).
+- `python3 .githooks/secret-scan.py --all`: clean (exit 0).
+
+Fix round 1 tool calls: 74
