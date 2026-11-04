@@ -10769,8 +10769,9 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: planning
-  model: plan:sonnet
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/4.4f-threat-weapon-rules
 - id: 5.1b
   milestone: M13
   title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on
