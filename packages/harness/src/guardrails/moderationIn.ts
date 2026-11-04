@@ -57,7 +57,11 @@ export const MISUSE_CODES: readonly ModerationCode[] = Object.freeze([
  * (harm_to_others, threat or weapons, level `critical` — B-50 and its lead amendment). The
  * excerpt is at most DISTRESS_EXCERPT_MAX code points of the scrubbed text, as in distressDetect.
  */
-export function preGuardAlert(text: string, ctx: PreGuardCtx, kind: Alert['kind']): SafetyAlert {
+export function preGuardAlert(
+  text: string,
+  ctx: Pick<PreGuardCtx, 'ids' | 'entitlement' | 'sessionId' | 'clock'>,
+  kind: Alert['kind'],
+): SafetyAlert {
   return SafetyAlertSchema.parse({
     id: ctx.ids.next('alert'),
     level: kind === 'misuse' ? 'critical' : 'alert',
@@ -84,6 +88,11 @@ async function verdict(
     };
     return { result, usage: [] };
   }
+  // Build the alert (and the ids/clock reads it needs) before recording the event (4.4f): a
+  // throw from preGuardAlert must never leave a safety-event row with no alert/block set.
+  const entry = MISUSE_CODES.includes(code)
+    ? { code, alert: preGuardAlert(text, ctx, 'misuse') }
+    : { code };
   await ctx.safetyEvents.record({
     studentId: ctx.entitlement.studentId,
     teacherId: ctx.entitlement.teacherId,
@@ -93,10 +102,7 @@ async function verdict(
     code,
     source,
   });
-  ctx.blocks.set(
-    NAME,
-    MISUSE_CODES.includes(code) ? { code, alert: preGuardAlert(text, ctx, 'misuse') } : { code },
-  );
+  ctx.blocks.set(NAME, entry);
   return { result: { ok: false, action: 'block', reason: code }, usage: [] };
 }
 

@@ -40,6 +40,23 @@ describe('withVerifiedHelplines', () => {
     expect(mixed.helplines).toHaveLength(3); // the input is not changed
   });
 
+  it('also drops a helpline committed with a typo of "pending" (3.10a item 3)', () => {
+    const typoed = {
+      ...XX,
+      helplines: [
+        line,
+        { ...line, name: 'Line TBD', verifiedBy: 'TBD' },
+        { ...line, name: 'Line Typo', number: 'Pendingg' },
+      ],
+    };
+    const { pack, dropped } = withVerifiedHelplines(typoed);
+    expect(pack.helplines).toEqual([line]);
+    expect(dropped).toEqual([
+      { market: 'XX', helpline: 'Line TBD', reasons: ['verifier_pending'] },
+      { market: 'XX', helpline: 'Line Typo', reasons: ['number_pending'] },
+    ]);
+  });
+
   it('reason codes only: never the number or the verifier text', () => {
     const odd = { ...line, name: 'L', number: ' ', verifiedBy: 'PENDING' };
     const { dropped } = withVerifiedHelplines({ ...XX, helplines: [odd] });

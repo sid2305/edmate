@@ -16,7 +16,14 @@ import {
   type PrivacyNotice,
   readPrivacyNoticesDir,
 } from './privacyNotices.js';
-import { copyNoticesValid, edit, LOCALES_VALID, NOTICES_VALID, tempDir, VALID } from './test-helpers.js';
+import {
+  copyNoticesValid,
+  edit,
+  LOCALES_VALID,
+  NOTICES_VALID,
+  tempDir,
+  VALID,
+} from './test-helpers.js';
 
 const FRONT = {
   version: '2026-01-01.1',
@@ -42,9 +49,9 @@ describe('PrivacyNoticeFrontMatterSchema', () => {
   });
 
   it('accepts "pending" as a signer (validation, not the schema, refuses it)', () => {
-    expect(PrivacyNoticeFrontMatterSchema.safeParse({ ...FRONT, reviewedBy: 'pending' }).success).toBe(
-      true,
-    );
+    expect(
+      PrivacyNoticeFrontMatterSchema.safeParse({ ...FRONT, reviewedBy: 'pending' }).success,
+    ).toBe(true);
   });
 
   it.each([
@@ -55,6 +62,11 @@ describe('PrivacyNoticeFrontMatterSchema', () => {
     ['a version with spaces', { ...FRONT, version: 'draft 0' }],
     ['a lower-case market', { ...FRONT, market: 'xx' }],
     ['an email as signer', { ...FRONT, reviewedBy: 'someone@example.com' }],
+    ['a fullwidth-dot email as signer (3.10a item 5)', { ...FRONT, reviewedBy: 'a@b．com' }],
+    [
+      'a spelled-out email as signer (3.10a item 5)',
+      { ...FRONT, reviewedBy: 'jane at example dot com' },
+    ],
     ['a blank signer', { ...FRONT, reviewedBy: '  ' }],
     ['a signer over 200 characters', { ...FRONT, reviewedBy: 'r'.repeat(201) }],
     ['a date that is not a real day', { ...FRONT, reviewedOn: '2026-02-30' }],

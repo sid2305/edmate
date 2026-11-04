@@ -1223,9 +1223,30 @@ tasks:
   deps:
   - GATE
   - '4.3'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: done
+  branch: m13/4.3b-distress-followups
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 305
+    tokens_in: 1054
+    tokens_out: 123277
+    cache_read_tokens: 47467478
+    wall_time_seconds: 5823
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 4.3c
   milestone: M13
   title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier per B-13 (SMS to the on-call phone plus email backup, e.g. Twilio and Resend, behind a notifier port; re-page every 15 min until
@@ -1272,9 +1293,29 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: running
+  status: done
   branch: m13/4.4c-failed-chain-alerts
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 108
+    tokens_out: 34864
+    cache_read_tokens: 3697581
+    wall_time_seconds: 400
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 1
+      by_severity:
+        CRITICAL: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: '4.5'
   milestone: M4
   title: '`answerLeak` (incremental + final) and the rewrite loop'
@@ -1443,9 +1484,29 @@ tasks:
   deps:
   - GATE
   - '3.10'
-  status: running
+  status: done
   branch: m13/3.10a-locale-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 70
+    tokens_in: 212
+    tokens_out: 59243
+    cache_read_tokens: 9552243
+    wall_time_seconds: 33934
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 3
 - id: 3.10b
   milestone: M13
   title: 'Pre-pilot: a named person verifies the India locale pack (Tele-MANAS number, grievance contact, pack reviewedBy/reviewedOn) and fills the pending values; `edmate content validate content/locales`
@@ -1687,7 +1748,7 @@ tasks:
   - '4.7'
   status: running
   branch: m13/4.7b-grounding-followups
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -10729,7 +10790,28 @@ tasks:
   deps:
   - GATE
   - '4.4'
-  status: todo
+  status: done
+  model: plan:sonnet build:sonnet review:sonnet
+  branch: m13/4.4f-threat-weapon-rules
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 5.1b
   milestone: M13
   title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on
@@ -12148,3 +12230,60 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: '0.24'
+  milestone: M13
+  title: 'Always-on agent VM on Azure, phase 1 (human decision 4 Nov 2026): infra/azure/ create-vm.sh (resource group, Ubuntu 24.04 VM, SSH from the operator IP only, managed identity), cloud-init toolchain,
+    start-lead.sh and two systemd units (lead in tmux through scripts/claude-backup.sh with Remote Control; dev stack at boot), and the step-by-step guide docs/azure-vm.md. No secrets in the repo; logins
+    by hand over SSH.'
+  accept: the human creates the VM from the Mac with one script, logs in to gh and claude over SSH, enables edmate-lead.service and attaches from the phone; docs/azure-vm.md covers it end to end; secret
+    scan and a security review pass.
+  deps: []
+  risk: risky
+  status: done
+  branch: null
+  model: console (fable) review:sonnet
+- id: '0.25'
+  milestone: M13
+  title: 'VM phase 1b, after 0.24 has run once: a heartbeat the phone can see (the lead writes a line to a small file or Azure Monitor custom log on each board commit), Azure Monitor alerts for VM down
+    and no heartbeat for 2 hours, the blockers watcher as a systemd timer on the VM instead of a Claude session, and a budget alert on the subscription at 50/80/100 percent of the monthly credit.'
+  accept: a stopped lead pages the phone within 2 hours; the watcher runs on the VM; the budget alert exists; nothing in the repo names the subscription, IP or account.
+  deps:
+  - '0.24'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
+- id: '0.26'
+  milestone: M13
+  title: 'VM phase 2: Foundry backup through the VM''s managed identity (no key on disk): role assignment documented in docs/azure-vm.md, scripts/claude-backup.sh verified on Linux with the Entra path (auth=entra
+    when no Keychain), and a probe that lets the launcher switch back to the subscription when the window reopens.'
+  accept: on the VM, scripts/claude-backup.sh --foundry starts with /status showing Microsoft Foundry and no ANTHROPIC_FOUNDRY_API_KEY set; the auto mode switches back to the subscription after the window
+    reopens; docs/backup-provider.md updated.
+  deps:
+  - '0.24'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
+- id: '0.27'
+  milestone: M13
+  title: 'VM phase 3, only if funded with a model budget per VM (parked): a pool of VMs, one lead each, the board split by milestone with an owner filter so two leads never take the same task; create-vm.sh
+    takes EDMATE_VM for the name already.'
+  accept: two VMs run two leads on disjoint board slices for a day with no double-taken task and no shared worktree.
+  deps:
+  - '0.26'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
+- id: 4.4h
+  milestone: M13
+  title: 'The three 4.4 review LOWs that 4.4f deferred: narrow withheldCode/code to the SafetyEventCode subset (runner.ts, types.ts); fix the indentation in runner.block.test.ts; add expectTypeOf links
+    between the queue and db safety-event enums (packages/queue). Start after 4.3b merges, because 4.3b owns runner.ts and types.ts.'
+  accept: the three remaining LOWs in docs/tasks/4.4/review.md are fixed (type-only changes proven by typecheck; the indentation by prettier/lint); the gate passes with --filter=...@edmate/harness and --filter=...@edmate/queue
+  deps:
+  - 4.4f
+  - 4.3b
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet

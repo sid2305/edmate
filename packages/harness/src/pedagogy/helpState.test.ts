@@ -12,6 +12,8 @@ import {
   parseSessionHelp,
   personaFields,
   withPersonaCount,
+  withDistressFollowup,
+  withoutDistressFollowup,
   personaQuestionsAsked,
   serializeSessionHelp,
   SessionHelpSchema,
@@ -135,6 +137,27 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
     });
     expect(personaQuestionsAsked(parsed.help)).toBe(0);
     expect(loadSessionHelp(old).unreadable).toBe(false);
+  });
+
+  it('round-trips distressFollowupDue true/false; absent on an old blob reads false (4.3b)', () => {
+    for (const due of [true, false]) {
+      const s = {
+        rung: 1 as const,
+        help: { ...INITIAL_HELP_STATE, answerKey: [], distressFollowupDue: due },
+      };
+      expect(parseSessionHelp(serializeSessionHelp(s))).toEqual(s);
+    }
+    const old = { ...VALID, groundingAsks: 2 };
+    expect(parseSessionHelp(old).help.distressFollowupDue).toBeUndefined();
+  });
+
+  it('withDistressFollowup sets it true; withoutDistressFollowup clears it (a no-op when absent) (4.3b)', () => {
+    const next = { rung: 2 as const, help: { ...INITIAL_HELP_STATE, answerKey: [] } };
+    const set = withDistressFollowup(next);
+    expect(set.help.distressFollowupDue).toBe(true);
+    const cleared = withoutDistressFollowup(set);
+    expect(cleared.help.distressFollowupDue).toBeUndefined();
+    expect(withoutDistressFollowup(next)).toEqual(next);
   });
 
   it('an old blob from before 4.6b, 4.7 and 3.11d alike still keeps its rung', () => {

@@ -30,8 +30,12 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import type { z } from 'zod';
+import { blockReplyFor } from '../guardrails/blockReplies.js';
 import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
+import { matchJailbreak } from '../guardrails/jailbreakPatterns.js';
 import { classifyMistakeTags } from '../memory/mistakeTags.js';
+import { MISUSE_CODES, preGuardAlert } from '../guardrails/moderationIn.js';
+import { matchModeration } from '../guardrails/moderationPatterns.js';
 import {
   copyHelp,
   type HelpState,
@@ -40,7 +44,9 @@ import {
   PRACTICE_SERVED_MAX,
   practiceFields,
   type SessionHelp,
+  withDistressFollowup,
   withGroundingAsks,
+  withoutDistressFollowup,
   withPersonaCount,
 } from '../pedagogy/helpState.js';
 import type { RolePlay } from '../pedagogy/roleplay.js';
@@ -460,11 +466,14 @@ class Turn {
       this.trace.step('preGuard', sc.ms, 'failed');
       // Reported, never dropped: a failed scrub is a guard bug or outage. Ids and names only.
       this.background.push({ task: 'runner', error: scrubFailure(scRaw) });
-      // A raw-text keyword hit escalates without running any step on the raw text.
+      // A raw-text keyword hit escalates without running any step on the raw text. 4.3b: the
+      // reply still carries the pack's helplines (same two-step fallback as escalate() below),
+      // never the bare last-resort text unless the fallback itself throws or returns empty.
       if (rawDistress) {
+        const fb = this.distressFallback(input, e);
         return this.sendEscalation(e, null, this.buildAlert(input, e, undefined), {
-          replyText: LAST_RESORT_DISTRESS_REPLY,
-          outcome: 'fallback',
+          replyText: fb.replyText,
+          outcome: fb.failed ? 'failed' : 'fallback',
           ms: 0,
         });
       }
@@ -508,8 +517,28 @@ class Turn {
       this.trace.addGuards([{ name: 'answerKeyContext', ok: false, action: 'drop' }]);
     }
 
+    // 4.3b: the loaded help state, set here (before decide may rebuild it) so the escalate branch
+    // just below can carry the session distress follow-up flag forward too. Recomputed below
+    // (unconditionally) once `built`/`helpLoaded` may have changed from a buildContext fallback.
+    const bcHelpLoaded = bc.ok && bc.value.helpStateUnreadable !== true;
+    this.loadedStop = bcHelpLoaded ? bc.value.helpState.lockedStopped === true : null;
+    this.loadedHelp = bcHelpLoaded ? { rung: bc.value.helpRung, help: bc.value.helpState } : null;
+
     // 5. Escalate beats block: a distressed student always gets the caring reply.
+    // 4.4c: with the pre guard chain down (no classifier verdict at all), the rule tables still
+    // run on the raw scrubbed text, so a decisive moderation/jailbreak hit is not lost to the
+    // generic PRE_GUARD_FAILED ending.
+    const ruleFallback = pg.ok ? null : this.ruleTableFallback(scrubbed, e);
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
+    // 4.4c: a router distress label (or a raw/soft distress hit) must not drop a misuse alert
+    // that was already found this turn: preGuard's own block alert when the chain ran, or — when
+    // the chain failed — the rule table fallback's block alert (fix round 1: the fallback's own
+    // decisive hit was being silently dropped whenever a distress signal coincided with it). The
+    // caring reply still wins (escalate beats block for the reply), but the misuse alert still
+    // reaches AlertSink.
+    const blockAlert =
+      (pg.ok && pg.value.result === 'block' ? pg.value.alert : undefined) ??
+      (ruleFallback?.kind === 'block' ? ruleFallback.alert : undefined);
     // A failed preGuard means no classifier verdict: the keyword check still runs, and there a
     // soft phrase counts too (no verdict to bypass; 4.3 safety review). A hit on the raw text
     // (before the scrub, hard phrases only) always counts.
@@ -517,10 +546,27 @@ class Turn {
       preAlert !== undefined ||
       intent === 'distress' ||
       rawDistress ||
+      ruleFallback?.kind === 'self_harm' ||
       (!pg.ok &&
+        ruleFallback === null &&
         (this.distressHit(scrubbed, 'scrubbed') || hasAnyDistressKeyword(scrubbed.text ?? '')))
     ) {
-      return this.escalate(scrubbed, e, preAlert);
+      // 4.3b: when the help state was loaded, carry the session distress follow-up flag forward
+      // so the next ordinary turn shows the gentle check-in once.
+      const escalateNext =
+        this.loadedHelp === null ? undefined : withDistressFollowup(this.loadedHelp);
+      return this.escalate(scrubbed, e, preAlert, escalateNext, blockAlert);
+    }
+    if (ruleFallback?.kind === 'block') {
+      // The rule table's own reply, plus a misuse alert if the code carries one (4.4c).
+      return this.sendBlockReply(
+        e,
+        scrubbed,
+        intent,
+        ruleFallback.reply,
+        ruleFallback.alert,
+        ruleFallback.code,
+      );
     }
     if (pg.ok && pg.value.result === 'block' && pg.value.reply !== undefined) {
       // moderationIn / jailbreak (4.4): the code's own reply, plus a misuse alert if one came.
@@ -590,12 +636,15 @@ class Turn {
     // The session's grounding escalation count rides along on every path that saves the help
     // state (decide's ladder may rebuild the state without it; 4.7 fix round 1).
     const asked = built.helpState.groundingAsks ?? 0;
+    // 4.3b: read once here, then always cleared on `base.next` below, whatever this turn's own
+    // outcome (Q3: a second escalation in a row just saves it true again instead).
+    const followupDue = helpLoaded && built.helpState.distressFollowupDue === true;
     const base = {
       input: scrubbed,
       intent,
       context: ctx,
       decision,
-      next: withGroundingAsks(decided.next, asked),
+      next: withoutDistressFollowup(withGroundingAsks(decided.next, asked)),
       promptPack: decided.promptPack,
     };
 
@@ -611,6 +660,7 @@ class Turn {
       decided.skill,
       decided.rolePlay,
       this.loadedStop !== false,
+      followupDue,
       {
         servedItemIds: built.helpState.practiceServed ?? [],
         ...(built.helpState.practiceModuleId === undefined
@@ -642,7 +692,9 @@ class Turn {
     if ('alert' in post) {
       this.clearAll();
       // A locked trip must still be saved (4.6b fix round 1): the loaded state, untouched, gets
-      // the flag in finish(). Without one, an escalation saves no help state, as before.
+      // the flag in finish(). This escalate branch serves every postGuard alert (lockedLeak,
+      // answerLeak, grounding), not only distress, so it does not set the 4.3b check-in flag
+      // (that is set only on the distress escalate path below, where it belongs).
       const keep = this.lockedTrip ? { rung: built.helpRung, help: built.helpState } : undefined;
       return this.escalate(scrubbed, e, post.alert, keep);
     }
@@ -667,10 +719,14 @@ class Turn {
       {
         ...base,
         // Only the model's own reply, passed by the post guard, counts a persona question
-        // (3.11e): the safe reply and a guard's replacement keep the loaded count.
-        next: withGroundingAsks(
-          post.modelReply ? decided.next : withPersonaCount(decided.next, built.helpState),
-          asked + (escalating && questionId !== undefined ? 1 : 0),
+        // (3.11e): the safe reply and a guard's replacement keep the loaded count. 4.3b: the
+        // session distress follow-up flag was read once into `followupDue` above; it is always
+        // cleared here too, whatever this turn's own outcome.
+        next: withoutDistressFollowup(
+          withGroundingAsks(
+            post.modelReply ? decided.next : withPersonaCount(decided.next, built.helpState),
+            asked + (escalating && questionId !== undefined ? 1 : 0),
+          ),
         ),
         outcome: 'replied',
         replyText,
@@ -736,11 +792,39 @@ class Turn {
     }
   }
 
+  /**
+   * The locale fallback, else the last resort. Never throws, never returns an empty string.
+   * Shared by `escalate()` (step text failed) and the scrub-failure branch above (no step ran at
+   * all), so both paths carry the pack's helplines rather than the bare last-resort text (4.3b).
+   */
+  private distressFallback(input: TurnInput, e: Entitled): { replyText: string; failed: boolean } {
+    let replyText = '';
+    try {
+      replyText = this.deps.fallbackReplies.distress(input.lang, e.locale);
+    } catch (error) {
+      this.background.push({ task: 'runner', error });
+    }
+    if (replyText === '') {
+      this.background.push({
+        task: 'runner',
+        error: new HarnessError('no distress reply text; sent the last-resort reply'),
+      });
+      return { replyText: LAST_RESORT_DISTRESS_REPLY, failed: true };
+    }
+    return { replyText, failed: false };
+  }
+
   private async escalate(
     input: TurnInput,
     e: Entitled,
     preAlert: SafetyAlert | undefined,
     next?: SessionHelp,
+    /**
+     * A misuse alert that must still reach AlertSink even though the caring reply wins (4.4c: the
+     * router's distress label must not drop preGuard's own misuse alert). Never the commit
+     * record's own `alert` field: that keeps today's single primary-alert shape.
+     */
+    extraAlert?: SafetyAlert,
   ): Promise<TurnRunResult> {
     const es = check(
       await this.timed(input, timeoutOf('escalate'), (env) =>
@@ -754,28 +838,27 @@ class Turn {
     let replyText = es.ok ? es.value.replyText : '';
     let outcome: 'ok' | 'fallback' | 'failed' = replyText !== '' ? 'ok' : 'fallback';
     if (replyText === '') {
-      try {
-        replyText = this.deps.fallbackReplies.distress(input.lang, e.locale);
-      } catch (error) {
-        this.background.push({ task: 'runner', error });
-      }
+      const fb = this.distressFallback(input, e);
+      replyText = fb.replyText;
+      if (fb.failed) outcome = 'failed';
     }
-    if (replyText === '') {
-      this.background.push({
-        task: 'runner',
-        error: new HarnessError('no distress reply text; sent the last-resort reply'),
-      });
-      replyText = LAST_RESORT_DISTRESS_REPLY;
-      outcome = 'failed';
-    }
-    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms }, next);
+    return this.sendEscalation(
+      e,
+      input,
+      built,
+      { replyText, outcome, ms: es.ms },
+      next,
+      extraAlert,
+    );
   }
 
   /**
    * The end of every escalated turn: dispatch the alert (if one could be built), record escalate
    * (`failed` when the alert could not be built first time), send safety + reply + done, save.
    * `commitInput` is null when the scrub failed, so the raw text is never stored. `next` is the
-   * help state to save, only after a locked trip (4.6b fix round 1).
+   * help state to save, only after a locked trip (4.6b fix round 1). `extraAlert` (4.4c) is
+   * delivered too, alongside `built.alert`, deduplicated by id so the same alert is never raised
+   * twice; the commit record's single `alert` field still holds only `built.alert`.
    */
   private sendEscalation(
     e: Entitled,
@@ -783,8 +866,15 @@ class Turn {
     built: { alert: SafetyAlert | null; failed: boolean },
     reply: { replyText: string; outcome: 'ok' | 'fallback' | 'failed'; ms: number },
     next?: SessionHelp,
+    extraAlert?: SafetyAlert,
   ): Promise<TurnRunResult> {
-    const delivered = built.alert === null ? undefined : this.deliverAlert(built.alert);
+    const toRaise = [built.alert, extraAlert ?? null].filter(
+      (a, i, arr): a is SafetyAlert => a !== null && arr.findIndex((b) => b?.id === a.id) === i,
+    );
+    const delivered =
+      toRaise.length === 0
+        ? undefined
+        : Promise.all(toRaise.map((a) => this.deliverAlert(a))).then(() => undefined);
     this.trace.step('escalate', reply.ms, built.failed ? 'failed' : reply.outcome);
     this.send({ type: 'safety', level: 'alert' });
     this.send({ type: 'token', text: reply.replyText });
@@ -858,6 +948,63 @@ class Turn {
       }
     }
     return { alert: null, failed: true };
+  }
+
+  /**
+   * 4.4c: with the pre guard chain down (no classifier verdict at all, e.g. a step error or
+   * timeout), the moderation and jailbreak rule tables still run directly on the scrubbed text
+   * (pure, synchronous, no model/gateway call; `matchModeration`/`matchJailbreak` are already
+   * exported for this). A decisive `self_harm` hit is reported as such so the caller folds it into
+   * the existing distress-escalate check (the moderation table is a better detector than the
+   * plain keyword lists already checked there). A decisive hit of any other moderation code, or a
+   * decisive jailbreak hit, builds the same block the real guard would have: its own reply, and
+   * — for `MISUSE_CODES` only — a critical misuse alert. No decisive hit at all (null) leaves the
+   * caller's existing keyword-only fallback unchanged. Never throws: `matchModeration` and
+   * `matchJailbreak` are pure pattern matchers.
+   */
+  private ruleTableFallback(
+    scrubbed: TurnInput,
+    e: Entitled,
+  ):
+    | { kind: 'self_harm' }
+    | { kind: 'block'; code: string; reply: string; alert: SafetyAlert | undefined }
+    | null {
+    const text = scrubbed.text ?? '';
+    const modHit = matchModeration(text);
+    if (modHit?.decisive === true) {
+      if (modHit.code === 'self_harm') return { kind: 'self_harm' };
+      const code = modHit.code;
+      const alert = MISUSE_CODES.includes(code)
+        ? preGuardAlert(text, this.ruleFallbackAlertCtx(e, scrubbed), 'misuse')
+        : undefined;
+      return { kind: 'block', code, reply: blockReplyFor(code), alert };
+    }
+    const jbHit = matchJailbreak(text, {
+      packageNames: [e.pkg.name],
+      currentPackageName: e.pkg.name,
+    });
+    if (jbHit?.decisive === true) {
+      return {
+        kind: 'block',
+        code: jbHit.code,
+        reply: blockReplyFor(jbHit.code),
+        alert: undefined,
+      };
+    }
+    return null;
+  }
+
+  /** The small `ctx` `preGuardAlert` reads, built from this turn's own fields (4.4c). */
+  private ruleFallbackAlertCtx(
+    e: Entitled,
+    scrubbed: TurnInput,
+  ): Parameters<typeof preGuardAlert>[1] {
+    return {
+      ids: this.deps.ids,
+      entitlement: e.entitlement,
+      sessionId: scrubbed.sessionId,
+      clock: this.deps.clock,
+    };
   }
 
   /**
@@ -937,6 +1084,7 @@ class Turn {
     skill: Skill | null | undefined,
     rolePlay: RolePlay | undefined,
     lockedStopped: boolean,
+    distressFollowupDue: boolean,
     practice: ToolSessionState,
   ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
@@ -963,6 +1111,7 @@ class Turn {
               ...(skill === undefined ? {} : { skill }),
               ...(rolePlay === undefined ? {} : { rolePlay }),
               lockedStopped,
+              distressFollowupDue,
               onLockedTrip: () => {
                 this.lockedTrip = true;
               },
@@ -1040,6 +1189,7 @@ class Turn {
       // 5.6b: the loaded item plus every item issued this turn, and every practice key.
       items: this.activeItems(),
       practiceKeys: [...new Set([...this.loadedPracticeKeys, ...keys])],
+      ...(gen.followup === undefined ? {} : { followup: gen.followup }),
     };
     const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
       this.steps.postGuard(env, x),

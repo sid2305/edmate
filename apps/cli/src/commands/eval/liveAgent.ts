@@ -86,7 +86,12 @@ async function seedPriorTurns(
  * (`PRE_GUARD_FAILED`, `retryable: true`: classifier outage, timeout, bad output) never got a
  * verdict, so the case fails instead of scoring it blocked. Every other `error` event (8.7g: for
  * example `model_error`) also fails the case, the same way the gate's `collectReply` does — today
- * it was silently scored as an empty or partial reply instead. */
+ * it was silently scored as an empty or partial reply instead.
+ *
+ * Since 4.4c, a `PRE_GUARD_FAILED` chain that still gets a rule-table hit (the chain's own
+ * fallback table, independent of the down classifier) replies with a fixed `BLOCK_REPLIES` string
+ * and emits no `error` event at all, so it is scored `blocked` via the text check above, not
+ * failed. */
 async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgentReply> {
   let text = '';
   let sources: SourceRef[] | undefined;

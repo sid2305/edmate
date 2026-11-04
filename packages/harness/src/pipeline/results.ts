@@ -102,6 +102,9 @@ export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   locked: z.enum(['hit', 'failed']).exactOptional(),
   held: z.boolean().exactOptional(),
   practiceAnswerKey: z.array(z.string()).readonly().exactOptional(),
+  // 4.3b fix round 1: the check-in text folded onto the front of `draft`, so postGuard can strip
+  // it before any guard judges it and put it back on a surgical rewrite.
+  followup: z.string().exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [

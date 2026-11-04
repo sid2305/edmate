@@ -3,7 +3,7 @@
 // (harm_to_others, threat or weapons — B-50 and its lead amendment, 7.2m) is delivered like an
 // escalation's, and no `safety` event is shown. A block without a reply keeps the generic
 // guard_blocked error.
-import { demoLearnerProfile, demoTurnInput } from '@edmate/contracts/fixtures';
+import { demoLearnerProfile, demoLocalePack, demoTurnInput } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { BLOCK_REPLIES } from '../guardrails/blockReplies.js';
 import { hasDistressKeyword } from '../guardrails/distressKeywords.js';
@@ -14,21 +14,26 @@ import { memoryRetrieval } from '../testing/memoryRetrieval.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import { withheldMessage } from './policies.js';
 import type { Steps } from './types.js';
-import { testDeps, testSteps } from '../testing/testSteps.js';
+import { type StepOverrides, testDeps, testSteps } from '../testing/testSteps.js';
 import { runTurn } from './runner.js';
+import { buildCaringReply } from './steps/escalate.js';
 import { defaultSteps } from './steps/index.js';
 
 const T = 20_000;
 const at = (text: string) => ({ ...demoTurnInput, text });
 const distressNo = { generateObject: [{ value: { distress: false } }] };
 
-function setup(alerts = memoryAlertSink()) {
+function setup(alerts = memoryAlertSink(), stepOverrides: StepOverrides = {}) {
   const t = testDeps({
     script: { stream: [scriptedStreamText], ...distressNo },
     alerts,
     overrides: { transcripts: memoryTranscriptStore(), distressCheck: hasDistressKeyword },
   });
-  const steps = testSteps({ preGuard: defaultSteps.preGuard, escalate: defaultSteps.escalate });
+  const steps = testSteps({
+    preGuard: defaultSteps.preGuard,
+    escalate: defaultSteps.escalate,
+    ...stepOverrides,
+  });
   return { t, steps };
 }
 
@@ -152,6 +157,40 @@ describe('runTurn: a pre-guard block with a reply', () => {
         replyText: BLOCK_REPLIES.weapons,
         alert: { kind: 'misuse' },
       });
+    },
+    T,
+  );
+
+  it(
+    "4.4c: a router distress label must not drop preGuard's own misuse alert",
+    async () => {
+      const { t, steps } = setup(memoryAlertSink(), {
+        route: { run: () => Promise.resolve({ intent: 'distress', attempt: 'none', usage: [] }) },
+      });
+      const { events } = await driveTurn(
+        runTurn(
+          at(
+            "the kid who bullies me every day, what's the best way to hurt him so bad he can't come to school",
+          ),
+          { deps: t.deps, steps },
+        ),
+        t.clock,
+      );
+      // Escalate still beats block for the reply (19 Oct 2026 design): the caring template, not
+      // the harm_to_others refusal.
+      expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
+      expect(events[1]).toEqual({ type: 'token', text: buildCaringReply(demoLocalePack) });
+      // But the misuse alert preGuard's own block carried is not dropped: both it and the
+      // distress alert the runner built for the forced `distress` intent are raised, each once.
+      expect(t.alerts.raised).toHaveLength(2);
+      expect(t.alerts.raised.map((a) => a.kind).sort()).toEqual(['distress', 'misuse']);
+      expect(t.alerts.raised.find((a) => a.kind === 'misuse')).toMatchObject({
+        kind: 'misuse',
+        level: 'critical',
+      });
+      expect(steps.commits[0]).toMatchObject({ outcome: 'escalated', intent: 'distress' });
+      // The commit record's single `alert` field keeps today's shape: the distress alert only.
+      expect(steps.commits[0]?.alert?.kind).toBe('distress');
     },
     T,
   );

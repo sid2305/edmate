@@ -3,6 +3,7 @@
 // StyleCard / PackageConfig with the ids and versions the seed (1.5) adds left out.
 import { PackageConfigSchema, StyleCardSchema } from '@edmate/contracts';
 import { z } from 'zod';
+import { looksLikeEmail } from './emailLike.js';
 
 /** The frozen id() format (letters, digits, `_`, `-`, at most 128), taken from the contract. */
 const id = () => PackageConfigSchema.shape.moduleIds.element;
@@ -14,7 +15,7 @@ const reviewer = () =>
     .string()
     .trim()
     .min(1)
-    .refine((s) => !/\S@\S+\.\S/.test(s), 'a name or handle, not an email address');
+    .refine((s) => !looksLikeEmail(s), 'a name or handle, not an email address');
 
 export const CourseModuleSchema = z.strictObject({ id: id(), title: text() });
 export type CourseModule = z.infer<typeof CourseModuleSchema>;

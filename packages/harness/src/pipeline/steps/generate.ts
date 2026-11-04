@@ -52,6 +52,7 @@ import { itemContextOf } from '../generate/itemContext.js';
 import { answerLeakStreamGate } from '../generate/streamGate.js';
 import { DEFAULT_COVERAGE_THRESHOLD } from '../../pedagogy/coverage.js';
 import { HarnessError } from '../errors.js';
+import { DISTRESS_FOLLOWUP_REPLY } from '../replies.js';
 import { runToolLoop } from '../generate/toolLoop.js';
 import { noTools, offeredTools } from '../tools.js';
 import type { StepEnv, Steps } from '../types.js';
@@ -115,6 +116,21 @@ export function holdsReply(
   return scores.length > 0 && Math.max(...scores) < threshold + HOLD_MARGIN;
 }
 
+/**
+ * The gentle check-in text (task 4.3b): `deps.fallbackReplies.distressFollowup` when it returns
+ * non-empty text without throwing, else the built-in `DISTRESS_FOLLOWUP_REPLY`. Never throws,
+ * never returns empty, same shape as the runner's own distress-reply fallback.
+ */
+function distressFollowupText(env: StepEnv): string {
+  try {
+    const text = env.deps.fallbackReplies.distressFollowup?.(env.input.lang);
+    if (text !== undefined && text !== '') return text;
+  } catch (error) {
+    env.report(error);
+  }
+  return DISTRESS_FOLLOWUP_REPLY;
+}
+
 /** A cited source's title or locator held the answer key, so it was not sent. Fixed text only. */
 export class SourceDropped extends HarnessError {
   override readonly name = 'SourceDropped';
@@ -141,6 +157,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       skill,
       rolePlay,
       lockedStopped,
+      distressFollowupDue,
       onLockedTrip,
       fromFallback,
       practice,
@@ -197,9 +214,21 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
     // 13.skillpresent: harness-computed progress, before the first token and before any tool
     // runs, never from a model tool call (ADR-0012, ADR-0013). At most one of these fires.
-    const progress = rolePlaySkillEvent(rolePlay, ctx) ?? feedbackSkillEvent(skill, decision.move, ctx);
+    const progress =
+      rolePlaySkillEvent(rolePlay, ctx) ?? feedbackSkillEvent(skill, decision.move, ctx);
     if (progress !== undefined) emit(progress);
-    const { draft, raw, locked } = await runToolLoop({
+    // 4.3b (lead review Q1): a held reply skips the check-in this turn; the flag still clears, so
+    // it is lost for this session rather than shown out of order once the whole reply is ready.
+    // 4.3b fix round 1: the check-in is folded onto the front of `draft` below (not just streamed
+    // as a bare token) so postGuard's chain and any surgical rewrite keep it; `followup` tells
+    // postGuard exactly what prefix to strip before judging and to put back on a rewrite.
+    const followup = distressFollowupDue && !held ? distressFollowupText(env) : undefined;
+    if (followup !== undefined) emit({ type: 'token', text: followup });
+    const {
+      draft: modelDraft,
+      raw,
+      locked,
+    } = await runToolLoop({
       gateway: env.gateway,
       request,
       offered,
@@ -241,13 +270,14 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       track: env.track,
     });
 
-    const cited = citedSources(draft, sources).filter((s) => {
+    const cited = citedSources(modelDraft, sources).filter((s) => {
       const leaks = revealsAnswerKey([s.title, s.locator], guarded);
       if (leaks) env.report(new SourceDropped());
       return !leaks;
     });
     if (cited.length > 0) emit({ type: 'sources', items: cited });
     if (decision.move === 'locked') emit(lockedEvent(ctx.pkg));
+    const draft = followup === undefined ? modelDraft : followup + modelDraft;
     return {
       draft,
       raw,
@@ -255,6 +285,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       ...(locked === undefined ? {} : { locked }),
       ...(held ? { held } : {}),
       ...(issued.length > 0 ? { practiceAnswerKey: issued } : {}),
+      ...(followup === undefined ? {} : { followup }),
     };
   };
 }

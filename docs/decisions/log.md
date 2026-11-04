@@ -10,6 +10,418 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.3b scrub-failure fallback shares escalate()'s helper · decided by builder · risk: low
+- Decided: extracted `distressFallback(input, e)` as a private `Runner` method, used by both the
+  scrub-failure branch and `escalate()`, instead of duplicating the try/catch-and-last-resort
+  logic inline in the scrub-failure branch.
+- Why: the plan's own wording calls for "the same two-step fallback `escalate()` already uses";
+  a shared private helper keeps that behavior in one place instead of two copies that could drift.
+- Alternatives: duplicate the inline try/catch in the scrub-failure branch (plan's literal
+  wording, more diff-local but duplicates logic).
+- Reversible: yes — inlining it back out is a small, local change.
+
+---
+
+### 4 Nov 2026 · 4.3b Q1 (held replies skip the check-in) · decided by lead, carried by builder · risk: low
+- Decided: the check-in is only emitted when `holdsReply()` says the turn's reply streams live
+  (`!held`). A held turn (postGuard may replace the draft whole) never shows it. **Corrected in fix
+  round 1:** the flag does not stay set for a later read — `runner.ts`'s `base.next` wraps every
+  save with `withoutDistressFollowup` unconditionally, on every outcome, whatever this turn's own
+  move was. A held turn therefore drops the check-in for the rest of the session: it is a one-shot
+  read, consumed and cleared whether or not it was actually shown. This is a documented gap, not
+  a "shown later" deferral.
+- Why: no extra gating logic needed — `generate.ts` already computes `held` for every other
+  purpose; piggy-backing on it keeps the check-in's placement consistent with how the rest of the
+  turn is shown, and avoids a second code path that `postGuard.ts`'s fixed-text builders would
+  need to know about. Making the flag survive a held turn (read again, unconsumed) would need a
+  third state ("due but not yet shown") on `SessionHelp`, which the plan's Q1 recommendation
+  already judged disproportionate for a 2-line follow-up.
+- Alternatives: force every flagged turn to show the check-in even when held, by injecting it into
+  postGuard's rewritten/safe text too — rejected per the plan's own Q1 recommendation (disproportionate
+  for a 2-line follow-up; logged as a follow-up for whichever task next touches `postGuard.ts`).
+  Keep the flag set across a held turn instead of clearing it — rejected in fix round 1 too: it
+  would need a new "due but unseen" state, out of this round's scope.
+- Reversible: yes — the gate is one boolean check in `generate.ts`; a later task could add the
+  third state above without touching this task's other code.
+
+---
+
+### 4 Nov 2026 · 4.3b Q2 (locked/redirect/ask_teacher moves never show it) · decided by lead, carried by builder · risk: low
+- Decided: moves that never call `generate` (`locked`, `redirect`, `ask_teacher`) never show the
+  check-in; this is accepted as-is, not worked around, per the plan's Q2 recommendation.
+  **Corrected in fix round 1:** the flag does not "stay set and carry forward" either — same
+  unconditional `withoutDistressFollowup` on `base.next` as Q1, so a turn that takes one of these
+  moves also drops the check-in for the rest of the session, not just until the next turn that
+  reaches `generate`.
+- Why: those moves' replies are built by `postGuard.ts`'s fixed-text builders
+  (`askTeacherReplyFor`, `redirectReplyFor`, locked's own reply), a separate code path this task
+  does not touch; the flag is a one-shot read on the next ordinary turn's help-state load,
+  consumed there whether or not that turn's move could show it (same accepted gap as Q1).
+- Alternatives: thread the check-in into each fixed-text builder too — rejected; out of this
+  task's scope and budget, logged as a follow-up for later `postGuard.ts` work.
+- Reversible: yes — no code depends on this gap; a later task can add the check-in to those
+  builders without touching this task's code.
+
+---
+
+### 4 Nov 2026 · 4.3b the postGuard-triggered escalate branch does not set the check-in flag · decided by builder · risk: low
+- Decided: the generic postGuard-alert escalate branch (`'alert' in post`, serving lockedLeak,
+  answerLeak and grounding escalations, not only distress) keeps its pre-4.3b `keep` logic
+  (`this.lockedTrip ? { rung, help } : undefined`) unchanged; it does not wrap that saved state
+  with `withDistressFollowup`.
+- Why: an earlier draft of this change made that branch always save the help state with the flag
+  set whenever it was known. That is wrong: this branch is reached for a locked-material leak or
+  an ungrounded-reply escalation, neither of which is a mental-health distress event, so showing
+  "I'm glad you're still here with me" on the next turn would be confusing and out of place. Only
+  the dedicated distress-escalate branch (raw keyword/classifier/self-harm rule) sets the flag.
+  Caught by `runner.lockedLeak.test.ts`'s two exact `.toEqual(next)` assertions turning red when
+  the draft briefly set the flag there too; reverted rather than widened those assertions.
+- Alternatives: set the flag on every escalate path regardless of cause (rejected, see above).
+- Reversible: yes — a future task could choose to also show a check-in after a locked-material
+  trip, as its own decision, without touching this task's distress-specific logic.
+
+---
+
+### 4 Nov 2026 · 4.3b an existing roleplay-distress test now expects the flag set · decided by builder · risk: low
+- Decided: `roleplay.integration.test.ts`'s "a stop the router flags as distress gets the distress
+  handling, not the role-play stop" test asserted `stopped.help` equals the pre-turn help state
+  (`before`) exactly; changed to `{ ...before, distressFollowupDue: true }`.
+- Why: that test's "stop" turn genuinely escalates as distress (`intent: 'distress'`), so it goes
+  through the same distress-escalate branch Phase B's own new `runner.test.ts` cases cover; the
+  plan's intended behavior change (every distress escalation sets the flag) necessarily changes
+  this existing assertion too. Named here per the brief's rule on editing existing assertions.
+- Alternatives: none — this is the plan's own behavior change reaching an existing test.
+- Reversible: yes — reverting the flag-setting logic would restore the original assertion.
+
+---
+
+### 4 Nov 2026 · 4.3b `distressFollowupDue` is a required field on the generate step's options · decided by builder · risk: low
+- Decided: `Steps['generate']`'s options object type gained `distressFollowupDue: boolean`
+  (required, not `?:`), matching `lockedStopped`'s sibling field placement but without a default.
+- Why: a required field forces every call site (test doubles, `generate.test.ts`'s `setup()`,
+  `runner.ts`'s own construction) to say explicitly whether the flag is set, rather than silently
+  defaulting to `undefined`/falsy and masking a future wiring mistake (same reasoning as other
+  `Steps` fields this task's sibling tasks have made required).
+- Alternatives: optional with a default of `false` inside `generate.ts` — slightly less diff
+  everywhere it is constructed, but would hide a caller that forgot to pass it.
+- Reversible: yes — a follow-up could relax it to optional without changing behavior.
+
+---
+
+### 4 Nov 2026 · 4.3b thread an explicit `followup` field instead of matching the fixed reply string · decided by builder · risk: low
+- Decided: `GenerateResult` gained an optional `followup: string` carrying the exact check-in text
+  folded onto `draft` this turn; `postGuard.ts` strips/reattaches that literal prefix rather than
+  pattern-matching against the `DISTRESS_FOLLOWUP_REPLY` constant.
+- Why: `generate.ts` calls `distressFollowupText(env)`, which may return a locale override rather
+  than the fixed harness constant; matching the constant directly would silently stop working for
+  any locale that overrides the text. Threading the actual string used keeps the strip/reattach
+  correct regardless of locale.
+- Alternatives: hardcode the match against `DISTRESS_FOLLOWUP_REPLY` — rejected, breaks under a
+  locale override. Export a dedicated "is this a check-in prefix" predicate instead of a string
+  field — rejected as unnecessary indirection for a one-field pass-through.
+- Reversible: yes — the field is additive and optional; removing it only re-opens this bug.
+
+---
+
+### 4 Nov 2026 · 4.3b `wholeReplacementTexts` distinguishes a fixed substitution from a surgical rewrite · decided by builder · risk: low
+- Decided: `postGuard.ts`'s generic 'ok'-with-changed-text branch only re-attaches the check-in
+  prefix when the guard's returned text is not a member of `wholeReplacementTexts` (the ask-teacher
+  reply, `ANSWER_LEAK_SAFE_HINT`, the locked reply, and the existing `fixedTexts` array).
+  Membership means "this guard swapped in a fixed whole-reply string", not "this guard edited the
+  model's own words in place".
+- Why: the guard chain's result shape does not otherwise distinguish these two cases — both reach
+  the same `{ ok: false, action: 'rewrite', text }` → generic 'ok' outcome. Without this check, the
+  fix prepended the check-in onto `ANSWER_LEAK_SAFE_HINT` (a fixed safe-hint substitution), which
+  is a whole-reply replacement and must drop the check-in like the locked/escalate/block paths do.
+  Caught by the new postGuard.test.ts case.
+- Alternatives: add a structural flag to the guard's rewrite outcome marking it "whole" vs.
+  "surgical" — more correct long-term, but a larger change to the `Guard`/`runGuardChain`
+  abstraction than this fix round's scope; logged here as a follow-up for whichever task next
+  touches that abstraction. Compare rewrite length/edit-distance to the original heuristically —
+  rejected as fragile (a short model draft could legitimately be fully replaced by a similarly
+  short surgical fix).
+- Reversible: yes — the set is a local constant in `postGuard.ts`; removing it reverts to the
+  pre-fix (buggy) behavior.
+
+---
+
+### 4 Nov 2026 · 4.3b add `followup` to `GenerateResultSchema` · decided by builder · risk: low
+- Decided: added `followup: z.string().exactOptional()` to `GenerateResultSchema` in `results.ts`.
+- Why: the schema is a `z.strictObject`; without this the new field made every `GenerateResult`
+  carrying it fail `runner.ts`'s `check()` validation, which the step's failure/retry policy
+  treats the same as the step genuinely failing — manifesting as duplicated stream events and an
+  eventual `provider_error` once the scripted gateway's fixture stream was exhausted by the retry,
+  rather than a type error at the call site. Found via the eval test above.
+- Alternatives: none — the field must be declared on the strict schema for the step to pass its
+  own output validation; this is not a design choice, just the schema catching up to the type.
+- Reversible: yes — removing the field from `types.ts` and this schema entry together reverts it.
+
+---
+
+### 4 Nov 2026 · 4.3b distress follow-ups, merged · decided by lead · risk: high
+- Decided: merge 4.3b. The scrub-failure distress reply now carries the pack's helplines through
+  the shared `distressFallback` helper. After a distress escalation, the session gets one gentle
+  check-in on the next ordinary tutoring reply, then the flag clears.
+- Wording: the lead changed the check-in to "Before we carry on: thank you for telling me how you
+  were feeling earlier. Support is still there whenever you want it. Now, let's keep going." The
+  first draft ("I'm glad you're still here with me") could read as "glad you're alive".
+- Review: code-reviewer found two HIGHs (the check-in was lost when postGuard rewrote the reply;
+  the handoff's Q1 text was wrong). Fix round 1 folds the check-in into the draft through an
+  explicit `followup` field, so surgical rewrites keep it and whole replacements, blocks and
+  escalations drop it. code-reviewer re-verified both fixed and found nothing new.
+- Known gaps, accepted for the pilot: a held reply or a fixed-text move (locked, redirect,
+  ask_teacher) uses the flag up without showing the check-in, so that session never sees it. A
+  whole-reply replacement also drops it. Both fail quiet (no check-in), never loud.
+- `followup` on `GenerateResultSchema` is harness-internal (`results.ts`), not `packages/contracts`,
+  so no ADR.
+- Reversible: yes; revert the squash commit.
+
+---
+
+### 4 Nov 2026 · 4.3b build over budget · decided by lead · risk: low
+- Decided: accept 387 tool calls against the plan's 110 (harness counts: Phase A 68, Phase B 197,
+  fix round 1 122). The builders self-reported about 32, 85 and 46.
+- Why: Phase B's eval wiring took trial and error, and the fix round had to trace a strict-schema
+  retry loop. Both builders ran past their stop limits; future briefs repeat the hard stop.
+- Reversible: n/a.
+
+---
+
+### 4 Nov 2026 · 4.4f deferred LOWs go to board task 4.4h, not 4.4g · decided by lead · risk: low
+- Decided: the three 4.4 review LOWs that 4.4f deferred (withheldCode narrowing, the runner.block.test.ts indentation, and the queue/db enum expectTypeOf links) become board task 4.4h. It depends on 4.4f and 4.3b.
+- Why: the id 4.4g was already taken by the finished jailbreak subject-exemption task (28 Oct 2026). The 4.4f entries below that say "4.4g" mean 4.4h.
+- Alternatives: rename the old task. Rejected: its PR and log entries already use 4.4g.
+- Reversible: yes.
+
+### 4 Nov 2026 · 4.4f first-person threat coded `harm_to_others` · decided by builder · risk: low
+- Decided: the new first-person future-tense threat shape ("I will stab him") is coded
+  `harm_to_others`, not `threat`.
+- Why: the plan's open question 3 and the lead review both recommend/accept this; the classifier's
+  own description of `harm_to_others` is "wants to hurt a person", and the existing `threat` rows
+  are all about threat *messages* someone wants to write, not a direct first-person statement.
+- Alternatives: code it `threat` — rejected, wrong fit with the existing table's split.
+- Reversible: yes — a one-line code change plus a test update.
+
+---
+
+### 4 Nov 2026 · 4.4f licence/permit exemption is a noun-adjacent lookahead, not a global `unless` · decided by builder · risk: low
+- Decided: the weapon-acquisition rule exempts a licence/permit request with a negative lookahead
+  immediately after the weapon noun (e.g. "...a gun license"), not the table's usual `unless`
+  field (which tests the whole message).
+- Why: the lead review's HIGH requires the exemption to apply only when the licence/permit is
+  itself the thing asked for; a global `unless` would also exempt "...a gun without a license" and
+  "...without a background check", which the review explicitly disallows.
+- Alternatives: a global `unless` listing license/permit, as the original plan text had — rejected
+  per lead review HIGH 1.
+- Reversible: yes — localised to one rule row.
+
+---
+
+### 4 Nov 2026 · 4.4f three LOWs move to 4.4g · decided by builder (per lead review) · risk: low
+- Decided: the three deferred LOWs from the original 4.4 review — `runner.ts:748` /
+  `types.ts:385` narrowing `withheldCode`/`code`, `runner.block.test.ts:46` indentation, and
+  `queues.ts:239` (`packages/queue`, tied to the db `safety-events.ts` enum) — stay open and move
+  to a new board task 4.4g, which the lead adds once 4.3b (owns `runner.ts`/`types.ts`) merges.
+- Why: lead review item 4, Q1: fixing them now risks a merge conflict with in-flight 4.3b/4.7b
+  work on the same lines; `queues.ts` is outside `packages/harness` entirely.
+- Alternatives: fix them in this task anyway — rejected, matches the plan's explicit scope
+  decision and the lead review's acceptance of it.
+- Reversible: yes — 4.4g is a new, independent task.
+
+---
+
+### 4 Nov 2026 · 4.4f first-person threat and weapon-acquisition rules, merged · decided by lead · risk: high
+- Decided: merge two new decisive rows in `packages/harness/src/guardrails/moderationPatterns.ts`.
+  - **Threat row.** A first-person future-tense threat ("I will stab him", "I'm going to shoot him") scores `harm_to_others`. `shoot` counts only in this row, and "shoot him a text" or "shoot her portrait" right after the person word is not a threat.
+  - **Weapon row.** A weapon-acquisition question ("how do I get a gun", "where can I buy a pistol") scores `weapons`. A gun licence or permit asked for as the thing itself stays clean, and "without a license" still hits. Knives are left out.
+  - **Shared fixes.** Both rows use the narrow `GAME_TITLE` list for their game exemption, not the shared `GAME` list. Two of the six 4.4 LOWs are also fixed: the alert is built before the event is recorded in `moderationIn.ts`, and `block()` in `jailbreak.ts` has an explicit return type. The other three LOWs move to 4.4g.
+- Why: the 4.4c review found that these everyday threat and acquisition phrasings scored nothing when the classifier was down.
+  - Code review found that "I'm going to shoot him" was missed; fix round 1 fixed it.
+  - The lead's own probe then found that the exemptions are tested against the whole message (`rulePhrases.ts`). The shared `GAME` list holds school words (class, level, object, player), so "I will stab him after class" and "how do I get a gun to bring to class" passed clean. Fix round 2 fixed that, and the lead re-ran 18 probe sentences: every hit and every no-hit came out right.
+  - Fix round 1's decision "message/photo exemption keyed to adjacency" is superseded by fix round 2's lookahead.
+- Alternatives:
+  - Add `shoot` to the shared HARM_VERB. Rejected: other rows would then block "shoot him a text".
+  - Keep the shared `GAME` exemption. Rejected: it hides threats made at school.
+  - Wait for a safety-reviewer. Rejected: there is no safety-reviewer per PR until the pilot gate (MVP first).
+- Reversible: yes. These are two table rows with their tests.
+
+---
+
+### 4 Nov 2026 · 4.4f build over budget · decided by lead · risk: low
+- Decided: accept 133 tool calls against a plan of 45 (about 3x). The build took 46, fix round 1 took 39 and fix round 2 took 48 (harness counts).
+- Why: the overrun is the two fix rounds, and each one closed a real missed threat.
+- Alternatives: none. The fixes were needed before merge.
+- Reversible: n/a.
+
+---
+
+### 4 Nov 2026 · 3.10a turbo.json `test` task gains `EDMATE_ALLOW_PENDING` · decided by builder · risk: low
+- Decided: added `"EDMATE_ALLOW_PENDING"` to the root `turbo.json` `test` task's `env` array
+  (alongside the existing `TEST_DATABASE_URL`, `TEST_REDIS_URL`).
+- Why: `turbo run test` does not forward arbitrary env vars to the underlying `vitest` process
+  unless they are declared in `env` (cache-key-affecting) or `passThroughEnv` (cache-key-neutral)
+  for that task. Without this, `EDMATE_ALLOW_PENDING=1 corepack pnpm turbo run test
+  --filter=@edmate/evals` (the gate command the plan itself specifies) silently runs `vitest`
+  with the var unset, and `suites.test.ts`'s pending-reviewer check always fails — not what the
+  plan's own gate line is asking for. `env` (not `passThroughEnv`) because the var changes test
+  behaviour and must bust the cache.
+- Alternatives: run `vitest` directly, bypassing `turbo`, for this one check (what I actually did
+  for the evidence above, to avoid touching the shared root config under time pressure); leave
+  `turbo.json` untouched and tell the lead the plan's gate line as written cannot pass through
+  `turbo`. Chose to fix `turbo.json` as well since it is a one-line, narrowly-scoped addition that
+  makes the plan's own documented gate command actually work for every future run, not just mine.
+- Reversible: yes — revert the one line in `turbo.json`.
+
+---
+
+### 4 Nov 2026 · 3.10a ran the typecheck/lint/test gate with `--concurrency=1` and some steps standalone · decided by builder · risk: low
+- Decided: confirmed `@edmate/content`, `@edmate/evals` (typecheck/lint) and `@edmate/cli`
+  (typecheck/lint, and `test` in isolation) are green by running them individually / with
+  `--concurrency=1`, rather than relying only on the single concurrent `turbo run typecheck lint
+  test --filter=...@edmate/content --filter=...@edmate/evals --filter=...@edmate/cli` invocation.
+- Why: that filter pulls in `@edmate/web` and `@edmate/worker` as dependents, and this worktree's
+  host had several other concurrent agent sessions running throughout the build (per the
+  background-task notifications I received); under that load, two pre-existing tests I never
+  touched (`gate.test.ts`'s B-40 case at a 5s default timeout, `chatDbRetrieval.int.test.ts`
+  against the shared dev Postgres) intermittently timed out or hit a Postgres
+  "terminating connection due to administrator command" error, and the new
+  `build-smoke.test.ts` once hit its own 30s ceiling. Every one of these passed cleanly when run
+  with less contention (standalone, or `--concurrency=1`), which is consistent with host load, not
+  a regression from this task's changes.
+- Alternatives: raise those tests' timeouts (out of scope — I didn't write them and raising a
+  timeout to paper over a flake it didn't cause is exactly the kind of "edit an existing test to
+  make it pass" the brief rules out); keep retrying the full concurrent command until it happened
+  to land clean. Chose the narrower, repeatable standalone runs instead, and am naming the flake
+  here for the lead/reviewer rather than silently hiding it.
+- Reversible: n/a (no code change, this is a note about how the gate was run).
+
+---
+
+### 4 Nov 2026 · 3.10a locale follow-ups and seven safety/locale eval cases, merged · decided by lead · risk: high
+- Decided: merge 3.10a. The safe-regex guard now fails closed outside tests when the compiled worker is missing, and a build-smoke test checks it on the real built CLI. A separate integration-test outDir fixes the build race. Shared `isPending` and `looksLikeEmail` helpers replace the local copies. Seven new safety/locale eval cases (003–009) are signed `reviewed_by: lead`: the lead read all seven bodies before signing, and the sign-off commit changed only the `reviewed_by` line in each.
+- Why: these are the 3.10 review items. A code-reviewer approved with no CRITICAL, HIGH or MEDIUM findings. The cases keep India/Hindi input as a safety net, with English replies (plan Q4). Their personal-data examples are standard dummy values. Under the MVP-first rule, the safety suites get a code-reviewer and no safety-reviewer per PR until the pilot gate.
+- Alternatives: leave the cases pending (they would not run in CI); fail closed on `NODE_ENV === 'production'` only (dev and staging would fail open).
+- Reversible: yes, by reverting the PR.
+
+---
+
+### 4 Nov 2026 · 3.10a build over budget · decided by lead · risk: low
+- Decided: accept 240 builder tool calls against a plan of 90 (2.7x), counted by the harness. That is 4 for a stalled start, 206 for the build across a context reset, and 30 for the sign-off commit.
+- Why: the build covered three packages, plus a real built-CLI smoke test and host-load flakes that needed gate re-runs. It finished green, with no fix round needed.
+- Alternatives: split it into two PRs (the plan was one phase).
+- Reversible: not applicable.
+
+---
+
+### 4 Nov 2026 · 4.4c skip writing a safety_event in the rule-table fallback · decided by builder · risk: low
+- Decided: the runner's new `!pg.ok` rule-table fallback does not write a `safety_event`
+  (`ctx.safetyEvents.record`).
+- Why: matches the lead's 30 Oct 2026 review answer to open question 1 and the narrow accept
+  criterion ("still raises a misuse alert"); the alert still reaches the trust team through
+  `AlertSink`, and the withheld commit record still counts toward strikes via `withheldCode`.
+- Alternatives: write a `safety_event` from the fallback too, matching what the real
+  `moderationIn`/`jailbreak` guards record on a decisive hit.
+- Reversible: yes — a follow-up task can add the safety_event write if a future consumer (e.g. a
+  staff dashboard) needs the failed-chain path represented there.
+
+---
+
+### 4 Nov 2026 · 4.4c kept test case 4 (self_harm rule-table gap exists) · decided by builder · risk: low
+- Decided: kept test case 4 (a decisive `self_harm` moderation rule hit whose wording is not
+  covered by the plain distress-keyword lists) rather than dropping it.
+- Why: `moderationPatterns.ts`'s first `self_harm` decisive rule matches
+  `(?:blade|...|gun)<gap> (?:on|against|to hurt|to harm|to cut) <SELF>` — "I'm pointing a gun
+  against myself right now" is a decisive hit, but neither `distressKeywords.ts`'s HARD nor SOFT
+  lists contain "gun" or "against" anywhere, so the gap the plan flagged as possibly-absent does
+  exist.
+- Alternatives: drop the case per the plan's fallback instruction if no gap is found (not taken,
+  since a gap was found).
+- Reversible: yes — a test case, easy to remove if the tables are later reconciled.
+
+---
+
+### 4 Nov 2026 · 4.4c dedup delivered alerts by id · decided by builder · risk: low
+- Decided: `sendEscalation()` now raises a de-duplicated set of alerts (primary/distress alert plus
+  the optional misuse alert carried over from preGuard's own block verdict), comparing by
+  `SafetyAlert.id`, instead of assuming the two are always distinct.
+- Why: the lead's review explicitly asked to guard against the same alert being raised twice and
+  to test that it is raised exactly once; the two alert sources (`pg.value.result === 'escalate'`
+  vs `pg.value.result === 'block'`) are mutually exclusive by the discriminated union today, but
+  the dedup is a cheap defensive measure against a future code path that could set both.
+- Alternatives: assume the two alerts are always distinct and raise both unconditionally.
+- Reversible: yes — a small, local change inside `sendEscalation()`.
+
+---
+
+### 4 Nov 2026 · 4.4c jailbreak fallback uses only the student's own package name · decided by builder · risk: low
+- Decided: the runner's failed-chain jailbreak check calls `matchJailbreak(text, { packageNames:
+  [e.pkg.name], currentPackageName: e.pkg.name })` — the student's own package name only, not a
+  full teacher-wide package list.
+- Why: matches the plan's instruction ("own package name only ... no new async read, keeps this
+  fallback synchronous and in-budget"); a full list would need an extra read inside an already
+  degraded (classifier-down) path.
+- Alternatives: read the teacher's full package list for a more complete jailbreak check.
+- Reversible: yes — a local call-site change if a cheap synchronous source for the full list
+  becomes available later.
+
+---
+
+### 4 Nov 2026 · 4.4c misuse alerts survive a failed pre-guard chain, merged · decided by lead · risk: high
+- Decided: merge 4.4c. When the pre-guard chain fails, the runner now runs the moderation and jailbreak rule tables as a fallback. A decisive rule hit blocks and raises its misuse alert, and the alert is kept even when a distress keyword or a router distress label also applies (the fix round 1 CRITICAL). Alerts are deduped by id, so each one is sent exactly once.
+- Why: before this change, a failed chain or a distress label silently dropped a misuse alert for threats or weapons, which is a student-safety gap. A code-reviewer re-ran the review on the fix and verified it with real-runner probes: one distress alert plus one misuse alert, and no duplicates. The full harness gate is green. Under the MVP-first rule, no safety-reviewer runs per PR until the pilot gate.
+- Alternatives: a plain safe reply with no rule-table fallback (this loses the misuse alert); waiting for a safety-reviewer (deferred to the pilot gate).
+- Reversible: yes, by reverting the PR.
+
+---
+
+### 4 Nov 2026 · 4.4c build over budget · decided by lead · risk: low
+- Decided: accept 244 builder tool calls against a plan of 85 (2.9x), counted by the harness. That is 22 + 5 + 3 calls across two stalled starts, 100 for the build, 40 for fix round 1, and 74 for fix round 2, the CI fix for the dependent apps. Planning (34), review (44) and the re-verify (26) are on top.
+- Why: the Mac slept on battery, which stalled the builder twice, and each restart re-read the context. Fix round 1 fixed a CRITICAL finding. Fix round 2 updated the dependent apps' outage tests, which the first gate missed because it was scoped to `@edmate/harness` only.
+- Alternatives: none worth taking; the work is done and verified.
+- Reversible: not applicable.
+
+---
+
+### 4 Nov 2026 · 4.4c phrase-level rule gaps go to 4.4f · decided by lead · risk: low
+- Decided: the moderation rule table is phrase-level, so plain direct threats ("I will stab him tomorrow") and "how do I get a gun" get no rule hit while the classifier is down. Both go to task 4.4f rather than this PR.
+- Why: 4.4c's scope was keeping alerts on the failed-chain path. Widening the rule table needs no-false-positive cases of its own.
+- Alternatives: widen the patterns in this PR (scope creep, more review).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4c live eval scores a rule-table block during a classifier outage as blocked · decided by lead · risk: low
+- Decided: since 4.4c, when the pre-guard chain fails and the moderation or jailbreak rule table matches, the turn replies with a fixed block reply and no error event. Live eval and the gate score that turn as blocked. An outage with no rule hit still fails the case. The liveAgent outage test now uses a message with no rule hit, and a new test covers the rule-hit case.
+- Why: a rule-table hit is a real verdict, not a missing one. The test's intent, that an eval never scores a missing verdict as blocked, still holds. CI caught the change in apps/cli because the fix round gated only `@edmate/harness`.
+- Alternatives: make live eval fail any turn whose chain failed even when the rule table blocked. That hides a real block, and it needs a new outage signal in the turn events.
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · one always-on agent VM on Azure, on the human's Azure credit · decided by you · risk: high
+- Decided: the team lead moves from the Mac to one Azure Ubuntu 24.04 VM (Standard_D4s_v5, East US 2,
+  resource group `edmate-agents`), created by `infra/azure/create-vm.sh` and set up by cloud-init;
+  the lead runs in tmux under systemd through `scripts/claude-backup.sh` with Remote Control on, so
+  the phone attaches the same way. The subscription stays the primary model provider; Foundry
+  stays the backup and later uses the VM's managed identity (task 0.26). The VM's own cost goes on
+  the Azure credit. GitHub is the human's own login first; a bot account can replace it later.
+  The Mac keeps the console session for now. Guide: `docs/azure-vm.md`.
+- Why: the team stopped whenever the Mac slept (two days with no merge, 29 to 30 Oct); a VM gives
+  uptime without changing the team, the hooks or the merge gate. The subscription allowance is
+  pooled per account, so one VM is the whole gain; a pool (0.27) only pays with a budget per VM.
+- Alternatives: Azure Container Apps or a GitHub Actions runner (rejected: Claude Code's login,
+  tmux and worktrees want a plain long-lived machine); a Mac mini at home (rejected: not on the
+  credit, same sleep and network problems); keep the Mac plugged in (rejected: travel).
+- Rules kept: nothing under `infra/azure/` holds a secret, an IP or an account name; SSH by key
+  from the operator's current IP only; logins by hand over SSH; the VM never serves pilot students.
+- Review: security-reviewer (Sonnet) raised two HIGH findings. The hard-coded repo owner in cloud-init
+  is fixed (the clone URL now comes from the checkout's git origin at create time). The lead running
+  as the sudo-capable admin user is accepted for phase 1 (same trust as on the Mac; SSH from one IP by
+  key only) and moves to its own unprivileged user in task 0.25.
+- Reversible: yes — `az group delete -n edmate-agents` removes everything; the Mac setup is unchanged.
+
+---
+
 ### 4 Nov 2026 · 4.6d scope the drop to exactly two named ranges, not the broader Default_Ignorable set · decided by builder · risk: low
 - Decided: `dropDefaultIgnorableMarks` matches only U+FE00-FE0F and U+034F, as the plan specified,
   not the full `\p{Default_Ignorable_Code_Point}` set `digitForms.ts` uses for its own, narrower

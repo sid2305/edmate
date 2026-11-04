@@ -56,6 +56,14 @@ export const HelpStateSchema = z.strictObject({
    */
   groundingAsks: z.int().min(0).max(1_000).exactOptional(),
   /**
+   * An escalated turn saves this true (4.3b): the next ordinary (non-escalating) turn's reply,
+   * when not held, opens with a built-in gentle check-in before the model's own stream, then the
+   * runner clears it, whatever that turn's own outcome. Not sticky otherwise: a second escalation
+   * in a row just saves it true again, so the check-in still comes once, after the last one.
+   * Optional, absent = false, so a blob saved before 4.3b still parses.
+   */
+  distressFollowupDue: z.boolean().exactOptional(),
+  /**
    * How many role-play questions the persona has asked this session (task 3.11d, ADR-0009). The
    * server counts it (`skillStep`, once per `mock_interview` turn with a persona), never the
    * model, and the composer shows it in the persona section. Absent until the first persona turn
@@ -204,6 +212,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     answerKey,
     lockedStopped,
     groundingAsks,
+    distressFollowupDue,
     personaQuestionsAsked: asked,
     personaId,
     personaPhase,
@@ -217,6 +226,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       answerKey,
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
+      ...(distressFollowupDue === undefined ? {} : { distressFollowupDue }),
       ...(asked === undefined ? {} : { personaQuestionsAsked: asked }),
       ...(personaId === undefined ? {} : { personaId }),
       ...(personaPhase === undefined ? {} : { personaPhase }),
@@ -235,6 +245,26 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
 export function withGroundingAsks(next: SessionHelp, asks: number): SessionHelp {
   if (asks === 0) return next;
   return { ...next, help: { ...next.help, groundingAsks: asks } };
+}
+
+/**
+ * `next` with the session distress follow-up flag set (4.3b): every escalated turn that saves a
+ * help state saves it true, so the next ordinary turn can show the gentle check-in once.
+ */
+export function withDistressFollowup(next: SessionHelp): SessionHelp {
+  return { ...next, help: { ...next.help, distressFollowupDue: true } };
+}
+
+/**
+ * `next` with the session distress follow-up flag cleared (4.3b): read only once, on the first
+ * non-escalating turn after it was set, whatever that turn's own outcome. A no-op when it was
+ * already absent.
+ */
+export function withoutDistressFollowup(next: SessionHelp): SessionHelp {
+  if (next.help.distressFollowupDue === undefined) return next;
+  const help = { ...next.help };
+  delete help.distressFollowupDue;
+  return { ...next, help };
 }
 
 /**

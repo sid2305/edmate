@@ -1,0 +1,19 @@
+# Edmate team lead: Claude Code in tmux, restarted whenever it exits (usage window, crash, reboot).
+# Installed by cloud-init; enable it only after the one-time logins in docs/azure-vm.md.
+[Unit]
+Description=Edmate team lead (Claude Code in tmux)
+After=network-online.target docker.service edmate-stack.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=edmate
+Group=edmate
+WorkingDirectory=/opt/edmate
+ExecStart=/opt/edmate/infra/azure/start-lead.sh
+ExecStop=/usr/bin/tmux kill-session -t lead
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

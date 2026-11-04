@@ -15,7 +15,7 @@
 import type { SafetyAlert } from '@edmate/contracts';
 import { SafetyAlertSchema } from '@edmate/contracts';
 import { isoAt } from '../pipeline/clock.js';
-import type { Guard } from './guard.js';
+import type { Guard, GuardRun } from './guard.js';
 import { type JailbreakCode, matchJailbreak } from './jailbreakPatterns.js';
 import { STRIKE_THRESHOLD, type PreGuardCtx } from './preGuardCtx.js';
 import {
@@ -54,7 +54,7 @@ async function block(
   code: JailbreakCode,
   source: 'rule' | 'classifier',
   priorCount?: number,
-) {
+): Promise<GuardRun> {
   await ctx.safetyEvents.record({
     studentId: ctx.entitlement.studentId,
     teacherId: ctx.entitlement.teacherId,

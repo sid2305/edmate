@@ -395,7 +395,7 @@ export function createPostGuard(
 ): Steps['postGuard'] {
   return async (
     env,
-    { ctx, decision, draft, raw, withheld, locked, sources, items, practiceKeys },
+    { ctx, decision, draft, raw, withheld, locked, sources, items, practiceKeys, followup },
   ): Promise<PostGuardResult> => {
     const studentText = env.input.text;
     const own = studentText === undefined ? {} : { studentText };
@@ -420,6 +420,13 @@ export function createPostGuard(
         raw !== draft &&
         compileAnswerKeys(decision.mustNotReveal, { ...own, ...answerContext }).leaks(raw));
     const subject = leaked ? (raw ?? draft) : draft;
+    // 4.3b fix round 1: the check-in `generate` folded onto the front of `draft` is stripped
+    // before any guard sees the text (grounding, adviceGuard, answerLeak and the number checks
+    // never judge it) and put back on the front of a surgical rewrite only; a whole-text
+    // replacement (block, escalate, the safe-reply fallback) drops it, like a held turn (Q1).
+    const hasFollowup = followup !== undefined && subject.startsWith(followup);
+    const followupPrefix = hasFollowup ? followup : '';
+    const checkedBody = hasFollowup ? subject.slice(followup.length) : subject;
     const lockedReply = lockedReplyFor(env, ctx);
 
     // The stream withheld locked text, or could not check it: nothing it held is judged or
@@ -455,7 +462,7 @@ export function createPostGuard(
     const sliceOf = (at: GuardSliceRequest): number => {
       pass = at.pass;
       const left = POST_GUARD_BUDGET_MS - (clock.now() - started);
-      const weights = weightsFor(at.text ?? subject, at.name === 'adviceGuard');
+      const weights = weightsFor(at.text ?? checkedBody, at.name === 'adviceGuard');
       const ms = postGuardSliceMs(left, weights, at);
       slices.set(at.name, ms);
       sliceStarts.set(at.name, clock.now());
@@ -479,12 +486,25 @@ export function createPostGuard(
     // no modal word, dose, promise, non-Latin letter or domain word, so it happens to pass
     // adviceGuard's own signal check already, but a future edit to its wording must not have to
     // rely on that happening to hold.
+    const askReply = askTeacherReplyFor(env);
     const fixedTexts = [
       ...fixed.texts,
       adviceFallbackText(disclaimer),
       redirectReply,
       PREMISE_CORRECTION_REPLY,
     ];
+    // 4.3b fix round 1: every fixed whole-reply text a guard may substitute for the draft (the
+    // ask-teacher reply, the answer-leak hint, the locked reply, and `fixedTexts` above). A rewrite
+    // that lands on one of these replaced the WHOLE reply (grounding's ungrounded/answer-key
+    // rewrites, answerLeak's own fallback, the locked reply): the check-in is dropped, like a held
+    // turn (Q1). Only a genuine surgical fix of the model's own words (grounding's number fix,
+    // answerLeak's small-tier rewrite) keeps it on the front.
+    const wholeReplacementTexts = new Set([
+      askReply,
+      ANSWER_LEAK_SAFE_HINT,
+      lockedReply,
+      ...fixedTexts,
+    ]);
     // Metric, code only: a regulated agent's market has no disclaimer for its subject.
     const subjectCode = ctx.agent.regulatedSubject;
     if (subjectCode !== undefined && disclaimerGap(subjectCode, ctx.locale)) {
@@ -502,7 +522,7 @@ export function createPostGuard(
       judge: judgeFor(env, () =>
         Math.min(GROUNDING_JUDGE_TIMEOUT_MS, share('grounding', JUDGE_SHARE)),
       ),
-      askTeacherReply: askTeacherReplyFor(env),
+      askTeacherReply: askReply,
       fixedTexts,
       // One token for the whole step call (4.7b item 1): both passes of this turn's chain share
       // it, so the judge-call cache (keyed on the rendered request text) still dedupes an
@@ -521,7 +541,7 @@ export function createPostGuard(
     };
     const r: GuardChainResult = await runGuardChain(
       guards.map((g) => watched(g, reasons)),
-      subject,
+      checkedBody,
       x,
       { phase: 'post', clock: env.deps.clock, timeoutMs: sliceOf, cancel: env.cancel },
     );
@@ -548,12 +568,18 @@ export function createPostGuard(
     switch (r.outcome) {
       case 'ok': {
         // A known leak that no guard rewrote is never shown: fail to the hint.
-        if (leaked && r.text === subject) return hint(trace, usage);
-        if (r.text === draft) return { result: 'ok', guards: trace, usage };
+        if (leaked && r.text === checkedBody) return hint(trace, usage);
+        // 4.3b fix round 1: unchanged, or a surgical rewrite (grounding's number fix, answerLeak's
+        // rewrite), keeps the check-in on the front; a rewrite that landed on a known fixed
+        // whole-reply text, the hint above, and every other result below (a block, an escalation,
+        // the safe-reply fallback) are whole-text replacements that drop it, the same accepted gap
+        // as a held turn (Q1).
+        const finalText = wholeReplacementTexts.has(r.text) ? r.text : followupPrefix + r.text;
+        if (finalText === draft) return { result: 'ok', guards: trace, usage };
         const escalate = grounding.includes(GROUNDING_REASONS.ungrounded);
         return {
           result: 'replace',
-          text: r.text,
+          text: finalText,
           ...(escalate ? { escalateToTeacher: true as const } : {}),
           ...(grounding.length > 0 ? { groundingRewrote: true as const } : {}),
           guards: trace,
