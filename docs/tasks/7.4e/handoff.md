@@ -4,7 +4,11 @@ Status: DONE
 
 ## Decisions
 
-None.
+### 4 Nov 2026 · 7.4e build over budget · decided by lead · risk: low
+- Decided: Accept 26 tool calls against a budget of 12 (hard stop 20).
+- Why: The change is one timeout and a comment. Most of the calls were install and gate runs. The diff is exactly what the plan asked for, and code-reviewer approved it.
+- Alternatives: None worth the cost.
+- Reversible: n/a.
 
 ## Red -> green evidence
 
@@ -38,4 +42,5 @@ skips without a local DB; no DB was used for this task.
 
 ## Budget
 
-Tool calls used: 12
+Tool calls used: 26
+Builder estimate: 12
