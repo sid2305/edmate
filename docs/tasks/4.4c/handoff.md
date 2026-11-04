@@ -75,6 +75,24 @@ so the runner's failed-chain fallback can build a small compatible context objec
 - Reversible: yes — a local call-site change if a cheap synchronous source for the full list
   becomes available later.
 
+### 4 Nov 2026 · 4.4c misuse alerts survive a failed pre-guard chain, merged · decided by lead · risk: high
+- Decided: merge 4.4c. When the pre-guard chain fails, the runner now runs the moderation and jailbreak rule tables as a fallback. A decisive rule hit blocks and raises its misuse alert, and the alert is kept even when a distress keyword or a router distress label also applies (the fix round 1 CRITICAL). Alerts are deduped by id, so each one is sent exactly once.
+- Why: before this change, a failed chain or a distress label silently dropped a misuse alert for threats or weapons, which is a student-safety gap. A code-reviewer re-ran the review on the fix and verified it with real-runner probes: one distress alert plus one misuse alert, and no duplicates. The full harness gate is green. Under the MVP-first rule, no safety-reviewer runs per PR until the pilot gate.
+- Alternatives: a plain safe reply with no rule-table fallback (this loses the misuse alert); waiting for a safety-reviewer (deferred to the pilot gate).
+- Reversible: yes, by reverting the PR.
+
+### 4 Nov 2026 · 4.4c build over budget · decided by lead · risk: low
+- Decided: accept 170 builder tool calls against a plan of 85 (2.0x), counted by the harness. That is 22 + 5 + 3 calls across two stalled starts, 100 for the build, and 40 for fix round 1. Planning (34), review (44) and the re-verify (26) are on top.
+- Why: the Mac slept on battery, which stalled the builder twice, and each restart re-read the context. The fix round was needed for a CRITICAL finding.
+- Alternatives: none worth taking; the work is done and verified.
+- Reversible: not applicable.
+
+### 4 Nov 2026 · 4.4c phrase-level rule gaps go to 4.4f · decided by lead · risk: low
+- Decided: the moderation rule table is phrase-level, so plain direct threats ("I will stab him tomorrow") and "how do I get a gun" get no rule hit while the classifier is down. Both go to task 4.4f rather than this PR.
+- Why: 4.4c's scope was keeping alerts on the failed-chain path. Widening the rule table needs no-false-positive cases of its own.
+- Alternatives: widen the patterns in this PR (scope creep, more review).
+- Reversible: yes.
+
 ## Red -> green evidence
 Before the fix (sanity-checked via a temporary `git stash` of `runner.ts` only, then restored):
 running `vitest run src/pipeline/runner.test.ts src/pipeline/runner.block.test.ts` with only the
@@ -116,12 +134,7 @@ Test counts for this task's own new/changed cases: 9 planned test cases, all 9 p
 (5, 6, 8, 9) all still passing unchanged.
 
 ## Budget
-Tool calls used: approximately 40 in this continuation session (gate re-runs, prettier fix,
-secret scan, this handoff) on top of the prior session's work before the compaction/stall. Plan
-budget was 85 tool calls; this session picked up from a stalled continuation rather than tracking
-a single running count, so the total across both sessions is estimated at ~95-110 tool calls,
-modestly over budget due to the lint-fix round and the flaky-test investigation requiring extra
-gate re-runs.
+Tool calls used (harness count): 170 builder calls against a plan of 85: 22 + 5 + 3 across two stalled starts, 100 for the build, and 40 for fix round 1. On top of that: plan 34, review 44, re-verify 26. See the lead's budget decision.
 
 ## Fix round 1
 
