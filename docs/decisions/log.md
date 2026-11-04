@@ -10,6 +10,91 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 4 Nov 2026 · 4.4c skip writing a safety_event in the rule-table fallback · decided by builder · risk: low
+- Decided: the runner's new `!pg.ok` rule-table fallback does not write a `safety_event`
+  (`ctx.safetyEvents.record`).
+- Why: matches the lead's 30 Oct 2026 review answer to open question 1 and the narrow accept
+  criterion ("still raises a misuse alert"); the alert still reaches the trust team through
+  `AlertSink`, and the withheld commit record still counts toward strikes via `withheldCode`.
+- Alternatives: write a `safety_event` from the fallback too, matching what the real
+  `moderationIn`/`jailbreak` guards record on a decisive hit.
+- Reversible: yes — a follow-up task can add the safety_event write if a future consumer (e.g. a
+  staff dashboard) needs the failed-chain path represented there.
+
+---
+
+### 4 Nov 2026 · 4.4c kept test case 4 (self_harm rule-table gap exists) · decided by builder · risk: low
+- Decided: kept test case 4 (a decisive `self_harm` moderation rule hit whose wording is not
+  covered by the plain distress-keyword lists) rather than dropping it.
+- Why: `moderationPatterns.ts`'s first `self_harm` decisive rule matches
+  `(?:blade|...|gun)<gap> (?:on|against|to hurt|to harm|to cut) <SELF>` — "I'm pointing a gun
+  against myself right now" is a decisive hit, but neither `distressKeywords.ts`'s HARD nor SOFT
+  lists contain "gun" or "against" anywhere, so the gap the plan flagged as possibly-absent does
+  exist.
+- Alternatives: drop the case per the plan's fallback instruction if no gap is found (not taken,
+  since a gap was found).
+- Reversible: yes — a test case, easy to remove if the tables are later reconciled.
+
+---
+
+### 4 Nov 2026 · 4.4c dedup delivered alerts by id · decided by builder · risk: low
+- Decided: `sendEscalation()` now raises a de-duplicated set of alerts (primary/distress alert plus
+  the optional misuse alert carried over from preGuard's own block verdict), comparing by
+  `SafetyAlert.id`, instead of assuming the two are always distinct.
+- Why: the lead's review explicitly asked to guard against the same alert being raised twice and
+  to test that it is raised exactly once; the two alert sources (`pg.value.result === 'escalate'`
+  vs `pg.value.result === 'block'`) are mutually exclusive by the discriminated union today, but
+  the dedup is a cheap defensive measure against a future code path that could set both.
+- Alternatives: assume the two alerts are always distinct and raise both unconditionally.
+- Reversible: yes — a small, local change inside `sendEscalation()`.
+
+---
+
+### 4 Nov 2026 · 4.4c jailbreak fallback uses only the student's own package name · decided by builder · risk: low
+- Decided: the runner's failed-chain jailbreak check calls `matchJailbreak(text, { packageNames:
+  [e.pkg.name], currentPackageName: e.pkg.name })` — the student's own package name only, not a
+  full teacher-wide package list.
+- Why: matches the plan's instruction ("own package name only ... no new async read, keeps this
+  fallback synchronous and in-budget"); a full list would need an extra read inside an already
+  degraded (classifier-down) path.
+- Alternatives: read the teacher's full package list for a more complete jailbreak check.
+- Reversible: yes — a local call-site change if a cheap synchronous source for the full list
+  becomes available later.
+
+---
+
+### 4 Nov 2026 · 4.4c misuse alerts survive a failed pre-guard chain, merged · decided by lead · risk: high
+- Decided: merge 4.4c. When the pre-guard chain fails, the runner now runs the moderation and jailbreak rule tables as a fallback. A decisive rule hit blocks and raises its misuse alert, and the alert is kept even when a distress keyword or a router distress label also applies (the fix round 1 CRITICAL). Alerts are deduped by id, so each one is sent exactly once.
+- Why: before this change, a failed chain or a distress label silently dropped a misuse alert for threats or weapons, which is a student-safety gap. A code-reviewer re-ran the review on the fix and verified it with real-runner probes: one distress alert plus one misuse alert, and no duplicates. The full harness gate is green. Under the MVP-first rule, no safety-reviewer runs per PR until the pilot gate.
+- Alternatives: a plain safe reply with no rule-table fallback (this loses the misuse alert); waiting for a safety-reviewer (deferred to the pilot gate).
+- Reversible: yes, by reverting the PR.
+
+---
+
+### 4 Nov 2026 · 4.4c build over budget · decided by lead · risk: low
+- Decided: accept 244 builder tool calls against a plan of 85 (2.9x), counted by the harness. That is 22 + 5 + 3 calls across two stalled starts, 100 for the build, 40 for fix round 1, and 74 for fix round 2, the CI fix for the dependent apps. Planning (34), review (44) and the re-verify (26) are on top.
+- Why: the Mac slept on battery, which stalled the builder twice, and each restart re-read the context. Fix round 1 fixed a CRITICAL finding. Fix round 2 updated the dependent apps' outage tests, which the first gate missed because it was scoped to `@edmate/harness` only.
+- Alternatives: none worth taking; the work is done and verified.
+- Reversible: not applicable.
+
+---
+
+### 4 Nov 2026 · 4.4c phrase-level rule gaps go to 4.4f · decided by lead · risk: low
+- Decided: the moderation rule table is phrase-level, so plain direct threats ("I will stab him tomorrow") and "how do I get a gun" get no rule hit while the classifier is down. Both go to task 4.4f rather than this PR.
+- Why: 4.4c's scope was keeping alerts on the failed-chain path. Widening the rule table needs no-false-positive cases of its own.
+- Alternatives: widen the patterns in this PR (scope creep, more review).
+- Reversible: yes.
+
+---
+
+### 4 Nov 2026 · 4.4c live eval scores a rule-table block during a classifier outage as blocked · decided by lead · risk: low
+- Decided: since 4.4c, when the pre-guard chain fails and the moderation or jailbreak rule table matches, the turn replies with a fixed block reply and no error event. Live eval and the gate score that turn as blocked. An outage with no rule hit still fails the case. The liveAgent outage test now uses a message with no rule hit, and a new test covers the rule-hit case.
+- Why: a rule-table hit is a real verdict, not a missing one. The test's intent, that an eval never scores a missing verdict as blocked, still holds. CI caught the change in apps/cli because the fix round gated only `@edmate/harness`.
+- Alternatives: make live eval fail any turn whose chain failed even when the rule table blocked. That hides a real block, and it needs a new outage signal in the turn events.
+- Reversible: yes.
+
+---
+
 ### 4 Nov 2026 · one always-on agent VM on Azure, on the human's Azure credit · decided by you · risk: high
 - Decided: the team lead moves from the Mac to one Azure Ubuntu 24.04 VM (Standard_D4s_v5, East US 2,
   resource group `edmate-agents`), created by `infra/azure/create-vm.sh` and set up by cloud-init;
