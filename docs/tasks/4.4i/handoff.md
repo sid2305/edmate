@@ -64,14 +64,8 @@ No new decisions beyond the plan: the implementation follows the plan's design e
 value on the guard, looked up once at step-creation time, default fallback for a registry with no
 distress guard).
 
-### 4.4i distress prefetch respects the guard's configured timeout — decided by lead, risk: high
-Decided: merge as planned. Why: `distressDetect.ts` is a student-safety risk path; pre-pilot-gate the
-  required reviewer there is `code-reviewer` only (`safety-reviewer` waived until task 13.3,
-  per `risk-paths.txt`). Reviewed by code-reviewer: zero code-level findings (type change is a pure
-  additive intersection, the timeout lookup happens once at step-creation not per-turn, fallback is
-  correctly guarded, chain order and other prefetches are untouched, gate independently re-run
-  green). The reviewer's one CRITICAL finding was procedural, not code: `plan.md`'s 4 Nov hold on
-  new risky-path work had not been logged as lifted anywhere durable. It was lifted out-of-band by
-  the human earlier the same session ("the hold is lifted ... build 4.4i"); that answer is now
-  logged in `.claude/blockers.md`'s B-64 entry (moved to Resolved) ahead of this merge, closing the
-  gap the reviewer flagged.
+### 5 Nov 2026 · 4.4i distress prefetch respects the guard's configured timeout · decided by lead · risk: high
+Decided: Merge as planned.
+Why: `distressDetect.ts` is a student-safety risk path; pre-pilot-gate the required reviewer there is `code-reviewer` only (`safety-reviewer` waived until task 13.3, per `risk-paths.txt`). Reviewed by code-reviewer: zero code-level findings (type change is a pure additive intersection, the timeout lookup happens once at step-creation not per-turn, fallback is correctly guarded, chain order and other prefetches are untouched, gate independently re-run green). The reviewer's one CRITICAL finding was procedural, not code: `plan.md`'s 4 Nov hold on new risky-path work had not been logged as lifted anywhere durable. It was lifted out-of-band by the human earlier the same session ("the hold is lifted ... build 4.4i"); that answer is now logged in `.claude/blockers.md`'s B-64 entry (moved to Resolved) ahead of this merge, closing the gap the reviewer flagged.
+Alternatives: Hold the merge until the human answers again in-band (rejected: the authorization was already genuinely given; the gap was the record, not the decision).
+Reversible: Yes — a config-only timeout lookup, no migration.

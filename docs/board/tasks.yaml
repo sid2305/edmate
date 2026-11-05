@@ -12442,9 +12442,9 @@ tasks:
   accept: a test with a non-default distress classifierTimeoutMs shows the prefetch uses it; the gate passes with --filter=...@edmate/harness
   deps:
   - 4.4b
-  status: running
+  status: done
   branch: m13/4.4i-distress-prefetch-timeout
-  model: plan:lead build:sonnet review:pending
+  model: plan:sonnet build:sonnet review:sonnet(code-reviewer)
 - id: 7.4e
   milestone: M7
   title: 'CI flake: apps/cli src/commands/gate.test.ts "no longer reports a blocker B-40 gap" runs the real suites under the default 5s vitest timeout and timed out once on PR #424 (passed on re-run). Give
