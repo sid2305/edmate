@@ -145,28 +145,83 @@ Tests were changed first. Against the unfixed Dockerfile, the licence test went 
 
 ## Lead verification
 
-<!-- The lead fills this in after `docker build` and the checks in the plan's "Lead verification". -->
+Docker build (worktree synced to `bf139afc`, the fix-round-1 commit): **succeeded**, including the
+image's own licence-check `RUN` step (previously the step that failed on a correct LGPL build,
+before the fix-round fix).
+
+```
+$ docker run --rm --entrypoint ffmpeg edmate-worker-check -version | head -3
+ffmpeg version 7.1.5 Copyright (c) 2000-2026 the FFmpeg developers
+built with gcc 14.2.0 (Alpine 14.2.0)
+configuration: --disable-everything --disable-autodetect --disable-network --disable-avdevice --disable-ffplay --disable-ffprobe --disable-doc --disable-debug --disable-x86asm --extra-ldexeflags=-static --enable-protocol=file --enable-demuxer='mov,matroska' --enable-decoder='aac,opus,vorbis,mp3,mp3float,alac' --enable-parser='aac,opus,vorbis,mpegaudio' --enable-encoder=pcm_s16le --enable-muxer='segment,wav' --enable-filter='aresample,aformat,anull'
+```
+
+Matches the "Expected" block above exactly (ffmpeg quotes each `--enable-*` list's value; same
+flags, same order, same content). No `--enable-gpl`, `--enable-nonfree`, `--enable-version3` or
+`--enable-lib…`.
+
+```
+$ docker run --rm --entrypoint ffmpeg edmate-worker-check -hide_banner -L
+... GNU Lesser General Public License ... version 2.1 of the License, or (at your option) any later version. ...
+```
+Names the GNU Lesser General Public License, version 2.1 or later. No GPL text.
+
+```
+$ docker run --rm --entrypoint sh edmate-worker-check -c 'apk info -e ffmpeg || echo "no apk ffmpeg"; ls /usr/local/share/licenses/ffmpeg'
+no apk ffmpeg
+COPYING.LGPLv2.1
+LICENSE.md
+```
+
+Functional smoke (synthetic MP4+AAC and WebM+Opus, made in a throwaway alpine+ffmpeg container,
+never committed; run against the built image with `--network none`):
+
+| Fixture | Exit | Pieces | Wall time |
+|---|---|---|---|
+| `v.mp4` (h264+aac, 20s) | 0 | 5 | 0.42s |
+| `v.webm` (vp8+opus, 20s) | 0 | 4 | 0.44s |
+
+Both within the plan's "4 or 5 pieces, about a second or two". The video track was correctly
+dropped by `-vn` (ffmpeg's own stream mapping log shows only the audio stream mapped to the
+`pcm_s16le` output). All checks pass. **Verdict: APPROVE.**
 
 ## Decisions
 
-- **11.4l LGPL-only ffmpeg replaces the distro package (lead, risk: high).** Decided: the worker
-  image builds FFmpeg 7.1.5 from the official source tarball, pinned by sha256 in
-  `apps/worker/Dockerfile` (GPG-verified against FFmpeg's release key when pinned), configured LGPL
-  2.1+ only with an audio-only component set, in place of `apk add ffmpeg`. Why: the lead's 5 Nov
-  2026 check showed the base image's apk ffmpeg 6.1.2-r2 is `--enable-gpl`, and ADR-0016 Decision
-  8 pre-authorizes this fallback. Reviewed by architect, security-reviewer, typescript-reviewer.
-  The lead re-checked the licence banner on a rebuilt image before merge.
-- D1 (risk: medium): a source build in a discarded stage rather than a prebuilt static binary. The
-  prebuilt sources are GPL, glibc-linked, or have rolling assets. A source build makes the
-  configuration line known before anything runs.
-- D2 (risk: low): the 7.1 release branch, newest point release when pinned. It is maintained, and
-  this flag set was checked against it, not against 8.x.
-- D3 (risk: low): decoders aac, opus and vorbis, plus mp3/mp3float and alac. ac3/eac3/flac are left
-  out, and an unsupported codec fails closed as `validation`.
-- D4 (risk: low): `--disable-x86asm`, so no `nasm` is needed. Audio-only work is far faster than
-  real time in plain C, and the lead's smoke times it.
-- D5 (risk: low): a dated amendment to ADR-0016 rather than a new ADR. It records that the fallback
-  was taken and what it replaces in Decisions 7 and 9.
+### 5 Nov 2026 · 11.4l LGPL-only ffmpeg replaces the distro package · decided by lead · risk: high
+Decided: The worker image builds FFmpeg 7.1.5 from the official source tarball, pinned by sha256 in `apps/worker/Dockerfile` (GPG-verified against FFmpeg's release key when pinned), configured LGPL 2.1+ only with an audio-only component set, in place of `apk add ffmpeg`.
+Why: The lead's 5 Nov 2026 check showed the base image's apk ffmpeg 6.1.2-r2 is `--enable-gpl`, and ADR-0016 Decision 8 pre-authorizes this fallback. Reviewed by architect, security-reviewer and typescript-reviewer (opus); code-reviewer also ran. The lead rebuilt the image and independently re-checked the licence banner, the configuration line, the absence of any apk ffmpeg package, and a functional smoke test (synthetic MP4+AAC and WebM+Opus, offline) before merge — see `## Lead verification` above.
+Alternatives: Keep the distro apk ffmpeg and accept the GPL exposure (rejected: ADR-0016 requires LGPL-only); use a prebuilt static binary (rejected below as D1).
+Reversible: Yes, but not cost-free — reverting the Dockerfile stage and the ADR amendment restores the apk package, which is the GPL build the ADR rejects, not a clean rollback. The actual rollback the ADR names (Consequences, "Rollback") is removing the `chunker` option from `createWhisperTranscriber`'s call site, restoring the prior "refuse at upload" behaviour, with no contracts change either way.
+
+### 5 Nov 2026 · 11.4l ffmpeg built from source in a discarded Docker stage (D1) · decided by planner · risk: medium
+Decided: Build ffmpeg from the official source tarball in its own discarded Docker stage, rather than fetch a prebuilt static binary.
+Why: The prebuilt sources available are GPL, glibc-linked, or have rolling (non-pinned) assets. A source build makes the exact `configuration:` line known before anything runs, so the LGPL-only guarantee can be checked mechanically.
+Alternatives: A prebuilt static binary from a third-party mirror (rejected: licence and provenance can't be pinned the same way).
+Reversible: Yes.
+
+### 5 Nov 2026 · 11.4l pinned to the 7.1 release branch (D2) · decided by planner · risk: low
+Decided: Pin to FFmpeg 7.1.5, the newest 7.1.x point release at the time of pinning.
+Why: The 7.1 branch is maintained, and this task's flag set was checked against it, not against 8.x, which changed configure (e.g. removed libpostproc).
+Alternatives: Track 8.x (rejected: this flag set has not been checked against it).
+Reversible: Yes — a version and sha256 bump.
+
+### 5 Nov 2026 · 11.4l decoder set limited to what the chunker needs (D3) · decided by planner · risk: low
+Decided: Enable only the decoders aac, opus, vorbis, mp3, mp3float and alac.
+Why: These are the audio codecs real uploads carry for the chunker's three supported MIME types (aac/alac in MP4 and M4A, opus/vorbis in WebM, mp3/mp3float as a broader-coverage addition); ac3/eac3/flac are left out, and an unsupported codec fails closed as a `validation` error rather than silently degrading.
+Alternatives: Enable a broader codec set for headroom (rejected: widens the audit surface for no current use).
+Reversible: Yes.
+
+### 5 Nov 2026 · 11.4l `--disable-x86asm` (D4) · decided by planner · risk: low
+Decided: Disable x86 assembly optimizations in the ffmpeg build, so no `nasm` build dependency is needed.
+Why: Audio-only work in plain C still runs far faster than real time; the lead's smoke test (above) confirms this (0.42-0.44s for 20s inputs).
+Alternatives: Keep x86asm enabled and add nasm to the build stage (rejected: unnecessary given the smoke-test timing).
+Reversible: Yes.
+
+### 5 Nov 2026 · 11.4l recorded as a dated ADR-0016 amendment, not a new ADR (D5) · decided by planner · risk: low
+Decided: Record this fallback as a dated amendment to ADR-0016 (Decision 8), not a new ADR.
+Why: ADR-0016 already pre-authorized this exact fallback in Decisions 7-9; amending it keeps the decision history in one place rather than splitting it across documents.
+Alternatives: Write a new ADR (rejected: unnecessary, the decision was already pre-authorized).
+Reversible: Yes.
 
 ## Gate
 
