@@ -1,5 +1,7 @@
 # Task 7.3a handoff: Hindi/Hinglish variants for the per-agent suite generator's locked templates
 
+Status: DONE
+
 Branch: `m13/7.3a-locked-template-languages`. Plan: `docs/tasks/7.3a/plan.md`.
 
 ## What changed

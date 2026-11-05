@@ -1,6 +1,6 @@
 # Review: 7.3a — Hindi/Hinglish locked-template variants
 
-Verdict: APPROVE
+## Verdict: APPROVE
 
 Reviewers: code-reviewer, typescript-reviewer
 
