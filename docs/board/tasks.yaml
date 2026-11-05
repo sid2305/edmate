@@ -3825,9 +3825,9 @@ tasks:
   deps:
   - '7.3'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.3a-locked-template-languages
+  model: plan:sonnet build:sonnet review:pending
 - id: 7.3b
   milestone: M13
   title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.;
@@ -11893,9 +11893,9 @@ tasks:
   deps:
   - 1.4e
   risk: low
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: plan:lead build:lead review:none
 - id: 1.4g
   milestone: M13
   title: 'Test flake: apps/web src/auth/index.test.ts:524 "linkBindingCookie: an HMAC of the address under AUTH_SECRET" compares the HMAC of two calls that each stamp Date.now(), so it fails when the clock
@@ -12182,6 +12182,20 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 0
+- id: 11.4l
+  milestone: M13
+  title: 'B-62 finding (resolved 5 Nov 2026 by the lead): the pinned worker base image''s apk ffmpeg (6.1.2-r2) is built --enable-gpl (confirmed by building the worker image and reading `ffmpeg -version`''s
+    configuration line). Per ADR-0016 Decision 8, swap apps/worker/Dockerfile to the documented fallback: a pinned, checksum-verified LGPL-only ffmpeg static build with no GPL-only codec enabled (no libx264,
+    libx265, libvpx or similar; AAC/Opus/Vorbis decode and PCM/WAV encode cover this task''s needs). Tech-stack change (rule 2): architect, security-reviewer and an opus typescript-reviewer, lead approves
+    with a risk: high decision referencing ADR-0016.'
+  accept: apps/worker/Dockerfile installs a pinned, checksum-verified ffmpeg build with no --enable-gpl codec; the handoff pastes the new build's `ffmpeg -version` configuration line showing no GPL-only
+    codec enabled; @edmate/worker typecheck, lint and test (including the ffmpegChunker suite) stay green; the lead rebuilds the image once and re-checks the licence banner before merge.
+  deps:
+  - 11.4d
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 0.20i
   milestone: M13
   title: 'harness timing flake: modelRequest.test.ts "expectUnderCeiling still fails on a deliberately backtracking regex (self-test)" finds the first k whose regex run passes the 2 s ceiling, then re-runs
@@ -12428,9 +12442,9 @@ tasks:
   accept: a test with a non-default distress classifierTimeoutMs shows the prefetch uses it; the gate passes with --filter=...@edmate/harness
   deps:
   - 4.4b
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/4.4i-distress-prefetch-timeout
+  model: plan:lead build:sonnet review:pending
 - id: 7.4e
   milestone: M7
   title: 'CI flake: apps/cli src/commands/gate.test.ts "no longer reports a blocker B-40 gap" runs the real suites under the default 5s vitest timeout and timed out once on PR #424 (passed on re-run). Give
