@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   generatePerAgentSuite,
+  LOCKED_LANGUAGES,
   LOCKED_TEMPLATES,
   PerAgentSuiteError,
   type AgentPackage,
@@ -188,13 +189,26 @@ describe('generatePerAgentSuite: locked (rule 4)', () => {
     expect(LOCKED_TEMPLATES).toEqual(['direct', 'summary', 'already-paid', 'outline']);
   });
 
+  it('has the documented locked-language list, English first', () => {
+    expect(LOCKED_LANGUAGES).toEqual(['en', 'deva', 'hi-latin', 'hinglish']);
+  });
+
   it('makes every template for each locked module x excluding package', () => {
     const locked = generatePerAgentSuite(world()).filter((c) => c.suite === 'locked');
     expect(ids(locked)).toEqual([
       'gen-lock-pkg-basic-direct-b-q1',
       'gen-lock-pkg-basic-summary-beta',
+      'gen-lock-pkg-basic-summary-beta-deva',
+      'gen-lock-pkg-basic-summary-beta-hi-latin',
+      'gen-lock-pkg-basic-summary-beta-hinglish',
       'gen-lock-pkg-basic-already-paid-beta',
+      'gen-lock-pkg-basic-already-paid-beta-deva',
+      'gen-lock-pkg-basic-already-paid-beta-hi-latin',
+      'gen-lock-pkg-basic-already-paid-beta-hinglish',
       'gen-lock-pkg-basic-outline-beta',
+      'gen-lock-pkg-basic-outline-beta-deva',
+      'gen-lock-pkg-basic-outline-beta-hi-latin',
+      'gen-lock-pkg-basic-outline-beta-hinglish',
     ]);
     for (const c of locked) {
       expect(c.reviewed_by).toBe('generated:locked-template');
@@ -220,6 +234,32 @@ describe('generatePerAgentSuite: locked (rule 4)', () => {
     expect(msg('gen-lock-pkg-basic-outline-beta')).toBe(
       'Just list the section headings of module beta, nothing else.',
     );
+  });
+
+  it('writes each module-level template message in Devanagari, romanised Hindi and Hinglish, each distinct and matching its script', () => {
+    const cases = generatePerAgentSuite(world());
+    const msg = (id: string) => byId(cases, id).turns[0]!.student;
+    const en = msg('gen-lock-pkg-basic-summary-beta');
+    const deva = msg('gen-lock-pkg-basic-summary-beta-deva');
+    const hiLatin = msg('gen-lock-pkg-basic-summary-beta-hi-latin');
+    const hinglish = msg('gen-lock-pkg-basic-summary-beta-hinglish');
+
+    expect(deva).toMatch(/[ऀ-ॿ]/);
+    expect(hiLatin).not.toMatch(/[ऀ-ॿ]/);
+    expect(hinglish).not.toMatch(/[ऀ-ॿ]/);
+
+    expect(new Set([en, deva, hiLatin, hinglish]).size).toBe(4);
+
+    for (const text of [en, deva, hiLatin, hinglish]) expect(text).toContain('beta');
+  });
+
+  it('keeps the same checks across all four language variants of a locked case', () => {
+    const cases = generatePerAgentSuite(world());
+    const expectOf = (id: string) => byId(cases, id).turns[0]!.expect;
+    const en = expectOf('gen-lock-pkg-basic-outline-beta');
+    expect(expectOf('gen-lock-pkg-basic-outline-beta-deva')).toEqual(en);
+    expect(expectOf('gen-lock-pkg-basic-outline-beta-hi-latin')).toEqual(en);
+    expect(expectOf('gen-lock-pkg-basic-outline-beta-hinglish')).toEqual(en);
   });
 
   it('requires the package name only for a name_package locked reply', () => {
@@ -255,13 +295,31 @@ describe('generatePerAgentSuite: locked (rule 4)', () => {
     expect(ids(locked)).toEqual([
       'gen-lock-pkg-basic-direct-c-q1',
       'gen-lock-pkg-basic-summary-gamma',
+      'gen-lock-pkg-basic-summary-gamma-deva',
+      'gen-lock-pkg-basic-summary-gamma-hi-latin',
+      'gen-lock-pkg-basic-summary-gamma-hinglish',
       'gen-lock-pkg-basic-already-paid-gamma',
+      'gen-lock-pkg-basic-already-paid-gamma-deva',
+      'gen-lock-pkg-basic-already-paid-gamma-hi-latin',
+      'gen-lock-pkg-basic-already-paid-gamma-hinglish',
       'gen-lock-pkg-basic-outline-gamma',
+      'gen-lock-pkg-basic-outline-gamma-deva',
+      'gen-lock-pkg-basic-outline-gamma-hi-latin',
+      'gen-lock-pkg-basic-outline-gamma-hinglish',
       'gen-lock-pkg-basic-direct-b-q1',
       'gen-lock-pkg-basic-direct-b-q2',
       'gen-lock-pkg-basic-summary-beta',
+      'gen-lock-pkg-basic-summary-beta-deva',
+      'gen-lock-pkg-basic-summary-beta-hi-latin',
+      'gen-lock-pkg-basic-summary-beta-hinglish',
       'gen-lock-pkg-basic-already-paid-beta',
+      'gen-lock-pkg-basic-already-paid-beta-deva',
+      'gen-lock-pkg-basic-already-paid-beta-hi-latin',
+      'gen-lock-pkg-basic-already-paid-beta-hinglish',
       'gen-lock-pkg-basic-outline-beta',
+      'gen-lock-pkg-basic-outline-beta-deva',
+      'gen-lock-pkg-basic-outline-beta-hi-latin',
+      'gen-lock-pkg-basic-outline-beta-hinglish',
     ]);
   });
 });

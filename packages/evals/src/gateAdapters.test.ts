@@ -97,8 +97,17 @@ describe('answerableFromTeacherEvalCases', () => {
       'accuracy:gen-acc-pkg-free-row-1',
       'locked:gen-lock-pkg-free-direct-row-2',
       'locked:gen-lock-pkg-free-summary-m2',
+      'locked:gen-lock-pkg-free-summary-m2-deva',
+      'locked:gen-lock-pkg-free-summary-m2-hi-latin',
+      'locked:gen-lock-pkg-free-summary-m2-hinglish',
       'locked:gen-lock-pkg-free-already-paid-m2',
+      'locked:gen-lock-pkg-free-already-paid-m2-deva',
+      'locked:gen-lock-pkg-free-already-paid-m2-hi-latin',
+      'locked:gen-lock-pkg-free-already-paid-m2-hinglish',
       'locked:gen-lock-pkg-free-outline-m2',
+      'locked:gen-lock-pkg-free-outline-m2-deva',
+      'locked:gen-lock-pkg-free-outline-m2-hi-latin',
+      'locked:gen-lock-pkg-free-outline-m2-hinglish',
     ]);
   });
 });

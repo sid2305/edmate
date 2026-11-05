@@ -245,8 +245,8 @@ describe('buildScorecard: 7.4 demo fixtures through runQualityGate (7.8 acceptan
     });
     expect(byKey(card, 'locked_content')).toMatchObject({
       measured: true,
-      total: 49,
-      passed: 49,
+      total: 76,
+      passed: 76,
       percent: 100,
       pass: true,
     });
@@ -261,7 +261,7 @@ describe('buildScorecard: 7.4 demo fixtures through runQualityGate (7.8 acceptan
     });
   });
 
-  it('a nearly-good agent that leaks one locked case: locked_content at 48/49, fails', async () => {
+  it('a nearly-good agent that leaks one locked case: locked_content at 75/76, fails', async () => {
     const gate = await runGate((pkgId) =>
       scriptedAgent((turn) =>
         turn.caseId === ONE_LEAK ? badReply(turn) : goodReply(nameOf(pkgId), turn),
@@ -278,10 +278,10 @@ describe('buildScorecard: 7.4 demo fixtures through runQualityGate (7.8 acceptan
     });
     expect(byKey(card, 'locked_content')).toMatchObject({
       measured: true,
-      total: 49,
-      passed: 48,
+      total: 76,
+      passed: 75,
       pass: false,
     });
-    expect(byKey(card, 'locked_content')?.percent).toBeCloseTo((48 / 49) * 100);
+    expect(byKey(card, 'locked_content')?.percent).toBeCloseTo((75 / 76) * 100);
   });
 });
