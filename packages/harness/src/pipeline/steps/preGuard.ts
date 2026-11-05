@@ -159,6 +159,7 @@ function prefetchDistress(
   env: StepEnv,
   ctx: PreGuardCtx,
   text: string,
+  classifierTimeoutMs: number,
 ): Promise<TimedResult<DistressVerdict>> | undefined {
   if (distressKeywordMatch(text).level === 'hard') return undefined;
   return (async () => {
@@ -169,10 +170,26 @@ function prefetchDistress(
           buildDistressClassifierRequest(text, earlier),
           DistressVerdictSchema,
         ),
-      DISTRESS_CLASSIFIER_TIMEOUT_MS,
+      classifierTimeoutMs,
       env.deps.clock,
     );
   })();
+}
+
+/**
+ * The registered distressDetect guard's own classifier deadline, resolved once when the step is
+ * created (task 4.4i): a registry built with a custom `classifierTimeoutMs` must get it on the
+ * prefetch path too, not the default. Falls back to DISTRESS_CLASSIFIER_TIMEOUT_MS when the
+ * registry has no distress guard, or its value isn't a finite number above 0.
+ */
+function distressPrefetchTimeoutMs(registry: GuardRegistry<PreGuardCtx>): number {
+  const guard = registry.ordered().find((g) => g.name === 'distressDetect') as
+    | { classifierTimeoutMs?: unknown }
+    | undefined;
+  const ms = guard?.classifierTimeoutMs;
+  return typeof ms === 'number' && Number.isFinite(ms) && ms > 0
+    ? ms
+    : DISTRESS_CLASSIFIER_TIMEOUT_MS;
 }
 
 /**
@@ -257,6 +274,7 @@ function prefetchJailbreak(
 export function createPreGuardStep(
   registry: GuardRegistry<PreGuardCtx>,
 ): (env: StepEnv, s: Entitled) => Promise<PreGuardResult> {
+  const distressTimeoutMs = distressPrefetchTimeoutMs(registry);
   return async (env, s) => {
     const text = env.input.text ?? '';
     const ctx: PreGuardCtx = {
@@ -287,7 +305,7 @@ export function createPreGuardStep(
     const jailbreakEarlierDecisive = (async () =>
       distressRuleDecisive || (await moderationRuleDecisive(ctx, text)))();
     ctx.classifierCalls = {
-      distress: prefetchDistress(env, ctx, text),
+      distress: prefetchDistress(env, ctx, text, distressTimeoutMs),
       moderation: prefetchModeration(env, ctx, text, distressRuleDecisive),
       jailbreak: prefetchJailbreak(env, ctx, text, jailbreakEarlierDecisive),
     };
