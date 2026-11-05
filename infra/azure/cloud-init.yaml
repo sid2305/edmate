@@ -25,6 +25,9 @@ packages:
 timezone: America/Los_Angeles
 
 runcmd:
+  # 6 GB swap: a D2s_v5 has 8 GB, and the dev stack plus builders peak above it.
+  - fallocate -l 6G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
   # Docker without sudo for the agent user; the dev stack runs under it.
   - usermod -aG docker edmate
   - systemctl enable --now docker

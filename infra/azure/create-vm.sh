@@ -7,13 +7,13 @@
 #   infra/azure/create-vm.sh ip         print the VM's public IP
 #
 # Overrides: EDMATE_RG (edmate-agents), EDMATE_LOCATION (eastus2), EDMATE_VM (edmate-lead),
-# EDMATE_VM_SIZE (Standard_D4s_v5). The admin user is always `edmate` (cloud-init.yaml assumes it).
+# EDMATE_VM_SIZE (Standard_D2s_v5). The admin user is always `edmate` (cloud-init.yaml assumes it).
 set -euo pipefail
 
 RG="${EDMATE_RG:-edmate-agents}"
 LOC="${EDMATE_LOCATION:-eastus2}"
 NAME="${EDMATE_VM:-edmate-lead}"
-SIZE="${EDMATE_VM_SIZE:-Standard_D4s_v5}"
+SIZE="${EDMATE_VM_SIZE:-Standard_D2s_v5}"
 ADMIN=edmate
 HERE=$(cd "$(dirname "$0")" && pwd)
 NSG="${NAME}NSG"

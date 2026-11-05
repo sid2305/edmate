@@ -15,7 +15,7 @@ the team available around the clock, not bigger. Foundry remains the backup for 
 - The VM has no inbound port except SSH, by key, from your current IP only. Remote Control from the
   phone needs no inbound port.
 - The Azure subscription keeps its spending limit on; the VM runs inside the monthly credit
-  (about $160 a month for a Standard_D4s_v5 with its disk at list prices, less with a reservation).
+  (about $90 a month for a Standard_D2s_v5 with its disk at list prices; set EDMATE_VM_SIZE=Standard_D4s_v5 for about $160 if the dev stack and three builders need more than 8 GB).
 - The VM never serves pilot students. It is the build machine; deploy is task 13.6.
 
 ## 1. Create the VM (from your Mac, about 15 minutes)
@@ -28,7 +28,7 @@ cd ~/edmate && git pull
 infra/azure/create-vm.sh
 ```
 
-The script creates a resource group `edmate-agents` in East US 2, a Standard_D4s_v5 (4 vCPU, 16 GB)
+The script creates a resource group `edmate-agents` in East US 2, a Standard_D2s_v5 (2 vCPU, 8 GB, plus a 6 GB swap file)
 Ubuntu 24.04 VM named `edmate-lead` with a 128 GB Premium SSD, a system-assigned identity, an SSH
 key in `~/.ssh` if you have none, and one firewall rule: port 22 from the IP you are on now. It then
 prints the SSH command. First boot runs `infra/azure/cloud-init.yaml`: Docker, Node 22 through nvm,
