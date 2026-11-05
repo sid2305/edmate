@@ -78,8 +78,15 @@ function valueAfter(argv: readonly string[], flag: string, from = 0): string | u
 
 describe('worker Dockerfile ffmpeg build (ADR-0016 Decision 8)', () => {
   it('the runtime stage installs no distro ffmpeg', () => {
-    const apkLines = DOCKERFILE.split('\n').filter((l) => /apk add/.test(l));
-    expect(apkLines.filter((l) => /\bffmpeg\b/.test(l))).toEqual([]);
+    // Join backslash-continued lines first, so `apk add \` with `ffmpeg` on the next line is
+    // caught; then take each `apk add` command up to the next `;`, `&&` or `||`.
+    const logical = DOCKERFILE.replace(/\\\n/g, ' ');
+    const apkCommands = [...logical.matchAll(/apk\s+add\b[^;&|\n]*/g)].map((m) => m[0]);
+    expect(
+      apkCommands.length,
+      'the ffmpeg build stage installs its tools with apk',
+    ).toBeGreaterThan(0);
+    expect(apkCommands.filter((c) => /\bffmpeg\b/.test(c))).toEqual([]);
   });
 
   it('ffmpeg is fetched at a pinned version over https and checked against a pinned sha256', () => {
@@ -91,7 +98,9 @@ describe('worker Dockerfile ffmpeg build (ADR-0016 Decision 8)', () => {
     expect(new Set(sha).size, 'the sha256 is a placeholder').toBeGreaterThan(1);
     const url = text.indexOf('"https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"');
     expect(url).toBeGreaterThan(-1);
-    const curl = text.indexOf('curl ');
+    // Anchor on the download command itself: a bare 'curl ' also matches the `apk add … curl …`
+    // line that installs the tool.
+    const curl = text.indexOf('curl -fsSL');
     const check = text.indexOf('sha256sum -c');
     const untar = text.indexOf('tar -x');
     expect(curl).toBeGreaterThan(-1);
@@ -132,7 +141,9 @@ describe('worker Dockerfile ffmpeg build (ADR-0016 Decision 8)', () => {
 
   it('the image build fails closed on a GPL or incomplete ffmpeg', () => {
     const text = stage('ffmpeg');
-    expect(text).toContain('./ffmpeg -hide_banner -L');
+    // `ffmpeg -L` wraps "GNU Lesser General Public\nLicense" across two lines, so the banner must
+    // be joined into one line before it is grepped, or a correct LGPL build fails the image build.
+    expect(text).toContain("./ffmpeg -hide_banner -L | tr '\\n' ' ' > /tmp/licence.txt");
     expect(text).toContain('GNU Lesser General Public License');
     expect(text).toMatch(
       /if grep -Eq -e '--enable-\(gpl\|nonfree\|version3\|lib\)' [^;]+; then [^;]*; exit 1; fi/,

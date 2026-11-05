@@ -119,6 +119,30 @@ configuration: --disable-everything --disable-autodetect --disable-network --dis
 It has no `--enable-gpl`, `--enable-version3`, `--enable-nonfree` and no `--enable-lib…`. Line 1
 should read `ffmpeg version 7.1.5`.
 
+## Fix round 1 (lead's docker build plus typescript-reviewer)
+
+Tests were changed first. Against the unfixed Dockerfile, the licence test went red
+(`Tests 1 failed | 5 passed`). After the Dockerfile fix, all 6 passed.
+
+- **HIGH, `apps/worker/Dockerfile:58`:** the licence check grepped `ffmpeg -L` output for "GNU
+  Lesser General Public License". Real ffmpeg wraps that phrase across two lines ("…General
+  Public" / "License…"), so a correct LGPL build failed the image build. The lead's docker build
+  confirmed it. Fix: `./ffmpeg -hide_banner -L | tr '\n' ' ' > /tmp/licence.txt`, with a comment
+  saying why. The GPL check below it is unchanged. Without `pipefail`, a failing `./ffmpeg` in the
+  pipe leaves the file without the LGPL phrase, so the next `grep -q` still fails the build.
+  `ffmpegBuild.test.ts:143` now asserts the joined form, so going back to the unjoined form fails
+  the test, not only a later docker build.
+- **MEDIUM, `ffmpegBuild.test.ts:100`:** the pin test used `indexOf('curl ')`, which matched the
+  earlier `apk add … curl tar xz` line instead of the download. It now anchors on `curl -fsSL`.
+  Mutation check: with the download `curl` line deleted from a temporary copy of the Dockerfile,
+  the pin test fails. The Dockerfile was restored afterwards.
+- **MEDIUM, `ffmpegBuild.test.ts:80-87`:** the "no distro ffmpeg" test read one physical line at
+  a time, so it missed `apk add \` with `ffmpeg` on the next line. It now joins
+  backslash-continued lines, takes each `apk add` command up to the next `;`, `&&` or `||`, and
+  checks for the whole word `ffmpeg`. It also asserts that at least one `apk add` was found, so
+  the check can't pass by matching nothing. Mutation check: adding `RUN apk add --no-cache \` /
+  `ffmpeg` to `runtime` in a temporary copy makes the test fail.
+
 ## Lead verification
 
 <!-- The lead fills this in after `docker build` and the checks in the plan's "Lead verification". -->
@@ -165,8 +189,16 @@ this handoff and the ADR.
     Re-run alone, both files passed: 2 files, 164 tests.
   - Every other package task in the filter passed.
 
+Fix round 1 gate: `turbo run typecheck lint test --filter=@edmate/worker...` passed all 38 tasks.
+`ffmpegBuild.test.ts` passed 6 of 6. `ffmpegChunker.test.ts` passed unchanged (28 tests, 4
+skipped, the opt-in block skipped because this host has no ffmpeg). The first attempt was cut off
+by my own 10-minute shell limit while `@edmate/evals#test` was still running. At that point 37 of
+38 tasks had passed and none had failed; the full rerun was green. After Prettier reformatted the
+test file, the worker package was re-checked: 11 of 11 tasks passed. Secret scan and Prettier are
+clean.
+
 ## Budget
 
 Budget: 60 tool calls (1 phase)
 
-Tool calls used: 37
+Tool calls used: 55 (37 in round 1, 18 in fix round 1)

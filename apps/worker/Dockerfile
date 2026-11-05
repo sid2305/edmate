@@ -52,8 +52,9 @@ RUN set -eux; \
       --enable-filter=aresample,aformat,anull; \
     make -j"$(nproc)"
 # Fail the image build unless the binary is LGPL 2.1+ and has every component the chunker uses.
+# `ffmpeg -L` wraps "GNU Lesser General Public" / "License" across two lines; join them first.
 RUN set -eux; \
-    ./ffmpeg -hide_banner -L > /tmp/licence.txt; \
+    ./ffmpeg -hide_banner -L | tr '\n' ' ' > /tmp/licence.txt; \
     grep -q 'GNU Lesser General Public License' /tmp/licence.txt; \
     if grep -q 'GNU General Public License' /tmp/licence.txt; then echo 'ffmpeg is GPL' >&2; exit 1; fi; \
     ./ffmpeg -version | grep '^configuration:' > /tmp/conf.txt; \
