@@ -12193,9 +12193,9 @@ tasks:
   deps:
   - 11.4d
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4l-ffmpeg-lgpl-swap
+  model: plan:opus build:opus review:pending
 - id: 0.20i
   milestone: M13
   title: 'harness timing flake: modelRequest.test.ts "expectUnderCeiling still fails on a deliberately backtracking regex (self-test)" finds the first k whose regex run passes the 2 s ceiling, then re-runs
