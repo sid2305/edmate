@@ -44,21 +44,13 @@
   — **green**, exit 0, `Tasks: 38 successful, 38 total`.
   - `@edmate/harness` tests: `Test Files 134 passed (134)`, `Tests 6155 passed (6155)`.
   - `@edmate/evals` tests: `Test Files 33 passed (33)`, `Tests 2004 passed (2004)`.
-- `corepack pnpm --filter @edmate/evals test` (explicit, as the plan's gate requires) was kicked
-  off separately to double-check in isolation; it was still running in the background when this
-  handoff was written up against the tool-call budget. The combined gate run above already shows
-  `@edmate/evals`: 33 files / 2004 tests passed, which is the same command the `--filter` syntax
-  resolves to.
-- `python3 .githooks/secret-scan.py --all`: started, result not yet confirmed before the budget
-  stop (see Left to do).
+- `corepack pnpm --filter @edmate/evals test` (explicit, as the plan's gate requires), run on its
+  own: **green** — `Test Files 33 passed (33)`, `Tests 2004 passed (2004)`.
+- `python3 .githooks/secret-scan.py --all`: exit 0, no findings.
 
-## Left to do (budget stop)
+## Left to do
 
-- Confirm the explicit `corepack pnpm --filter @edmate/evals test` run finished clean (it was
-  running in the background; the combined turbo gate already shows evals green, so this is a
-  belt-and-suspenders re-check, not expected to differ).
-- Confirm `python3 .githooks/secret-scan.py --all` printed clean (no reason to expect otherwise —
-  no secrets, tokens or credentials were touched by this change).
+None. Everything in the plan's gate is confirmed green.
 
 ## Decisions
 
