@@ -64,8 +64,8 @@ No new decisions beyond the plan: the implementation follows the plan's design e
 value on the guard, looked up once at step-creation time, default fallback for a registry with no
 distress guard).
 
-- **4.4i distress prefetch respects the guard's configured timeout (lead, risk: high).** Decided:
-  merge as planned. Why: `distressDetect.ts` is a student-safety risk path; pre-pilot-gate the
+### 4.4i distress prefetch respects the guard's configured timeout — decided by lead, risk: high
+Decided: merge as planned. Why: `distressDetect.ts` is a student-safety risk path; pre-pilot-gate the
   required reviewer there is `code-reviewer` only (`safety-reviewer` waived until task 13.3,
   per `risk-paths.txt`). Reviewed by code-reviewer: zero code-level findings (type change is a pure
   additive intersection, the timeout lookup happens once at step-creation not per-turn, fallback is
