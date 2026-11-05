@@ -60,11 +60,13 @@ export {
 } from './recorder.js';
 export {
   generatePerAgentSuite,
+  LOCKED_LANGUAGES,
   LOCKED_TEMPLATES,
   PerAgentSuiteError,
   type AgentPackage,
   type AnswerableItem,
   type ItemProvenance,
+  type LockedLanguage,
   type LockedTemplate,
   type OutOfCourseItem,
   type PerAgentSuiteErrorReason,

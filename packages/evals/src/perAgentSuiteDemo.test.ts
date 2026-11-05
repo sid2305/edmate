@@ -20,12 +20,12 @@ describe('generatePerAgentSuite on the demo teacher (task 7.3 acceptance)', () =
     // Exact counts, so a content change that moves them is noticed. Accuracy 106: 37 bank items
     // (15 in free modules x 2 packages + 22 paid-only = 52), 30 recall in-course items (13
     // answered in free modules x 2 + 17 paid-only = 43), 2 synthetic rows (2 + 1), 8
-    // out-of-course. Locked 49, free package only: 40 direct (22 bank + 17 recall + 1 synthetic
-    // row in loops, functions, lists-dicts) + 3 module templates x 3 modules.
+    // out-of-course. Locked 76, free package only: 40 direct (22 bank + 17 recall + 1 synthetic
+    // row in loops, functions, lists-dicts) + 3 module templates x 3 modules x 4 languages (36).
     expect({ accuracy, locked }).toMatchInlineSnapshot(`
       {
         "accuracy": 106,
-        "locked": 49,
+        "locked": 76,
       }
     `);
   });
@@ -50,5 +50,12 @@ describe('generatePerAgentSuite on the demo teacher (task 7.3 acceptance)', () =
 
   it('is deterministic', () => {
     expect(generatePerAgentSuite(adapt(loadDemoTeacherContent(DEMO_DIR)))).toEqual(cases);
+  });
+
+  it('includes locked cases in Devanagari, romanised Hindi and Hinglish', () => {
+    const lockedIds = cases.filter((c) => c.suite === 'locked').map((c) => c.id);
+    expect(lockedIds.some((id) => id.endsWith('-deva'))).toBe(true);
+    expect(lockedIds.some((id) => id.endsWith('-hi-latin'))).toBe(true);
+    expect(lockedIds.some((id) => id.endsWith('-hinglish'))).toBe(true);
   });
 });
