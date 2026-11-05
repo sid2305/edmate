@@ -14,6 +14,12 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { BLOCK_REPLIES } from '../../guardrails/blockReplies.js';
+import {
+  createDistressDetectGuard,
+  DISTRESS_CLASSIFIER_TIMEOUT_MS,
+} from '../../guardrails/distressDetect.js';
+import { createJailbreakGuard } from '../../guardrails/jailbreak.js';
+import { createModerationInGuard } from '../../guardrails/moderationIn.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
 import type { PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { fakeGuard } from '../../testing/guardFixtures.js';
@@ -76,6 +82,16 @@ const ALL_CLEAR = {
     { value: { category: 'none' } },
   ],
 };
+
+describe('createDistressDetectGuard (task 4.4i): the resolved classifierTimeoutMs', () => {
+  it('a custom option resolves to that value', () => {
+    expect(createDistressDetectGuard({ classifierTimeoutMs: 50 }).classifierTimeoutMs).toBe(50);
+  });
+
+  it('no option resolves to DISTRESS_CLASSIFIER_TIMEOUT_MS', () => {
+    expect(createDistressDetectGuard().classifierTimeoutMs).toBe(DISTRESS_CLASSIFIER_TIMEOUT_MS);
+  });
+});
 
 describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)', () => {
   it('registers every pre guard GUARD_ORDER declares', () => {
@@ -761,4 +777,32 @@ describe('preGuard (task 4.4b): the three classifier calls run concurrently', ()
     await expect(t.clock.drive(preGuard(env, entitled))).rejects.toThrow(PreGuardChainFailedError);
     expect(t.safetyEvents.recorded).toEqual([]);
   }, 5_000);
+
+  it(
+    'task 4.4i: a registry built with a non-default classifierTimeoutMs prefetches with it, ' +
+      'not DISTRESS_CLASSIFIER_TIMEOUT_MS',
+    async () => {
+      const t = testDeps({ overrides: { transcripts: memoryTranscriptStore() } });
+      const registry = new GuardRegistry<PreGuardCtx>('pre');
+      registry.register(createDistressDetectGuard({ classifierTimeoutMs: 50 }));
+      registry.register(createModerationInGuard());
+      registry.register(createJailbreakGuard());
+      const step = createPreGuardStep(registry);
+      const gateway = delayedClassifierGateway(t.clock, 100);
+      const env: StepEnv = {
+        input: { ...demoTurnInput, text: 'nothing matters anymore' },
+        deps: t.deps,
+        cancel: cancelSource().token,
+        turnId: 'turn_1',
+        ...stepEnvExtras(),
+        gateway,
+      };
+      const r = await t.clock.drive(step(env, entitled));
+      // At the guard's own 50 ms deadline the classifier has not answered (it answers at 100 ms),
+      // so the prefetch times out and the soft keyword still escalates, exactly as it would at the
+      // default deadline (red against the old hard-coded 230 ms, which would have let it through).
+      expect(r).toMatchObject({ result: 'escalate' });
+    },
+    5_000,
+  );
 });

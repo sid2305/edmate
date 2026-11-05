@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 5 Nov 2026 · 4.4i distress prefetch respects the guard's configured timeout · decided by lead · risk: high
+Decided: Merge as planned.
+Why: `distressDetect.ts` is a student-safety risk path; pre-pilot-gate the required reviewer there is `code-reviewer` only (`safety-reviewer` waived until task 13.3, per `risk-paths.txt`). Reviewed by code-reviewer: zero code-level findings (type change is a pure additive intersection, the timeout lookup happens once at step-creation not per-turn, fallback is correctly guarded, chain order and other prefetches are untouched, gate independently re-run green). The reviewer's one CRITICAL finding was procedural, not code: `plan.md`'s 4 Nov hold on new risky-path work had not been logged as lifted anywhere durable. It was lifted out-of-band by the human earlier the same session ("the hold is lifted ... build 4.4i"); that answer is now logged in `.claude/blockers.md`'s B-64 entry (moved to Resolved) ahead of this merge, closing the gap the reviewer flagged.
+Alternatives: Hold the merge until the human answers again in-band (rejected: the authorization was already genuinely given; the gap was the record, not the decision).
+Reversible: Yes — a config-only timeout lookup, no migration.
+
+---
+
+### 5 Nov 2026 · 7.3a three locked-template language forms are generator-specific · decided by planner · risk: low
+Decided: Define three new locked-template language forms (`deva`, `hi-latin`, `hinglish`) precisely for this generator, narrower than some existing hand-authored `-hi-latin` files' looser usage, so the generator's own three forms are mechanically distinct from each other.
+Why: a mechanical generator needs an unambiguous form per file it emits; reusing the looser hand-authored convention would let two of its own forms collide.
+Alternatives: reuse the existing hand-authored files' looser definitions (rejected: ambiguous for a generator).
+Reversible: yes.
+
+---
+
+### 5 Nov 2026 · 7.3a direct locked cases get no language variants · decided by planner · risk: low
+Decided: `direct` locked-template cases are not given language variants: their text is the answerable item's own question, not a generator template, and inventing or translating question text is out of scope.
+Why: translating or inventing question text is a different, larger task than this one.
+Alternatives: generate variants anyway (rejected: needs translation-quality review this task doesn't have).
+Reversible: yes.
+
+---
+
+### 5 Nov 2026 · 7.3a locked-case Checks object stays unlocalized · decided by planner · risk: low
+Decided: The locked-case `Checks` object (`must_cite_source`, `must_contain`, `judge`) is shared, unlocalized, across all four language variants of a case — only the student-facing message changes.
+Why: grading logic doesn't depend on display language; duplicating it per language risks drift between variants of the same case.
+Alternatives: localize Checks per variant (rejected: no behavioural reason to, multiplies maintenance).
+Reversible: yes.
+
+---
+
+### 5 Nov 2026 · 7.3a case id suffix convention · decided by planner · risk: low
+Decided: English locked-template case ids keep their existing unsuffixed form; the three new forms append `-deva` / `-hi-latin` / `-hinglish`.
+Why: keeps existing English-only consumers' ids stable while making the new variants unambiguous.
+Alternatives: suffix English too (rejected: unnecessary churn for existing consumers).
+Reversible: yes.
+
+---
+
+### 5 Nov 2026 · 7.3a template wording taken verbatim from the plan · decided by builder · risk: low
+Decided: The plan's Design §2 template wording was used verbatim, with no wording changes, after checking it against three real house-style files (`locked-functions-summary-deva.yaml`, `-hi-latin.yaml`, `leak-forged-note-hinglish.yaml`) and finding the drafted strings already matched that register.
+Why: no refinement was needed once checked against real examples; changing it without reason risks drifting from house style.
+Alternatives: rewrite the wording (rejected: unnecessary, already matched house style).
+Reversible: yes.
+
+---
+
+### 5 Nov 2026 · 7.3a locked-case count propagated into sibling test files · decided by builder, lead-approved · risk: low
+Decided: The plan's "files to create/modify" list missed that `qualityGateDemo.test.ts`, `scorecard.test.ts`, `qualityGate.test.ts` and `gateAdapters.test.ts` also hardcode locked-case counts derived from `generatePerAgentSuite`; the builder stopped and reported this rather than widening scope silently, and the lead authorized propagating the already-approved count change (49→76 demo content; 5→14 and 5-id→14-id toy-world cases) into those literals, as a mechanical consequence of the same approved change, not a new design decision.
+Why: the count change was already approved mid-build (this task's own 49→76 recalculation); the sibling files' literals were a mechanical consequence of it, not a new scope decision.
+Alternatives: leave the sibling tests broken and open a follow-up task (rejected: they test the same generator this task already changed, so deferring would leave the suite red for no reason).
+Reversible: yes.
+
+---
+
 ### 4 Nov 2026 · 4.5b judge fallback only on a non-numeric-key regex miss · decided by builder · risk: low
 - Decided: the judge is asked only when the matcher found no leak and `mustNotReveal` holds at
   least one key that is not a number, a number word or a label (`hasNonNumericKey`). An all-numeric

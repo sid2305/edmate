@@ -101,11 +101,15 @@ export interface DistressDetectOptions {
   classifierTimeoutMs?: number;
 }
 
-export function createDistressDetectGuard(opts: DistressDetectOptions = {}): Guard<PreGuardCtx> {
+/** The guard distressDetect returns, with its resolved classifier deadline (task 4.4i). */
+export type DistressDetectGuard = Guard<PreGuardCtx> & { readonly classifierTimeoutMs: number };
+
+export function createDistressDetectGuard(opts: DistressDetectOptions = {}): DistressDetectGuard {
   const timeoutMs = opts.classifierTimeoutMs ?? DISTRESS_CLASSIFIER_TIMEOUT_MS;
   return {
     name: 'distressDetect',
     phase: 'pre',
+    classifierTimeoutMs: timeoutMs,
     async run(text, ctx, cancel) {
       const match = distressKeywordMatch(text);
       if (match.level === 'hard') return { result: escalate(text, ctx, match.kind), usage: [] };

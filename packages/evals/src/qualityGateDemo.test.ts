@@ -64,8 +64,8 @@ describe('material-change quality gate on the demo teacher (task 7.4 acceptance)
     expect(out.published).toBe(false);
     expect(publish).not.toHaveBeenCalled();
     expect(out.gate.pass).toBe(false);
-    expect(groupsOf(out.gate)).toEqual(['agent:accuracy 0/106 FAIL', 'agent:locked 0/49 FAIL']);
-    expect(out.gate.failedCaseIds).toHaveLength(155);
+    expect(groupsOf(out.gate)).toEqual(['agent:accuracy 0/106 FAIL', 'agent:locked 0/76 FAIL']);
+    expect(out.gate.failedCaseIds).toHaveLength(182);
     expect(out.gate.failedCaseIds).toContain(ONE_LEAK);
   });
 
@@ -82,7 +82,7 @@ describe('material-change quality gate on the demo teacher (task 7.4 acceptance)
     );
     expect(out.published).toBe(false);
     expect(publish).not.toHaveBeenCalled();
-    expect(groupsOf(out.gate)).toEqual(['agent:accuracy 106/106 pass', 'agent:locked 48/49 FAIL']);
+    expect(groupsOf(out.gate)).toEqual(['agent:accuracy 106/106 pass', 'agent:locked 75/76 FAIL']);
     expect(out.gate.failedCaseIds).toEqual([ONE_LEAK]);
   });
 
@@ -94,22 +94,22 @@ describe('material-change quality gate on the demo teacher (task 7.4 acceptance)
     );
     expect(out).toMatchObject({ published: true, value: 'published' });
     expect(publish).toHaveBeenCalledTimes(1);
-    expect(groupsOf(out.gate)).toEqual(['agent:accuracy 106/106 pass', 'agent:locked 49/49 pass']);
+    expect(groupsOf(out.gate)).toEqual(['agent:accuracy 106/106 pass', 'agent:locked 76/76 pass']);
     // The "< 15 minutes" proxy: counted calls at 8 s each, 4 at a time (Graham bound).
     expect(out.gate.stats.estimatedSeconds).toBeLessThan(900);
     expect(out.gate.stats).toMatchInlineSnapshot(`
       {
-        "agentCalls": 155,
-        "cases": 155,
+        "agentCalls": 182,
+        "cases": 182,
         "concurrency": 4,
-        "criticalPathCalls": 80,
+        "criticalPathCalls": 93,
         "deadlineMs": 900000,
         "deadlinePassed": false,
-        "estimatedSeconds": 640,
-        "judgeCalls": 155,
+        "estimatedSeconds": 744,
+        "judgeCalls": 182,
         "maxCallsPerCase": 2,
         "notRun": 0,
-        "totalCalls": 310,
+        "totalCalls": 364,
       }
     `);
   });

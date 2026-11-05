@@ -130,8 +130,8 @@ describe('runQualityGate', () => {
     const r = await runQualityGate(gateInput({ perAgent, agentFor: () => agent }));
     expect(r.groups.map((g) => `${g.origin}:${g.group}:${g.total}:${g.passed}`)).toEqual([
       'agent:accuracy:2:2',
-      // 2 direct + 3 module templates, every one missing the package name "Nothing".
-      'agent:locked:5:0',
+      // 2 direct + 3 module templates x 4 languages, every one missing the package name "Nothing".
+      'agent:locked:14:0',
     ]);
     expect(r.pass).toBe(false);
   });
