@@ -12511,9 +12511,9 @@ tasks:
   deps:
   - '9.0'
   risk: low
-  status: planning
-  branch: null
-  model: plan:sonnet build:sonnet review:sonnet
+  status: running
+  branch: m9/9.9a-live-overlay
+  model: plan:sonnet build:sonnet
 - id: 9.9b
   milestone: M9
   title: scripts/live-deploy.sh (pull main, build images, docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build, run db:migrate and the docs/try-it.md demo seed, print the URL)
