@@ -11,15 +11,35 @@ full `python3 -m unittest discover -v .claude/tests` (388/388 passed), `python3
 `security-reviewer` line for the `.claude/**`/`.githooks/**` risk paths). All claims in
 `docs/tasks/0.25/handoff.md`'s Gate section were independently reproduced.
 
-No CRITICAL or HIGH issues found: no hardcoded credentials, no real Azure identifiers in the diff
-(`test_no_azure_identifiers.py`'s regexes were checked against every line this task adds and
-correctly allowlist only the fixed IMDS constant `169.254.169.254`), the `.githooks/post-commit`
-hook always exits 0 and never blocks a commit, and `blockers-watch.sh`/`monitor-ingest.sh` post only
-a bare open-count, never `.claude/blockers.md` entry text, matching the stated safety requirement.
+No hardcoded credentials or real Azure identifiers in the diff itself. `.githooks/post-commit`
+always exits 0 and never blocks a commit (confirmed by security-reviewer: no injection via file
+paths/branch names, which are only used in a static `grep -qx` match, never eval'd; IMDS token is
+never printed or logged). `blockers-watch.sh`/`monitor-ingest.sh` post only a bare open-count, never
+`.claude/blockers.md` entry text, matching the stated safety requirement.
+
+A second, independent security-reviewer pass found that `test_no_azure_identifiers.py`'s own regex
+coverage had a real gap (see the HIGH finding below, now fixed) — the first-pass claim that its
+regexes were comprehensive was itself incomplete; corrected here.
 
 ## Findings
 
-- [MEDIUM] [open] infra/azure/lib/monitor-ingest.sh:26 — `. "$env_file"` sources the human-edited
+- [HIGH] [fixed] .claude/tests/test_no_azure_identifiers.py:18-20 — the regex set (`GUID_RE`,
+  `IPV4_RE`, `ONCALL_FILLED_RE`) had no pattern for hostname-shaped Azure identifiers. Verified: a
+  real DCE endpoint (`https://edmate-prod-dce-xk29.eastus-1.ingest.monitor.azure.com`) and a bare
+  `*.monitor.azure.com` URL both returned no hit — exactly the data `monitor-setup.sh` prints to the
+  human's terminal for pasting into `~/.config/edmate/monitor.env`, and exactly the shape a future
+  doc edit (e.g. a "here's what it looks like" example in `docs/azure-vm.md`) could leak into this
+  public repo with no test or secret-scan pattern catching it. Fixed in commit `e39b3bc6`: added
+  `AZURE_FQDN_RE` (scanned the same way as `GUID_RE`/`IPV4_RE`), with an allowlist for the one fixed
+  `monitor.azure.com` AAD resource-URI constant already in `infra/azure/lib/monitor-ingest.sh` (and
+  its percent-encoded form). Added regression tests proving it catches the two real-hostname
+  fixtures above and does not flag the repo's existing legitimate content. Resource-group/VM-name
+  patterns were deliberately left uncovered — `edmate-agents`/`edmate-lead` are the repo's own fixed,
+  already-public documented names, indistinguishable from a real secret by regex alone; not a gap
+  worth a brittle rule. Re-verified: `python3 -m unittest discover .claude/tests` → 390/390 OK;
+  `python3 .githooks/secret-scan.py --all` → clean.
+
+- [MEDIUM] [deferred 0.25b] infra/azure/lib/monitor-ingest.sh:26 — `. "$env_file"` sources the human-edited
   `monitor.env` while `set -e` is active (inherited from the callers, `heartbeat.sh` and
   `blockers-watch.sh`, both `set -euo pipefail`). The file's own header comment (lines 5-6) promises
   "every exit path returns 0", but a malformed `monitor.env` line (a shell syntax error, or any value
@@ -39,7 +59,7 @@ a bare open-count, never `.claude/blockers.md` entry text, matching the stated s
   evidence. Fix: wrap the source so it can't abort the caller, e.g. `set +e; . "$env_file"; local
   rc=$?; set -e; [ "$rc" -eq 0 ] || { printf '...skipping\n' >&2; return 0; }`.
 
-- [MEDIUM] [open] infra/azure/lib/monitor-ingest.sh:46,51 — neither the IMDS token request nor the
+- [MEDIUM] [deferred 0.25b] infra/azure/lib/monitor-ingest.sh:46,51 — neither the IMDS token request nor the
   DCE POST sets a `curl` timeout (`--max-time`/`--connect-timeout`). `heartbeat.sh` is started
   detached and unsupervised from `.githooks/post-commit` (`( ... & )`, no parent waits on it); if
   either `curl` call hangs on a network stall rather than failing outright, that backgrounded process
@@ -60,13 +80,13 @@ a bare open-count, never `.claude/blockers.md` entry text, matching the stated s
 
 ## Gate reproduction
 - `python3 -m unittest -v test_vm_heartbeat_and_alerts test_no_azure_identifiers` (from
-  `.claude/tests/`): 21/21 passed.
-- `python3 -m unittest discover -v .claude/tests` (repo root): 388/388 passed.
+  `.claude/tests/`): 21/21 passed (pre-fix); 390/390 on the full suite post-fix (see below).
+- `python3 -m unittest discover -v .claude/tests` (repo root): 390/390 passed, post-fix.
 - `python3 .githooks/secret-scan.py --all`: clean.
 - `python3 .claude/skills/merge-gate/merge_gate.py 0.25`: fails only on the pre-review checks this
   file resolves; no other failures once this file is present.
 
-Both findings are real but narrow in trigger (a malformed human-edited `monitor.env`, or a network
-stall) rather than routine-operation bugs, so they don't change the verdict to CHANGES_REQUESTED;
-left [open] for the lead to fix, defer, or mark [wontfix] with a decision entry per the merge gate's
-own rule (build plan rule 6).
+The HIGH finding above is fixed and re-verified. The two MEDIUM findings are real but narrow in
+trigger (a malformed human-edited `monitor.env`, or a network stall) rather than routine-operation
+bugs; deferred to board task `0.25b` per the merge gate's own rule (build plan rule 6) rather than
+holding up this merge, given the human's live-demo priority (6 Nov 2026).
