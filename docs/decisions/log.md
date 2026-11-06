@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 6 Nov 2026 · 9.9 live demo deployment: existing one-VM stack, no Vercel · decided by human (console) · risk: high
+Decided: Edmate's first public demo runs on the stack already built (`docker/compose.yaml` + Caddy, ADR 0001 "one VM"), reached over HTTPS via a new Azure VM named `edmate-app` (created with the existing `infra/azure/create-vm.sh`/`cloud-init.yaml` — no new VM-creation script was needed), its NSG open on 22 from the human's home IP only plus 80 and 443 from everywhere. Caddy terminates TLS for an `EDMATE_PUBLIC_HOST` set to a `sslip.io` hostname derived from the VM's public IP (Let's Encrypt via Caddy's automatic HTTPS, no DNS to configure). The VM's public IP and hostname are kept out of every committed file; `docs/live-demo.md` and `scripts/live-deploy.sh` take them from an environment variable or script argument, filled in by hand on the VM.
+Why: the whole stack (web, worker, Postgres+pgvector, Redis, MinIO) already runs as one Compose project per ADR 0001; moving any one piece to a managed service (e.g. Vercel for `web`) would require standing up separate managed services for the rest, for no benefit at demo stage. The VM already existed as infra Edmate's own scripts can create and redeploy, so reusing it is the smallest change that gets a real teacher/student slice onto a public URL.
+Alternatives: Vercel for `web` plus managed Postgres/Redis/S3 (rejected: four extra managed services, no existing automation, slower to stand up than the VM path already proven by task 0.24). A brand-new `infra/azure/create-app-vm.sh` script (rejected once the VM was confirmed created with the existing `create-vm.sh`: no new creation script was actually exercised, so none was written).
+Reversible: Yes — this is a demo deployment, not the production topology; revisit before a real pilot cohort.
+
+---
+
 ### 5 Nov 2026 · 7.2 closed with no new build (platform suites already at M7 target) · decided by lead · risk: low
 Decided: Task 7.2 ("grow platform suites to target sizes") is marked done with no new planner/builder run. Counts verified against the Evals table: leak 153/150, locked 200/200, safety 324/300, pedagogy 150/150, persona 100/100, advice 102/100 — every target already met or exceeded by the merged `7.2a`–`7.2e` subtasks. `accuracy` is out of scope for 7.2 (it's the per-agent suite 7.3 builds, not a platform suite).
 Why: All five subtasks (7.2a–7.2e) were already `done` on the board; re-checking the actual suite directories and `packages/evals` test run (2008 tests passed, every case has `reviewed_by`) showed nothing left to grow. Running a planner/builder against a task with no remaining work would be pure overhead.
