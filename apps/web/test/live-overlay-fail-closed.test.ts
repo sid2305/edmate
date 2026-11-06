@@ -62,10 +62,15 @@ describe('live overlay: S3_ALLOW_HTTP / AGE_NOTICE_ALLOW_UNSIGNED stay literal, 
   it('S3_ALLOW_HTTP=false (from the overlay) is accepted by the real production storage check', () => {
     // The merged container env the live stack actually produces: NODE_ENV=production (base
     // x-app-env) plus the overlay's literal 'false' and non-placeholder S3 settings.
+    const liveAllowHttp = literalValue(liveWeb, 'S3_ALLOW_HTTP');
+    // Guard against a regex-parsing regression silently turning this into a vacuous pass: if
+    // literalValue() ever failed to match, it'd return undefined, and undefined !== 'true' would
+    // still land on the fail-closed path below without actually exercising the overlay's value.
+    expect(liveAllowHttp).toBeDefined();
     expect(() =>
       storageConfigFromEnv({
         NODE_ENV: 'production',
-        S3_ALLOW_HTTP: literalValue(liveWeb, 'S3_ALLOW_HTTP'),
+        S3_ALLOW_HTTP: liveAllowHttp,
         S3_ENDPOINT: 'https://test.example.invalid/s3',
         S3_REGION: 'us-test-1',
         S3_ACCESS_KEY_ID: 'live-test-key',
