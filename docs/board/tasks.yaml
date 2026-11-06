@@ -4655,9 +4655,9 @@ tasks:
   deps:
   - '1.7'
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m13/1.7h-us-ssn-pii-pattern
+  model: plan:sonnet build:sonnet
 - id: '0.20'
   milestone: M7
   title: 'Harness tests time out under CI load (PR #118: route.accuracy at the 5 s default, runner.block at its own 3 s): a 20 s harness testTimeout and no explicit timeouts under 10 s, with no logic change'
