@@ -5,9 +5,11 @@ reachable from a public `https://` URL on the `edmate-app` VM instead of your ma
 member, the **demo teacher** and a **student**. The teacher uploads a short lesson. The student
 starts a package and asks about the lesson, and the tutor streams back a reply based on it.
 
-Every address in this guide is made up (`.test` and `.invalid` domains). Sign-in mail goes to
-Mailpit, the same local mail catcher `docs/try-it.md` uses — it never sends real email, and its web
-UI is reachable only over the tailnet, never the public internet.
+Sign-in mail on the live site goes out through Resend (human decision B-25; see
+`docs/setup/sign-in-mail-and-proxy.md`), not the local Mailpit sandbox `docs/try-it.md` uses — so,
+unlike that guide, the three accounts below need **real, deliverable addresses**, not made-up
+`.test`/`.invalid` ones. See the note in step 2 about which addresses actually work without a
+verified sending domain.
 
 ## 1. What you need
 
@@ -45,6 +47,8 @@ S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=<the second openssl output above>
 S3_SECRET_ACCESS_KEY=<the third openssl output above>
 S3_BUCKET=edmate-live
+EMAIL_SERVER=smtps://resend:<your Resend API key>@smtp.resend.com:465
+EMAIL_FROM=Edmate <onboarding@resend.dev>
 ```
 
 The four `S3_*` lines matter even though this stack's storage is just the `minio` container
@@ -55,12 +59,18 @@ requires real, non-default values for these — unlike the local dev stack, it r
 those placeholders by accident. Pick any values that aren't the dev defaults; the ones above are
 just as good as any other.
 
-Leave `EMAIL_SERVER` and `EMAIL_FROM` unset. The live demo keeps using Mailpit until a real mail
-provider exists (human decision; see `docs/setup/sign-in-mail-and-proxy.md`). Mailpit's own web UI
-stays bound to `127.0.0.1` on the VM, never public — see step 4 for how to reach it anyway.
+`EMAIL_SERVER`/`EMAIL_FROM` route sign-in mail through Resend (human decision B-25) instead of the
+local Mailpit sandbox `docs/try-it.md` uses. **Without a verified sending domain in Resend**,
+`onboarding@resend.dev` can only deliver to the Resend account's own owner — not to arbitrary
+addresses like the made-up `.test`/`.invalid` ones `docs/try-it.md` uses. Until a domain is
+verified (see `docs/setup/sign-in-mail-and-proxy.md`), use the Resend account owner's own real
+email address for every account you sign in as in step 5, not a made-up one. If you'd rather keep
+testing with made-up addresses, leave `EMAIL_SERVER`/`EMAIL_FROM` unset instead — the stack falls
+back to Mailpit, and step 4 below still applies in that case.
 
 Never paste any of these values anywhere else. If a value ever leaks, rotate it at the source
-(the Anthropic console for the API key); deleting it from the file isn't enough.
+(the Anthropic console for the API key, the Resend dashboard for the API key); deleting it from
+the file isn't enough.
 
 `EDMATE_PUBLIC_HOST` is also filled in by hand, but **not** in `docker/.env` — see step 3. Keeping
 it out of this file is deliberate: it's an environment variable or script argument only, so a
@@ -84,10 +94,15 @@ up to four minutes for `/api/health` to answer, and prints `live at: https://<yo
 is safe to rerun: a clean pull and `docker compose up -d --build` are both idempotent, and the
 script fails loudly (not silently) if the tree is dirty, diverged, or a required var is missing.
 
-## 4. Reach Mailpit to read sign-in links
+## 4. Read sign-in links
 
-Mailpit's web UI is bound to `127.0.0.1` on the VM, so read it over the tailnet with the same
-SSH port-forward pattern `docs/azure-vm.md` already uses for the VM's internal services:
+**If you set `EMAIL_SERVER`/`EMAIL_FROM` for Resend in step 2**: sign-in links arrive as real
+email. Check the inbox of whichever real address you used to sign in (the Resend account owner's
+address, per the note in step 2, unless a domain is verified).
+
+**If you left `EMAIL_SERVER`/`EMAIL_FROM` unset**: the stack falls back to Mailpit, whose web UI
+is bound to `127.0.0.1` on the VM. Read it over the tailnet with the same SSH port-forward pattern
+`docs/azure-vm.md` already uses for the VM's internal services:
 
 ```bash
 ssh -L 8025:127.0.0.1:8025 edmate@<your-vm-hostname>
@@ -97,13 +112,18 @@ Then open <http://127.0.0.1:8025> on your own machine.
 
 ## 5. Make a staff account, verify the teacher, upload, chat
 
-Same steps as `docs/try-it.md` §4-6, with the URL swapped to `https://<your-vm-hostname>` and
-sign-in mail read from the tailnet-forwarded Mailpit (step 4) instead of a local one:
+Same steps as `docs/try-it.md` §4-6, with the URL swapped to `https://<your-vm-hostname>`. If
+you're using Resend (step 2), sign in with the real address(es) from step 2's note instead of the
+made-up `staff@example.test`/`demo-teacher@example.invalid` addresses below — those only work if
+you left `EMAIL_SERVER`/`EMAIL_FROM` unset (Mailpit fallback). Read sign-in links per step 4.
 
-1. Open `https://<your-vm-hostname>/sign-in`, sign in as `staff@example.test`, grant the role with
-   `corepack pnpm --filter @edmate/db db:grant-role -- --email staff@example.test --role staff --by operator`.
-2. Sign in as `demo-teacher@example.invalid`, fill in the profile, then verify it as staff with
-   `corepack pnpm --filter @edmate/db db:verify-teacher -- --email demo-teacher@example.invalid --status verified --by <staff id>`.
+1. Open `https://<your-vm-hostname>/sign-in`, sign in as `staff@example.test` (or your real
+   address), grant the role with `corepack pnpm --filter @edmate/db db:grant-role -- --email
+   staff@example.test --role staff --by operator` (substitute the address you actually used).
+2. Sign in as `demo-teacher@example.invalid` (or your real address), fill in the profile, then
+   verify it as staff with `corepack pnpm --filter @edmate/db db:verify-teacher -- --email
+   demo-teacher@example.invalid --status verified --by <staff id>` (substitute the address you
+   actually used).
 3. Upload `docs/try-it/sample-lesson.md` from the teacher's uploads page; it should go
    **Processing** → **Ready** within a few seconds.
 4. In a private window, sign in as a student, pass the age check, start a package, and ask about
@@ -112,8 +132,8 @@ sign-in mail read from the tailnet-forwarded Mailpit (step 4) instead of a local
 ## 6. Smoke checklist
 
 - `https://<your-vm-hostname>/api/health` answers `200`.
-- Sign-in mail for each account arrives in Mailpit, read over the tailnet (step 4) — not over the
-  public internet.
+- Sign-in mail for each account arrives — in the real inbox via Resend, or in Mailpit over the
+  tailnet (step 4) — not over the public internet either way.
 - The teacher's upload goes **Processing** → **Ready**. If it doesn't, the MinIO bucket may be
   missing — this script deliberately does not create it (see the task's Decisions); run it by hand:
   `docker compose -f docker/compose.yaml -f docker/compose.live.yaml exec worker npm run storage:roundtrip`.

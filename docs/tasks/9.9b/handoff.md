@@ -115,3 +115,11 @@ hostname/secret scan on both files (same clean result as before — see above).
    `scripts/live-deploy.sh` itself is unchanged; only `docs/live-demo.md` grew a fuller step 2 and
    one new troubleshooting entry for the placeholder-rejection error. `EDMATE_PUBLIC_HOST` stays
    out of that block, in its own step 3, per decision 2 above — unchanged.
+8. **(Post-approval, lead) `docs/live-demo.md`'s `docker/.env` block also lists `EMAIL_SERVER` and
+   `EMAIL_FROM`, per B-25 (human decision, 21 Oct 2026): the live site's sign-in mail goes through
+   Resend, not the local Mailpit sandbox `docs/try-it.md` uses. The doc now says plainly that
+   without a verified sending domain in Resend, `onboarding@resend.dev` can only deliver to the
+   Resend account's own owner, and gives two paths: use the account owner's real address for every
+   demo account in step 5, or leave `EMAIL_SERVER`/`EMAIL_FROM` unset to fall back to Mailpit (step
+   4 covers both). Nothing in `scripts/live-deploy.sh` changed; the stack already read these two
+   vars the same way `docker/compose.yaml` does for `docs/try-it.md`.
