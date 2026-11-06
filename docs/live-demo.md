@@ -102,8 +102,8 @@ script fails loudly (not silently) if the tree is dirty, diverged, or a required
 The S3 API is served on `s3.<your-vm-hostname>` (`docker/Caddyfile.live`), not a path under the
 app's own host, so that part of the stack needs that subdomain to resolve too. If
 `<your-vm-hostname>` is an [sslip.io](https://sslip.io) address (the VM's own public IP with dots
-swapped for dashes, e.g. `20-186-28-171.sslip.io`), this needs nothing extra — sslip.io resolves
-any label prefix of the IP-based name to the same address, so `s3.20-186-28-171.sslip.io` already
+swapped for dashes, e.g. `203-0-113-10.sslip.io`), this needs nothing extra — sslip.io resolves
+any label prefix of the IP-based name to the same address, so `s3.203-0-113-10.sslip.io` already
 works. A real custom domain instead needs its own DNS record for the `s3.` subdomain pointing at
 the VM before running the script.
 

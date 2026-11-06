@@ -24,7 +24,7 @@
 # /s3/<bucket>/<key>, so a path-based proxy that strips the /s3 prefix before forwarding to MinIO
 # makes the signature no longer match what MinIO sees -- 403 SignatureDoesNotMatch. sslip.io
 # resolves any label prefix of an IP-based hostname, so this just works for an
-# EDMATE_PUBLIC_HOST like 20-186-28-171.sslip.io; Caddy auto-issues this block its own cert the
+# EDMATE_PUBLIC_HOST like 203-0-113-10.sslip.io; Caddy auto-issues this block its own cert the
 # same as the main one. A custom (non-sslip.io) EDMATE_PUBLIC_HOST needs its own DNS record for
 # this subdomain pointing at the VM. Default reverse_proxy does NOT rewrite Host, so MinIO sees
 # the same Host it was signed for -- do not add header_up Host here either.

@@ -27,7 +27,7 @@ edited.
      `reverse_proxy` doesn't rewrite Host, so MinIO sees exactly the Host it was signed for).
      Caddy auto-issues this block its own cert the same as the main one; sslip.io resolves any
      label prefix of an IP-based hostname, so an `EDMATE_PUBLIC_HOST` like
-     `20-186-28-171.sslip.io` needs no extra DNS work for `s3.20-186-28-171.sslip.io` to resolve.
+     `203-0-113-10.sslip.io` needs no extra DNS work for `s3.203-0-113-10.sslip.io` to resolve.
    - `docker/compose.live.yaml`: `web`/`worker`'s `S3_ENDPOINT` changed from
      `https://${EDMATE_PUBLIC_HOST}/s3` to `https://s3.${EDMATE_PUBLIC_HOST}`.
    - `caddy`'s `networks.default.aliases` gained a second entry, `s3.${EDMATE_PUBLIC_HOST}`,
