@@ -31,13 +31,13 @@ changes.
   resolves and all 9 tests pass; full `corepack pnpm turbo run typecheck lint test
   --filter=@edmate/web...` passes clean (34/34 tasks, exit 0).
 
-- [LOW] [open] apps/web/test/live-overlay-fail-closed.test.ts:62-76 — `literalValue()` returns
+- [LOW] [fixed] apps/web/test/live-overlay-fail-closed.test.ts:62-76 — `literalValue()` returns
   `string | undefined`; if its regex ever failed to match (returning `undefined`), the
   `S3_ALLOW_HTTP !== 'true'` branch in `storageConfigFromEnv` would still resolve to the fail-closed
   (https-only) path and this `it` would pass vacuously, masking a parsing regression rather than
-  catching it. Not exploitable today because the literal `'false'` value is independently asserted
-  elsewhere in the same file (line 48), so left open/non-blocking; worth a stricter (non-undefined)
-  assertion if this file is touched again.
+  catching it. Fixed in commit `b44f1d9a`: added `expect(liveAllowHttp).toBeDefined()` before the
+  value is used, so a future regex-parsing break now fails loudly instead of passing vacuously.
+  Re-verified: `npx vitest run test/live-overlay-fail-closed.test.ts` still 9/9 passed.
 
 ## Gate reproduction
 - `npx vitest run test/live-overlay-fail-closed.test.ts` (apps/web): 9/9 passed, post-fix.
