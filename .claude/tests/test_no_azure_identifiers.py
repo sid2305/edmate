@@ -18,10 +18,21 @@ EXCLUDED_DIR = AZURE_DIR / "test"
 GUID_RE = re.compile(r"\b[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b")
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 ONCALL_FILLED_RE = re.compile(r"\b(?:EDMATE_ONCALL_PHONE|EDMATE_ONCALL_EMAIL)=(\S.*)$")
+# Azure hostname-shaped string, e.g. a DCE's logs-ingestion endpoint
+# (<name>.<region>-1.ingest.monitor.azure.com) or a bare *.azure.com URL.
+AZURE_FQDN_RE = re.compile(r"\b[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.azure\.com\b", re.IGNORECASE)
 
 # 169.254.169.254 is Azure's fixed link-local IMDS address, the same on every subscription --
 # a documented platform constant, not a resource identifier (infra/azure/lib/monitor-ingest.sh).
 ALLOWED_IPV4 = {"169.254.169.254"}
+
+# monitor.azure.com is the fixed AAD token audience/resource URI for the Azure Monitor Logs
+# Ingestion API, the same on every subscription -- a documented platform constant, not a
+# resource identifier (infra/azure/lib/monitor-ingest.sh IMDS_TOKEN_URL). "2fmonitor.azure.com"
+# is the same constant as it appears percent-encoded in that URL (...%2Fmonitor.azure.com%2F) --
+# the trailing "2f" of the preceding %2F has no delimiter before "monitor" in the raw text, so
+# the hostname regex's match includes it.
+ALLOWED_AZURE_FQDN = {"monitor.azure.com", "2fmonitor.azure.com"}
 
 
 def scanned_files():
@@ -70,6 +81,37 @@ class NoAzureIdentifiers(unittest.TestCase):
             if ONCALL_FILLED_RE.search(line)
         ]
         self.assertEqual(hits, [], f"a filled-in EDMATE_ONCALL_PHONE/EDMATE_ONCALL_EMAIL value found: {hits}")
+
+    def test_no_azure_fqdn_hostname(self):
+        hits = [
+            f"{path.relative_to(ROOT)}:{n}: {m.group(0)}"
+            for path in scanned_files()
+            for n, line in enumerate(path.read_text().splitlines(), 1)
+            for m in AZURE_FQDN_RE.finditer(line)
+            if m.group(0).lower() not in ALLOWED_AZURE_FQDN
+        ]
+        self.assertEqual(hits, [], f"Azure hostname-shaped string found: {hits}")
+
+    def test_azure_fqdn_pattern_catches_real_examples(self):
+        # Regression guard for the regex itself (not the repo): these shapes must be caught
+        # if they ever appear outside the documented placeholder/constant allowlist.
+        caught = [
+            "https://edmate-prod-dce-xk29.eastus-1.ingest.monitor.azure.com",
+            "https://some-resource.monitor.azure.com/ingest",
+        ]
+        for example in caught:
+            self.assertTrue(
+                AZURE_FQDN_RE.search(example),
+                f"expected AZURE_FQDN_RE to catch {example!r}",
+            )
+
+        # The doc's own placeholder (angle-bracket tokens, not a real hostname) must not trip it.
+        placeholder = "https://<name>.<region>-1.ingest.monitor.azure.com"
+        match = AZURE_FQDN_RE.search(placeholder)
+        self.assertIsNotNone(match)
+        self.assertNotIn(match.group(0).lower(), ALLOWED_AZURE_FQDN)
+        # It matches the hostname shape (so a real value would be caught), but since the
+        # placeholder itself is never committed to a scanned file, scanned_files() never sees it.
 
     def test_scan_path_itself_is_not_silently_empty(self):
         # A regression guard for the scan helper, not the repo: if infra/azure/ or
