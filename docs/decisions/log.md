@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 5 Nov 2026 · 7.2 closed with no new build (platform suites already at M7 target) · decided by lead · risk: low
+Decided: Task 7.2 ("grow platform suites to target sizes") is marked done with no new planner/builder run. Counts verified against the Evals table: leak 153/150, locked 200/200, safety 324/300, pedagogy 150/150, persona 100/100, advice 102/100 — every target already met or exceeded by the merged `7.2a`–`7.2e` subtasks. `accuracy` is out of scope for 7.2 (it's the per-agent suite 7.3 builds, not a platform suite).
+Why: All five subtasks (7.2a–7.2e) were already `done` on the board; re-checking the actual suite directories and `packages/evals` test run (2008 tests passed, every case has `reviewed_by`) showed nothing left to grow. Running a planner/builder against a task with no remaining work would be pure overhead.
+Alternatives: Run the planner anyway to double-check (rejected: the file counts and test run are already the ground truth the planner would have used).
+Reversible: Yes — reopen 7.2 if a suite's floor rises again in a later milestone.
+
 ### 5 Nov 2026 · 11.4m mirroring the pinned ffmpeg tarball deferred (item 8) · decided by planner · risk: low
 Decided: `apps/worker/Dockerfile` keeps downloading the pinned ffmpeg source tarball from ffmpeg.org only; no mirror added, no change to `apps/worker/src/ingest/ffmpegBuild.test.ts` for this item.
 Why: The sha256 pin already catches tampering, so this is an availability-only risk, not a trust one. Mirroring is deferred until the worker image itself is published/distributed somewhere a mirror would matter — not yet true, the image is built straight from this Dockerfile on the VM today (confirmed: no registry push step exists in `.github/workflows` or `infra/`).

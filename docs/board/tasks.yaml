@@ -2410,10 +2410,10 @@ tasks:
   - 7.2c
   - 7.2d
   - 7.2e
-  status: todo
+  status: done
   risk: expert
   branch: null
-  model: plan:opus
+  model: plan:none build:none review:lead
 - id: '7.3'
   milestone: M7
   title: Per-agent suite generator from the question bank, teacher notes, approved drafts and the agent's packages
