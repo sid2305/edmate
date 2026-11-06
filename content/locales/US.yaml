@@ -24,7 +24,8 @@ reviewedOn: "2026-10-21"
 regulatedDisclaimers:
   investing: "Educational only; not investment advice."
 piiPatterns:
-  # pending human sign-off (task 1.7h): see docs/tasks/1.7h/plan.md and .claude/blockers.md (B-64).
+  # Signed by sid2305, 6 Nov 2026 (task 1.7h, B-67): the regex and the synthetic test values in
+  # docs/tasks/1.7h/handoff.md are approved as drafted.
   # SSN: the Social Security Administration's published numbering format, AAA-GG-SSSS (three
   # digits, two digits, four digits), covering hyphenated, spaced and bare forms, with
   # digit-boundary guards so a longer or shorter run never matches.

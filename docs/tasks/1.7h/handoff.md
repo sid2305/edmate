@@ -1,7 +1,8 @@
 # 1.7h handoff: US SSN PII pattern (locale pack, human-signed)
 
-Status: **DONE** (build); merge waits on the human's sign-off (B-64/blocker, raised separately by
-the lead).
+Status: **DONE**. Signed by sid2305, 6 Nov 2026 (B-67): the regex and the synthetic test values
+below are approved as drafted. `content/locales/US.yaml`'s comment and
+`packages/harness/src/testing/piiLocaleFixtures.ts`'s comment both carry the sign-off now.
 
 Branch: `m13/1.7h-us-ssn-pii-pattern`
 
@@ -9,8 +10,7 @@ Branch: `m13/1.7h-us-ssn-pii-pattern`
 Add one `piiPatterns` entry to `content/locales/US.yaml`: a US Social Security Number shape,
 mirroring `IN.yaml`'s `AADHAAR` pattern's shape and safe-regex reasoning. The acceptance has two
 halves: "an SSN in a student message is scrubbed" (proved by tests + a new eval case) and "the
-pattern is signed by a named human" (carried as a YAML comment, left as **pending human sign-off**
-by this build — the lead edits it in after the human answers).
+pattern is signed by a named human" (carried as a YAML comment — signed per B-67 above).
 
 ## The pattern (for the lead to put in the sign-off ask)
 
