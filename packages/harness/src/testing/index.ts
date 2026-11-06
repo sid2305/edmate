@@ -49,7 +49,12 @@ export {
   RETRIEVAL_CONTRACT,
   type RetrievalContractCase,
 } from './retrievalContract.js';
-export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
+export {
+  IN_PII_PATTERNS,
+  indiaLocalePackWithPii,
+  US_PII_PATTERNS,
+  usLocalePackWithPii,
+} from './piiLocaleFixtures.js';
 export { PII_SCRUB_CASES, type PiiScrubCase, piiScrubCaseFailures } from './piiScrubCases.js';
 export { type Prng, prng } from './prng.js';
 export {

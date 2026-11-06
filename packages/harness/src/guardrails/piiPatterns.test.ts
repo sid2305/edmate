@@ -2,7 +2,12 @@
 // it: every table row has a plain label, and only the label goes into the name.
 import { LIMITS, LocalePackSchema } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
-import { IN_PII_PATTERNS, indiaLocalePackWithPii } from '../testing/piiLocaleFixtures.js';
+import {
+  IN_PII_PATTERNS,
+  indiaLocalePackWithPii,
+  US_PII_PATTERNS,
+  usLocalePackWithPii,
+} from '../testing/piiLocaleFixtures.js';
 import {
   compileLocalePatterns,
   findPii,
@@ -467,6 +472,43 @@ describe('locale patterns', () => {
 
   it('a non-string source also fails closed', () => {
     expect(() => compileLocalePatterns([42 as unknown as string])).toThrow(PiiPatternError);
+  });
+});
+
+describe('US locale patterns', () => {
+  const US = compileLocalePatterns(usLocalePackWithPii.piiPatterns);
+  const scrubUs = (t: string): string => scrubPii(t, US).text;
+
+  it('parses as a LocalePack and compiles with the guard flags', () => {
+    expect(LocalePackSchema.parse(usLocalePackWithPii)).toEqual(usLocalePackWithPii);
+    expect(US.map((r) => r.flags)).toEqual(['gu']);
+    expect(Object.keys(US_PII_PATTERNS)).toEqual(['ssn']);
+  });
+
+  it.each(
+    each([
+      ['SSN-like, hyphenated', 'my SSN is 000-00-0000, ok', `my SSN is ${P.id}, ok`],
+      ['SSN-like, spaced', 'my SSN is 000 00 0000, ok', `my SSN is ${P.id}, ok`],
+      // Not all-zero (the generic constant-run guard, 4.2c item 8, skips a pure-digit locale
+      // match whose digits are all the same, e.g. "x = 9999999999"): area 000 is still an SSA
+      // "never issued" area number, so this stays a synthetic, never-real value.
+      ['SSN-like, bare/contiguous', 'ssn 000123456 ok', `ssn ${P.id} ok`],
+    ]),
+  )('$label', ({ input, expected }) => {
+    expect(scrubUs(input)).toBe(expected);
+  });
+
+  // Isolated boundary checks on the pattern itself (no generic categories involved): the
+  // wrong-grouping value is also phone-shaped, so it is still caught by the generic phone
+  // category further down the pipeline, but the SSN pattern specifically must not match any of
+  // these three.
+  it.each([
+    ['wrong grouping, phone-shaped 3-3-4', '000-000-0000'],
+    ['extra leading digit (lookbehind must block it)', '1000-00-0000'],
+    ['extra trailing digit (lookahead must block it)', '000-00-00001'],
+  ])('%s: the SSN pattern itself does not match', (_label, input) => {
+    const [ssn] = compileLocalePatterns([US_PII_PATTERNS.ssn]);
+    expect((ssn as RegExp).test(input)).toBe(false);
   });
 });
 
