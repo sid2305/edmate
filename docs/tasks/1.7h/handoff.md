@@ -110,15 +110,14 @@ $ python3 .githooks/secret-scan.py --all
 ```
 Only synthetic SSNs (`000`-prefixed, SSA "never issued") appear anywhere in the diff.
 
-## Decisions to log at merge (human name left blank until sign-off)
+## Decisions
 
-### 1.7h US SSN pattern added to the US locale pack · decided by sid2305 · risk: high
-
-- Decided: `content/locales/US.yaml` carries its first `piiPatterns` entry — an SSN shape
-  (`AAA-GG-SSSS`, citing the Social Security Administration's published numbering format),
-  covering hyphenated/spaced/bare forms with digit-boundary guards. Pattern:
-  `(?<!\d)\d{3}(?:\d{2}\d{4}| \d{2} \d{4}|-\d{2}-\d{4})(?!\d)`.
-- Why: CLAUDE.md reserves safety-content decisions like this for a named human, same as prompt
-  packs and skill templates; the pattern mirrors IN's already-shipped `AADHAAR` shape and passes
-  the same safe-regex structural and timing checks.
-- risk: high
+### 6 Nov 2026 · 1.7h US SSN pattern added to the US locale pack · decided by sid2305 · risk: high
+Decided: `content/locales/US.yaml` carries its first `piiPatterns` entry — an SSN shape
+(`AAA-GG-SSSS`, citing the Social Security Administration's published numbering format),
+covering hyphenated/spaced/bare forms with digit-boundary guards. Pattern:
+`(?<!\d)\d{3}(?:\d{2}\d{4}| \d{2} \d{4}|-\d{2}-\d{4})(?!\d)`.
+Why: CLAUDE.md reserves safety-content decisions like this for a named human, same as prompt
+packs and skill templates; the pattern mirrors IN's already-shipped `AADHAAR` shape and passes
+the same safe-regex structural and timing checks.
+risk: high

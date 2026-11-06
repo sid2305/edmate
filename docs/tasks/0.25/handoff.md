@@ -86,37 +86,28 @@ Status: DONE
 ## Decisions
 
 ### 6 Nov 2026 · 0.25 the shared-admin-user risk stays deferred, out of scope · decided by builder · risk: low
-- Decided: left `docs/azure-vm.md`'s "Known risks" bullet about moving the lead off the shared
-  `edmate` admin user exactly as it stands; did not fold that work into this task.
-- Why: the plan's "Open questions" flags this by name as a separate, larger change the board entry
-  for 0.25 never asked for (only heartbeat/alerts/watcher/budget). "Not done yet" now names it as
-  the one open item in that area so it isn't lost; a future task should pick it up.
+Decided: Left `docs/azure-vm.md`'s "Known risks" bullet about moving the lead off the shared `edmate` admin user exactly as it stands; did not fold that work into this task.
+Why: The plan's "Open questions" flags this by name as a separate, larger change the board entry for 0.25 never asked for (only heartbeat/alerts/watcher/budget). "Not done yet" now names it as the one open item in that area so it isn't lost; a future task should pick it up.
+Alternatives: Fold the admin-user migration into this task (rejected: out of scope for 0.25's board entry).
+Reversible: Yes.
 
 ### 6 Nov 2026 · 0.25 blockers-watch.sh's file path is overridable via EDMATE_BLOCKERS_FILE · decided by builder · risk: low
-- Decided: added an `EDMATE_BLOCKERS_FILE` override (default `<repo root>/.claude/blockers.md`),
-  matching the `EDMATE_MONITOR_ENV_FILE` override `heartbeat.sh` already has.
-- Why: the plan didn't name an env var for this, but the dry-run tests need to point the script at
-  a fixture without touching the real (local-only, untracked) `blockers.md`; this mirrors an
-  existing convention rather than inventing a new one.
+Decided: Added an `EDMATE_BLOCKERS_FILE` override (default `<repo root>/.claude/blockers.md`), matching the `EDMATE_MONITOR_ENV_FILE` override `heartbeat.sh` already has.
+Why: The plan didn't name an env var for this, but the dry-run tests need to point the script at a fixture without touching the real (local-only, untracked) `blockers.md`; this mirrors an existing convention rather than inventing a new one.
+Alternatives: Hardcode the path and skip dry-run test coverage (rejected: would leave the watcher untested against a real fixture).
+Reversible: Yes.
 
 ### 6 Nov 2026 · 0.25 docs use a plain env-var-export instruction, not inline VAR="value" · decided by builder · risk: low
-- Decided: `docs/azure-vm.md`'s phase-1b section tells the human to set `EDMATE_ONCALL_PHONE`/
-  `EDMATE_ONCALL_EMAIL` in their own shell first, rather than writing `EDMATE_ONCALL_EMAIL="<your
-  email>" some-script.sh` inline in the doc.
-- Why: `test_no_azure_identifiers.py`'s `ONCALL_FILLED_RE` (by design) flags the literal pattern
-  `EDMATE_ONCALL_EMAIL=`/`EDMATE_ONCALL_PHONE=` followed by any non-empty text, to catch a real
-  filled-in contact ever landing in the repo. A bracketed placeholder used inline as
-  `VAR="<placeholder>"` trips the same regex even though it's obviously a placeholder; rewording to
-  an export-first instruction avoids a false positive without weakening the check.
+Decided: `docs/azure-vm.md`'s phase-1b section tells the human to set `EDMATE_ONCALL_PHONE`/`EDMATE_ONCALL_EMAIL` in their own shell first, rather than writing `EDMATE_ONCALL_EMAIL="<your email>" some-script.sh` inline in the doc.
+Why: `test_no_azure_identifiers.py`'s `ONCALL_FILLED_RE` (by design) flags the literal pattern `EDMATE_ONCALL_EMAIL=`/`EDMATE_ONCALL_PHONE=` followed by any non-empty text, to catch a real filled-in contact ever landing in the repo. A bracketed placeholder used inline as `VAR="<placeholder>"` trips the same regex even though it's obviously a placeholder; rewording to an export-first instruction avoids a false positive without weakening the check.
+Alternatives: Weaken `ONCALL_FILLED_RE` to allow bracketed placeholders (rejected: a brittler, more exploitable check than rewording the doc).
+Reversible: Yes, doc-only.
 
-### 6 Nov 2026 · 0.25 risk: high (merge path) · decided by builder, pending lead confirmation at merge · risk: high
-- Decided: this task touches two risk-paths.txt groups (`.githooks/**` for the new `post-commit`
-  hook; `.claude/**` for `test_no_azure_identifiers.py`), both requiring security-reviewer; the
-  board already marks 0.25 `risk: risky`. Logging this here per rule 6/the plan's "Risky paths
-  touched" section so the merge gate's check 5 has an entry to find; nucleus should confirm (or
-  amend) this when review.md lands.
-- Why: rule 6 requires the handoff's `## Decisions` to carry a `### ... risk: high` entry before a
-  risky-path change can merge.
+### 6 Nov 2026 · 0.25 risk: high (merge path, both risk-paths.txt groups reviewed) · decided by builder, confirmed by lead at merge · risk: high
+Decided: This task touches two risk-paths.txt groups (`.githooks/**` for the new `post-commit` hook; `.claude/**` for `test_no_azure_identifiers.py`), both requiring security-reviewer; the board already marks 0.25 `risk: risky`. A fresh security-reviewer pass at merge time additionally found and the lead fixed a HIGH-severity gap in `test_no_azure_identifiers.py`'s own Azure-FQDN regex coverage (commit `e39b3bc6`); two pre-existing MEDIUM findings (monitor-ingest.sh `set -e` sourcing risk, missing curl timeouts) were deferred to board task `0.25b` given the live-demo priority.
+Why: Rule 6 requires the handoff's `## Decisions` to carry a `### ... risk: high` entry before a risky-path change can merge, naming the required reviewers and the merge-time outcome.
+Alternatives: Fix the two MEDIUM findings immediately (rejected: live-demo urgency; tracked instead as 0.25b).
+Reversible: Yes, the HIGH fix; the MEDIUM deferrals are tracked and reversible via 0.25b.
 
 ## Left to do
 

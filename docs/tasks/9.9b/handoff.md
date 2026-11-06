@@ -74,52 +74,50 @@ hostname/secret scan on both files (same clean result as before — see above).
 
 ## Decisions
 
-1. **Migrate/seed run the same way `docs/try-it.md` already does, against the VM's own loopback**:
-   `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres`
-   publishes Postgres on `127.0.0.1:55432` (loopback only — the VM's NSG has no inbound rule for it
-   anyway), then the script runs `db:migrate` and `pnpm seed` from the host exactly as try-it.md
-   does. No new in-container migration path is invented; the web/worker images are standalone
-   runtime images and don't carry the `@edmate/db` CLI.
-2. **`EDMATE_PUBLIC_HOST` comes only from `$1` or the `EDMATE_PUBLIC_HOST` shell env var**, never
-   from `docker/.env`, matching the accept line's exact wording ("an env var or script argument
-   only"). `AUTH_SECRET` and `EDMATE_ANTHROPIC_API_KEY` (the "secrets ... fills by hand on the VM")
-   are read from `docker/.env`, the existing convention in every other guide (`try-it.md`,
-   `azure-vm.md`). The script checks `docker/.env`'s ownership/permissions, then
-   `set -a; source <(sed 's/\r$//' docker/.env); set +a` (if the file exists), then re-exports
-   `EDMATE_PUBLIC_HOST="$HOST"` so a same-named key in the file can never win — see Round 2 fixes
-   #1-3 above.
-3. **Bucket creation (`storage:roundtrip`) is not in the script** — the task title lists exactly
-   "db:migrate and the docs/try-it.md demo seed", not storage. It is documented as an explicit
-   smoke-checklist step in `docs/live-demo.md` instead, so 9.9c's first real run surfaces a missing
-   bucket rather than the script silently doing something the title didn't ask for.
-4. **No shellcheck/test file is added.** The repo has no bash test convention: the two existing
-   scripts (`scripts/claude-backup.sh`, `infra/azure/start-lead.sh`) have no test file and
-   `.github/workflows/ci.yml` runs no shellcheck step. The builder runs `bash -n` and, if available,
-   `shellcheck` locally as its own verification, but does not wire either into CI — matching what's
-   already there, not inventing a new pattern.
-5. **Health check after `up -d --build` is a soft, bounded retry loop** (`curl -fsS
-   https://${EDMATE_PUBLIC_HOST}/api/health`, e.g. 24 tries / 5 s), that warns and still prints the
-   URL on timeout rather than exiting non-zero — 9.9c's whole job is to fix wiring from a first run
-   that may not be healthy yet, so the script must not die before printing the URL it needs.
-6. **Idempotency**: `git pull --ff-only origin main` (fails loudly, not silently, on a dirty tree
-   or diverged branch — the human/console fixes that by hand), `docker compose up -d --build` is
-   naturally rerunnable, `db:migrate` and `pnpm seed` are already idempotent per try-it.md. A
-   `corepack pnpm install` runs right after the pull so a dependency-changing commit doesn't surface
-   as a confusing module-resolution error in the migrate/seed steps (Round 2 fix #7).
-7. **(Post-approval, lead) `docs/live-demo.md`'s `docker/.env` block now lists all the human-filled
-   vars in one place**: `AUTH_SECRET`, `EDMATE_ANTHROPIC_API_KEY`, and the four `S3_*` vars
-   (`S3_REGION`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_BUCKET`), per a direct human
-   instruction that `EDMATE_ANTHROPIC_API_KEY` is the human's own key, filled by hand only — never
-   held by an agent, a doc, a message or a log — and that the doc must name every var and cover
-   B-69 (the live overlay must not fall back to the dev stack's placeholder S3 values).
-   `scripts/live-deploy.sh` itself is unchanged; only `docs/live-demo.md` grew a fuller step 2 and
-   one new troubleshooting entry for the placeholder-rejection error. `EDMATE_PUBLIC_HOST` stays
-   out of that block, in its own step 3, per decision 2 above — unchanged.
-8. **(Post-approval, lead) `docs/live-demo.md`'s `docker/.env` block also lists `EMAIL_SERVER` and
-   `EMAIL_FROM`, per B-25 (human decision, 21 Oct 2026): the live site's sign-in mail goes through
-   Resend, not the local Mailpit sandbox `docs/try-it.md` uses. The doc now says plainly that
-   without a verified sending domain in Resend, `onboarding@resend.dev` can only deliver to the
-   Resend account's own owner, and gives two paths: use the account owner's real address for every
-   demo account in step 5, or leave `EMAIL_SERVER`/`EMAIL_FROM` unset to fall back to Mailpit (step
-   4 covers both). Nothing in `scripts/live-deploy.sh` changed; the stack already read these two
-   vars the same way `docker/compose.yaml` does for `docs/try-it.md`.
+### 6 Nov 2026 · 9.9b migrate/seed reuse try-it.md's loopback Postgres pattern · decided by builder · risk: low
+Decided: `scripts/live-deploy.sh` publishes Postgres on `127.0.0.1:55432` via `packages/db/test/compose.port.yaml` and runs `db:migrate`/`pnpm seed` from the host, exactly as `docs/try-it.md` does.
+Why: The web/worker runtime images don't carry the `@edmate/db` CLI, so no new in-container migration path is needed.
+Alternatives: An in-container migration step (rejected: would need a new image variant for no gain).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b EDMATE_PUBLIC_HOST comes only from an env var or script argument · decided by builder · risk: low
+Decided: `EDMATE_PUBLIC_HOST` is read only from `$1` or the shell env var, never from `docker/.env`; `AUTH_SECRET`/`EDMATE_ANTHROPIC_API_KEY` still come from `docker/.env` as every other guide already does. The script re-exports `EDMATE_PUBLIC_HOST` after sourcing the file so a same-named key there can never win.
+Why: Matches the accept line's exact wording; a stale value left in `docker/.env` must never silently override the host the script was actually just told to use.
+Alternatives: Allow `docker/.env` to set it too (rejected: exactly the silent-override risk the accept line rules out).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b bucket creation left out of the deploy script · decided by builder · risk: low
+Decided: `storage:roundtrip` (MinIO bucket creation) is not run by `scripts/live-deploy.sh`; it's a documented manual smoke-check step in `docs/live-demo.md` instead.
+Why: The task title lists exactly "db:migrate and the docs/try-it.md demo seed", not storage; a missing bucket should surface as a visible first-run issue, not be silently papered over.
+Alternatives: Add it to the script (rejected: outside the task's stated scope).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b no shellcheck/test file added · decided by builder · risk: low
+Decided: No shellcheck or test file for `scripts/live-deploy.sh`; the builder ran `bash -n` and `shellcheck` locally but wired neither into CI.
+Why: Matches the repo's existing convention — neither `scripts/claude-backup.sh` nor `infra/azure/start-lead.sh` has a test file, and CI runs no shellcheck step today.
+Alternatives: Add a new CI shellcheck step (rejected: a repo-wide convention change, out of scope for this task).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b health check is a soft, bounded retry that never fails the script · decided by builder · risk: low
+Decided: After `up -d --build`, the script polls `/api/health` (e.g. 24 tries / 5s) and still prints the URL on timeout instead of exiting non-zero.
+Why: Task 9.9c's job is to fix wiring from a first run that may not be healthy yet, so the script must not die before printing the URL it needs.
+Alternatives: Exit non-zero on timeout (rejected: would block 9.9c's own diagnostic first run).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b idempotency via ff-only pull plus a reinstall · decided by builder · risk: low
+Decided: `git pull --ff-only origin main` fails loudly on a dirty/diverged tree; `corepack pnpm install` runs right after the pull so a dependency-changing commit doesn't surface as a confusing module-resolution error during migrate/seed.
+Why: `docker compose up -d --build`, `db:migrate` and `pnpm seed` are already idempotent per try-it.md; the pull/install steps needed the same guarantee made explicit.
+Alternatives: None — matches the existing idempotency pattern.
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b live-demo.md's env block lists every human-filled var, covers B-69 · decided by lead · risk: low
+Decided: `docs/live-demo.md`'s `docker/.env` block (post-approval amendment) now lists `AUTH_SECRET`, `EDMATE_ANTHROPIC_API_KEY` and the four `S3_*` vars in one place, states `EDMATE_ANTHROPIC_API_KEY` is the human's own key filled by hand only, and explains why the `S3_*` vars must be non-default (B-69: the live overlay must not fall back to the dev stack's placeholder S3 values).
+Why: Direct human instruction naming the exact vars and the B-69 requirement.
+Alternatives: None — a direct instruction.
+Reversible: Yes, doc-only.
+
+### 6 Nov 2026 · 9.9b live-demo.md's env block adds Resend vars per B-25 · decided by lead · risk: low
+Decided: `docs/live-demo.md`'s `docker/.env` block also lists `EMAIL_SERVER`/`EMAIL_FROM` (Resend), with the verified-domain caveat and a Mailpit-fallback option.
+Why: B-25 (human decision, 21 Oct 2026): the live site's sign-in mail goes through Resend, not Mailpit.
+Alternatives: None — a direct instruction.
+Reversible: Yes, doc-only.
