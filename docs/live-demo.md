@@ -13,9 +13,12 @@ verified sending domain.
 
 ## 1. What you need
 
-- SSH access to `edmate-app`. Nothing else — no local Docker, no local Node.
-- The VM already has a clean checkout of this repo and Docker running (see `docs/azure-vm.md` for
-  how the VM itself was provisioned; that is a one-time step, not part of this guide).
+- SSH access to `edmate-app`. Nothing else on your own machine — no local Docker, no local Node.
+- The VM already has a clean checkout of this repo, Docker, and Node 22 via nvm (see
+  `docs/azure-vm.md` for how the VM itself was provisioned; that is a one-time step, not part of
+  this guide). `scripts/live-deploy.sh` runs `pnpm install`/build/migrate/seed on the VM's own
+  Node, not inside a container, and loads nvm itself so that works over a non-interactive SSH
+  session.
 
 ## 2. Fill in `docker/.env` by hand on the VM
 
@@ -43,7 +46,7 @@ file needs to change):
 ```
 AUTH_SECRET=<the first openssl output above>
 EDMATE_ANTHROPIC_API_KEY=<your Anthropic key>
-S3_REGION=us-east-1
+S3_REGION=us-east-2
 S3_ACCESS_KEY_ID=<the second openssl output above>
 S3_SECRET_ACCESS_KEY=<the third openssl output above>
 S3_BUCKET=edmate-live
@@ -55,9 +58,11 @@ The four `S3_*` lines matter even though this stack's storage is just the `minio
 running on the VM, not a third-party bucket: the live overlay (`docker/compose.live.yaml`)
 requires real, non-default values for these — unlike the local dev stack, it refuses to start
 `web`/`worker` with the dev placeholder values `docker/compose.yaml` otherwise defaults to
-(`edmate-dev` / `edmate-dev-storage` / `edmate-dev`), so the live demo can never end up running on
-those placeholders by accident. Pick any values that aren't the dev defaults; the ones above are
-just as good as any other.
+(`us-east-1` / `edmate-dev` / `edmate-dev-storage` / `edmate-dev`), so the live demo can never end
+up running on those placeholders by accident. Pick any values that aren't the dev defaults; the
+ones above are just as good as any other. MinIO itself ignores `S3_REGION` entirely — it only
+needs to not equal the dev stack's own default (`us-east-1`), so `us-east-2` above is just a
+convenient, clearly-non-default placeholder, not a meaningful setting.
 
 `EMAIL_SERVER`/`EMAIL_FROM` route sign-in mail through Resend (human decision B-25) instead of the
 local Mailpit sandbox `docs/try-it.md` uses. **Without a verified sending domain in Resend**,
@@ -93,6 +98,14 @@ The script pulls `main`, builds and starts the live stack, migrates and seeds th
 up to four minutes for `/api/health` to answer, and prints `live at: https://<your-vm-hostname>`. It
 is safe to rerun: a clean pull and `docker compose up -d --build` are both idempotent, and the
 script fails loudly (not silently) if the tree is dirty, diverged, or a required var is missing.
+
+The S3 API is served on `s3.<your-vm-hostname>` (`docker/Caddyfile.live`), not a path under the
+app's own host, so that part of the stack needs that subdomain to resolve too. If
+`<your-vm-hostname>` is an [sslip.io](https://sslip.io) address (the VM's own public IP with dots
+swapped for dashes, e.g. `20-186-28-171.sslip.io`), this needs nothing extra — sslip.io resolves
+any label prefix of the IP-based name to the same address, so `s3.20-186-28-171.sslip.io` already
+works. A real custom domain instead needs its own DNS record for the `s3.` subdomain pointing at
+the VM before running the script.
 
 ## 4. Read sign-in links
 

@@ -1,6 +1,7 @@
-# Live overlay (task 9.9a): on top of docker/compose.yaml's one-VM stack, turns on Caddy's
-# automatic HTTPS and routes MinIO's S3 API through the same public host. Apply together with the
-# base file, never alone:
+# Live overlay (task 9.9a; S3 wiring fixed in 9.9c): on top of docker/compose.yaml's one-VM
+# stack, turns on Caddy's automatic HTTPS and routes MinIO's S3 API through its own public
+# hostname (s3.${EDMATE_PUBLIC_HOST}, docker/Caddyfile.live). Apply together with the base file,
+# never alone:
 #
 #   docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build
 #
@@ -15,11 +16,14 @@ services:
   web:
     environment:
       AUTH_URL: https://${EDMATE_PUBLIC_HOST:?EDMATE_PUBLIC_HOST must be set}
-      # Routes the web container's own S3 calls, and the browser's signed PUT, through the same
-      # public host via Caddy's /s3 path (docker/Caddyfile.live): same-origin for the browser (no
-      # MinIO CORS dependency) and Caddy's default reverse_proxy does not rewrite Host, so MinIO's
-      # SigV4 check still passes.
-      S3_ENDPOINT: https://${EDMATE_PUBLIC_HOST}/s3
+      # Routes the web container's own S3 calls, and the browser's signed PUT, to MinIO's own
+      # public hostname (docker/Caddyfile.live's s3.${EDMATE_PUBLIC_HOST} site block), not a path
+      # on the app's own host: SigV4 signs the full canonical path including /s3/<bucket>/<key>,
+      # so a path-stripping proxy (the previous design) made the signature MinIO saw not match,
+      # 403 SignatureDoesNotMatch. Caddy's default reverse_proxy does not rewrite Host, so MinIO's
+      # SigV4 check still passes. This is cross-origin from the app for the browser now, so
+      # MinIO's own CORS_ALLOW_ORIGIN below must explicitly allow the app's origin.
+      S3_ENDPOINT: https://s3.${EDMATE_PUBLIC_HOST}
       # Literal 'false', not ${S3_ALLOW_HTTP:-false}: Compose merges environment maps key by key,
       # last file wins, so a defaulted override would still let a shell-exported
       # S3_ALLOW_HTTP=true leak through. A literal here is the only thing that can't be reopened
@@ -34,15 +38,15 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
       S3_BUCKET: ${S3_BUCKET}
       # Overrides the base's dev-only http://localhost:... value to functionally unset (the app
-      # treats an empty string the same as unset): the same public host now serves both the app
-      # and S3 (S3_ENDPOINT above), so there is no separate public endpoint for the browser to
-      # reach, and leaving the base's http value in effect would fail the production https-only
-      # check at startup.
+      # treats an empty string the same as unset): S3_ENDPOINT above is already a publicly
+      # resolvable hostname (real DNS for the browser, the caddy network alias for containers),
+      # so there is no separate public endpoint to name, and leaving the base's http value in
+      # effect would fail the production https-only check at startup.
       S3_PUBLIC_ENDPOINT: ''
 
   worker:
     environment:
-      S3_ENDPOINT: https://${EDMATE_PUBLIC_HOST}/s3
+      S3_ENDPOINT: https://s3.${EDMATE_PUBLIC_HOST}
       S3_REGION: ${S3_REGION}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
@@ -54,6 +58,12 @@ services:
       # credentials are never the dev placeholders either.
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+      # S3 now lives on its own hostname (s3.${EDMATE_PUBLIC_HOST}), so the browser's presigned
+      # PUT is cross-origin from the app (https://${EDMATE_PUBLIC_HOST}) for the first time:
+      # MinIO's own CORS check must allow that origin explicitly. Overrides (not extends) the
+      # base file's dev-only ${AUTH_URL:-http://localhost:8080},http://localhost:3000 value, which
+      # resolves against the host shell's AUTH_URL (normally unset), not web's own computed one.
+      MINIO_API_CORS_ALLOW_ORIGIN: https://${EDMATE_PUBLIC_HOST}
 
   caddy:
     # Additive: Compose unions ports lists across -f files, so the base's 127.0.0.1:8080:80
@@ -69,9 +79,11 @@ services:
     volumes:
       - ./Caddyfile.live:/etc/caddy/Caddyfile:ro
     # No top-level networks: key needed: the base file uses the implicit default network, and this
-    # just adds an alias to it, so internal web/worker -> Caddy calls match the public hostname's
-    # TLS SNI/Host without relying on the VM's real internet path or cloud hairpin NAT.
+    # just adds aliases to it, so internal web/worker -> Caddy calls (for both the app's own host
+    # and the new s3. host) match the public hostname's TLS SNI/Host without relying on the VM's
+    # real internet path or cloud hairpin NAT.
     networks:
       default:
         aliases:
           - ${EDMATE_PUBLIC_HOST}
+          - s3.${EDMATE_PUBLIC_HOST}
