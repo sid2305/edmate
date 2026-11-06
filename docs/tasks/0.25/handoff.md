@@ -127,5 +127,6 @@ above (plus any from review) to `docs/decisions/log.md`.
 
 ## Budget
 
-Tool calls used: ~210 (not programmatically counted on this host; in line with the plan's 220-call
-cap across both phases — Phase A landed close to its ~130 estimate, Phase B close to its ~90).
+Tool calls used: 210 (approximate -- not programmatically counted on this host; in line with the
+plan's 220-call cap across both phases, Phase A close to its ~130 estimate and Phase B close to
+its ~90).
