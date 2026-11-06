@@ -1,0 +1,17 @@
+# A non-LLM, systemd-timer port of the watcher: see infra/azure/blockers-watch.sh and
+# docs/azure-vm.md phase 1b. Needs monitor.env to post anything (ConditionPathExists on the timer's
+# own install step); without it this unit still runs and simply has nothing to post.
+[Unit]
+Description=Edmate blockers watch (check .claude/blockers.md, post a count if anything is open)
+After=network-online.target
+ConditionPathExists=%h/.config/edmate/monitor.env
+
+[Service]
+Type=oneshot
+User=edmate
+Group=edmate
+WorkingDirectory=/opt/edmate
+ExecStart=/opt/edmate/infra/azure/blockers-watch.sh
+
+[Install]
+WantedBy=multi-user.target

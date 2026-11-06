@@ -104,14 +104,84 @@ To stop it: `sudo systemctl stop edmate-lead.service`. To change what the lead i
 add Claude flags, put `EDMATE_LEAD_PROMPT` or `EDMATE_LEAD_ARGS` in a drop-in:
 `sudo systemctl edit edmate-lead.service`, then an `[Service]` block with `Environment=` lines.
 
-## 5. Move the console and watcher (when you are ready)
+## 5. Wire up Monitor alerts (phase 1b)
 
-Your own console session can keep running on the Mac. The blockers watcher is a Claude session
-today; run it on the VM the same way as the lead (`tmux new -s watcher`, `claude --remote-control
-edmate-watcher`), or leave it on the Mac until the Mac's role ends. Once everything runs on the VM,
-retire the Mac's `caffeinate` and its copy of the worktrees.
+Board task 0.25. Run these once, from your Mac where `az login` already ran (step 1) — same
+subscription, no VM access needed except to drop `monitor.env` in place. Every script below
+supports `DRY_RUN=1` to print the `az` command instead of running it; none of it reads or writes a
+real identifier into the repo (`.claude/tests/test_no_azure_identifiers.py` enforces that on every
+PR).
 
-## 6. Day to day
+```bash
+infra/azure/monitor-setup.sh
+```
+creates (if missing) a Log Analytics workspace, a Data Collection Endpoint and Rule with a custom
+table `EdmateHeartbeat_CL`, and grants the VM's managed identity the "Monitoring Metrics Publisher"
+role on the DCR. It prints a DCE endpoint, a DCR immutable id and a stream name at the end — paste
+those three into `monitor.env` on the VM, never into the repo:
+
+```bash
+ssh edmate@$(infra/azure/create-vm.sh ip)
+mkdir -p ~/.config/edmate && chmod 700 ~/.config/edmate
+cp /opt/edmate/scripts/monitor.env.example ~/.config/edmate/monitor.env
+chmod 600 ~/.config/edmate/monitor.env
+nano ~/.config/edmate/monitor.env          # fill in the three values monitor-setup.sh printed
+exit
+```
+
+Back on your Mac, create the on-call action group and the two alert rules. Set `EDMATE_ONCALL_PHONE`
+and `EDMATE_ONCALL_EMAIL` in your own shell first (your phone, country code and all, and your
+email — the script refuses to run without them, and never defaults to or logs a value since none
+is ever known to it ahead of time):
+
+```bash
+infra/azure/monitor-action-group.sh
+infra/azure/monitor-vm-down-alert.sh        # fires if the VM itself goes unreachable, 5-minute window
+infra/azure/monitor-heartbeat-alert.sh      # fires if EdmateHeartbeat_CL has had no row for 2 hours
+```
+
+The heartbeat row itself comes from `.githooks/post-commit`, already active on the VM's clone
+(`core.hooksPath .githooks`, set by cloud-init): every commit that touches `docs/board/tasks.yaml`
+calls `infra/azure/heartbeat.sh` in the background, which writes a local timestamp file and, once
+`monitor.env` exists, one row to `EdmateHeartbeat_CL`. A missing `monitor.env` or a failed Monitor
+write never fails the commit — it only affects whether the alert above has anything to watch.
+
+Add the budget alert (same subscription, from your Mac). With `EDMATE_ONCALL_EMAIL` still set from
+above:
+
+```bash
+infra/azure/monitor-budget-alert.sh
+```
+Notifies that address at 50/80/100% of `EDMATE_MONTHLY_CREDIT` (default 90, matching the
+Standard_D2s_v5 estimate above; override it if your VM size or disk differ). Skim `az consumption
+budget create --help` first — its flags have moved between `az` versions.
+
+The watcher (§6 below) ships as two systemd units, `edmate-blockers-watch.service` and
+`edmate-blockers-watch.timer`. A VM created after this task merges already has them (cloud-init
+copies and enables the timer; its service only fires once `monitor.env` exists, same
+`ConditionPathExists` pattern as `edmate-stack.service`). An **already-created 0.24 VM** needs them
+copied in by hand, once, since cloud-init only runs on first boot:
+
+```bash
+ssh edmate@$(infra/azure/create-vm.sh ip)
+cd /opt/edmate && git pull
+sudo cp infra/azure/edmate-blockers-watch.service infra/azure/edmate-blockers-watch.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now edmate-blockers-watch.timer
+systemctl list-timers edmate-blockers-watch.timer   # shows the next 2-hour-window firing
+```
+
+## 6. The watcher: now a timer, not a session
+
+`infra/azure/blockers-watch.sh` ports the watcher's old cadence exactly (every 2 hours, 8am–11pm
+Pacific) and its trigger (an unresolved `### B-` entry under `.claude/blockers.md`'s `## Open`
+heading) without an LLM in the loop: the timer runs it, and when something is open it posts one
+Monitor row with a bare count (`"blocker:N"`), never the entry text — `.claude/blockers.md` is
+local-only and may hold business context that must never reach a cloud log. Your own console
+session keeps running on the Mac either way; once everything else runs on the VM too, retire the
+Mac's `caffeinate` and its copy of the worktrees.
+
+## 7. Day to day
 
 | Want | Do |
 | --- | --- |
@@ -138,7 +208,8 @@ retire the Mac's `caffeinate` and its copy of the worktrees.
 
 ## Not done yet
 
-- Azure Monitor alerts (VM down, lead idle) and a heartbeat line: board task 0.25.
+- Moving the lead off the shared `edmate` admin user (see Known risks) — not yet assigned a task
+  number.
 - Foundry through the managed identity is wired but untested until the role assignment above runs:
   board task 0.26.
 - A pool of VMs (0.27) only once each VM has its own model budget.

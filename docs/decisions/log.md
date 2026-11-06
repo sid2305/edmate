@@ -10,6 +10,143 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 6 Nov 2026 · 0.25 risk: high (merge path, both risk-paths.txt groups reviewed) · decided by builder, confirmed by lead at merge · risk: high
+Decided: This task touches two risk-paths.txt groups (`.githooks/**` for the new `post-commit` hook; `.claude/**` for `test_no_azure_identifiers.py`), both requiring security-reviewer; the board already marks 0.25 `risk: risky`. A fresh security-reviewer pass at merge time additionally found and the lead fixed a HIGH-severity gap in `test_no_azure_identifiers.py`'s own Azure-FQDN regex coverage (commit `e39b3bc6`); two pre-existing MEDIUM findings (monitor-ingest.sh `set -e` sourcing risk, missing curl timeouts) were deferred to board task `0.25b` given the live-demo priority.
+Why: Rule 6 requires the handoff's `## Decisions` to carry a `### ... risk: high` entry before a risky-path change can merge, naming the required reviewers and the merge-time outcome.
+Alternatives: Fix the two MEDIUM findings immediately (rejected: live-demo urgency; tracked instead as 0.25b).
+Reversible: Yes, the HIGH fix; the MEDIUM deferrals are tracked and reversible via 0.25b.
+
+### 6 Nov 2026 · 0.25 docs use a plain env-var-export instruction, not inline VAR="value" · decided by builder · risk: low
+Decided: `docs/azure-vm.md`'s phase-1b section tells the human to set `EDMATE_ONCALL_PHONE`/`EDMATE_ONCALL_EMAIL` in their own shell first, rather than writing `EDMATE_ONCALL_EMAIL="<your email>" some-script.sh` inline in the doc.
+Why: `test_no_azure_identifiers.py`'s `ONCALL_FILLED_RE` (by design) flags the literal pattern `EDMATE_ONCALL_EMAIL=`/`EDMATE_ONCALL_PHONE=` followed by any non-empty text, to catch a real filled-in contact ever landing in the repo. A bracketed placeholder used inline as `VAR="<placeholder>"` trips the same regex even though it's obviously a placeholder; rewording to an export-first instruction avoids a false positive without weakening the check.
+Alternatives: Weaken `ONCALL_FILLED_RE` to allow bracketed placeholders (rejected: a brittler, more exploitable check than rewording the doc).
+Reversible: Yes, doc-only.
+
+### 6 Nov 2026 · 0.25 blockers-watch.sh's file path is overridable via EDMATE_BLOCKERS_FILE · decided by builder · risk: low
+Decided: Added an `EDMATE_BLOCKERS_FILE` override (default `<repo root>/.claude/blockers.md`), matching the `EDMATE_MONITOR_ENV_FILE` override `heartbeat.sh` already has.
+Why: The plan didn't name an env var for this, but the dry-run tests need to point the script at a fixture without touching the real (local-only, untracked) `blockers.md`; this mirrors an existing convention rather than inventing a new one.
+Alternatives: Hardcode the path and skip dry-run test coverage (rejected: would leave the watcher untested against a real fixture).
+Reversible: Yes.
+
+### 6 Nov 2026 · 0.25 the shared-admin-user risk stays deferred, out of scope · decided by builder · risk: low
+Decided: Left `docs/azure-vm.md`'s "Known risks" bullet about moving the lead off the shared `edmate` admin user exactly as it stands; did not fold that work into this task.
+Why: The plan's "Open questions" flags this by name as a separate, larger change the board entry for 0.25 never asked for (only heartbeat/alerts/watcher/budget). "Not done yet" now names it as the one open item in that area so it isn't lost; a future task should pick it up.
+Alternatives: Fold the admin-user migration into this task (rejected: out of scope for 0.25's board entry).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9a review found the new fail-closed test was never wired into vitest · decided by lead · risk: low
+Decided: `apps/web/vitest.config.ts`'s `include` array was missing the new `test/live-overlay-fail-closed.test.ts`, so B-69's guarantee had zero automated coverage despite the handoff's claim otherwise; added it to `include` (commit `06ca9e07`) and separately hardened one assertion that could pass vacuously on a parsing regression (commit `b44f1d9a`).
+Why: Code-reviewer found the gap during the pre-merge review; both fixes were re-verified (9/9 tests, full suite green) before merge.
+Alternatives: None — a real coverage gap, not a design choice.
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9a B-69 fail-closed test covers both the overlay and the app layer independently · decided by lead, human addition during build · risk: low
+Decided: Keep the overlay's credential requirement as a second, independent layer behind `storageConfigFromEnv`'s own placeholder guard, not a replacement for it — the test file asserts both layers explicitly (the overlay's bare `${VAR}` form, and the app's throw on dev-default values).
+Why: The human flagged that the overlay must not depend on the app-level guard by itself.
+Alternatives: Rely on the app-level guard alone (rejected: direct human instruction against single-layer coverage).
+Reversible: Yes, documentation and test coverage only.
+
+### 6 Nov 2026 · 9.9a S3_PUBLIC_ENDPOINT is explicitly set to '' in the overlay, not omitted · decided by builder · risk: low
+Decided: `web.environment.S3_PUBLIC_ENDPOINT` is explicitly set to `''` (empty string) in the overlay, rather than omitted from the overlay's `environment` map entirely.
+Why: Compose merges `environment` maps key by key, last file wins — an omitted key keeps the base file's dev value (`http://localhost:9000`) in effect, which would then fail the https-only check at startup under the overlay's own `S3_ALLOW_HTTP: 'false'`. An explicit empty string is treated as absent by `presign.ts`, achieving the plan's stated "unset beats stale" intent given Compose's per-key merge semantics.
+Alternatives: Omit the key (rejected: silently inherits the base file's dev value and crashes the live stack at startup).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9a live overlay requires non-default S3 credentials with no fallback · decided by builder · risk: low
+Decided: `docker/compose.live.yaml` requires `S3_REGION`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_BUCKET` from `docker/.env` with no default, even though the task title doesn't name them.
+Why: Sidesteps the dev-placeholder detection question regardless of its root cause, and a live deploy should never reuse the dev MinIO credentials anyway.
+Alternatives: Leave the base file's defaults in place (rejected: would let the live stack silently use dev MinIO credentials).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9a S3 traffic goes through the app's own public host on a /s3 path · decided by builder · risk: high
+Decided: Route both the browser's upload PUT and web/worker's own S3 traffic through the same public host via a `/s3` path on Caddy (`docker/Caddyfile.live`), overriding `S3_ENDPOINT` itself rather than a separate `S3_PUBLIC_ENDPOINT`.
+Why: Both apps' fail-closed checks apply the https-only rule to `S3_ENDPOINT` directly; same-origin removes any MinIO CORS dependency.
+Alternatives: A separate `S3_PUBLIC_ENDPOINT` host (rejected: more moving parts, doesn't remove the CORS dependency).
+Reversible: Yes, but flagged high risk as a new network path for signed storage traffic (the 6 Nov 2026 hosting decision's own flagged risk area) — superseded by 9.9c's fix moving S3 to its own subdomain instead.
+
+### 6 Nov 2026 · 1.7h US SSN pattern added to the US locale pack · decided by human (sid2305) · risk: high
+Decided: `content/locales/US.yaml` carries its first `piiPatterns` entry — an SSN shape
+(`AAA-GG-SSSS`, citing the Social Security Administration's published numbering format),
+covering hyphenated/spaced/bare forms with digit-boundary guards. Pattern:
+`(?<!\d)\d{3}(?:\d{2}\d{4}| \d{2} \d{4}|-\d{2}-\d{4})(?!\d)`.
+Why: CLAUDE.md reserves safety-content decisions like this for a named human, same as prompt
+packs and skill templates; the pattern mirrors IN's already-shipped `AADHAAR` shape and passes
+the same safe-regex structural and timing checks.
+risk: high
+
+### 6 Nov 2026 · 9.9b live-demo.md's env block adds Resend vars per B-25 · decided by lead · risk: low
+Decided: `docs/live-demo.md`'s `docker/.env` block also lists `EMAIL_SERVER`/`EMAIL_FROM` (Resend), with the verified-domain caveat and a Mailpit-fallback option.
+Why: B-25 (human decision, 21 Oct 2026): the live site's sign-in mail goes through Resend, not Mailpit.
+Alternatives: None — a direct instruction.
+Reversible: Yes, doc-only.
+
+### 6 Nov 2026 · 9.9b live-demo.md's env block lists every human-filled var, covers B-69 · decided by lead · risk: low
+Decided: `docs/live-demo.md`'s `docker/.env` block (post-approval amendment) now lists `AUTH_SECRET`, `EDMATE_ANTHROPIC_API_KEY` and the four `S3_*` vars in one place, states `EDMATE_ANTHROPIC_API_KEY` is the human's own key filled by hand only, and explains why the `S3_*` vars must be non-default (B-69: the live overlay must not fall back to the dev stack's placeholder S3 values).
+Why: Direct human instruction naming the exact vars and the B-69 requirement.
+Alternatives: None — a direct instruction.
+Reversible: Yes, doc-only.
+
+### 6 Nov 2026 · 9.9b idempotency via ff-only pull plus a reinstall · decided by builder · risk: low
+Decided: `git pull --ff-only origin main` fails loudly on a dirty/diverged tree; `corepack pnpm install` runs right after the pull so a dependency-changing commit doesn't surface as a confusing module-resolution error during migrate/seed.
+Why: `docker compose up -d --build`, `db:migrate` and `pnpm seed` are already idempotent per try-it.md; the pull/install steps needed the same guarantee made explicit.
+Alternatives: None — matches the existing idempotency pattern.
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b health check is a soft, bounded retry that never fails the script · decided by builder · risk: low
+Decided: After `up -d --build`, the script polls `/api/health` (e.g. 24 tries / 5s) and still prints the URL on timeout instead of exiting non-zero.
+Why: Task 9.9c's job is to fix wiring from a first run that may not be healthy yet, so the script must not die before printing the URL it needs.
+Alternatives: Exit non-zero on timeout (rejected: would block 9.9c's own diagnostic first run).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b no shellcheck/test file added · decided by builder · risk: low
+Decided: No shellcheck or test file for `scripts/live-deploy.sh`; the builder ran `bash -n` and `shellcheck` locally but wired neither into CI.
+Why: Matches the repo's existing convention — neither `scripts/claude-backup.sh` nor `infra/azure/start-lead.sh` has a test file, and CI runs no shellcheck step today.
+Alternatives: Add a new CI shellcheck step (rejected: a repo-wide convention change, out of scope for this task).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b bucket creation left out of the deploy script · decided by builder · risk: low
+Decided: `storage:roundtrip` (MinIO bucket creation) is not run by `scripts/live-deploy.sh`; it's a documented manual smoke-check step in `docs/live-demo.md` instead.
+Why: The task title lists exactly "db:migrate and the docs/try-it.md demo seed", not storage; a missing bucket should surface as a visible first-run issue, not be silently papered over.
+Alternatives: Add it to the script (rejected: outside the task's stated scope).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b EDMATE_PUBLIC_HOST comes only from an env var or script argument · decided by builder · risk: low
+Decided: `EDMATE_PUBLIC_HOST` is read only from `$1` or the shell env var, never from `docker/.env`; `AUTH_SECRET`/`EDMATE_ANTHROPIC_API_KEY` still come from `docker/.env` as every other guide already does. The script re-exports `EDMATE_PUBLIC_HOST` after sourcing the file so a same-named key there can never win.
+Why: Matches the accept line's exact wording; a stale value left in `docker/.env` must never silently override the host the script was actually just told to use.
+Alternatives: Allow `docker/.env` to set it too (rejected: exactly the silent-override risk the accept line rules out).
+Reversible: Yes.
+
+### 6 Nov 2026 · 9.9b migrate/seed reuse try-it.md's loopback Postgres pattern · decided by builder · risk: low
+Decided: `scripts/live-deploy.sh` publishes Postgres on `127.0.0.1:55432` via `packages/db/test/compose.port.yaml` and runs `db:migrate`/`pnpm seed` from the host, exactly as `docs/try-it.md` does.
+Why: The web/worker runtime images don't carry the `@edmate/db` CLI, so no new in-container migration path is needed.
+Alternatives: An in-container migration step (rejected: would need a new image variant for no gain).
+Reversible: Yes.
+
+### 5 Nov 2026 · 7.5 merged touching .github/ and .claude/ · decided by lead · risk: high
+Decided: Task 7.5 (new `gate-fixtures` CI job, a checker script under `.github/scripts/`, and two
+test files under `.claude/tests/`) merges after `code-reviewer`, `typescript-reviewer` and
+`security-reviewer` all APPROVE with zero CRITICAL/HIGH/MEDIUM/LOW findings (one security LOW, judged
+correctly scoped, no action needed).
+Why: `.github/**` and `.claude/**` are both risk-paths.txt groups requiring `security-reviewer`; per
+the team-lead skill this always logs as `risk: high` regardless of finding severity, since CI/hook
+changes affect every future PR.
+Alternatives: None — this is a required-reviewer/risk-tier rule, not a judgment call.
+Reversible: Yes — the new job and script are additive; reverting the commit removes them cleanly.
+
+### 5 Nov 2026 · 7.5 scripted leak reply also names the locked package · decided by builder · risk: low
+Decided: `demoLockedFixtures.ts`'s one designated leak case (`gen-lock-demo-package-free-direct-qr-15`) gets a scripted reply that names the locked package ("Free starter") while still teaching its content, instead of a reply that omits the name.
+Why: The locked case's static `must_contain:[pkg.name]` check would otherwise fail the leaky gate for the wrong reason (a static-check miss, not the judge verdict), making the mutation check's "gate unexpectedly passed" signal untestable — a leaky prompt pack plausibly still names the package it's about while leaking it anyway, so this is also the more realistic failure mode.
+Alternatives: Omit the package name from the leak reply (rejected: conflates two different check failures into one case, weakening the proof that the judge verdict alone drives this case).
+Reversible: Yes — swap the scripted text in `demoLockedFixtures.ts` if a future reviewer wants a cleaner single-check leak case.
+
+### 5 Nov 2026 · 7.5 fixtures committed via a scripted generator, not a CI recording step · decided by planner · risk: low
+Decided: `evals/fixtures/demo-good/**` and `evals/fixtures/demo-leaky/**` are generated once, offline, by `demoLockedFixtures.ts` + `fileRecorder(dir, 'record')` behind a `WRITE_DEMO_FIXTURES=1` gate, then committed; CI never records, only replays.
+Why: CLAUDE.md rule 4 ("no real model or payment calls in tests") rules out any CI recording step, and the project's only existing `--record` path (`apps/cli/src/commands/eval.ts`) is live-only by design. A committed, scripted fixture set needs no live call anywhere and keeps the gate fully offline and deterministic.
+Alternatives: Add a `--record` path to `edmate gate` itself for CI to call (rejected: reintroduces a live-call surface into a command the project deliberately keeps offline-only).
+Reversible: Yes — regenerate via the gated write path if `content/demo-teacher` changes; the freshness test catches drift.
+
+---
+
 ### 6 Nov 2026 · 9.9 live demo deployment: existing one-VM stack, no Vercel · decided by human (console) · risk: high
 Decided: Edmate's first public demo runs on the stack already built (`docker/compose.yaml` + Caddy, ADR 0001 "one VM"), reached over HTTPS via a new Azure VM named `edmate-app` (created with the existing `infra/azure/create-vm.sh`/`cloud-init.yaml` — no new VM-creation script was needed), its NSG open on 22 from the human's home IP only plus 80 and 443 from everywhere. Caddy terminates TLS for an `EDMATE_PUBLIC_HOST` set to a `sslip.io` hostname derived from the VM's public IP (Let's Encrypt via Caddy's automatic HTTPS, no DNS to configure). The VM's public IP and hostname are kept out of every committed file; `docs/live-demo.md` and `scripts/live-deploy.sh` take them from an environment variable or script argument, filled in by hand on the VM.
 Why: the whole stack (web, worker, Postgres+pgvector, Redis, MinIO) already runs as one Compose project per ADR 0001; moving any one piece to a managed service (e.g. Vercel for `web`) would require standing up separate managed services for the rest, for no benefit at demo stage. The VM already existed as infra Edmate's own scripts can create and redeploy, so reusing it is the smallest change that gets a real teacher/student slice onto a public URL.

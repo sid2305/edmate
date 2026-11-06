@@ -2493,9 +2493,9 @@ tasks:
   - '7.2'
   - M3
   - M4
-  status: running
+  status: done
   branch: m7/7.5-ci-gate-fixtures
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '7.6'
   milestone: M7
   title: Live model runs, per-model pass rates and cost per turn by tier
@@ -4655,9 +4655,9 @@ tasks:
   deps:
   - '1.7'
   risk: risky
-  status: review
+  status: done
   branch: m13/1.7h-us-ssn-pii-pattern
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '0.20'
   milestone: M7
   title: 'Harness tests time out under CI load (PR #118: route.accuracy at the 5 s default, runner.block at its own 3 s): a 20 s harness testTimeout and no explicit timeouts under 10 s, with no logic change'
@@ -12350,9 +12350,25 @@ tasks:
   deps:
   - '0.24'
   risk: risky
-  status: running
+  status: done
   branch: m13/0.25-vm-heartbeat-alerts-watcher
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+- id: 0.25b
+  milestone: M13
+  title: '0.25 review findings (deferred, lead, 6 Nov 2026): infra/azure/lib/monitor-ingest.sh''s `. "$env_file"` can abort heartbeat.sh/blockers-watch.sh under `set -e` on a malformed monitor.env line
+    instead of degrading gracefully (code-reviewer MEDIUM); its curl calls (IMDS token, DCE POST) have no --max-time, so a network stall leaves the unsupervised backgrounded heartbeat.sh process hanging
+    (code-reviewer MEDIUM); .claude/tests/test_no_azure_identifiers.py has no pattern for an Azure hostname/FQDN (*.cloudapp.azure.com, *.blob.core.windows.net) or a bare resource name without an embedded
+    GUID, so one could slip into a commit silently (security-reviewer MEDIUM); infra/azure/monitor-setup.sh''s ensure_dcr()/grant_identity() build ws_id/dce_id/principal_id/dcr_id as literal escaped strings
+    and feed those into the real (DRY=0) az calls instead of the resolved IDs, unlike the sibling alert scripts, so the DCR/role-grant step as written would not work against a live subscription (security-reviewer
+    LOW).'
+  accept: monitor-ingest.sh degrades gracefully on a malformed monitor.env line and its curl calls have a bounded timeout; test_no_azure_identifiers.py also catches an Azure hostname/FQDN shape; monitor-setup.sh's
+    DCR/role-grant step uses the resolved IDs, not literal escaped strings, and is exercised with DRY_RUN=0 against a disposable resource group at least once.
+  deps:
+  - '0.25'
+  risk: risky
+  status: todo
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '0.26'
   milestone: M13
   title: 'VM phase 2: Foundry backup through the VM''s managed identity (no key on disk): role assignment documented in docs/azure-vm.md, scripts/claude-backup.sh verified on Linux with the Entra path (auth=entra
@@ -12511,9 +12527,9 @@ tasks:
   deps:
   - '9.0'
   risk: low
-  status: running
+  status: done
   branch: m9/9.9a-live-overlay
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 9.9b
   milestone: M9
   title: scripts/live-deploy.sh (pull main, build images, docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build, run db:migrate and the docs/try-it.md demo seed, print the URL)
@@ -12524,9 +12540,9 @@ tasks:
   deps:
   - '9.0'
   risk: low
-  status: review
+  status: done
   branch: m9/9.9b-live-deploy-script
-  model: plan:sonnet build:sonnet review:sonnet(code-reviewer)+sonnet(security-reviewer)
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 9.9c
   milestone: M9
   title: 'Live deploy fixes: after 9.9a and 9.9b merge, the console runs scripts/live-deploy.sh on edmate-app over SSH (builders have no SSH access to this VM) and posts the output back to the lead; this
@@ -12537,6 +12553,6 @@ tasks:
   - 9.9a
   - 9.9b
   risk: risky
-  status: todo
-  branch: null
+  status: running
+  branch: m9/9.9c-live-deploy-fixes
   model: plan:sonnet build:sonnet review:sonnet

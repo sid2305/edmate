@@ -41,10 +41,13 @@ runcmd:
   - sudo -iu edmate bash -lc '. ~/.nvm/nvm.sh && nvm install 22 && nvm alias default 22 && corepack enable'
   - sudo -iu edmate bash -lc '. ~/.nvm/nvm.sh && cd /opt/edmate && corepack pnpm install'
   - sudo -iu edmate bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'
-  # systemd units from the repo: the dev stack at boot, the lead once the human has logged in.
-  - cp /opt/edmate/infra/azure/edmate-stack.service /opt/edmate/infra/azure/edmate-lead.service /etc/systemd/system/
+  # systemd units from the repo: the dev stack at boot, the lead once the human has logged in, the
+  # blockers-watch timer (its service has its own ConditionPathExists on monitor.env, so enabling
+  # it here is a no-op until the human runs phase 1b's monitor-setup.sh and fills in monitor.env).
+  - cp /opt/edmate/infra/azure/edmate-stack.service /opt/edmate/infra/azure/edmate-lead.service /opt/edmate/infra/azure/edmate-blockers-watch.service /opt/edmate/infra/azure/edmate-blockers-watch.timer /etc/systemd/system/
   - systemctl daemon-reload
   - systemctl enable edmate-stack.service
+  - systemctl enable edmate-blockers-watch.timer
   - touch /var/lib/cloud/edmate-ready
 
 final_message: "Edmate VM ready after $UPTIME seconds. Next: docs/azure-vm.md, step 4."

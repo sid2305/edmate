@@ -1,0 +1,15 @@
+#!/bin/bash
+# Pages a heartbeat to Azure Monitor whenever a commit touches the board (docs/board/tasks.yaml) --
+# the same "is the team alive" signal the old tmux watcher's heartbeat stands in for (see
+# infra/azure/heartbeat.sh and docs/azure-vm.md phase 1b). Runs heartbeat.sh in the background and
+# never fails the commit: this hook's own exit code is always 0, and any error starting
+# heartbeat.sh is swallowed with a one-line stderr note. On a contributor's laptop or in CI (hooks
+# never run in CI) this only ever writes a small local file under the user's own $HOME.
+# Enabled per clone with: git config core.hooksPath .githooks
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+if git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null | grep -qx 'docs/board/tasks.yaml'; then
+  ("$ROOT/infra/azure/heartbeat.sh" >/dev/null 2>&1 &) || printf 'post-commit: could not start heartbeat.sh\n' >&2
+fi
+
+exit 0
