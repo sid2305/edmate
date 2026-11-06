@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Deploy the live demo stack on the edmate-app VM: pull main, build and start the live overlay,
-# migrate and seed the database, and print the public URL. See docs/live-demo.md.
+# migrate and seed the database, and print the public URL. See docs/live-demo.md. Node itself
+# runs on the VM, not just in containers: install/build/migrate/seed below all run on the VM's
+# own Node (via nvm, same as docs/azure-vm.md's cloud-init installs it), not inside Docker.
 #
 #   scripts/live-deploy.sh [public-host]
 #
@@ -12,6 +14,14 @@
 # tree or a diverged branch (fix that by hand on the VM, then rerun); `docker compose up -d
 # --build`, `db:migrate` and `pnpm seed` are already idempotent.
 set -euo pipefail
+
+# nvm (and the corepack/pnpm it puts on PATH) only loads automatically in an interactive login
+# shell; this script is meant to run non-interactively over SSH (docs/live-demo.md), where that
+# never happens on its own, so load it explicitly here. Harmless if nvm isn't installed.
+if [ -f "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$HOME/.nvm/nvm.sh"
+fi
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO_ROOT"
@@ -56,6 +66,9 @@ git pull --ff-only origin main || die "git pull --ff-only origin main failed; re
 
 say "installing dependencies (in case the pull changed any)"
 corepack pnpm install
+
+say "building @edmate/db (and its dependencies: contracts, harness, content) for db:migrate below"
+corepack pnpm turbo run build --filter=@edmate/db...
 
 say "building and starting the live stack for https://$HOST"
 docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build

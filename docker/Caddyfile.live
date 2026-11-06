@@ -14,14 +14,20 @@
 {$EDMATE_PUBLIC_HOST} {
 	encode gzip
 
-	# Same origin as the app itself, so the browser's signed PUT is same-origin (MinIO's CORS
-	# config is irrelevant) and SigV4 still validates: default reverse_proxy does NOT rewrite
-	# Host, so MinIO sees the same Host it was signed for. Do not add header_up Host here.
-	handle_path /s3/* {
-		reverse_proxy minio:9000
-	}
-
 	reverse_proxy web:3000 {
 		header_up X-Forwarded-For {client_ip}
 	}
+}
+
+# S3 on its own hostname, not a path on the app's site block (task 9.9c): SigV4 (the
+# browser's presigned PUT and the worker's S3 client) signs the full canonical path including
+# /s3/<bucket>/<key>, so a path-based proxy that strips the /s3 prefix before forwarding to MinIO
+# makes the signature no longer match what MinIO sees -- 403 SignatureDoesNotMatch. sslip.io
+# resolves any label prefix of an IP-based hostname, so this just works for an
+# EDMATE_PUBLIC_HOST like 203-0-113-10.sslip.io; Caddy auto-issues this block its own cert the
+# same as the main one. A custom (non-sslip.io) EDMATE_PUBLIC_HOST needs its own DNS record for
+# this subdomain pointing at the VM. Default reverse_proxy does NOT rewrite Host, so MinIO sees
+# the same Host it was signed for -- do not add header_up Host here either.
+s3.{$EDMATE_PUBLIC_HOST} {
+	reverse_proxy minio:9000
 }
