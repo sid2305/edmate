@@ -1,0 +1,27 @@
+# Live overlay (task 9.9a): the mounted Caddyfile when docker/compose.live.yaml is applied on top
+# of docker/compose.yaml. Caddy's automatic HTTPS for EDMATE_PUBLIC_HOST, left on, is the whole
+# point of this file. There is no load balancer or CDN in front of Caddy in this one-VM design,
+# so the proxy ranges below default to loopback only (EDMATE_TRUSTED_PROXY_RANGES,
+# docker/env.example); the servers block below also refuses a client-sent X-Forwarded-For, same
+# reasoning as docker/Caddyfile's own comment.
+{
+	servers {
+		trusted_proxies static {$EDMATE_TRUSTED_PROXY_RANGES}
+		trusted_proxies_strict
+	}
+}
+
+{$EDMATE_PUBLIC_HOST} {
+	encode gzip
+
+	# Same origin as the app itself, so the browser's signed PUT is same-origin (MinIO's CORS
+	# config is irrelevant) and SigV4 still validates: default reverse_proxy does NOT rewrite
+	# Host, so MinIO sees the same Host it was signed for. Do not add header_up Host here.
+	handle_path /s3/* {
+		reverse_proxy minio:9000
+	}
+
+	reverse_proxy web:3000 {
+		header_up X-Forwarded-For {client_ip}
+	}
+}
