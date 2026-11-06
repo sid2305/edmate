@@ -12553,6 +12553,6 @@ tasks:
   - 9.9a
   - 9.9b
   risk: risky
-  status: running
+  status: done
   branch: m9/9.9c-live-deploy-fixes
   model: plan:sonnet build:sonnet review:sonnet
