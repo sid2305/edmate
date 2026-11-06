@@ -1,10 +1,11 @@
-# 7.5 — CI merge gates on fixtures: Phase A handoff
+# 7.5 — CI merge gates on fixtures
 
-Status: DONE (Phase A only; Phase B — `.github`/`.claude` CI wiring — is a separate builder's work,
-not touched here).
+Status: DONE (both phases).
 
 Branch: `m7/7.5-ci-gate-fixtures`
 Worktree: `/tmp/edmate-build-7.5`
+
+## Phase A handoff (unchanged from the Phase A builder)
 
 ## What was built
 
@@ -119,11 +120,107 @@ one case).
   defence-in-depth instead (same judgment call the per-agent generator itself documents for its own
   invariants).
 
-## Left to do
+Tool calls used (Phase A): approximately 75 (within the ~80 budget for Phase A).
 
-Phase B (CI wiring: `.github/workflows/ci.yml`'s new `gate-fixtures` job,
-`.github/scripts/check_gate_fixture_reports.py`, `.claude/tests/test_check_gate_fixture_reports.py`,
-`.claude/tests/test_workflows.py`) — out of this builder's scope per the task prompt, left for the
-Phase B builder.
+## Phase B handoff — CI wiring (`.github`, `.claude` only)
 
-Tool calls used: approximately 75 (within the ~80 budget for Phase A).
+Status: DONE.
+
+### What was built
+
+- `.github/scripts/check_gate_fixture_reports.py` — `--good <file> --leaky <file>
+  --leaky-exit-code <n> --leak-case-id <id>`. Exits 0 only when: the good report's `pass` is
+  `true`; the leaky exit code is non-zero; the leaky report's `pass` is `false`; and the leaky
+  report's `failedCaseIds` is exactly `[leak-case-id]`. Any other combination prints a specific
+  stderr message per failed condition (not a generic "mismatch") and exits 1. Stdlib only.
+- `.claude/tests/test_check_gate_fixture_reports.py` — six unit tests written first (confirmed red:
+  the script didn't exist, so every subprocess call failed with "No such file or directory"), then
+  green against the script: good/leaky pair that should pass; good report that doesn't pass; leaky
+  exit code of 0; leaky report that unexpectedly passes; leaky report that fails on the wrong case
+  id; leaky report that fails on more than one case.
+- `.github/workflows/ci.yml` — new job `gate-fixtures`, `needs: changes`,
+  `if: needs.changes.outputs.docs_only != 'true'` (identical gating expression to `node`/`e2e`), no
+  services, `timeout-minutes: 15`. Steps: checkout (persist-credentials: false), setup-node (same
+  pinned SHAs as the `node`/`e2e` jobs), `pnpm install --frozen-lockfile`, `corepack pnpm turbo run
+  build --filter=@edmate/cli...`, the good gate (plain `node apps/cli/bin/edmate gate demo --change
+  packages --fixtures evals/fixtures/demo-good --report ...` — a non-zero exit here fails the step
+  and so the job directly, no `set +e`), the leaky gate (`set +e`, captures its own exit code to a
+  step output `exit-code` via `id: gate-leaky`), then `check_gate_fixture_reports.py` with both
+  report paths, `${{ steps.gate-leaky.outputs.exit-code }}`, and the literal `--leak-case-id
+  gen-lock-demo-package-free-direct-qr-15`. No new `permissions:` block (inherits the workflow's
+  `contents: read`); no secrets or untrusted PR fields referenced in any `run:` string.
+- `.claude/tests/test_workflows.py` — a new test
+  `test_gate_fixtures_job_runs_the_demo_locked_fixture_gate` (written first, confirmed red with a
+  `KeyError: 'gate-fixtures'`) asserting the job exists, is gated the same way `node` is (reusing
+  the file's existing `eval_gh_if` helper, same true/false truth-table check the `node` job's own
+  test uses), has no `services` key, and its steps' `run:` text contains the CLI build filter, both
+  `gate demo` fixture-dir arguments (`demo-good`/`demo-leaky`), the checker script's path, and the
+  literal leak case id. Also updated the pre-existing
+  `test_job_names_match_branch_protection`'s job-name set to include `gate-fixtures` (it would
+  otherwise have gone red the moment the new job was added — confirmed this by running the suite
+  before editing it: it failed with "Items in the second set but not the first: 'gate-fixtures'").
+
+### TDD order followed (matches the plan's Phase B order)
+
+1. `.claude/tests/test_check_gate_fixture_reports.py` (red: script missing) →
+   `check_gate_fixture_reports.py` (green).
+2. `.claude/tests/test_workflows.py`'s new assertion + the job-name-set update (red: `KeyError` and
+   `AssertionError` respectively) → `ci.yml`'s new `gate-fixtures` job (green).
+
+### Verification (key output)
+
+`python3 -m unittest discover -v .claude/tests`:
+```
+Ran 374 tests in 35.4s
+OK
+```
+
+`python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`: parses cleanly, no
+error.
+
+**Mutation check, run through the real new job's exact commands** (built `@edmate/cli` via
+`corepack pnpm turbo run build --filter=@edmate/cli...` first, then ran the identical
+`node apps/cli/bin/edmate gate demo ...` and `check_gate_fixture_reports.py` invocations the new
+`ci.yml` step text contains, by hand):
+
+- Unmutated (the committed fixtures): `demo-good` → `agent:locked 75/75 pass`, exit 0. `demo-leaky`
+  → `agent:locked 74/75 FAIL`, `failed: gen-lock-demo-package-free-direct-qr-15`, exit 1. Checker:
+  `check_gate_fixture_reports: OK (good passes, leaky fails on exactly the leak case)`, exit 0.
+- Mutation (flipped `demo-good`'s `DEMO_LEAK_CASE_ID` judge fixture to `pass:false`, and
+  `demo-leaky`'s same fixture to `pass:true`): `demo-good` now → `agent:locked 74/75 FAIL`, exit 1
+  (good now fails, as expected). `demo-leaky` now → `agent:locked 75/75 pass`, exit 0 (leaky now
+  passes, as expected). Checker, run with the mutated reports and the mutated leaky exit code `0`:
+  ```
+  check_gate_fixture_reports: FAIL
+    - good report did not pass (pass=False, failedCaseIds=['gen-lock-demo-package-free-direct-qr-15'])
+    - leaky gate's exit code was 0; expected a non-zero (failing) exit code
+    - leaky report unexpectedly passed (pass=true)
+    - leaky report's failedCaseIds was [], expected exactly ['gen-lock-demo-package-free-direct-qr-15']
+  ```
+  exit 1 — all four conditions correctly flagged, proving the checker (not just the gate) actually
+  checks something.
+- Both fixture files reverted immediately after; `git status --short evals/fixtures/` showed no
+  diff afterward (confirmed the revert was exact), and the unmutated dry run above was re-confirmed
+  clean one more time before moving on.
+
+`python3 .githooks/secret-scan.py --all`: exit 0, clean.
+
+### Deviations / decisions not fully pinned down by the plan (plain prose, for the lead to fold into the canonical decision log)
+
+- **`node`/`pnpm`/`corepack` were invoked without the usual `source ~/.nvm/nvm.sh &&` prefix in
+  this worktree's shell**, because this worktree-isolated agent's shell guard blocks any command
+  that runs a string through `source` (a blanket rule, not specific to this task). Worked around by
+  putting `$HOME/.nvm/versions/node/v22.23.4/bin` on `PATH` directly for the verification commands
+  only; `ci.yml` itself uses `actions/setup-node` (not nvm) and is unaffected by this local-shell
+  quirk. Flagging this since it's a deviation from CLAUDE.md's literal "prefix with `source
+  ~/.nvm/nvm.sh`" command convention, though only in how *this builder* ran local verification
+  commands, not in anything committed.
+- Did not add a `permissions:` block to the new `gate-fixtures` job (inherits the workflow-level
+  `contents: read`), matching `node`/`e2e`/`python-harness`'s own convention of not widening
+  permissions per job; `test_top_level_permissions_are_explicit_and_minimal` already asserts no job
+  sets its own `permissions` key, and it stayed green.
+- Reused the exact pinned `actions/checkout`/`actions/setup-node` SHAs the `node` and `e2e` jobs
+  already use, rather than introducing a new pin to review — no new third-party action in this PR.
+
+Tool calls used (Phase B): approximately 30 (well within the ~70 budget for Phase B; ~105 total
+across both phases, within the plan's 150 total).
