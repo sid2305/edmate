@@ -8,6 +8,8 @@
 #
 # Overrides: EDMATE_RG (edmate-agents), EDMATE_LOCATION (eastus2), EDMATE_VM (edmate-lead),
 # EDMATE_VM_SIZE (Standard_D2s_v5). The admin user is always `edmate` (cloud-init.yaml assumes it).
+# EDMATE_MONTHLY_CREDIT, EDMATE_ONCALL_PHONE and EDMATE_ONCALL_EMAIL are phase-1b overrides (Monitor
+# alerts, the budget alert) -- not read by this script; see docs/azure-vm.md phase 1b.
 set -euo pipefail
 
 RG="${EDMATE_RG:-edmate-agents}"

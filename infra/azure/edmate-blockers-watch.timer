@@ -1,0 +1,12 @@
+# Fires edmate-blockers-watch.service every 2 hours, 8am-11pm Pacific, exactly the cadence
+# docs/azure-vm.md's old §5 ran as a second Claude session. See infra/azure/blockers-watch.sh.
+[Unit]
+Description=Edmate blockers watch timer (every 2 hours, 8am-11pm Pacific)
+
+[Timer]
+OnCalendar=*-*-* 08,10,12,14,16,18,20,22:00:00
+Timezone=America/Los_Angeles
+Persistent=false
+
+[Install]
+WantedBy=timers.target

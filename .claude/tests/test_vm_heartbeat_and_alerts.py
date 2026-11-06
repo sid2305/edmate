@@ -122,6 +122,66 @@ class MonitorScripts(unittest.TestCase):
         for expect in ("EdmateHeartbeat_CL", "ago(2h)", "edmate-test-oncall", "edmate-test-ws"):
             self.assertIn(expect, out)
 
+    def test_monitor_budget_alert_refuses_without_email(self):
+        env = dict(self.env)
+        env.pop("EDMATE_ONCALL_EMAIL", None)
+        r = self.run_script("monitor-budget-alert.sh", env=env)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("EDMATE_ONCALL_EMAIL", r.stderr)
+
+    def test_monitor_budget_alert_dry_run(self):
+        env = dict(self.env, EDMATE_ONCALL_EMAIL="fake@example.invalid", EDMATE_MONTHLY_CREDIT="90")
+        r = self.run_script("monitor-budget-alert.sh", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = r.stdout + r.stderr
+        for expect in ("90", "50", "80", "100", "fake@example.invalid", "Monthly"):
+            self.assertIn(expect, out)
+
+
+class BlockersWatch(unittest.TestCase):
+    def setUp(self):
+        self.env = dict(
+            ENV,
+            DRY_RUN="1",
+            EDMATE_MONITOR_ENV_FILE=str(FIXTURES / "monitor.env.fake"),
+        )
+
+    def run_watch(self, fixture):
+        env = dict(self.env, EDMATE_BLOCKERS_FILE=str(FIXTURES / fixture))
+        return run([str(AZURE / "blockers-watch.sh")], cwd=ROOT, env=env)
+
+    def test_open_entries_post_a_bare_count_never_entry_text(self):
+        r = self.run_watch("blockers-open.md")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = r.stdout + r.stderr
+        self.assertIn('"Source":"blocker:2"', out)
+        self.assertNotIn("fake blocker", out)
+
+    def test_only_resolved_entries_posts_nothing(self):
+        r = self.run_watch("blockers-resolved.md")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("monitor-ingest", r.stdout + r.stderr)
+
+    def test_missing_blockers_file_exits_zero_and_posts_nothing(self):
+        env = dict(self.env, EDMATE_BLOCKERS_FILE=str(Path(ROOT) / "no-such-blockers.md"))
+        r = run([str(AZURE / "blockers-watch.sh")], cwd=ROOT, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("monitor-ingest", r.stdout + r.stderr)
+
+
+class SystemdUnits(unittest.TestCase):
+    def test_service_and_timer_have_required_stanzas(self):
+        service = (AZURE / "edmate-blockers-watch.service").read_text()
+        for stanza in ("[Unit]", "[Service]", "[Install]"):
+            self.assertIn(stanza, service)
+        self.assertIn("ExecStart=", service)
+
+        timer = (AZURE / "edmate-blockers-watch.timer").read_text()
+        for stanza in ("[Unit]", "[Timer]", "[Install]"):
+            self.assertIn(stanza, timer)
+        self.assertIn("OnCalendar=", timer)
+        self.assertIn("Timezone=", timer)
+
 
 class PostCommitHook(unittest.TestCase):
     """A throwaway repo, never the real one, with a stubbed heartbeat.sh (helpers.Repo is built
