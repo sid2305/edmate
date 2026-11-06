@@ -64,7 +64,7 @@ Why: Both apps' fail-closed checks apply the https-only rule to `S3_ENDPOINT` di
 Alternatives: A separate `S3_PUBLIC_ENDPOINT` host (rejected: more moving parts, doesn't remove the CORS dependency).
 Reversible: Yes, but flagged high risk as a new network path for signed storage traffic (the 6 Nov 2026 hosting decision's own flagged risk area) — superseded by 9.9c's fix moving S3 to its own subdomain instead.
 
-### 6 Nov 2026 · 1.7h US SSN pattern added to the US locale pack · decided by sid2305 · risk: high
+### 6 Nov 2026 · 1.7h US SSN pattern added to the US locale pack · decided by human (sid2305) · risk: high
 Decided: `content/locales/US.yaml` carries its first `piiPatterns` entry — an SSN shape
 (`AAA-GG-SSSS`, citing the Social Security Administration's published numbering format),
 covering hyphenated/spaced/bare forms with digit-boundary guards. Pattern:

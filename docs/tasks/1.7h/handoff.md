@@ -112,7 +112,7 @@ Only synthetic SSNs (`000`-prefixed, SSA "never issued") appear anywhere in the 
 
 ## Decisions
 
-### 6 Nov 2026 · 1.7h US SSN pattern added to the US locale pack · decided by sid2305 · risk: high
+### 6 Nov 2026 · 1.7h US SSN pattern added to the US locale pack · decided by human (sid2305) · risk: high
 Decided: `content/locales/US.yaml` carries its first `piiPatterns` entry — an SSN shape
 (`AAA-GG-SSSS`, citing the Social Security Administration's published numbering format),
 covering hyphenated/spaced/bare forms with digit-boundary guards. Pattern:
