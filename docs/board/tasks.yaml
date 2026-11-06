@@ -12491,8 +12491,8 @@ tasks:
   milestone: M9
   title: 'Live demo deployment (human request 5 Nov 2026, top priority): get the first working end-to-end slice (teacher sign-in/profile/upload/ingest; student sign-in/package/chat with a real model) onto
     a public URL, on the existing docker/compose.yaml + Caddy one-VM stack (ADR 0001), reached over HTTPS on the new edmate-app Azure VM. No Vercel (see decision log, 6 Nov 2026).'
-  accept: a person on the public internet reaches https://<the demo host>, signs in as the demo teacher and uploads/ingests content, then signs in as a student, starts the package and gets a streamed
-    chat reply from a real model about that content; the run is recorded in the handoff (no keys, no IP/hostname).
+  accept: a person on the public internet reaches https://<the demo host>, signs in as the demo teacher and uploads/ingests content, then signs in as a student, starts the package and gets a streamed chat
+    reply from a real model about that content; the run is recorded in the handoff (no keys, no IP/hostname).
   deps:
   - 9.9a
   - 9.9b
@@ -12503,35 +12503,35 @@ tasks:
   model: plan:sonnet build:sonnet review:sonnet
 - id: 9.9a
   milestone: M9
-  title: 'Live overlay: docker/compose.live.yaml + docker/Caddyfile.live — Caddy on 80/443 with automatic HTTPS for EDMATE_PUBLIC_HOST, trusted_proxies per docs/setup/sign-in-mail-and-proxy.md,
-    S3_PUBLIC_ENDPOINT reachable behind the same host (direct host or a /s3 path), AUTH_URL=https://${EDMATE_PUBLIC_HOST}, and the production fail-closed settings (S3_ALLOW_HTTP and
-    AGE_NOTICE_ALLOW_UNSIGNED both unset/false). Mailpit and the MinIO console stay bound to 127.0.0.1, never published. Tests for any code change.'
-  accept: 'docker compose -f docker/compose.yaml -f docker/compose.live.yaml config validates; Caddyfile.live has no auto_https off and sets trusted_proxies/trusted_proxies_strict; mailpit/minio-console
-    ports are not published by the overlay; a test proves the production fail-closed checks still reject S3_ALLOW_HTTP=true/AGE_NOTICE_ALLOW_UNSIGNED=true even with the overlay applied.'
+  title: 'Live overlay: docker/compose.live.yaml + docker/Caddyfile.live — Caddy on 80/443 with automatic HTTPS for EDMATE_PUBLIC_HOST, trusted_proxies per docs/setup/sign-in-mail-and-proxy.md, S3_PUBLIC_ENDPOINT
+    reachable behind the same host (direct host or a /s3 path), AUTH_URL=https://${EDMATE_PUBLIC_HOST}, and the production fail-closed settings (S3_ALLOW_HTTP and AGE_NOTICE_ALLOW_UNSIGNED both unset/false).
+    Mailpit and the MinIO console stay bound to 127.0.0.1, never published. Tests for any code change.'
+  accept: docker compose -f docker/compose.yaml -f docker/compose.live.yaml config validates; Caddyfile.live has no auto_https off and sets trusted_proxies/trusted_proxies_strict; mailpit/minio-console
+    ports are not published by the overlay; a test proves the production fail-closed checks still reject S3_ALLOW_HTTP=true/AGE_NOTICE_ALLOW_UNSIGNED=true even with the overlay applied.
   deps:
   - '9.0'
   risk: low
-  status: todo
+  status: planning
   branch: null
   model: plan:sonnet build:sonnet review:sonnet
 - id: 9.9b
   milestone: M9
-  title: 'scripts/live-deploy.sh (pull main, build images, docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build, run db:migrate and the docs/try-it.md demo seed, print the
-    URL) + docs/live-demo.md (exact steps; EDMATE_PUBLIC_HOST and every secret the human fills by hand on the VM, never committed; how to grant the staff role and make the demo teacher/student; a
-    smoke checklist; a note that magic-link mail is read in Mailpit over the tailnet until a real mail provider exists). Takes the public IP/hostname from an env var or script argument only.'
+  title: scripts/live-deploy.sh (pull main, build images, docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build, run db:migrate and the docs/try-it.md demo seed, print the URL)
+    + docs/live-demo.md (exact steps; EDMATE_PUBLIC_HOST and every secret the human fills by hand on the VM, never committed; how to grant the staff role and make the demo teacher/student; a smoke checklist;
+    a note that magic-link mail is read in Mailpit over the tailnet until a real mail provider exists). Takes the public IP/hostname from an env var or script argument only.
   accept: a clean checkout on the edmate-app VM, with EDMATE_PUBLIC_HOST and the secrets set by hand, reaches a running stack and a printed https URL by running scripts/live-deploy.sh alone; docs/live-demo.md
     has no real IP, hostname or secret in it.
   deps:
   - '9.0'
   risk: low
-  status: todo
+  status: planning
   branch: null
   model: plan:sonnet build:sonnet review:sonnet
 - id: 9.9c
   milestone: M9
-  title: 'Live deploy fixes: after 9.9a and 9.9b merge, the console runs scripts/live-deploy.sh on edmate-app over SSH (builders have no SSH access to this VM) and posts the output back to the lead;
-    this task fixes whatever the output shows (CORS, the public S3 endpoint, cookies behind HTTPS, trusted-proxy wiring) from that output alone, pushes a fix branch, and the console re-runs the script
-    until the smoke checklist in docs/live-demo.md passes. Reports the live URL with a smoke run; no keys or IP in the handoff.'
+  title: 'Live deploy fixes: after 9.9a and 9.9b merge, the console runs scripts/live-deploy.sh on edmate-app over SSH (builders have no SSH access to this VM) and posts the output back to the lead; this
+    task fixes whatever the output shows (CORS, the public S3 endpoint, cookies behind HTTPS, trusted-proxy wiring) from that output alone, pushes a fix branch, and the console re-runs the script until
+    the smoke checklist in docs/live-demo.md passes. Reports the live URL with a smoke run; no keys or IP in the handoff.'
   accept: docs/live-demo.md's smoke checklist passes against the real public URL, reported in the handoff without any key or IP.
   deps:
   - 9.9a
