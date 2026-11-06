@@ -104,14 +104,56 @@ To stop it: `sudo systemctl stop edmate-lead.service`. To change what the lead i
 add Claude flags, put `EDMATE_LEAD_PROMPT` or `EDMATE_LEAD_ARGS` in a drop-in:
 `sudo systemctl edit edmate-lead.service`, then an `[Service]` block with `Environment=` lines.
 
-## 5. Move the console and watcher (when you are ready)
+## 5. Wire up Monitor alerts (phase 1b)
+
+Board task 0.25. Run these once, from your Mac where `az login` already ran (step 1) — same
+subscription, no VM access needed except to drop `monitor.env` in place. Every script below
+supports `DRY_RUN=1` to print the `az` command instead of running it; none of it reads or writes a
+real identifier into the repo (`.claude/tests/test_no_azure_identifiers.py` enforces that on every
+PR).
+
+```bash
+infra/azure/monitor-setup.sh
+```
+creates (if missing) a Log Analytics workspace, a Data Collection Endpoint and Rule with a custom
+table `EdmateHeartbeat_CL`, and grants the VM's managed identity the "Monitoring Metrics Publisher"
+role on the DCR. It prints a DCE endpoint, a DCR immutable id and a stream name at the end — paste
+those three into `monitor.env` on the VM, never into the repo:
+
+```bash
+ssh edmate@$(infra/azure/create-vm.sh ip)
+mkdir -p ~/.config/edmate && chmod 700 ~/.config/edmate
+cp /opt/edmate/scripts/monitor.env.example ~/.config/edmate/monitor.env
+chmod 600 ~/.config/edmate/monitor.env
+nano ~/.config/edmate/monitor.env          # fill in the three values monitor-setup.sh printed
+exit
+```
+
+Back on your Mac, create the on-call action group and the two alert rules. Set `EDMATE_ONCALL_PHONE`
+and `EDMATE_ONCALL_EMAIL` in your own shell first (your phone, country code and all, and your
+email — the script refuses to run without them, and never defaults to or logs a value since none
+is ever known to it ahead of time):
+
+```bash
+infra/azure/monitor-action-group.sh
+infra/azure/monitor-vm-down-alert.sh        # fires if the VM itself goes unreachable, 5-minute window
+infra/azure/monitor-heartbeat-alert.sh      # fires if EdmateHeartbeat_CL has had no row for 2 hours
+```
+
+The heartbeat row itself comes from `.githooks/post-commit`, already active on the VM's clone
+(`core.hooksPath .githooks`, set by cloud-init): every commit that touches `docs/board/tasks.yaml`
+calls `infra/azure/heartbeat.sh` in the background, which writes a local timestamp file and, once
+`monitor.env` exists, one row to `EdmateHeartbeat_CL`. A missing `monitor.env` or a failed Monitor
+write never fails the commit — it only affects whether the alert above has anything to watch.
+
+## 6. Move the console and watcher (when you are ready)
 
 Your own console session can keep running on the Mac. The blockers watcher is a Claude session
 today; run it on the VM the same way as the lead (`tmux new -s watcher`, `claude --remote-control
 edmate-watcher`), or leave it on the Mac until the Mac's role ends. Once everything runs on the VM,
 retire the Mac's `caffeinate` and its copy of the worktrees.
 
-## 6. Day to day
+## 7. Day to day
 
 | Want | Do |
 | --- | --- |
