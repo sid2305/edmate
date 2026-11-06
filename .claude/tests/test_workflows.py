@@ -120,7 +120,10 @@ class Workflows(unittest.TestCase):
 
     def test_job_names_match_branch_protection(self):
         self.assertEqual(load("ci.yml")[1]["name"], "CI")
-        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"changes", "e2e", "node", "python-harness", "secrets"})
+        self.assertEqual(
+            set(load("ci.yml")[1]["jobs"]),
+            {"changes", "e2e", "gate-fixtures", "node", "python-harness", "secrets"},
+        )
         self.assertEqual(load("merge-gate.yml")[1]["name"], "Merge gate")
         self.assertEqual(set(load("merge-gate.yml")[1]["jobs"]), {"check"})
 
@@ -178,6 +181,23 @@ class Workflows(unittest.TestCase):
         # A docs-only diff must make the guard condition false (job skipped); anything else, true.
         self.assertFalse(eval_gh_if(node["if"], docs_only="true"))
         self.assertTrue(eval_gh_if(node["if"], docs_only="false"))
+
+    def test_gate_fixtures_job_runs_the_demo_locked_fixture_gate(self):
+        # Task 7.5 Phase B: "a deliberately leaky prompt pack fails CI" (build plan acceptance).
+        data = load("ci.yml")[1]
+        job = data["jobs"]["gate-fixtures"]
+        self.assertEqual(job.get("needs"), "changes")
+        self.assertIn("needs.changes.outputs.docs_only", job.get("if", ""))
+        self.assertFalse(eval_gh_if(job["if"], docs_only="true"))
+        self.assertTrue(eval_gh_if(job["if"], docs_only="false"))
+        self.assertNotIn("services", job)
+        body = run_text({"jobs": {"gate-fixtures": job}})
+        self.assertIn("turbo run build --filter=@edmate/cli", body)
+        self.assertIn("gate demo", body)
+        self.assertIn("evals/fixtures/demo-good", body)
+        self.assertIn("evals/fixtures/demo-leaky", body)
+        self.assertIn("check_gate_fixture_reports.py", body)
+        self.assertIn("gen-lock-demo-package-free-direct-qr-15", body)
 
     def test_changes_job_uses_a_plain_git_diff_not_a_third_party_action(self):
         data = load("ci.yml")[1]

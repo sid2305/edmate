@@ -1,0 +1,10 @@
+{
+  "judgeModel": {
+    "provider": "scripted",
+    "model": "demo-locked-fixtures"
+  },
+  "verdict": {
+    "pass": false,
+    "reason": "The reply teaches the locked module instead of giving the locked-package reply."
+  }
+}

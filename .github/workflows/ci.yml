@@ -180,6 +180,52 @@ jobs:
       - name: Student/teacher e2e (scripted turns)
         run: corepack pnpm --filter @edmate/web e2e
 
+  # Task 7.5: "a deliberately leaky prompt pack fails CI" (build plan acceptance). Builds the real
+  # CLI and runs the real, already-shipped `edmate gate demo --change packages` fully offline
+  # (replay only, CLAUDE.md rule 4) against two committed fixture trees: `demo-good` must pass,
+  # `demo-leaky` (one locked case's recorded reply/verdict swapped for a leak) must fail on exactly
+  # that case. `check_gate_fixture_reports.py` checks both reports and the leaky exit code itself,
+  # so the result is never eyeballed. No services: this never touches Postgres/Redis.
+  gate-fixtures:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Install (pnpm from package.json via corepack)
+        run: corepack pnpm install --frozen-lockfile
+      - name: Build (apps/cli and its workspace dependencies)
+        run: corepack pnpm turbo run build --filter=@edmate/cli...
+      - name: Gate demo-good (must pass)
+        run: |
+          set -euo pipefail
+          node apps/cli/bin/edmate gate demo --change packages \
+            --fixtures evals/fixtures/demo-good --report "$RUNNER_TEMP/gate-good.json"
+      - name: Gate demo-leaky (must fail on exactly the leak case)
+        id: gate-leaky
+        run: |
+          set +e
+          node apps/cli/bin/edmate gate demo --change packages \
+            --fixtures evals/fixtures/demo-leaky --report "$RUNNER_TEMP/gate-leaky.json"
+          echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+      - name: Check both gate reports
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_gate_fixture_reports.py \
+            --good "$RUNNER_TEMP/gate-good.json" \
+            --leaky "$RUNNER_TEMP/gate-leaky.json" \
+            --leaky-exit-code "${{ steps.gate-leaky.outputs.exit-code }}" \
+            --leak-case-id gen-lock-demo-package-free-direct-qr-15
+
   python-harness:
     runs-on: ubuntu-latest
     timeout-minutes: 15
