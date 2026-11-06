@@ -112,8 +112,7 @@ Only synthetic SSNs (`000`-prefixed, SSA "never issued") appear anywhere in the 
 
 ## Decisions to log at merge (human name left blank until sign-off)
 
-### 1.7h US SSN pattern added to the US locale pack · decided by **(blank — fill in after B-64
-answers)** · risk: high
+### 1.7h US SSN pattern added to the US locale pack · decided by sid2305 · risk: high
 
 - Decided: `content/locales/US.yaml` carries its first `piiPatterns` entry — an SSN shape
   (`AAA-GG-SSSS`, citing the Social Security Administration's published numbering format),
