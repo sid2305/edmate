@@ -507,8 +507,8 @@ describe('US locale patterns', () => {
     ['extra leading digit (lookbehind must block it)', '1000-00-0000'],
     ['extra trailing digit (lookahead must block it)', '000-00-00001'],
   ])('%s: the SSN pattern itself does not match', (_label, input) => {
-    const [ssn] = compileLocalePatterns([US_PII_PATTERNS.ssn]);
-    expect((ssn as RegExp).test(input)).toBe(false);
+    const ssn = compileLocalePatterns([US_PII_PATTERNS.ssn])[0]!;
+    expect(ssn.test(input)).toBe(false);
   });
 });
 
