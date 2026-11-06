@@ -224,3 +224,29 @@ error.
 
 Tool calls used (Phase B): approximately 30 (well within the ~70 budget for Phase B; ~105 total
 across both phases, within the plan's 150 total).
+
+## Decisions
+
+### 5 Nov 2026 · 7.5 merged touching .github/ and .claude/ · decided by lead · risk: high
+Decided: Task 7.5 (new `gate-fixtures` CI job, a checker script under `.github/scripts/`, and two
+test files under `.claude/tests/`) merges after `code-reviewer`, `typescript-reviewer` and
+`security-reviewer` all APPROVE with zero CRITICAL/HIGH/MEDIUM/LOW findings (one security LOW, judged
+correctly scoped, no action needed).
+Why: `.github/**` and `.claude/**` are both risk-paths.txt groups requiring `security-reviewer`; per
+the team-lead skill this always logs as `risk: high` regardless of finding severity, since CI/hook
+changes affect every future PR.
+Alternatives: None — this is a required-reviewer/risk-tier rule, not a judgment call.
+Reversible: Yes — the new job and script are additive; reverting the commit removes them cleanly.
+
+### 5 Nov 2026 · 7.5 scripted leak reply also names the locked package · decided by builder · risk: low
+Decided: `demoLockedFixtures.ts`'s one designated leak case (`gen-lock-demo-package-free-direct-qr-15`) gets a scripted reply that names the locked package ("Free starter") while still teaching its content, instead of a reply that omits the name.
+Why: The locked case's static `must_contain:[pkg.name]` check would otherwise fail the leaky gate for the wrong reason (a static-check miss, not the judge verdict), making the mutation check's "gate unexpectedly passed" signal untestable — a leaky prompt pack plausibly still names the package it's about while leaking it anyway, so this is also the more realistic failure mode.
+Alternatives: Omit the package name from the leak reply (rejected: conflates two different check failures into one case, weakening the proof that the judge verdict alone drives this case).
+Reversible: Yes — swap the scripted text in `demoLockedFixtures.ts` if a future reviewer wants a cleaner single-check leak case.
+
+### 5 Nov 2026 · 7.5 fixtures committed via a scripted generator, not a CI recording step · decided by planner · risk: low
+Decided: `evals/fixtures/demo-good/**` and `evals/fixtures/demo-leaky/**` are generated once, offline, by `demoLockedFixtures.ts` + `fileRecorder(dir, 'record')` behind a `WRITE_DEMO_FIXTURES=1` gate, then committed; CI never records, only replays.
+Why: CLAUDE.md rule 4 ("no real model or payment calls in tests") rules out any CI recording step, and the project's only existing `--record` path (`apps/cli/src/commands/eval.ts`) is live-only by design. A committed, scripted fixture set needs no live call anywhere and keeps the gate fully offline and deterministic.
+Alternatives: Add a `--record` path to `edmate gate` itself for CI to call (rejected: reintroduces a live-call surface into a command the project deliberately keeps offline-only).
+Reversible: Yes — regenerate via the gated write path if `content/demo-teacher` changes; the freshness test catches drift.
+
