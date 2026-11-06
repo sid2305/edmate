@@ -1,0 +1,77 @@
+# Live overlay (task 9.9a): on top of docker/compose.yaml's one-VM stack, turns on Caddy's
+# automatic HTTPS and routes MinIO's S3 API through the same public host. Apply together with the
+# base file, never alone:
+#
+#   docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build
+#
+# EDMATE_PUBLIC_HOST has no default (required): a missing value fails `config` loudly, naming it,
+# instead of silently resolving AUTH_URL/S3_ENDPOINT to an empty host. docker/env.example
+# documents EDMATE_PUBLIC_HOST and EDMATE_TRUSTED_PROXY_RANGES; see docs/live-demo.md (task 9.9b)
+# for the full deploy recipe. Every other base service (postgres, redis, mailpit) is untouched and
+# not mentioned here: Compose only re-merges services an overlay file actually lists, so their
+# existing 127.0.0.1-only port bindings keep applying unchanged.
+
+services:
+  web:
+    environment:
+      AUTH_URL: https://${EDMATE_PUBLIC_HOST:?EDMATE_PUBLIC_HOST must be set}
+      # Routes the web container's own S3 calls, and the browser's signed PUT, through the same
+      # public host via Caddy's /s3 path (docker/Caddyfile.live): same-origin for the browser (no
+      # MinIO CORS dependency) and Caddy's default reverse_proxy does not rewrite Host, so MinIO's
+      # SigV4 check still passes.
+      S3_ENDPOINT: https://${EDMATE_PUBLIC_HOST}/s3
+      # Literal 'false', not ${S3_ALLOW_HTTP:-false}: Compose merges environment maps key by key,
+      # last file wins, so a defaulted override would still let a shell-exported
+      # S3_ALLOW_HTTP=true leak through. A literal here is the only thing that can't be reopened
+      # from outside this file.
+      S3_ALLOW_HTTP: 'false'
+      AGE_NOTICE_ALLOW_UNSIGNED: 'false'
+      # No default: a live deploy never reuses docker/compose.yaml's dev MinIO credentials. Set in
+      # docker/.env alongside AUTH_SECRET and EDMATE_ANTHROPIC_API_KEY (same "secret filled by
+      # hand on the VM" convention docs/live-demo.md documents).
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      # Overrides the base's dev-only http://localhost:... value to functionally unset (the app
+      # treats an empty string the same as unset): the same public host now serves both the app
+      # and S3 (S3_ENDPOINT above), so there is no separate public endpoint for the browser to
+      # reach, and leaving the base's http value in effect would fail the production https-only
+      # check at startup.
+      S3_PUBLIC_ENDPOINT: ''
+
+  worker:
+    environment:
+      S3_ENDPOINT: https://${EDMATE_PUBLIC_HOST}/s3
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+
+  minio:
+    environment:
+      # MinIO's root user doubles as the access key pair, same as the base file: the live bucket's
+      # credentials are never the dev placeholders either.
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+
+  caddy:
+    # Additive: Compose unions ports lists across -f files, so the base's 127.0.0.1:8080:80
+    # loopback mapping also still works, harmlessly.
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      EDMATE_PUBLIC_HOST: ${EDMATE_PUBLIC_HOST}
+      EDMATE_TRUSTED_PROXY_RANGES: ${EDMATE_TRUSTED_PROXY_RANGES:-127.0.0.1/32 ::1/128}
+    # Compose merges volumes by container target, so this entry replaces the base's
+    # ./Caddyfile:/etc/caddy/Caddyfile:ro mount at the same target.
+    volumes:
+      - ./Caddyfile.live:/etc/caddy/Caddyfile:ro
+    # No top-level networks: key needed: the base file uses the implicit default network, and this
+    # just adds an alias to it, so internal web/worker -> Caddy calls match the public hostname's
+    # TLS SNI/Host without relying on the VM's real internet path or cloud hairpin NAT.
+    networks:
+      default:
+        aliases:
+          - ${EDMATE_PUBLIC_HOST}

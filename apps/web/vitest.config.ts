@@ -12,6 +12,8 @@ export default defineConfig({
       // The memory turn backend's own unit test (9.4a Phase D). `test/**` is otherwise helpers
       // only; `test/build-smoke.test.ts` has its own config and must not run here.
       'test/turn-backend.test.ts',
+      // The live overlay's fail-closed-on-missing-S3-credentials guarantee (9.9a, B-69).
+      'test/live-overlay-fail-closed.test.ts',
     ],
     // No real network: global fetch rejects, and sign-in env is cleared (rule 4).
     setupFiles: ['test/setup.ts'],
