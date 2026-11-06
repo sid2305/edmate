@@ -12503,6 +12503,21 @@ tasks:
   status: done
   branch: m13/11.4m-ffmpeg-test-hardening
   model: plan:sonnet build:sonnet review:sonnet(code-reviewer)+sonnet(typescript-reviewer)+sonnet(security-reviewer)
+- id: 11.4n
+  milestone: M13
+  title: 'Console finding (6 Nov 2026, live-deploy run on edmate-app): 11.4l''s from-source LGPL-only ffmpeg compile takes ~15 minutes on the VM''s 2 vCPUs during the first `docker compose up --build`,
+    slowing every fresh deploy/rebuild. Swap apps/worker/Dockerfile to a pinned, checksum-verified prebuilt LGPL-only ffmpeg static build (e.g. a reputable static-build provider''s LGPL variant) instead
+    of compiling from source, keeping the same no-GPL-codec guarantee ADR-0016 requires. Tech-stack change (rule 2): architect, security-reviewer and an opus typescript-reviewer; lead approves with a
+    risk: high decision referencing ADR-0016.'
+  accept: apps/worker/Dockerfile installs a pinned, checksum-verified prebuilt ffmpeg build with no --enable-gpl codec (same ffmpegBuild.test.ts assertions as 11.4l/11.4m, updated for the new install
+    step); a fresh `docker compose up --build` of the worker image is measurably faster than the from-source compile; @edmate/worker typecheck, lint and test stay green; the lead rebuilds the image once
+    and re-checks the licence banner before merge.
+  deps:
+  - 11.4m
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: '9.9'
   milestone: M9
   title: 'Live demo deployment (human request 5 Nov 2026, top priority): get the first working end-to-end slice (teacher sign-in/profile/upload/ingest; student sign-in/package/chat with a real model) onto
