@@ -1,9 +1,14 @@
-# 9.9b review — CHANGES_REQUESTED
-Reviewers: code-reviewer
+# 9.9b review — APPROVE
+Reviewers: code-reviewer, security-reviewer
+
+Round 2: all findings below fixed by builder-9-9b (commit 973bc1df) and independently re-verified
+by a second code-reviewer pass, which reproduced both the original clobber and the fix in a scratch
+shell. No new issues found. See docs/tasks/9.9b/security-review.md for the security-reviewer's
+advisory pass (APPROVE, 1 MEDIUM + 1 LOW, both fixed in the same round).
 
 ## Findings
 
-- [HIGH] [open] scripts/live-deploy.sh:22-30 — `EDMATE_PUBLIC_HOST` is resolved and exported on
+- [HIGH] [fixed] scripts/live-deploy.sh:22-30 — `EDMATE_PUBLIC_HOST` is resolved and exported on
   line 22-24 (`HOST="${1:-${EDMATE_PUBLIC_HOST:-}}"; export EDMATE_PUBLIC_HOST="$HOST"`), then
   `source docker/.env` runs *after* that with `set -a` on (line 27-30). If `docker/.env` ever
   defines `EDMATE_PUBLIC_HOST` (not true of today's `docker/env.example`, but nothing in the
@@ -24,7 +29,7 @@ Reviewers: code-reviewer
   `docker/.env`"). Fix: re-assert `export EDMATE_PUBLIC_HOST="$HOST"` immediately after the
   `source docker/.env` block (or source `.env` before resolving `$HOST`).
 
-- [MEDIUM] [open] scripts/live-deploy.sh:48 and docs/live-demo.md:53 — both say the health check
+- [MEDIUM] [fixed] scripts/live-deploy.sh:48 and docs/live-demo.md:53 — both say the health check
   "waits up to two minutes", but the loop is 24 iterations of `curl --max-time 5` + `sleep 5`
   (line 50-56), i.e. up to 24 × 10s = 240s (~4 minutes) in the worst case, not 2 minutes. Not a
   hang (still bounded) and not fatal (matches decision 5's "soft, non-fatal" design), but the
@@ -32,7 +37,7 @@ Reviewers: code-reviewer
   actually has. Fix: correct the comment/doc, or halve the retry count/sleep to match "two
   minutes".
 
-- [MEDIUM] [open] scripts/live-deploy.sh:43-45 — the loopback-postgres overlay
+- [MEDIUM] [fixed] scripts/live-deploy.sh:43-45 — the loopback-postgres overlay
   (`-f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres`, decision 1) omits
   the `-f docker/compose.live.yaml` flag used one line earlier (line 40) to bring the live stack
   up. `docker/compose.live.yaml` doesn't exist yet (9.9a), so this can't be verified today, but if
@@ -43,7 +48,7 @@ Reviewers: code-reviewer
   Worth a one-line comment in the script (or flagging to 9.9a/9.9c) stating the constraint this
   decision depends on: `compose.live.yaml` must not redefine the `postgres` service.
 
-- [MEDIUM] [open] scripts/live-deploy.sh:27-30 — `source docker/.env` with CRLF line endings (e.g.
+- [MEDIUM] [fixed] scripts/live-deploy.sh:27-30 — `source docker/.env` with CRLF line endings (e.g.
   the file was ever edited/copied from Windows) bakes a trailing `\r` into every sourced value.
   Reproduced:
   ```
@@ -58,12 +63,19 @@ Reviewers: code-reviewer
   strip `\r` after sourcing (`AUTH_SECRET="${AUTH_SECRET%$'\r'}"` etc.) or note the Windows-editing
   pitfall in docs/live-demo.md's troubleshooting section.
 
-- [LOW] [open] scripts/live-deploy.sh:36-40 — `git pull --ff-only` is not followed by `corepack
+- [LOW] [fixed] scripts/live-deploy.sh:36-40 — `git pull --ff-only` is not followed by `corepack
   pnpm install`. A rerun after a commit that changes a workspace package's dependencies will pull
   new code but keep stale `node_modules` on the host, so the host-run `db:migrate`/`pnpm seed`
   steps (line 45-46) can fail with a module-resolution error rather than something that points at
   "run `pnpm install`". Not corrupting state (fails loudly), just undocumented. Consider adding
   `corepack pnpm install` after the pull, or a troubleshooting entry.
+
+- [MEDIUM] [fixed] scripts/live-deploy.sh:27-30 (security-reviewer) — sourcing `docker/.env` as
+  bash without a permission/ownership check, unlike `scripts/claude-backup.sh:65-76`'s precedent.
+  Fixed: a permission/ownership check now gates the source, mirroring `claude-backup.sh`.
+- [LOW] [fixed] scripts/live-deploy.sh (security-reviewer, cosmetic) — the `"pulling main"` log
+  line didn't match the `git pull --ff-only` call (no branch argument). Fixed: the pull now passes
+  an explicit `origin main` and the log line matches.
 
 ## Verification performed
 - `bash -n scripts/live-deploy.sh` — passes.
@@ -86,5 +98,5 @@ Reviewers: code-reviewer
   compose.live.yaml) and that `EDMATE_PUBLIC_HOST` has no literal default anywhere in the script.
 
 ## Decisions
-None — no new design decisions from this review; all findings are open for the builder/lead to
-triage.
+None — no new design decisions from this review; all findings were fixed in the one fix round
+and re-verified.
