@@ -33,13 +33,30 @@ function configureTokens(): string[] {
   const text = stage('ffmpeg');
   const at = text.indexOf('./configure');
   if (at === -1) return [];
-  const end = text.indexOf('make -j', at);
-  const body = text.slice(at + './configure'.length, end === -1 ? undefined : end);
+  const makeAt = text.indexOf('make -j', at);
+  const nextRun = text.indexOf('\nRUN', at);
+  // Bound the configure body at `make -j` when present, and otherwise at the next `RUN`
+  // instruction — never at end-of-stage-text, which would over-scan into the licence-check
+  // block's own quoted `--enable-(gpl|nonfree|version3|lib)` grep pattern.
+  const end = makeAt !== -1 ? makeAt : nextRun !== -1 ? nextRun : undefined;
+  const body = text.slice(at + './configure'.length, end);
   return body
     .replace(/\\\n/g, ' ')
     .replace(/;/g, ' ')
     .split(/\s+/)
+    .map((t) => t.replace(/^['"]|['"]$/g, ''))
     .filter((t) => t.startsWith('--'));
+}
+
+/** Every `RUN` instruction in `text`, with backslash line continuations joined into one line. */
+function runInstructions(text: string): string[] {
+  const joined = text.replace(/\\\n/g, ' ');
+  return [...joined.matchAll(/^RUN\s.*$/gm)].map((m) => m[0]);
+}
+
+/** True when `run` (a `RUN ...` instruction) has more than one shell statement. */
+function isMultiCommand(run: string): boolean {
+  return run.replace(/;\s*$/, '').includes(';');
 }
 
 type Kind = 'protocol' | 'demuxer' | 'decoder' | 'parser' | 'encoder' | 'muxer' | 'filter';
@@ -79,14 +96,25 @@ function valueAfter(argv: readonly string[], flag: string, from = 0): string | u
 describe('worker Dockerfile ffmpeg build (ADR-0016 Decision 8)', () => {
   it('the runtime stage installs no distro ffmpeg', () => {
     // Join backslash-continued lines first, so `apk add \` with `ffmpeg` on the next line is
-    // caught; then take each `apk add` command up to the next `;`, `&&` or `||`.
+    // caught; then take each `apk add` command (allowing flags such as `--no-cache` before
+    // `add`) up to the next `;`, `&&` or `||`.
     const logical = DOCKERFILE.replace(/\\\n/g, ' ');
-    const apkCommands = [...logical.matchAll(/apk\s+add\b[^;&|\n]*/g)].map((m) => m[0]);
+    const apkCommands = [...logical.matchAll(/apk\s+(?:-{1,2}\S+\s+)*add\b[^;&|\n]*/g)].map(
+      (m) => m[0],
+    );
     expect(
       apkCommands.length,
       'the ffmpeg build stage installs its tools with apk',
     ).toBeGreaterThan(0);
     expect(apkCommands.filter((c) => /\bffmpeg\b/.test(c))).toEqual([]);
+  });
+
+  it('every multi-command RUN in the ffmpeg stage starts with set -eux', () => {
+    const multiCommand = runInstructions(stage('ffmpeg')).filter(isMultiCommand);
+    expect(multiCommand.length, 'the ffmpeg stage has multi-command RUN blocks').toBeGreaterThan(0);
+    for (const run of multiCommand) {
+      expect(run).toMatch(/^RUN\s+set -eux;/);
+    }
   });
 
   it('ffmpeg is fetched at a pinned version over https and checked against a pinned sha256', () => {
@@ -106,6 +134,11 @@ describe('worker Dockerfile ffmpeg build (ADR-0016 Decision 8)', () => {
     expect(curl).toBeGreaterThan(-1);
     expect(check).toBeGreaterThan(curl);
     expect(untar).toBeGreaterThan(check);
+    // Order alone doesn't prove the checksum line interpolates the pinned variable rather than a
+    // literal sha; pin the actual interpolated line.
+    expect(text).toMatch(/echo "\$\{FFMPEG_SHA256\}\s+ffmpeg\.tar\.xz" \| sha256sum -c -/);
+    // Order alone also doesn't prove the download carries its TLS-hardening flags.
+    expect(text).toMatch(/curl -fsSL --proto '=https' --tlsv1\.2 -o ffmpeg\.tar\.xz/);
   });
 
   it('configure is LGPL-only with no external library', () => {
@@ -144,7 +177,13 @@ describe('worker Dockerfile ffmpeg build (ADR-0016 Decision 8)', () => {
     // `ffmpeg -L` wraps "GNU Lesser General Public\nLicense" across two lines, so the banner must
     // be joined into one line before it is grepped, or a correct LGPL build fails the image build.
     expect(text).toContain("./ffmpeg -hide_banner -L | tr '\\n' ' ' > /tmp/licence.txt");
-    expect(text).toContain('GNU Lesser General Public License');
+    // Anchor on the actual failing grep lines, not just the phrase appearing somewhere in the
+    // block: a renamed temp file would still contain the phrase but no longer be the line that
+    // fails the build.
+    expect(text).toMatch(/grep -q 'GNU Lesser General Public License' \/tmp\/licence\.txt;/);
+    expect(text).toMatch(
+      /if grep -q 'GNU General Public License' \/tmp\/licence\.txt; then [^;]*; exit 1; fi;/,
+    );
     expect(text).toMatch(
       /if grep -Eq -e '--enable-\(gpl\|nonfree\|version3\|lib\)' [^;]+; then [^;]*; exit 1; fi/,
     );
