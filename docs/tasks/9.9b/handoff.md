@@ -106,3 +106,12 @@ hostname/secret scan on both files (same clean result as before — see above).
    naturally rerunnable, `db:migrate` and `pnpm seed` are already idempotent per try-it.md. A
    `corepack pnpm install` runs right after the pull so a dependency-changing commit doesn't surface
    as a confusing module-resolution error in the migrate/seed steps (Round 2 fix #7).
+7. **(Post-approval, lead) `docs/live-demo.md`'s `docker/.env` block now lists all the human-filled
+   vars in one place**: `AUTH_SECRET`, `EDMATE_ANTHROPIC_API_KEY`, and the four `S3_*` vars
+   (`S3_REGION`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_BUCKET`), per a direct human
+   instruction that `EDMATE_ANTHROPIC_API_KEY` is the human's own key, filled by hand only — never
+   held by an agent, a doc, a message or a log — and that the doc must name every var and cover
+   B-69 (the live overlay must not fall back to the dev stack's placeholder S3 values).
+   `scripts/live-deploy.sh` itself is unchanged; only `docs/live-demo.md` grew a fuller step 2 and
+   one new troubleshooting entry for the placeholder-rejection error. `EDMATE_PUBLIC_HOST` stays
+   out of that block, in its own step 3, per decision 2 above — unchanged.
