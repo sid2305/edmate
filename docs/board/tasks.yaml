@@ -12484,4 +12484,6 @@ tasks:
   deps:
   - 11.4l
   risk: low
-  status: planning
+  status: running
+  branch: m13/11.4m-ffmpeg-test-hardening
+  model: plan:sonnet build:sonnet
