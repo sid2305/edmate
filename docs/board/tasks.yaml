@@ -2493,9 +2493,9 @@ tasks:
   - '7.2'
   - M3
   - M4
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.5-ci-gate-fixtures
+  model: plan:sonnet build:sonnet
 - id: '7.6'
   milestone: M7
   title: Live model runs, per-model pass rates and cost per turn by tier
@@ -4655,7 +4655,7 @@ tasks:
   deps:
   - '1.7'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '0.20'
@@ -12350,7 +12350,7 @@ tasks:
   deps:
   - '0.24'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: plan:sonnet build:sonnet review:sonnet
 - id: '0.26'
