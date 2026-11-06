@@ -119,14 +119,20 @@ both files formatted.
 
 ## Decisions
 
-- **Item 8 (mirror the pinned ffmpeg source tarball once images are published) — risk: low, no
-  action.** The worker image still downloads the pinned ffmpeg source tarball from ffmpeg.org
-  only; the sha256 pin already catches tampering, so this is an availability-only risk, not a
-  trust one. Mirroring is deferred until the worker image itself is published/distributed
-  somewhere a mirror would matter — not yet true, the image is built straight from this Dockerfile
-  on the VM today. Revisit then, as its own task; no new board task is opened now because the
-  trigger condition (images being published) hasn't happened yet.
-- **Item 7 (banner-join literal pin) — risk: low, no action, restated.** Already decided in
-  11.4l's review as an accepted tradeoff (an intentionally brittle literal-string pin so a
-  regression can't silently return); this task doesn't re-decide it, only records that no action
-  was taken and why.
+### 5 Nov 2026 · 11.4m mirroring the pinned ffmpeg tarball deferred (item 8) · decided by planner · risk: low
+Decided: `apps/worker/Dockerfile` keeps downloading the pinned ffmpeg source tarball from ffmpeg.org only; no mirror added, no change to `apps/worker/src/ingest/ffmpegBuild.test.ts` for this item.
+Why: The sha256 pin already catches tampering, so this is an availability-only risk, not a trust one. Mirroring is deferred until the worker image itself is published/distributed somewhere a mirror would matter — not yet true, the image is built straight from this Dockerfile on the VM today (confirmed: no registry push step exists in `.github/workflows` or `infra/`).
+Alternatives: Add a mirror now (rejected: no trigger condition met yet; premature).
+Reversible: Yes — revisit as its own task once images are published.
+
+### 5 Nov 2026 · 11.4m banner-join literal pin left unchanged (item 7) · decided by code-reviewer (11.4l), restated by planner · risk: low
+Decided: `apps/worker/src/ingest/ffmpegBuild.test.ts`'s `expect(text).toContain("./ffmpeg -hide_banner -L | tr '\\n' ' ' > /tmp/licence.txt")` stays an intentionally brittle literal-string pin; no edit.
+Why: Already decided in 11.4l's review as an accepted tradeoff, so a regression can't silently return. This task doesn't re-decide it, only records that no action was taken and why.
+Alternatives: Loosen the pin (rejected in 11.4l: would weaken the exact protection it exists for).
+Reversible: N/A — no change made.
+
+### 5 Nov 2026 · 11.4m two typescript-reviewer LOWs left as wontfix · decided by lead · risk: low
+Decided: Two theoretical LOW findings against `apps/worker/src/ingest/ffmpegBuild.test.ts` from this task's typescript-reviewer pass are left unfixed: the widened `apk add` regex can't distinguish a real flag from a package literally named like one (e.g. `apk add -- --fake-pkg`), and the sha256-interpolation regex doesn't also check `${FFMPEG_SHA256}` isn't overridden by a later literal elsewhere in the file.
+Why: Both are not risks against the current Dockerfile — the reviewer's own verdict marked them "theoretical, no fix needed now" / "not a gap the original finding asked to close." Fixing them would add test complexity for scenarios the Dockerfile doesn't exhibit.
+Alternatives: Fix anyway for defense-in-depth (rejected: no concrete gap, see `docs/tasks/11.4m/review.md`).
+Reversible: Yes — revisit if the Dockerfile ever grows a package or interpolation shaped like these.
