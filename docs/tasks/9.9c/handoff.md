@@ -111,23 +111,29 @@ premise and the console's job after this merges. What I did run:
 
 ## Decisions
 
-1. **S3 moves to its own hostname, not a smarter path rewrite.** The bug report's own fix
-   instruction already specifies this; recorded here because it reopens 9.9a's own flagged risk
-   area (a new network path for signed storage traffic) and changes the overlay's CORS story.
-   Risk: high (same category as 9.9a's own S3-routing decision — logging it here too so it
-   reaches the human's skim list at merge).
-2. **Fixed `S3_REGION`'s collision in the doc, not in `storageConfigFromEnv`'s placeholder
-   check.** Keeps the existing, already-tested B-69 guard intact for the other three credentials;
-   the region collision was specific to one recommended value in one doc, not a problem with the
-   check's design. Risk: low (docs only).
-3. **MinIO's CORS allow-origin is now an explicit literal in the overlay**, not inherited from the
-   base file's `${AUTH_URL:-...}` default (which doesn't actually read `web`'s own `AUTH_URL`
-   anyway — see bug 1's writeup). Risk: medium (storage-path correctness; the allowed origin is
-   still exactly the app's own host, never `*`).
-4. **No new test file.** Same precedent as 9.9a/9.9b: no bash test convention in this repo, and
-   `apps/web/test/live-overlay-fail-closed.test.ts` already covers the Compose-structure layer
-   this task touches (and needed no changes, per the verification above) — a real Caddy/MinIO
-   SigV4 round-trip needs the actual VM, which is exactly what this task can't reach.
+### 6 Nov 2026 · 9.9c S3 moves to its own hostname, not a smarter path rewrite · decided by builder · risk: high
+Decided: S3 traffic now goes through its own Caddy site block (`s3.${EDMATE_PUBLIC_HOST}`, plain `reverse_proxy minio:9000`, no path rewriting), replacing the shared-path approach 9.9a shipped.
+Why: Caddy's `handle_path /s3/*` strips the prefix before proxying, but SigV4 signs the full canonical path including it, so MinIO saw a path that no longer matched what was signed (403 SignatureDoesNotMatch). The bug report's own fix instruction specifies the subdomain move; recorded here too because it reopens 9.9a's own flagged risk area (a new network path for signed storage traffic) and changes the overlay's CORS story.
+Alternatives: A smarter path-stripping rewrite that re-signs or passes the original path through (rejected: more moving parts than just giving S3 its own hostname, which sslip.io resolves for free).
+Reversible: Yes, overlay/Caddyfile only.
+
+### 6 Nov 2026 · 9.9c S3_REGION's doc collision fixed in the doc, not in storageConfigFromEnv's placeholder check · decided by builder · risk: low
+Decided: `docs/live-demo.md`'s recommended `S3_REGION` value changed to `us-east-2`; the app-level placeholder guard in `storageConfigFromEnv` (B-69) was left untouched.
+Why: MinIO ignores the region value entirely, so any non-placeholder string works; the collision was specific to one recommended doc value matching the dev default, not a problem with the guard's design.
+Alternatives: Weaken or special-case the placeholder check (rejected: would erode the B-69 fail-closed guarantee for no reason).
+Reversible: Yes, doc-only.
+
+### 6 Nov 2026 · 9.9c MinIO's CORS allow-origin is an explicit literal in the overlay · decided by builder · risk: medium
+Decided: `MINIO_API_CORS_ALLOW_ORIGIN` is now set as an explicit literal (`https://${EDMATE_PUBLIC_HOST}`) in the live overlay, not inherited from the base file's `${AUTH_URL:-...}` default.
+Why: That default resolves `${AUTH_URL}` from the host shell's environment at Compose-parse time, not from `web`'s own computed `AUTH_URL`, so it silently fell back to the literal default rather than tracking the real app origin; the browser's presigned PUT also signs a `content-type` header, making the request genuinely cross-origin now that S3 has its own subdomain.
+Alternatives: Fix the base file's inheritance generally (rejected: broader change than this task's bug-fix scope; the allowed origin is still exactly the app's own host, never `*`).
+Reversible: Yes, overlay only.
+
+### 6 Nov 2026 · 9.9c no new test file for the deploy-script/Caddy fixes · decided by builder · risk: low
+Decided: No new bash test file added for `scripts/live-deploy.sh`'s nvm/build-order fixes or the Caddyfile/overlay changes.
+Why: Same precedent as 9.9a/9.9b: no bash test convention in this repo; `apps/web/test/live-overlay-fail-closed.test.ts` already covers the Compose-structure layer this task touches and needed no changes; a real Caddy/MinIO SigV4 round-trip needs the actual VM, which this task can't reach.
+Alternatives: Add a bash test harness (rejected: repo-wide convention change, out of scope).
+Reversible: Yes.
 
 ## Open questions
 
