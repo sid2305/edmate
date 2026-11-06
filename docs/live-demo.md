@@ -51,7 +51,7 @@ scripts/live-deploy.sh
 
 `<your-vm-hostname>` is a placeholder — use whatever public hostname actually resolves to this VM.
 The script pulls `main`, builds and starts the live stack, migrates and seeds the database, waits
-up to two minutes for `/api/health` to answer, and prints `live at: https://<your-vm-hostname>`. It
+up to four minutes for `/api/health` to answer, and prints `live at: https://<your-vm-hostname>`. It
 is safe to rerun: a clean pull and `docker compose up -d --build` are both idempotent, and the
 script fails loudly (not silently) if the tree is dirty, diverged, or a required var is missing.
 
