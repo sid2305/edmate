@@ -34,3 +34,19 @@ export const indiaLocalePackWithPii: LocalePack = {
   ...demoLocalePack,
   piiPatterns: [AADHAAR, PAN, UPI, PHONE_IN],
 };
+
+// United States market (task 1.7h, signed by sid2305 6 Nov 2026, B-67: see content/locales/US.yaml).
+// SSN: the Social Security Administration's published format, AAA-GG-SSSS (three digits, two
+// digits, four digits). Same unquantified three-branch alternation shape as AADHAAR above (no
+// separator / space-separated / hyphen-separated), so it passes safeRegex.ts the same way.
+const SSN = String.raw`(?<!\d)\d{3}(?:\d{2}\d{4}| \d{2} \d{4}|-\d{2}-\d{4})(?!\d)`;
+
+export const US_PII_PATTERNS = Object.freeze({
+  ssn: SSN,
+});
+
+/** demoLocalePack with the US patterns above in place of its one generic pattern. */
+export const usLocalePackWithPii: LocalePack = {
+  ...demoLocalePack,
+  piiPatterns: [SSN],
+};
