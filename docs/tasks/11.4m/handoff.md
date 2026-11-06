@@ -125,7 +125,7 @@ Why: The sha256 pin already catches tampering, so this is an availability-only r
 Alternatives: Add a mirror now (rejected: no trigger condition met yet; premature).
 Reversible: Yes — revisit as its own task once images are published.
 
-### 5 Nov 2026 · 11.4m banner-join literal pin left unchanged (item 7) · decided by code-reviewer (11.4l), restated by planner · risk: low
+### 5 Nov 2026 · 11.4m banner-join literal pin left unchanged (item 7) · decided by planner · risk: low
 Decided: `apps/worker/src/ingest/ffmpegBuild.test.ts`'s `expect(text).toContain("./ffmpeg -hide_banner -L | tr '\\n' ' ' > /tmp/licence.txt")` stays an intentionally brittle literal-string pin; no edit.
 Why: Already decided in 11.4l's review as an accepted tradeoff, so a regression can't silently return. This task doesn't re-decide it, only records that no action was taken and why.
 Alternatives: Loosen the pin (rejected in 11.4l: would weaken the exact protection it exists for).
