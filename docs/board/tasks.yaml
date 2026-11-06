@@ -12524,9 +12524,9 @@ tasks:
   deps:
   - '9.0'
   risk: low
-  status: running
+  status: review
   branch: m9/9.9b-live-deploy-script
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet(code-reviewer)+sonnet(security-reviewer)
 - id: 9.9c
   milestone: M9
   title: 'Live deploy fixes: after 9.9a and 9.9b merge, the console runs scripts/live-deploy.sh on edmate-app over SSH (builders have no SSH access to this VM) and posts the output back to the lead; this
