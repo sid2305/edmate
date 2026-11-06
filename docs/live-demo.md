@@ -17,26 +17,55 @@ UI is reachable only over the tailnet, never the public internet.
 
 ## 2. Fill in `docker/.env` by hand on the VM
 
+Every value below is filled in **by hand, on the VM, by whoever is running the demo** — never by
+an agent, never pasted into a doc, a commit, a message or a log. `docker/.env` is gitignored and
+never leaves the VM.
+
+This is non-negotiable for `EDMATE_ANTHROPIC_API_KEY` in particular: it is a real, billable
+Anthropic API key. Only the human running the demo holds it. No agent writes it, reads it back, or
+repeats it in a message — if an agent is ever asked to, that is a mistake and the key should be
+rotated.
+
 On the VM, from the repo root:
 
 ```bash
 cp docker/env.example docker/.env
-openssl rand -base64 32
+openssl rand -base64 32   # use the output for AUTH_SECRET below
+openssl rand -hex 16      # use the output for S3_ACCESS_KEY_ID below
+openssl rand -base64 32   # use the output for S3_SECRET_ACCESS_KEY below
 ```
 
-Open `docker/.env` and fill in only these two lines:
+Open `docker/.env` and fill in exactly these lines (one copy-paste block — nothing else in the
+file needs to change):
 
 ```
-AUTH_SECRET=<the output of openssl rand -base64 32>
+AUTH_SECRET=<the first openssl output above>
 EDMATE_ANTHROPIC_API_KEY=<your Anthropic key>
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=<the second openssl output above>
+S3_SECRET_ACCESS_KEY=<the third openssl output above>
+S3_BUCKET=edmate-live
 ```
+
+The four `S3_*` lines matter even though this stack's storage is just the `minio` container
+running on the VM, not a third-party bucket: the live overlay (`docker/compose.live.yaml`)
+requires real, non-default values for these — unlike the local dev stack, it refuses to start
+`web`/`worker` with the dev placeholder values `docker/compose.yaml` otherwise defaults to
+(`edmate-dev` / `edmate-dev-storage` / `edmate-dev`), so the live demo can never end up running on
+those placeholders by accident. Pick any values that aren't the dev defaults; the ones above are
+just as good as any other.
 
 Leave `EMAIL_SERVER` and `EMAIL_FROM` unset. The live demo keeps using Mailpit until a real mail
 provider exists (human decision; see `docs/setup/sign-in-mail-and-proxy.md`). Mailpit's own web UI
 stays bound to `127.0.0.1` on the VM, never public — see step 4 for how to reach it anyway.
 
-`docker/.env` is gitignored and never leaves the VM. Never paste a key anywhere else. If a key ever
-leaks, rotate it at the provider; deleting it from the file isn't enough.
+Never paste any of these values anywhere else. If a value ever leaks, rotate it at the source
+(the Anthropic console for the API key); deleting it from the file isn't enough.
+
+`EDMATE_PUBLIC_HOST` is also filled in by hand, but **not** in `docker/.env` — see step 3. Keeping
+it out of this file is deliberate: it's an environment variable or script argument only, so a
+stale value left over in `docker/.env` from an earlier run can never silently override the host
+the script was actually just told to use.
 
 ## 3. Run the deploy script
 
@@ -109,3 +138,7 @@ New on the live stack:
   given. Confirm `EDMATE_PUBLIC_HOST` (or the argument passed to `scripts/live-deploy.sh`) matches
   the hostname you're actually browsing to, then rerun the script. Fixing the wiring itself, if it
   turns out to need more than this, is a follow-up task, not part of this guide.
+- **`web`/`worker` fail to start with an `S3_..._missing` or `S3_..._placeholder` error**: one of
+  the four `S3_*` lines in step 2 is unset or still has a dev-default value. Fill in real values
+  (any value that isn't `edmate-dev`/`edmate-dev-storage`) and rerun the script — this is the live
+  overlay's deliberate refusal to run on the dev stack's own placeholder values, not a bug.
