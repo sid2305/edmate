@@ -12193,9 +12193,9 @@ tasks:
   deps:
   - 11.4d
   risk: risky
-  status: running
+  status: done
   branch: m13/11.4l-ffmpeg-lgpl-swap
-  model: plan:opus build:opus review:pending
+  model: plan:opus build:opus review:opus(architect)+sonnet(security-reviewer)+opus(typescript-reviewer)+sonnet(code-reviewer)
 - id: 0.20i
   milestone: M13
   title: 'harness timing flake: modelRequest.test.ts "expectUnderCeiling still fails on a deliberately backtracking regex (self-test)" finds the first k whose regex run passes the 2 s ceiling, then re-runs
@@ -12473,3 +12473,15 @@ tasks:
         deferred: 0
         wontfix: 0
     human_questions: 1
+- id: 11.4m
+  milestone: M13
+  title: '11.4l review LOWs/MEDIUMs, test-hardening only (no Dockerfile behaviour change): ffmpegBuild.test.ts assert set -eux is present on both multi-command RUN blocks (typescript-reviewer MEDIUM); assert
+    the sha256sum -c line actually interpolates ${FFMPEG_SHA256} rather than any literal (typescript-reviewer MEDIUM); tighten the apk add/configure-flag/licence-grep regexes against apk --no-cache add
+    ordering, quoted --enable-gpl tokens, and an unpinned GPL-banner grep (typescript-reviewer and code-reviewer LOWs); assert curl -fsSL carries --proto =https --tlsv1.2 (security-reviewer LOW); mirror
+    the pinned ffmpeg source tarball once images are published, per LGPL 2.1 provenance (security-reviewer LOW, no code change yet, docs only).'
+  accept: every finding listed above has a new or tightened assertion in ffmpegBuild.test.ts (or, for the mirroring item, a documented follow-up note) that fails against a reintroduced instance of the original
+    gap and passes against the current Dockerfile; @edmate/worker typecheck, lint and test stay green; no Dockerfile behaviour changes.
+  deps:
+  - 11.4l
+  risk: low
+  status: todo

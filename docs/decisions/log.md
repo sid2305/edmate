@@ -10,6 +10,44 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 5 Nov 2026 · 11.4l LGPL-only ffmpeg replaces the distro package · decided by lead · risk: high
+Decided: The worker image builds FFmpeg 7.1.5 from the official source tarball, pinned by sha256 in `apps/worker/Dockerfile` (GPG-verified against FFmpeg's release key when pinned), configured LGPL 2.1+ only with an audio-only component set, in place of `apk add ffmpeg`.
+Why: The lead's 5 Nov 2026 check showed the base image's apk ffmpeg 6.1.2-r2 is `--enable-gpl`, and ADR-0016 Decision 8 pre-authorizes this fallback. Reviewed by architect, security-reviewer and typescript-reviewer (opus); code-reviewer also ran. The lead rebuilt the image and independently re-checked the licence banner, the configuration line, the absence of any apk ffmpeg package, and a functional smoke test (synthetic MP4+AAC and WebM+Opus, offline) before merge — see `## Lead verification` above.
+Alternatives: Keep the distro apk ffmpeg and accept the GPL exposure (rejected: ADR-0016 requires LGPL-only); use a prebuilt static binary (rejected below as D1).
+Reversible: Yes, but not cost-free — reverting the Dockerfile stage and the ADR amendment restores the apk package, which is the GPL build the ADR rejects, not a clean rollback. The actual rollback the ADR names (Consequences, "Rollback") is removing the `chunker` option from `createWhisperTranscriber`'s call site, restoring the prior "refuse at upload" behaviour, with no contracts change either way.
+
+### 5 Nov 2026 · 11.4l ffmpeg built from source in a discarded Docker stage (D1) · decided by planner · risk: medium
+Decided: Build ffmpeg from the official source tarball in its own discarded Docker stage, rather than fetch a prebuilt static binary.
+Why: The prebuilt sources available are GPL, glibc-linked, or have rolling (non-pinned) assets. A source build makes the exact `configuration:` line known before anything runs, so the LGPL-only guarantee can be checked mechanically.
+Alternatives: A prebuilt static binary from a third-party mirror (rejected: licence and provenance can't be pinned the same way).
+Reversible: Yes.
+
+### 5 Nov 2026 · 11.4l pinned to the 7.1 release branch (D2) · decided by planner · risk: low
+Decided: Pin to FFmpeg 7.1.5, the newest 7.1.x point release at the time of pinning.
+Why: The 7.1 branch is maintained, and this task's flag set was checked against it, not against 8.x, which changed configure (e.g. removed libpostproc).
+Alternatives: Track 8.x (rejected: this flag set has not been checked against it).
+Reversible: Yes — a version and sha256 bump.
+
+### 5 Nov 2026 · 11.4l decoder set limited to what the chunker needs (D3) · decided by planner · risk: low
+Decided: Enable only the decoders aac, opus, vorbis, mp3, mp3float and alac.
+Why: These are the audio codecs real uploads carry for the chunker's three supported MIME types (aac/alac in MP4 and M4A, opus/vorbis in WebM, mp3/mp3float as a broader-coverage addition); ac3/eac3/flac are left out, and an unsupported codec fails closed as a `validation` error rather than silently degrading.
+Alternatives: Enable a broader codec set for headroom (rejected: widens the audit surface for no current use).
+Reversible: Yes.
+
+### 5 Nov 2026 · 11.4l `--disable-x86asm` (D4) · decided by planner · risk: low
+Decided: Disable x86 assembly optimizations in the ffmpeg build, so no `nasm` build dependency is needed.
+Why: Audio-only work in plain C still runs far faster than real time; the lead's smoke test (above) confirms this (0.42-0.44s for 20s inputs).
+Alternatives: Keep x86asm enabled and add nasm to the build stage (rejected: unnecessary given the smoke-test timing).
+Reversible: Yes.
+
+### 5 Nov 2026 · 11.4l recorded as a dated ADR-0016 amendment, not a new ADR (D5) · decided by planner · risk: low
+Decided: Record this fallback as a dated amendment to ADR-0016 (Decision 8), not a new ADR.
+Why: ADR-0016 already pre-authorized this exact fallback in Decisions 7-9; amending it keeps the decision history in one place rather than splitting it across documents.
+Alternatives: Write a new ADR (rejected: unnecessary, the decision was already pre-authorized).
+Reversible: Yes.
+
+---
+
 ### 5 Nov 2026 · 4.4i distress prefetch respects the guard's configured timeout · decided by lead · risk: high
 Decided: Merge as planned.
 Why: `distressDetect.ts` is a student-safety risk path; pre-pilot-gate the required reviewer there is `code-reviewer` only (`safety-reviewer` waived until task 13.3, per `risk-paths.txt`). Reviewed by code-reviewer: zero code-level findings (type change is a pure additive intersection, the timeout lookup happens once at step-creation not per-turn, fallback is correctly guarded, chain order and other prefetches are untouched, gate independently re-run green). The reviewer's one CRITICAL finding was procedural, not code: `plan.md`'s 4 Nov hold on new risky-path work had not been logged as lifted anywhere durable. It was lifted out-of-band by the human earlier the same session ("the hold is lifted ... build 4.4i"); that answer is now logged in `.claude/blockers.md`'s B-64 entry (moved to Resolved) ahead of this merge, closing the gap the reviewer flagged.
