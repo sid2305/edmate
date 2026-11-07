@@ -12378,9 +12378,9 @@ tasks:
   deps:
   - '0.24'
   risk: risky
-  status: planning
-  branch: null
-  model: plan:sonnet build:sonnet review:sonnet
+  status: running
+  branch: m13/0.26-foundry-managed-identity
+  model: plan:sonnet build:sonnet review:sonnet(code-reviewer,security-reviewer)
 - id: '0.27'
   milestone: M13
   title: 'VM phase 3, only if funded with a model budget per VM (parked): a pool of VMs, one lead each, the board split by milestone with an owner filter so two leads never take the same task; create-vm.sh
