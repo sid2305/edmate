@@ -63,6 +63,18 @@ No files created; no files touched outside the plan's "Files to modify" list;
 - Decided: `NODE_EXTRA_CA_CERTS` is wired onto `web` only, not `worker`. Why: grepping `nodemailer`/`createTransport` across `apps/` shows only `apps/web/src/auth/mail.ts` ever opens an SMTP connection; the worker never sends mail. Alternatives: wiring it onto `worker` too for symmetry, rejected as unneeded. Reversible: yes.
 - Decided: no change to `docker/env.example`. Why: both new env values (`MP_SMTP_TLS_CERT`/`MP_SMTP_TLS_KEY`/`NODE_EXTRA_CA_CERTS`) are fixed, compose-internal container paths the overlay itself sets — nothing a human ever fills into `docker/.env` by hand. Alternatives: documenting them there anyway for visibility, rejected as noise since they're never operator-set. Reversible: yes.
 
+### 6 Nov 2026 · 9.9d TS narrowing LOW left as wontfix · decided by lead · risk: low
+Decided: leave `apps/web/test/live-overlay-fail-closed.test.ts:188`'s `expect(mailpitCertPath).toBeDefined()` as-is, not rewritten into a type-narrowing form.
+Why: typescript-reviewer found it harmless at runtime (both sides of the later comparison already share the same type); a stricter narrowing guard is extra ceremony in a demo-fix test file with no safety stakes.
+Alternatives: rewrite as `expect(mailpitCertPath).not.toBeUndefined()` plus a throw, rejected as unnecessary here.
+Reversible: yes, trivial to add later if the file grows stricter typing elsewhere.
+
+### 6 Nov 2026 · 9.9d VM depends_on confirmation LOW left as wontfix · decided by lead · risk: low
+Decided: leave the real `docker compose -f docker/compose.yaml -f docker/compose.live.yaml config` merge check for `docker/compose.live.yaml` unverified from this worktree; it is confirmed on the real VM after merge instead, same pattern as 9.9a/9.9b/9.9c/1.4d.
+Why: no docker/VM access from this worktree or the lead's own environment; the plan already treats this as a deferred post-merge verification step, not a blocking one.
+Alternatives: block the merge on it, rejected — would stall the live-demo fix for a check that was always going to run after merge.
+Reversible: yes.
+
 Risk label: `risk: high` (board's `risk: risky` label on 9.9d — live-demo critical path, human
 judgment, not a `risk-paths.txt` match). Risky paths touched: none per
 `.claude/skills/merge-gate/risk-paths.txt` (confirmed in the plan); required reviewers per the
