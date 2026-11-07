@@ -3,7 +3,7 @@
 Status: DONE
 Branch: m13/0.25b-monitor-fixes
 Worktree: /tmp/edmate-0.25b
-Tool calls used: ~40
+Tool calls used: 40
 
 ## Acceptance evidence
 
