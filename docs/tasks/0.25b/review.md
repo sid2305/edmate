@@ -1,0 +1,8 @@
+# 0.25b review — APPROVE
+
+Reviewers: code-reviewer, security-reviewer
+
+## Findings
+- [LOW] [deferred 0.25] .claude/tests/test_no_azure_identifiers.py:26 — `AZURE_FQDN_RE`'s unanchored prefix quantifier has pre-existing catastrophic-backtracking risk (confirmed: a crafted 20000-char input hangs the regex >120s), present on both the old and new regex — not introduced by this diff's suffix-alternation widening. Low practical risk: the scanner only runs against trusted, checked-in `infra/azure/**`/`docs/azure-vm.md` content, never attacker-controlled input. Worth a follow-up task to anchor the prefix quantifier; not a blocker here.
+
+Both reviewers independently verified each of the four fixes by reverting the relevant file to `main`'s version and re-running the new regression tests (confirming they fail on the old code and pass on the fix, not vacuous): the `monitor.env` malformed-source degrade, the `--max-time` curl flags, the widened FQDN regex (new `*.blob.core.windows.net` case genuinely exercises the new branch), and the `monitor-setup.sh` resolved-id fix proven by a fully sandboxed fake-`az` stub test (no real `az`/`curl`/`docker`/`systemctl` call, confirmed `az` isn't even installed on the review host). Full `.claude/tests` suite: 401/401 green. Secret scan clean. Open question 4 (the live `DRY_RUN=0`-against-a-disposable-resource-group exercise) is correctly carried forward in the handoff as an outstanding human step, not silently marked done. `ensure_dcr()`'s unconditional id resolution (vs. the plan's illustrative inside-the-branch sketch) is a pre-approved deviation per the plan's own Open question 3.
