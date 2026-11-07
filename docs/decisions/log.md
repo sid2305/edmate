@@ -10,6 +10,83 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 6 Nov 2026 · Fetch the Foundry IMDS token with ANTHROPIC_FOUNDRY_AUTH_TOKEN, scoped to the Cognitive Services audience · decided by builder · risk: high
+- Decided: Added `fetch_imds_token()` to `scripts/claude-backup.sh`, gated to `uname -s = Linux`,
+  requesting `https://cognitiveservices.azure.com/` from the VM's system-assigned managed identity
+  via IMDS (`169.254.169.254`), exporting the result only as `ANTHROPIC_FOUNDRY_AUTH_TOKEN`, never
+  `ANTHROPIC_FOUNDRY_API_KEY`, and logging only the auth mode name (`entra-imds`), never the token.
+- Why: this is the only Linux-capable auth path today (`az` CLI is not installed by
+  `infra/azure/cloud-init.yaml`, and the Mac Keychain path doesn't exist on Linux); the plan already
+  resolved this design (see plan "Design decisions resolved" §1–2) and specified the exact test
+  cases, which this PR implements and passes.
+- Alternatives: install the `az` CLI on the VM and use `az login`/`az account get-access-token`
+  (plan rejected this — new attack surface and package, where IMDS is already the proven pattern
+  `monitor-ingest.sh` uses for the identical problem).
+- Reversible: yes — a one-line change to `FOUNDRY_IMDS_TOKEN_URL`'s audience string if the human's
+  real-VM run shows Claude Code's Foundry client expects a different audience (not confirmed against
+  live Foundry docs from the planning/build sandbox).
+
+### 6 Nov 2026 · No new systemd timer for mid-session proactive switch-back; the existing stateless `auto` mode plus the VM's restart cadence is the switch-back mechanism · decided by builder · risk: high
+- Decided: the accept line names "auto mode" specifically; `probe_subscription()`/`auto` already
+  re-probes fresh on every invocation with zero memory of the previous provider. This PR adds
+  tests proving that statelessness (`TestAutoSwitchBack`), not new infrastructure.
+- Why: a systemd timer that force-restarts a running Foundry session the moment the window reopens
+  is new infrastructure the accept line doesn't ask for; the VM's existing `Restart=always` plus the
+  lead's own natural exit/crash/reboot cadence already delivers "switches back ... when the window
+  reopens."
+- Alternatives: a new always-on watcher/timer (sibling to `edmate-blockers-watch.timer`) that force-
+  restarts a live Foundry session proactively — left out as a separate, differently-sized task if
+  the human wants it later.
+- Reversible: yes, additive — a future timer could be layered on without touching this PR's code.
+
+### 6 Nov 2026 · Fixed a pre-existing Linux/macOS `stat` ordering bug blocking every Linux invocation of load_foundry_env() · decided by builder · risk: high
+- Decided: reordered both permission/ownership `stat` calls in `load_foundry_env()` to try the GNU
+  (`-c`) form first, falling back to the BSD/macOS (`-f`) form, instead of the reverse.
+- Why: not itemized in the plan's "Files to modify" bullets, but strictly necessary to meet the
+  plan's own acceptance line ("verified on Linux with the Entra path") — `stat -f '%Lp' FILE` is
+  BSD/macOS-only; on GNU/Linux `-f` means "filesystem status" and misparses the format string as a
+  second file operand, so the config-permission check could never pass on Linux at all, in or out
+  of this task's new code. Found while running the new tests on this (Linux) sandbox — every
+  `TestLinuxEntraPath` test failed with a "must be chmod 600" error even though the fixture file was
+  chmod 600, until this fix. `infra/azure/lib/monitor-ingest.sh` doesn't have this bug (it has no
+  `stat` call at all), so there was no existing pattern to copy; the fix instead matches the general
+  "Linux-first, Mac-fallback" convention used elsewhere in this script (e.g. the Keychain-then-Entra
+  order).
+- Alternatives: leave it and mark 0.26 blocked pending a separate bug-fix task — rejected: the bug
+  sits directly on this task's own critical path (no Linux `--foundry` run can get past the
+  permission check without it), and the fix is a one-line, low-risk reordering with no behaviour
+  change on macOS (BSD `stat -f` still works exactly as before when GNU `-c` isn't available).
+- Reversible: yes, trivial one-line revert.
+
+### 6 Nov 2026 · Unset the empty ANTHROPIC_FOUNDRY_API_KEY/_AUTH_TOKEN left over from sourcing the config file · decided by builder · risk: high
+- Decided: in the IMDS and plain-`entra` fallback branches of `load_foundry_env()`, explicitly
+  `unset ANTHROPIC_FOUNDRY_API_KEY` (and, in the plain fallback, `ANTHROPIC_FOUNDRY_AUTH_TOKEN` too)
+  before setting the real auth variable.
+- Why: `set -a; . "$CONFIG"; set +a` exports every variable the config file declares, including
+  `ANTHROPIC_FOUNDRY_API_KEY=` (empty) from `foundry.env.example`/`foundry.env.fake`. Without the
+  `unset`, the final Claude Code process would see `ANTHROPIC_FOUNDRY_API_KEY=` (empty string) in
+  its environment even on the IMDS/Entra paths — technically "set to empty," which could read as
+  contradicting the accept line's "no `ANTHROPIC_FOUNDRY_API_KEY` set" and definitely contradicted
+  the plan's own test spec ("no `ANTHROPIC_FOUNDRY_API_KEY=` line at all"). Found by running the new
+  tests, which failed on exactly this until the `unset` was added.
+- Alternatives: change the config file convention to omit the line instead of leaving it blank —
+  rejected: `foundry.env.example`'s documented convenience is leaving the line present-but-empty for
+  the human to fill in; cleaning it up in the script is simpler and keeps the example file's wording
+  unchanged.
+- Reversible: yes, trivial.
+
+### 6 Nov 2026 · `risk: high` for the whole task · decided by builder · risk: high
+- Decided: carrying forward the board's task-level `risk: risky` flag plus the `.claude/**` new-file
+  match on `test_claude_backup.py` (per `risk-paths.txt`'s `.claude/**` → security-reviewer line) as
+  a `risk: high` decision, per rule 6.
+- Why: the plan's "Risky paths touched" section already worked this out — required reviewers are
+  `code-reviewer` (every PR) and `security-reviewer` (the `.claude/**` match, and substantively
+  right given the credential-acquisition subject matter); no `architect`/`typescript-reviewer`
+  needed (no `packages/contracts/**` or `docs/adr/**` touched).
+- Alternatives: none — this is a direct carry-forward of the plan's own resolved analysis, not a
+  new call.
+- Reversible: n/a (a logging decision, not a design one).
+
 ### 6 Nov 2026 · 0.25b four deferred review-finding fixes merged · decided by builder · risk: high
 - Decided: board-level `risk: risky` flag on 0.25b, plus this PR's `.claude/**` test-file changes
   matching the `.claude/**` risk-paths group, together require a `risk: high` decision per rule 6.
