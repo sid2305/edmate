@@ -12606,6 +12606,6 @@ tasks:
   deps:
   - 9.9c
   risk: risky
-  status: running
+  status: done
   branch: m9/9.9e-privacy-notice-draft
   model: plan:sonnet build:sonnet review:sonnet(code-reviewer)

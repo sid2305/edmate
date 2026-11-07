@@ -10,6 +10,32 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 6 Nov 2026 · 9.9e drafted interim US/global notice bodies verbatim from the plan, reviewedBy left pending · decided by builder · risk: high
+Decided: Replaced the body text of `content/legal/privacy-notice/US.md` and `global.md` with the
+demo-honest draft text the plan specified word for word; left `reviewedBy: pending` and
+`[PLACEHOLDER]` in place so the notices stay correctly unsigned.
+Why: The task is to unblock a future human sign-off, not to perform it — same pattern as 1.7h/B-67
+(a named human signs later, out of band). Writing any name into `reviewedBy` would be the human's
+own act, and this task only drafts content for that future sign-off.
+Alternatives: Leave the old one-paragraph placeholder body as-is and only add the live-demo.md note
+(rejected: the old body doesn't name who the demo is for or what data it stores, so the future
+human sign-off would have nothing demo-specific to actually judge against).
+Reversible: Yes, content-only; `content/legal/**` is a risk path per
+`.claude/skills/merge-gate/risk-paths.txt` (reviewer group: `code-reviewer`, which runs on every
+PR), hence `risk: high` here per that file's own comment.
+
+### 6 Nov 2026 · 9.9e live-demo.md phrases the precondition around the student's age-gate market, not EDMATE_MARKET · decided by builder · risk: low
+Decided: Both new `docs/live-demo.md` insertions describe the precondition as "whichever market a
+demo student picks at the age gate", not "a signed notice for EDMATE_MARKET" (the board task's own
+one-line shorthand).
+Why: `EDMATE_MARKET` only selects the teacher studio's own test-chat preview market
+(`apps/web/src/turn/previewMarket.ts`); it never picks a student's market at the age gate. Using
+the shorthand in the doc would mislead whoever runs the live demo about which env var or UI step
+actually controls the precondition.
+Alternatives: Use the board task's shorthand verbatim (rejected: factually wrong about what
+`EDMATE_MARKET` does).
+Reversible: Yes, doc wording only.
+
 ### 6 Nov 2026 · 9.9d Mailpit TLS named volume, not a host bind mount · decided by builder · risk: low
 - Decided: a true Docker named volume (`mailpit-tls`), not a `docker/data/...` host bind mount. Why: the board task specifies "via a named volume"; it also keeps the self-signed private key out of the repo checkout tree entirely. Alternatives: a host bind mount under `docker/data/`, rejected per the task's own wording and the private-key-exposure risk. Reversible: yes (swap the volume definition later if ever needed).
 
