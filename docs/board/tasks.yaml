@@ -12587,8 +12587,8 @@ tasks:
   deps:
   - 9.9c
   risk: risky
-  status: planning
-  branch: null
+  status: done
+  branch: m9/9.9d-mailpit-tls
   model: plan:sonnet build:sonnet review:sonnet
 - id: 9.9e
   milestone: M9
@@ -12606,6 +12606,6 @@ tasks:
   deps:
   - 9.9c
   risk: risky
-  status: planning
-  branch: null
-  model: plan:sonnet build:sonnet review:sonnet
+  status: running
+  branch: m9/9.9e-privacy-notice-draft
+  model: plan:sonnet build:sonnet review:sonnet(code-reviewer)

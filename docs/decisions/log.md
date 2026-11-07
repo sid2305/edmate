@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 6 Nov 2026 · 9.9d Mailpit TLS named volume, not a host bind mount · decided by builder · risk: low
+- Decided: a true Docker named volume (`mailpit-tls`), not a `docker/data/...` host bind mount. Why: the board task specifies "via a named volume"; it also keeps the self-signed private key out of the repo checkout tree entirely. Alternatives: a host bind mount under `docker/data/`, rejected per the task's own wording and the private-key-exposure risk. Reversible: yes (swap the volume definition later if ever needed).
+
+### 6 Nov 2026 · 9.9d Mailpit TLS init container as a new overlay-only service · decided by builder · risk: low
+- Decided: a new one-shot init-container service (`mailpit-cert`), breaking 9.9a's self-imposed "every overlay service name already exists in the base file" convention. Why: the task requires either an init container or a sidecar for cert generation, which is necessarily a new service name; Compose fully supports services defined only in an overlay file. Alternatives: a long-running sidecar, rejected as unnecessary complexity for a one-time generation step. Reversible: yes.
+
+### 6 Nov 2026 · 9.9d Mailpit TLS init container base image · decided by builder · risk: low
+- Decided: `node:22.22.3-alpine3.22` (already the exact base of `apps/web`'s and `apps/worker`'s own Dockerfiles) as the init container's image, with `apk add --no-cache openssl` run at container start, rather than pinning a brand-new third-party openssl-bearing image by digest. Why: introduces no new image to track; matches the inline-`apk add` idiom `apps/worker/Dockerfile`'s ffmpeg stage already uses. Alternatives: a dedicated openssl/alpine image pinned by digest, rejected as an unnecessary new third-party image to track. Reversible: yes.
+
+### 6 Nov 2026 · 9.9d Mailpit TLS cert/key file permissions · decided by builder · risk: low
+- Decided: both generated files get `chmod 644` (world-readable, including the private key). Why: this cert protects nothing outside the Docker-internal sandbox mail path between `mailpit` and `web` (Mailpit has no outbound relay); `mailpit`/`web` may run as different non-root container users and both need read access regardless of UID. Alternatives: a stricter private-key mode plus matching UID/GID across services, rejected as unnecessary complexity for a cert with no value outside this container network. Reversible: yes.
+
+### 6 Nov 2026 · 9.9d NODE_EXTRA_CA_CERTS scoped to web only · decided by builder · risk: low
+- Decided: `NODE_EXTRA_CA_CERTS` is wired onto `web` only, not `worker`. Why: grepping `nodemailer`/`createTransport` across `apps/` shows only `apps/web/src/auth/mail.ts` ever opens an SMTP connection; the worker never sends mail. Alternatives: wiring it onto `worker` too for symmetry, rejected as unneeded. Reversible: yes.
+
+### 6 Nov 2026 · 9.9d no docker/env.example change · decided by builder · risk: low
+- Decided: no change to `docker/env.example`. Why: both new env values (`MP_SMTP_TLS_CERT`/`MP_SMTP_TLS_KEY`/`NODE_EXTRA_CA_CERTS`) are fixed, compose-internal container paths the overlay itself sets — nothing a human ever fills into `docker/.env` by hand. Alternatives: documenting them there anyway for visibility, rejected as noise since they're never operator-set. Reversible: yes.
+
+### 6 Nov 2026 · 9.9d TS narrowing LOW left as wontfix · decided by lead · risk: low
+Decided: leave `apps/web/test/live-overlay-fail-closed.test.ts:188`'s `expect(mailpitCertPath).toBeDefined()` as-is, not rewritten into a type-narrowing form.
+Why: typescript-reviewer found it harmless at runtime (both sides of the later comparison already share the same type); a stricter narrowing guard is extra ceremony in a demo-fix test file with no safety stakes.
+Alternatives: rewrite as `expect(mailpitCertPath).not.toBeUndefined()` plus a throw, rejected as unnecessary here.
+Reversible: yes, trivial to add later if the file grows stricter typing elsewhere.
+
+### 6 Nov 2026 · 9.9d VM depends_on confirmation LOW left as wontfix · decided by lead · risk: low
+Decided: leave the real `docker compose -f docker/compose.yaml -f docker/compose.live.yaml config` merge check for `docker/compose.live.yaml` unverified from this worktree; it is confirmed on the real VM after merge instead, same pattern as 9.9a/9.9b/9.9c/1.4d.
+Why: no docker/VM access from this worktree or the lead's own environment; the plan already treats this as a deferred post-merge verification step, not a blocking one.
+Alternatives: block the merge on it, rejected — would stall the live-demo fix for a check that was always going to run after merge.
+Reversible: yes.
+
 ### 6 Nov 2026 · 9.9c S3 moves to its own hostname, not a smarter path rewrite · decided by builder · risk: high
 Decided: S3 traffic now goes through its own Caddy site block (`s3.${EDMATE_PUBLIC_HOST}`, plain `reverse_proxy minio:9000`, no path rewriting), replacing the shared-path approach 9.9a shipped.
 Why: Caddy's `handle_path /s3/*` strips the prefix before proxying, but SigV4 signs the full canonical path including it, so MinIO saw a path that no longer matched what was signed (403 SignatureDoesNotMatch). The bug report's own fix instruction specifies the subdomain move; recorded here too because it reopens 9.9a's own flagged risk area (a new network path for signed storage traffic) and changes the overlay's CORS story.
