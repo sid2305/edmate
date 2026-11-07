@@ -55,7 +55,9 @@ describe('live overlay: S3_ALLOW_HTTP / AGE_NOTICE_ALLOW_UNSIGNED stay literal, 
   });
 
   it('the overlay never republishes mailpit or minio ports', () => {
-    expect(serviceBlock(LIVE_COMPOSE, 'mailpit')).toBe('');
+    // mailpit is now mentioned (task 9.9d, STARTTLS cert wiring only) but must still never
+    // republish its 127.0.0.1-only port binding, same shape as the minio assertion below.
+    expect(serviceBlock(LIVE_COMPOSE, 'mailpit')).not.toContain('ports:');
     expect(serviceBlock(LIVE_COMPOSE, 'minio')).not.toContain('ports:');
   });
 
@@ -148,5 +150,47 @@ describe('live overlay: S3 credentials never fall back to the dev stack placehol
         S3_BUCKET: 'edmate-dev',
       }),
     ).toThrow('S3_REGION_placeholder');
+  });
+});
+
+describe('live overlay: mailpit STARTTLS cert (task 9.9d)', () => {
+  const liveMailpit = serviceBlock(LIVE_COMPOSE, 'mailpit');
+  const liveWeb = serviceBlock(LIVE_COMPOSE, 'web');
+  const baseMailpit = serviceBlock(BASE_COMPOSE, 'mailpit');
+
+  it("mailpit's overlay block wires in the self-signed cert and mounts it read-only", () => {
+    expect(liveMailpit).toContain('MP_SMTP_TLS_CERT: /tls/cert.pem');
+    expect(liveMailpit).toContain('MP_SMTP_TLS_KEY: /tls/key.pem');
+    expect(liveMailpit).toMatch(/mailpit-tls:\/tls:ro/);
+  });
+
+  it("web's overlay block trusts the same cert file and mounts it read-only", () => {
+    expect(liveWeb).toContain('NODE_EXTRA_CA_CERTS: /tls/cert.pem');
+    expect(liveWeb).toMatch(/mailpit-tls:\/tls:ro/);
+  });
+
+  it('web trusts the byte-for-byte same cert path mailpit is given (why the fix works at all)', () => {
+    const mailpitCertPath = literalValue(liveMailpit, 'MP_SMTP_TLS_CERT');
+    const webTrustPath = literalValue(liveWeb, 'NODE_EXTRA_CA_CERTS');
+    expect(mailpitCertPath).toBeDefined();
+    expect(webTrustPath).toBe(mailpitCertPath);
+  });
+
+  it('a one-shot mailpit-cert service generates the cert into a writable mount of the same volume', () => {
+    const certService = serviceBlock(LIVE_COMPOSE, 'mailpit-cert');
+    expect(certService).not.toBe('');
+    expect(certService).toContain('openssl req -x509');
+    // Writable: a mailpit-tls:/tls line with no trailing :ro, distinct from mailpit's/web's
+    // read-only mounts of the same volume.
+    expect(certService).toMatch(/mailpit-tls:\/tls\n/);
+    expect(certService).not.toMatch(/mailpit-tls:\/tls:ro/);
+  });
+
+  it('the top-level volumes block declares the named mailpit-tls volume', () => {
+    expect(LIVE_COMPOSE).toMatch(/\nvolumes:\n(?:[\s\S]*?\n)? {2}mailpit-tls:/);
+  });
+
+  it('regression guard: the base compose file ships mailpit with no TLS cert of its own', () => {
+    expect(baseMailpit).not.toContain('MP_SMTP_TLS_CERT');
   });
 });

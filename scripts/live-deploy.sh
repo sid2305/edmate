@@ -13,6 +13,10 @@
 # Safe to rerun: `git pull --ff-only origin main` fails loudly rather than silently on a dirty
 # tree or a diverged branch (fix that by hand on the VM, then rerun); `docker compose up -d
 # --build`, `db:migrate` and `pnpm seed` are already idempotent.
+#
+# The live stack also runs a one-shot `mailpit-cert` container before `mailpit`/`web` start (task
+# 9.9d, generates mailpit's self-signed STARTTLS cert on first run only); `docker compose ps`
+# showing it Exit 0 during a deploy is expected, not a crash.
 set -euo pipefail
 
 # nvm (and the corepack/pnpm it puts on PATH) only loads automatically in an interactive login
@@ -70,6 +74,7 @@ corepack pnpm install
 say "building @edmate/db (and its dependencies: contracts, harness, content) for db:migrate below"
 corepack pnpm turbo run build --filter=@edmate/db...
 
+say "mailpit's self-signed STARTTLS cert (mailpit-tls volume) generates on first run only; a rerun reuses it"
 say "building and starting the live stack for https://$HOST"
 docker compose -f docker/compose.yaml -f docker/compose.live.yaml up -d --build
 

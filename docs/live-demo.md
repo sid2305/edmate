@@ -71,7 +71,9 @@ addresses like the made-up `.test`/`.invalid` ones `docs/try-it.md` uses. Until 
 verified (see `docs/setup/sign-in-mail-and-proxy.md`), use the Resend account owner's own real
 email address for every account you sign in as in step 5, not a made-up one. If you'd rather keep
 testing with made-up addresses, leave `EMAIL_SERVER`/`EMAIL_FROM` unset instead — the stack falls
-back to Mailpit, and step 4 below still applies in that case.
+back to Mailpit, and step 4 below still applies in that case. This path now actually works on the
+live https deploy: Mailpit's STARTTLS is backed by a self-signed cert the stack generates on first
+run, and `web` is told to trust it (`NODE_EXTRA_CA_CERTS`) — see step 3.
 
 Never paste any of these values anywhere else. If a value ever leaks, rotate it at the source
 (the Anthropic console for the API key, the Resend dashboard for the API key); deleting it from
@@ -106,6 +108,13 @@ swapped for dashes, e.g. `203-0-113-10.sslip.io`), this needs nothing extra — 
 any label prefix of the IP-based name to the same address, so `s3.203-0-113-10.sslip.io` already
 works. A real custom domain instead needs its own DNS record for the `s3.` subdomain pointing at
 the VM before running the script.
+
+The first `docker compose ... up -d --build` run (or `live-deploy.sh` run) also creates a one-shot
+`mailpit-cert` container that generates a self-signed cert into a Docker-managed volume
+(`mailpit-tls`), shared read-only with `mailpit` and `web`; it exits 0 once done (visible in
+`docker compose ps`) and every later run reuses the same cert — no human step needed, and no cert
+material ever appears in this repo or in `docker/.env`. Rotating it (not routine) means removing
+the `mailpit-tls` volume (`docker compose ... down -v`, or `docker volume rm`) before the next run.
 
 ## 4. Read sign-in links
 
@@ -151,6 +160,11 @@ you left `EMAIL_SERVER`/`EMAIL_FROM` unset (Mailpit fallback). Read sign-in link
   missing — this script deliberately does not create it (see the task's Decisions); run it by hand:
   `docker compose -f docker/compose.yaml -f docker/compose.live.yaml exec worker npm run storage:roundtrip`.
 - The student's chat gets a real reply with no error.
+- Sign-in mail over Mailpit (the `EMAIL_SERVER`-unset path) works over STARTTLS; a
+  `MailSendError`/`sign-in mail failed` in `web`'s logs with Mailpit answering `502 5.5.1 Command
+  not implemented` means the `mailpit-tls` volume or the `mailpit-cert` container's exit code
+  needs checking by hand (`docker compose -f docker/compose.yaml -f docker/compose.live.yaml logs
+  mailpit-cert`).
 
 ## 7. Troubleshooting
 

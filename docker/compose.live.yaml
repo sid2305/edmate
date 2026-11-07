@@ -8,12 +8,59 @@
 # EDMATE_PUBLIC_HOST has no default (required): a missing value fails `config` loudly, naming it,
 # instead of silently resolving AUTH_URL/S3_ENDPOINT to an empty host. docker/env.example
 # documents EDMATE_PUBLIC_HOST and EDMATE_TRUSTED_PROXY_RANGES; see docs/live-demo.md (task 9.9b)
-# for the full deploy recipe. Every other base service (postgres, redis, mailpit) is untouched and
-# not mentioned here: Compose only re-merges services an overlay file actually lists, so their
-# existing 127.0.0.1-only port bindings keep applying unchanged.
+# for the full deploy recipe. postgres and redis are untouched and not mentioned here: Compose
+# only re-merges services an overlay file actually lists, so their existing config keeps applying
+# unchanged. mailpit is mentioned below (task 9.9d, STARTTLS cert wiring only) but its existing
+# 127.0.0.1-only port binding is untouched too.
+
+volumes:
+  # Holds the self-signed STARTTLS cert the mailpit-cert service below generates once and both
+  # mailpit and web mount read-only. Never a host bind mount (unlike docker/compose.yaml's own
+  # ./data/... convention): keeps the private key out of the repo checkout entirely.
+  mailpit-tls:
 
 services:
+  mailpit-cert:
+    # One-shot, idempotent: generates mailpit's self-signed STARTTLS cert into the mailpit-tls
+    # volume the first time, skips if it's already there (a live-deploy.sh rerun, or a plain
+    # `docker compose up -d --build`, must never regenerate a working cert out from under a
+    # running stack). node:22.22.3-alpine3.22 is already the exact base apps/web's and
+    # apps/worker's own Dockerfiles build FROM -- no new third-party image to track.
+    image: node:22.22.3-alpine3.22
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        if [ -f /tls/cert.pem ] && [ -f /tls/key.pem ]; then
+          echo 'mailpit-cert: existing cert found in the mailpit-tls volume, skipping'
+        else
+          apk add --no-cache openssl >/dev/null
+          openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+            -subj /CN=mailpit -addext 'subjectAltName=DNS:mailpit' \
+            -keyout /tls/key.pem -out /tls/cert.pem
+          chmod 644 /tls/cert.pem /tls/key.pem
+          echo 'mailpit-cert: generated a new self-signed cert for mailpit'
+        fi
+    volumes:
+      - mailpit-tls:/tls
+    restart: 'no'
+
+  mailpit:
+    depends_on:
+      mailpit-cert:
+        condition: service_completed_successfully
+    environment:
+      # Mailpit then logs "STARTTLS optional" instead of refusing it (Console's verified fix).
+      MP_SMTP_TLS_CERT: /tls/cert.pem
+      MP_SMTP_TLS_KEY: /tls/key.pem
+    volumes:
+      - mailpit-tls:/tls:ro
+
   web:
+    depends_on:
+      mailpit-cert:
+        condition: service_completed_successfully
     environment:
       AUTH_URL: https://${EDMATE_PUBLIC_HOST:?EDMATE_PUBLIC_HOST must be set}
       # Routes the web container's own S3 calls, and the browser's signed PUT, to MinIO's own
@@ -43,6 +90,12 @@ services:
       # so there is no separate public endpoint to name, and leaving the base's http value in
       # effect would fail the production https-only check at startup.
       S3_PUBLIC_ENDPOINT: ''
+      # Trusts mailpit's self-signed cert for nodemailer's STARTTLS handshake (apps/web/src/auth/
+      # mail.ts), without weakening certificate verification anywhere: requireTls stays exactly
+      # env.secureCookies (apps/web/src/auth/index.ts, untouched by this task).
+      NODE_EXTRA_CA_CERTS: /tls/cert.pem
+    volumes:
+      - mailpit-tls:/tls:ro
 
   worker:
     environment:
