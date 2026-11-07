@@ -51,15 +51,33 @@ this sandbox cannot satisfy, flagged explicitly rather than silently marked done
 
 ## Decisions
 
-- `risk: high` — board-level `risk: risky` flag on 0.25b, plus this PR's `.claude/**` test-file
-  changes matching the `.claude/**` risk-paths group (reviewers: security-reviewer), per rule 6.
-  Required reviewers for this PR: code-reviewer (every PR) and security-reviewer
-  (`.claude/**` match) — the same two who raised these four findings in 0.25's review.
-- Finding 3 is scoped to the Azure hostname/FQDN shape half only, not the "bare resource name
-  without an embedded GUID" half. The accept line's own wording ("an Azure hostname/FQDN shape")
-  and 0.25's own prior HIGH-fix precedent (`edmate-agents`/`edmate-lead` are the repo's own fixed,
-  already-public documented names, indistinguishable from a real secret by regex alone) both
-  support leaving the bare-resource-name half uncovered; not implemented, by design, not oversight.
-- Finding 4's live `DRY_RUN=0`-against-a-disposable-resource-group verification is a human step,
-  not performed by the builder (see "Open question 4 carried forward" above). Who runs it and when
-  is for the lead to assign after merge; this handoff does not claim it done.
+### 6 Nov 2026 · 0.25b four deferred review-finding fixes merged · decided by builder · risk: high
+- Decided: board-level `risk: risky` flag on 0.25b, plus this PR's `.claude/**` test-file changes
+  matching the `.claude/**` risk-paths group, together require a `risk: high` decision per rule 6.
+  Required reviewers for this PR: code-reviewer (every PR) and security-reviewer (`.claude/**`
+  match) — the same two who raised these four findings in 0.25's review.
+- Why: 0.25's own review deferred these four findings (two code-reviewer MEDIUM, two
+  security-reviewer MEDIUM/LOW) to a follow-up task rather than blocking 0.25's merge.
+- Alternatives: none — the findings were already fully diagnosed; this task implements the fixes
+  already designed in the plan.
+- Reversible: yes, a plain code revert of the four files.
+
+### 6 Nov 2026 · 0.25b finding 3 scoped to FQDN shape only · decided by builder · risk: low
+- Decided: finding 3 is scoped to the Azure hostname/FQDN shape half only, not the "bare resource
+  name without an embedded GUID" half.
+- Why: the accept line's own wording ("an Azure hostname/FQDN shape") and 0.25's own prior HIGH-fix
+  precedent (`edmate-agents`/`edmate-lead` are the repo's own fixed, already-public documented
+  names, indistinguishable from a real secret by regex alone) both support leaving the
+  bare-resource-name half uncovered.
+- Alternatives: add a bare-resource-name detection rule; rejected as brittle, same reasoning 0.25
+  already used.
+- Reversible: yes, a follow-up task could add the narrower rule later if a real incident shows it's
+  needed.
+
+### 6 Nov 2026 · 0.25b finding 4's live exercise deferred to the human · decided by builder · risk: low
+- Decided: finding 4's live `DRY_RUN=0`-against-a-disposable-resource-group verification is a human
+  step, not performed by the builder.
+- Why: 0.25's own plan and 10.1's plan both set the same precedent ("no real `az`/provider call by
+  any agent"); the fix is proven instead with a fully sandboxed fake-`az` stub test.
+- Alternatives: none available to the builder without breaking the no-real-az-call rule.
+- Reversible: not applicable — this is a verification step still outstanding, not a code choice.
