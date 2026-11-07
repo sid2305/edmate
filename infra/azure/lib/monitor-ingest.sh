@@ -22,8 +22,16 @@ monitor_post_row() {
   [ -f "$env_file" ] || return 0
 
   local EDMATE_MONITOR_DCE_ENDPOINT="" EDMATE_MONITOR_DCR_IMMUTABLE_ID="" EDMATE_MONITOR_STREAM_NAME=""
+  local rc
   # shellcheck disable=SC1090
+  set +eu
   . "$env_file"
+  rc=$?
+  set -eu
+  if [ "$rc" -ne 0 ]; then
+    printf 'monitor-ingest: monitor.env failed to source (malformed); skipping the Monitor write\n' >&2
+    return 0
+  fi
   if [ -z "$EDMATE_MONITOR_DCE_ENDPOINT" ] || [ -z "$EDMATE_MONITOR_DCR_IMMUTABLE_ID" ] || [ -z "$EDMATE_MONITOR_STREAM_NAME" ]; then
     printf 'monitor-ingest: monitor.env is missing a field; skipping the Monitor write\n' >&2
     return 0
@@ -43,12 +51,12 @@ monitor_post_row() {
   fi
 
   local token
-  token=$(curl -fsS -H "Metadata: true" "$IMDS_TOKEN_URL" 2>/dev/null | jq -r '.access_token // empty') || token=""
+  token=$(curl -fsS --max-time 5 -H "Metadata: true" "$IMDS_TOKEN_URL" 2>/dev/null | jq -r '.access_token // empty') || token=""
   if [ -z "$token" ]; then
     printf 'monitor-ingest: could not get an IMDS token; skipping the Monitor write\n' >&2
     return 0
   fi
-  if ! curl -fsS -X POST "$url" -H "Content-Type: application/json" -H "Authorization: Bearer $token" -d "$body" >/dev/null 2>&1; then
+  if ! curl -fsS --max-time 10 -X POST "$url" -H "Content-Type: application/json" -H "Authorization: Bearer $token" -d "$body" >/dev/null 2>&1; then
     printf 'monitor-ingest: Monitor write failed; continuing\n' >&2
   fi
   return 0
