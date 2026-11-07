@@ -75,9 +75,12 @@ Each of these stores its token in the `edmate` user's home on the VM, nowhere el
    docker compose -f docker/compose.yaml ps
    ```
    Leave the model key empty unless you want real replies on the VM; see `docs/try-it.md`.
-4. **Foundry backup** (optional, phase 2): copy `scripts/foundry.env.example` to
+4. **Foundry backup**: copy `scripts/foundry.env.example` to
    `~/.config/edmate/foundry.env` with mode 600, fill in the resource and deployment names, leave the
-   key empty, and give the VM's identity access to the Foundry resource from your Mac:
+   key empty, and give the VM's identity access to the Foundry resource from your Mac. This unlocks
+   `scripts/claude-backup.sh`'s Linux IMDS-fetch path (`fetch_imds_token()`, `docs/backup-provider.md`):
+   with no key in the config and no Mac Keychain on Linux, the script fetches a short-lived token
+   from the VM's own managed identity instead of failing or asking for a login.
    ```bash
    PRINCIPAL=$(az vm show -g edmate-agents -n edmate-lead --query identity.principalId -o tsv)
    az role assignment create --assignee "$PRINCIPAL" --role "Cognitive Services User" \
@@ -210,6 +213,8 @@ Mac's `caffeinate` and its copy of the worktrees.
 
 - Moving the lead off the shared `edmate` admin user (see Known risks) — not yet assigned a task
   number.
-- Foundry through the managed identity is wired but untested until the role assignment above runs:
-  board task 0.26.
+- Foundry through the managed identity is coded and unit-tested (board task 0.26, stub `curl`/`claude`
+  only — no real Azure call), but the real-VM check is still outstanding: grant the role assignment
+  above, then on the VM run `scripts/claude-backup.sh --foundry` and confirm `/status` shows Microsoft
+  Foundry with no `ANTHROPIC_FOUNDRY_API_KEY` set.
 - A pool of VMs (0.27) only once each VM has its own model budget.
