@@ -19,6 +19,15 @@ verified sending domain.
   this guide). `scripts/live-deploy.sh` runs `pnpm install`/build/migrate/seed on the VM's own
   Node, not inside a container, and loads nvm itself so that works over a non-interactive SSH
   session.
+- A **signed privacy notice** for whichever market a demo student picks at the age gate (`US`, or
+  `global` for "somewhere else") — `content/legal/privacy-notice/US.md` and `global.md` must have
+  `reviewedBy` set to a real name, not `pending`. `docker/compose.live.yaml` sets
+  `AGE_NOTICE_ALLOW_UNSIGNED: 'false'`, so a signed-in student's age-check step fails in production
+  until this is true. `content/legal/privacy-notice/US.md` and `global.md` carry a drafted,
+  demo-honest body (board task 9.9e) ready for a named human to review and sign; nobody else may
+  set `reviewedBy`. If it is still `pending`, read the draft, and if it is accurate for this demo,
+  change that file's `reviewedBy` (and, if not already done, confirm `[PLACEHOLDER]` reads as
+  intended) before running step 3 below.
 
 ## 2. Fill in `docker/.env` by hand on the VM
 
@@ -175,3 +184,11 @@ New on the live stack:
   the four `S3_*` lines in step 2 is unset or still has a dev-default value. Fill in real values
   (any value that isn't `edmate-dev`/`edmate-dev-storage`) and rerun the script — this is the live
   overlay's deliberate refusal to run on the dev stack's own placeholder values, not a bug.
+- **The `web` service logs `privacy notice for "<market>" is not signed; refusing in production`,
+  and the student's age-check step fails**: that market's notice (`content/legal/privacy-notice/
+  <market>.md`, or `global.md` for "somewhere else") still has `reviewedBy: pending`. This is not a
+  bug — `apps/web/src/auth/age.ts` refuses to serve an unsigned notice in production on purpose.
+  Fix: a named human reads the drafted body (board task 9.9e) and, if it's accurate for this demo,
+  sets that file's `reviewedBy` to their own name or handle; the age-check step then works on the
+  next sign-in. Do not set `AGE_NOTICE_ALLOW_UNSIGNED` to unblock this instead — that flag stays
+  `false` on purpose (see `docker/compose.live.yaml`'s own comment).
