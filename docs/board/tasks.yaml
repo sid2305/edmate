@@ -12590,3 +12590,22 @@ tasks:
   status: planning
   branch: null
   model: plan:sonnet build:sonnet review:sonnet
+- id: 9.9e
+  milestone: M9
+  title: 'Console finding (6 Nov 2026, ~20:25 UTC): after the 9.9d mail fix, sign-in still fails one step later — web logs `privacy notice for "US" is not signed; refusing in production` (apps/web/src/auth/age.ts).
+    content/legal/privacy-notice/US.md and global.md are still version draft-0, reviewedBy: pending, with the [PLACEHOLDER] body from B-27, and docker/compose.live.yaml hard-codes AGE_NOTICE_ALLOW_UNSIGNED:
+    "false", so nobody can finish sign-in on the live site for any market. docs/live-demo.md never says a signed notice is a precondition. B-27''s answer (21 Oct 2026) parked the real US notice to counsel
+    (3.10c, M13) for the pilot, which is fine, but leaves the demo with nothing at all to sign today. Console is not changing AGE_NOTICE_ALLOW_UNSIGNED on the VM and has put the sign-off decision to the
+    human directly. Two small, separate deliverables: (1) docs/live-demo.md states the precondition (a signed privacy notice for EDMATE_MARKET) and what a fresh deploy needs before sign-in works; (2) draft
+    an interim, honest, plain-language demo notice for US.md and global.md (content/legal/privacy-notice/IN.md stays untouched — India is parked per B-27) — demo-only framing, no real learners, describing
+    data handling as it actually runs in this stack (locale pack, age screen, Postgres, S3-compatible storage, no selling of data) — written for the human to review and sign themselves as reviewedBy: sid2305;
+    counsel''s real notice replaces it at 3.10c. Do not touch the refuse-unsigned check in apps/web/src/auth/age.ts or the AGE_NOTICE_ALLOW_UNSIGNED literal in docker/compose.live.yaml.'
+  accept: docs/live-demo.md names the signed-notice precondition and the fix if it is missing; US.md and global.md carry a drafted, demo-honest notice body with reviewedBy still pending (the human signs
+    it, same pattern as 1.7h/B-67); existing locale/legal content tests and `edmate content validate`-equivalent checks still pass for IN.md (untouched) and for the two drafted files once signed; no change
+    to apps/web/src/auth/age.ts or docker/compose.live.yaml.
+  deps:
+  - 9.9c
+  risk: risky
+  status: planning
+  branch: null
+  model: plan:sonnet build:sonnet review:sonnet
