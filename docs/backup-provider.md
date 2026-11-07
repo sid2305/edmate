@@ -30,7 +30,12 @@ endpoint and the bill. Human decision, 22 Oct 2026.
    - paste the API key into `ANTHROPIC_FOUNDRY_API_KEY` in that file; or
    - leave it empty and store the key in the Mac Keychain:
      `security add-generic-password -a "$USER" -s edmate-foundry-key -w`; or
-   - leave it empty, no Keychain item, and `az login` once (Entra ID).
+   - leave it empty, no Keychain item, and `az login` once (Entra ID); on the VM (no Keychain, no
+     `az` CLI installed) the launcher instead fetches a short-lived token from the VM's own
+     system-assigned managed identity via Azure's Instance Metadata Service — nothing is written to
+     disk, the token lives only in that one process's environment (`ANTHROPIC_FOUNDRY_AUTH_TOKEN`,
+     never `ANTHROPIC_FOUNDRY_API_KEY`), and the one-time human step that makes it work (granting the
+     identity access to the Foundry resource) is in `docs/azure-vm.md` §3.4.
 4. Check it: `scripts/claude-backup.sh --foundry` should start Claude Code, and `/status` inside
    it shows `Microsoft Foundry` as the API provider. Exit, then `scripts/claude-backup.sh --check`
    should print `subscription OK`.
@@ -57,6 +62,14 @@ secrets, to `~/.config/edmate/backup.log`.
 On the backup the main session runs on the Sonnet deployment by default (`EDMATE_BACKUP_MAIN_MODEL`),
 and `EDMATE_PROVIDER=foundry` is set so the team-lead skill's backup rules apply: builders on Sonnet,
 no third slot, finish running work first, record `provider: foundry` in the board's `model` field.
+
+## Switching back
+
+`auto` mode (the default, no flag) probes the subscription fresh on every start — it keeps no memory
+of which provider the last session used. So once the usage window reopens, the lead's next restart
+(its own `/exit`, a crash, or the VM's `Restart=always`) goes back to the subscription with no
+separate step. As with the forward switch, there is no automatic failover *mid*-session either
+direction: a session already running on Foundry keeps running there until it is relaunched.
 
 ## Cost to expect
 
