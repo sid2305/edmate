@@ -282,7 +282,8 @@ see "Context already resolved").
 6. `bash -n scripts/live-deploy.sh` — confirms the new line didn't break the script's syntax.
 
 ## How a human (lead/console) verifies this without editing anything
-1. ```
+1. Run:
+   ```
    export EDMATE_PUBLIC_HOST=test.example.invalid EDMATE_TRUSTED_PROXY_RANGES='127.0.0.1/32 ::1/128' \
      S3_REGION=us-test-1 S3_ACCESS_KEY_ID=live-test-key S3_SECRET_ACCESS_KEY=live-test-secret-value \
      S3_BUCKET=live-test-bucket
