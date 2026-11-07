@@ -12366,9 +12366,9 @@ tasks:
   deps:
   - '0.25'
   risk: risky
-  status: planning
-  branch: null
-  model: plan:sonnet build:sonnet review:sonnet
+  status: running
+  branch: m13/0.25b-monitor-fixes
+  model: plan:sonnet build:sonnet review:sonnet(code-reviewer,security-reviewer)
 - id: '0.26'
   milestone: M13
   title: 'VM phase 2: Foundry backup through the VM''s managed identity (no key on disk): role assignment documented in docs/azure-vm.md, scripts/claude-backup.sh verified on Linux with the Entra path (auth=entra
