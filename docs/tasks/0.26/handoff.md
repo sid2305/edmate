@@ -82,6 +82,13 @@ worktree's board copy doesn't see the branch the lead already set from main); pe
 the lead must re-run the gate from the main checkout before merging — this run from the worktree was
 only a pre-handoff sanity check of the test/scan parts, both of which are clean.
 
+Note (code-reviewer finding, LOW, no code change needed): `test_configured_key_skips_the_imds_fetch_entirely`
+uses a "poison" `curl` stub (one that would loudly print to stderr and exit non-zero if ever invoked)
+rather than the plan's literal spec of having `curl` "absent from PATH entirely." Functionally
+equivalent for proving the IMDS path is unreached when a key is already configured, and it lets the
+test assert directly on the stub's telltale stderr string — a deliberate, reviewed deviation from the
+plan's wording, not an oversight.
+
 ## Outstanding, human-only (not done, not claimed done)
 
 The literal accept-line clause — "on the VM, `scripts/claude-backup.sh --foundry` starts with

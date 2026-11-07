@@ -133,7 +133,9 @@ class TestLinuxEntraPath(BackupScriptCase):
         self.setUp()
         r = self.run_backup("--foundry")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("auth entra", r.stderr)
+        # "auth entra," (trailing comma from the say() format) so this can't match the
+        # "auth entra-imds," variant too -- a mislabelling regression must fail this test.
+        self.assertIn("auth entra,", r.stderr)
         self.assertNotIn("ANTHROPIC_FOUNDRY_API_KEY=", r.stdout)
         self.assertNotIn("ANTHROPIC_FOUNDRY_AUTH_TOKEN=", r.stdout)
 

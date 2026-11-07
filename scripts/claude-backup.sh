@@ -20,10 +20,10 @@ CONFIG="${EDMATE_FOUNDRY_ENV:-$HOME/.config/edmate/foundry.env}"
 LOG="${EDMATE_BACKUP_LOG:-$HOME/.config/edmate/backup.log}"
 KEYCHAIN_ITEM="edmate-foundry-key"
 PROBE_SECONDS=90
-# 169.254.169.254 is Azure's fixed link-local IMDS address on every VM, not a resource identifier
-# (secret-scan: allow - Azure IMDS platform constant, same constant infra/azure/lib/monitor-ingest.sh
-# uses; see .claude/tests/test_no_azure_identifiers.py). The resource audience is Cognitive
-# Services (the "Cognitive Services User" role granted in docs/azure-vm.md §3.4).
+# 169.254.169.254 is Azure's fixed link-local IMDS address on every VM, not a resource identifier --
+# same constant infra/azure/lib/monitor-ingest.sh uses; see .claude/tests/test_no_azure_identifiers.py
+# (this file is outside that test's scan path, so no allow-list marker is needed here). The resource
+# audience is Cognitive Services (the "Cognitive Services User" role granted in docs/azure-vm.md §3.4).
 FOUNDRY_IMDS_TOKEN_URL="http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fcognitiveservices.azure.com%2F"
 
 mode=auto
