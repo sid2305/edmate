@@ -12366,7 +12366,7 @@ tasks:
   deps:
   - '0.25'
   risk: risky
-  status: running
+  status: done
   branch: m13/0.25b-monitor-fixes
   model: plan:sonnet build:sonnet review:sonnet(code-reviewer,security-reviewer)
 - id: '0.26'
@@ -12515,7 +12515,7 @@ tasks:
   deps:
   - 11.4m
   risk: risky
-  status: running
+  status: blocked
   branch: m13/11.4n-ffmpeg-prebuilt
   model: plan:sonnet build:opus review:sonnet(architect,security-reviewer,typescript-reviewer-opus,code-reviewer)
 - id: '9.9'
