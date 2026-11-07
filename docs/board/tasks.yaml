@@ -12507,11 +12507,11 @@ tasks:
   milestone: M13
   title: 'Console finding (6 Nov 2026, live-deploy run on edmate-app): 11.4l''s from-source LGPL-only ffmpeg compile takes ~15 minutes on the VM''s 2 vCPUs during the first `docker compose up --build`,
     slowing every fresh deploy/rebuild. Swap apps/worker/Dockerfile to a pinned, checksum-verified prebuilt LGPL-only ffmpeg static build (e.g. a reputable static-build provider''s LGPL variant) instead
-    of compiling from source, keeping the same no-GPL-codec guarantee ADR-0016 requires. Tech-stack change (rule 2): architect, security-reviewer and an opus typescript-reviewer; lead approves with a
-    risk: high decision referencing ADR-0016.'
-  accept: apps/worker/Dockerfile installs a pinned, checksum-verified prebuilt ffmpeg build with no --enable-gpl codec (same ffmpegBuild.test.ts assertions as 11.4l/11.4m, updated for the new install
-    step); a fresh `docker compose up --build` of the worker image is measurably faster than the from-source compile; @edmate/worker typecheck, lint and test stay green; the lead rebuilds the image once
-    and re-checks the licence banner before merge.
+    of compiling from source, keeping the same no-GPL-codec guarantee ADR-0016 requires. Tech-stack change (rule 2): architect, security-reviewer and an opus typescript-reviewer; lead approves with a risk:
+    high decision referencing ADR-0016.'
+  accept: apps/worker/Dockerfile installs a pinned, checksum-verified prebuilt ffmpeg build with no --enable-gpl codec (same ffmpegBuild.test.ts assertions as 11.4l/11.4m, updated for the new install step);
+    a fresh `docker compose up --build` of the worker image is measurably faster than the from-source compile; @edmate/worker typecheck, lint and test stay green; the lead rebuilds the image once and re-checks
+    the licence banner before merge.
   deps:
   - 11.4m
   risk: risky
@@ -12570,4 +12570,23 @@ tasks:
   risk: risky
   status: done
   branch: m9/9.9c-live-deploy-fixes
+  model: plan:sonnet build:sonnet review:sonnet
+- id: 9.9d
+  milestone: M9
+  title: 'Console finding (6 Nov 2026, ~20:10 UTC): /sign-in gives a server error on the live (https) deploy. apps/web/src/auth/index.ts sets requireTls: env.secureCookies, so with an https AUTH_URL nodemailer
+    insists on STARTTLS; the base compose Mailpit (axllent/mailpit) has no TLS cert and refuses STARTTLS, so sign-in mail fails (MailSendError / Mailpit "502 5.5.1 Command not implemented"). docs/live-demo.md''s
+    claim that an unset EMAIL_SERVER "falls back to Mailpit" is false on a live deploy; Resend alone cannot carry the multi-account (staff+teacher+student) demo while its sending domain is unverified. Console''s
+    working stopgap on the VM (outside the repo, not durable across a live-deploy.sh rerun): a self-signed cert (CN/SAN "mailpit") mounted into Mailpit via MP_SMTP_TLS_CERT/MP_SMTP_TLS_KEY, the same cert
+    mounted read-only into web with NODE_EXTRA_CA_CERTS so Node trusts it; EMAIL_SERVER stays smtp://mailpit:1025, requireTls and certificate verification stay on. Bring this into the repo: docker/compose.live.yaml
+    generates (or ships) the self-signed Mailpit cert and shares it with web via a named volume (an init step or a tiny sidecar), with NODE_EXTRA_CA_CERTS wired on the web service; scripts/live-deploy.sh
+    and docs/live-demo.md updated to describe it. Do not relax requireTls or disable certificate checks; do not touch apps/web/src/auth/** behaviour. Keep the Resend path unchanged. Not currently blocking
+    the demo (stopgap holds), but the next live-deploy.sh rerun reverts it until this merges.'
+  accept: a fresh docker compose -f docker/compose.yaml -f docker/compose.live.yaml up (or the equivalent live-deploy.sh run) brings up Mailpit with a working self-signed TLS cert and web trusting it via
+    NODE_EXTRA_CA_CERTS, with EMAIL_SERVER unset; POST /api/auth/signin/email succeeds (302 verify-request) and the mail lands in Mailpit, with no change to apps/web/src/auth/** behaviour or to the Resend
+    path; docs/live-demo.md and scripts/live-deploy.sh describe the cert step; reported against the real public URL in the handoff with no key or IP.
+  deps:
+  - 9.9c
+  risk: risky
+  status: planning
+  branch: null
   model: plan:sonnet build:sonnet review:sonnet
