@@ -19,8 +19,13 @@ GUID_RE = re.compile(r"\b[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b")
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 ONCALL_FILLED_RE = re.compile(r"\b(?:EDMATE_ONCALL_PHONE|EDMATE_ONCALL_EMAIL)=(\S.*)$")
 # Azure hostname-shaped string, e.g. a DCE's logs-ingestion endpoint
-# (<name>.<region>-1.ingest.monitor.azure.com) or a bare *.azure.com URL.
-AZURE_FQDN_RE = re.compile(r"\b[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.azure\.com\b", re.IGNORECASE)
+# (<name>.<region>-1.ingest.monitor.azure.com) or a bare *.azure.com URL (this suffix also
+# already catches *.cloudapp.azure.com, since that ends in .azure.com), or a *.core.windows.net
+# URL (the common suffix for blob/queue/table/file storage endpoints).
+AZURE_FQDN_RE = re.compile(
+    r"\b[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.(?:azure\.com|core\.windows\.net)\b",
+    re.IGNORECASE,
+)
 
 # 169.254.169.254 is Azure's fixed link-local IMDS address, the same on every subscription --
 # a documented platform constant, not a resource identifier (infra/azure/lib/monitor-ingest.sh).
@@ -98,6 +103,7 @@ class NoAzureIdentifiers(unittest.TestCase):
         caught = [
             "https://edmate-prod-dce-xk29.eastus-1.ingest.monitor.azure.com",
             "https://some-resource.monitor.azure.com/ingest",
+            "https://fakestorageacct.blob.core.windows.net/container",
         ]
         for example in caught:
             self.assertTrue(

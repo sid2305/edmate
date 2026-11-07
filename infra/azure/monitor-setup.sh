@@ -51,8 +51,13 @@ ensure_dce() {
 ensure_dcr() {
   local ws_id dce_id
   RULE_FILE=$(mktemp)
-  ws_id="\$(az monitor log-analytics workspace show -g $RG -n $WORKSPACE --query id -o tsv)"
-  dce_id="\$(az monitor data-collection endpoint show -g $RG -n $DCE --query id -o tsv)"
+  if [ "$DRY" = "1" ]; then
+    ws_id="\$(az monitor log-analytics workspace show -g $RG -n $WORKSPACE --query id -o tsv)"
+    dce_id="\$(az monitor data-collection endpoint show -g $RG -n $DCE --query id -o tsv)"
+  else
+    ws_id=$(az monitor log-analytics workspace show -g "$RG" -n "$WORKSPACE" --query id -o tsv)
+    dce_id=$(az monitor data-collection endpoint show -g "$RG" -n "$DCE" --query id -o tsv)
+  fi
   cat > "$RULE_FILE" <<JSON
 {
   "location": "$LOC",
@@ -86,8 +91,13 @@ JSON
 
 grant_identity() {
   local principal_id dcr_id
-  principal_id="\$(az vm show -g $RG -n $VM --query identity.principalId -o tsv)"
-  dcr_id="\$(az monitor data-collection rule show -g $RG -n $DCR --query id -o tsv)"
+  if [ "$DRY" = "1" ]; then
+    principal_id="\$(az vm show -g $RG -n $VM --query identity.principalId -o tsv)"
+    dcr_id="\$(az monitor data-collection rule show -g $RG -n $DCR --query id -o tsv)"
+  else
+    principal_id=$(az vm show -g "$RG" -n "$VM" --query identity.principalId -o tsv)
+    dcr_id=$(az monitor data-collection rule show -g "$RG" -n "$DCR" --query id -o tsv)
+  fi
   run az role assignment create --assignee "$principal_id" --role "Monitoring Metrics Publisher" --scope "$dcr_id" -o none
 }
 

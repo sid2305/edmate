@@ -68,6 +68,32 @@ class HeartbeatScript(unittest.TestCase):
         state_file = self.state_dir / "heartbeat"
         self.assertTrue(state_file.exists(), "DRY_RUN must still write the local heartbeat file")
 
+    def test_malformed_monitor_env_degrades_gracefully_not_abort(self):
+        """Finding 1 (docs/tasks/0.25b/plan.md): a monitor.env line whose command substitution
+        fails must make monitor_post_row return 0 with a one-line stderr note, not abort the
+        caller under set -e."""
+        r = self.run_heartbeat({"EDMATE_MONITOR_ENV_FILE": str(FIXTURES / "monitor.env.malformed")})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("monitor-ingest: monitor.env failed to source (malformed); skipping", r.stderr)
+        state_file = self.state_dir / "heartbeat"
+        self.assertTrue(state_file.exists(), "the local heartbeat write must still happen")
+
+    def test_malformed_monitor_env_unset_variable_degrades_gracefully(self):
+        """Finding 1's nounset half: a required field that references an undefined shell
+        variable must not trip `set -u` and abort; it degrades to the missing-field skip."""
+        r = self.run_heartbeat({"EDMATE_MONITOR_ENV_FILE": str(FIXTURES / "monitor.env.malformed-unset")})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("monitor-ingest: monitor.env is missing a field; skipping", r.stderr)
+        state_file = self.state_dir / "heartbeat"
+        self.assertTrue(state_file.exists(), "the local heartbeat write must still happen")
+
+    def test_curl_calls_have_a_bounded_timeout(self):
+        """Finding 2: both curl invocations in monitor-ingest.sh must have --max-time, so a
+        network stall cannot hang the unsupervised backgrounded heartbeat.sh process. A static
+        check -- there is no live network stall to simulate in this sandbox."""
+        text = (AZURE / "lib" / "monitor-ingest.sh").read_text()
+        self.assertEqual(text.count("--max-time"), 2, "expected exactly two --max-time curl flags")
+
 
 class MonitorScripts(unittest.TestCase):
     def setUp(self):
@@ -128,6 +154,72 @@ class MonitorScripts(unittest.TestCase):
         r = self.run_script("monitor-budget-alert.sh", env=env)
         self.assertEqual(r.returncode, 2)
         self.assertIn("EDMATE_ONCALL_EMAIL", r.stderr)
+
+    def test_monitor_setup_real_path_uses_resolved_ids_not_literal_strings(self):
+        """Finding 4 (docs/tasks/0.25b/plan.md): with DRY_RUN=0, ensure_dcr()/grant_identity()
+        must feed the real `az` calls the *resolved* ids, not the literal escaped string
+        "$(az ... )". Proven with a fake `az` stub on PATH -- no real az/curl/docker/systemctl
+        call, per the plan's "Out of bounds" line."""
+        tmp = tempfile.TemporaryDirectory(prefix="edmate-fake-az-")
+        self.addCleanup(tmp.cleanup)
+        tmp_path = Path(tmp.name)
+        log_file = tmp_path / "az-calls.log"
+        stub = tmp_path / "az"
+        stub.write_text(
+            "#!/bin/bash\n"
+            "args=(\"$@\")\n"
+            "case \"$*\" in\n"
+            "  *'account show'*)\n"
+            "    [[ \" $* \" == *'--query name'* ]] && echo fake-subscription-name\n"
+            "    exit 0 ;;\n"
+            "  *'--query id -o tsv'*workspace*|*workspace*'--query id -o tsv'*)\n"
+            "    echo fake-ws-id-0; exit 0 ;;\n"
+            "  *'--query id -o tsv'*endpoint*|*endpoint*'--query id -o tsv'*)\n"
+            "    echo fake-dce-id-0; exit 0 ;;\n"
+            "  *'--query identity.principalId -o tsv'*)\n"
+            "    echo fake-principal-id-0; exit 0 ;;\n"
+            "  *'rule show'*'--query id -o tsv'*)\n"
+            "    echo fake-dcr-id-0; exit 0 ;;\n"
+            "  *'create'*|*'role assignment create'*)\n"
+            "    printf '%s\\n' \"$*\" >> \"" + str(log_file) + "\"\n"
+            "    exit 0 ;;\n"
+            "  *'-o none'*)\n"
+            "    exit 1 ;;\n"
+            "  *)\n"
+            "    exit 0 ;;\n"
+            "esac\n"
+        )
+        stub.chmod(0o755)
+
+        env = dict(
+            os.environ,
+            DRY_RUN="0",
+            PATH=f"{tmp_path}:{os.environ['PATH']}",
+            EDMATE_RG="edmate-test-rg",
+            EDMATE_VM="edmate-test-vm",
+            EDMATE_WORKSPACE="edmate-test-ws",
+            EDMATE_DCE="edmate-test-dce",
+            EDMATE_DCR="edmate-test-dcr",
+        )
+        r = self.run_script("monitor-setup.sh", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(log_file.exists(), "no az create/role-assignment call was logged")
+        calls = log_file.read_text()
+
+        rule_create = [line for line in calls.splitlines() if "data-collection rule create" in line]
+        self.assertEqual(len(rule_create), 1)
+        rule_file_path = rule_create[0].split("--rule-file")[1].split()[0]
+        rule_body = Path(rule_file_path).read_text()
+        self.assertIn("fake-ws-id-0", rule_body)
+        self.assertIn("fake-dce-id-0", rule_body)
+        self.assertNotIn('"$(az', rule_body)
+
+        role_create = [line for line in calls.splitlines() if "role assignment create" in line]
+        self.assertEqual(len(role_create), 1)
+        self.assertIn("fake-principal-id-0", role_create[0])
+        self.assertIn("fake-dcr-id-0", role_create[0])
+        self.assertNotIn('"$(az', role_create[0])
+        self.assertNotIn("$(az", role_create[0])
 
     def test_monitor_budget_alert_dry_run(self):
         env = dict(self.env, EDMATE_ONCALL_EMAIL="fake@example.invalid", EDMATE_MONTHLY_CREDIT="90")
