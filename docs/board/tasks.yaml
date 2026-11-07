@@ -12366,7 +12366,7 @@ tasks:
   deps:
   - '0.25'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: plan:sonnet build:sonnet review:sonnet
 - id: '0.26'
@@ -12515,9 +12515,9 @@ tasks:
   deps:
   - 11.4m
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/11.4n-ffmpeg-prebuilt
+  model: plan:sonnet build:opus review:sonnet(architect,security-reviewer,typescript-reviewer-opus,code-reviewer)
 - id: '9.9'
   milestone: M9
   title: 'Live demo deployment (human request 5 Nov 2026, top priority): get the first working end-to-end slice (teacher sign-in/profile/upload/ingest; student sign-in/package/chat with a real model) onto
